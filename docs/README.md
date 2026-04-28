@@ -264,6 +264,7 @@ feat(backend): 对话历史分页查询接口
 feat(frontend): 流式对话气泡组件
 fix(agent): 修复时间解析器时区问题
 docs: 更新系统设计说明书
+chore: 杂项
 ```
 
 ---

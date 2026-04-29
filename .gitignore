@@ -55,3 +55,4 @@ coverage/
 htmlcov/
 .next/
 out/
+.codex

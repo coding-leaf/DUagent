@@ -1,4 +1,4 @@
-# Agent Service 内部接口规范 (v4.0)
+# Agent Service 内部接口规范 (v4.1)
 
 > 本文档定义后端 (Backend) 与 Agent Service 之间的全部 HTTP 接口。
 > 基础 URL: `http://agent-service:8002`
@@ -75,6 +75,9 @@ data: {"type": "text", "content": "函数停止调用自身的判断..."}
 event: message
 data: {"type": "tool_call", "tool_name": "draw_diagram", "tool_args": {"type": "mermaid", "code": "graph TD; A-->B; A-->C;"}}
 
+event: message
+data: {"type": "profile_update_suggestion", "content": {"cognitive_blind_spots_removed": ["递归边界条件"]}}
+
 event: done
 data: {"status": "finished"}
 ```
@@ -84,6 +87,7 @@ data: {"status": "finished"}
 | `message` | `status` | 阶段状态提示文本 |
 | `message` | `text` | 回答内容片段，前端逐字追加显示 |
 | `message` | `tool_call` | 工具调用，前端根据 `tool_name` 渲染（如 Mermaid 图） |
+| `message` | `profile_update_suggestion` | (可选) 随学随新机制，Agent 发现用户掌握了某盲点时，建议后端更新画像 |
 | `done` | — | 本次请求结束 |
 | `error` | — | 异常信息: `{"error": "描述"}` |
 
@@ -189,11 +193,11 @@ Step 3: 将 facts 向量化 → 存入 Qdrant(user_memory)，metadata 含 user_i
 |------|------|------|------|------|
 | `user_id` | string | Y | 后端 | 用户标识 |
 | `current_profile` | object | Y | 后端从 SQL 查 | 当前画像的部分字段（Agent 需要参考来调整建议） |
-| `current_mastery` | object | Y | 后端从 SQL 查 | 各知识点当前掌握度 `{"kp_id": 0.0~1.0}` |
+| `current_mastery` | object | Y | 后端从 SQL 查 | 各知识点当前掌握度 `{"[kp_id]": 0.0~1.0}` (动态 Key) |
 | `quiz_data.knowledge_point_id` | string | Y | 后端 | 本次测验对应的知识点 ID |
 | `quiz_data.knowledge_point_name` | string | Y | 后端 | 知识点中文名 |
 | `quiz_data.questions` | array | Y | 后端从 SQL 查题目 | 题目列表，含 `correct_answer` |
-| `quiz_data.user_answers` | object | Y | 前端提交 | 用户的答案 `{"q_id": "选项"}` |
+| `quiz_data.user_answers` | object | Y | 前端提交 | 用户的答案 `{"[q_id]": "选项"}` (动态 Key) |
 
 ### Agent 内部处理流程
 
@@ -230,7 +234,7 @@ Step 5: LLM 判断是否需要调整 guidance_level（输出枚举值）
 | `score` | integer | 百分制分数，代码算 (答对数/总题数*100) |
 | `evaluation_text` | string | LLM 生成的文字评语 |
 | `updated_profile_patch` | object | 需要更新的画像字段（增量补丁），后端 MERGE 进 SQL |
-| `updated_mastery_patch` | object | 需要更新的知识点掌握度，后端 UPSERT 进 SQL |
+| `updated_mastery_patch` | object | 需要更新的知识点掌握度 `{"[kp_id]": float}`，后端 UPSERT 进 SQL |
 | `recommended_next_nodes` | array | 推荐下一步学习的知识点，含 ID、名称、推荐理由 |
 
 ---
@@ -264,16 +268,6 @@ Step 5: LLM 判断是否需要调整 guidance_level（输出枚举值）
 | `knowledge_point_id` | string | Y | 前端选择 | 知识点 ID，Agent 用于 RAG 检索 |
 | `user_profile` | object | Y | 后端从 SQL 查 | 画像（Worker 据此调整难度和风格） |
 | `types` | array[string] | Y | 前端选择 | 要生成的资源类型列表 |
-
-**types 可选值:**
-
-| 值 | 说明 |
-|----|------|
-| `explanation_doc` | 专业课程讲解文档 (Markdown) |
-| `mindmap` | 知识点思维导图 (Mermaid 代码) |
-| `quiz` | 练习题组 (JSON 结构化题目) |
-| `extended_reading` | 拓展阅读材料 (Markdown) |
-| `code_practice` | 代码类实操案例 (含代码+解释) |
 
 ### Response (立即返回)
 
@@ -326,7 +320,124 @@ Step 5: LLM 判断是否需要调整 guidance_level（输出枚举值）
 
 ---
 
-## 5. 数据库归属总结
+## 5. 画像初始构建 (冷启动)
+
+- **POST** `/agent/v1/profile/initialize`
+- **工作流模式**: 引导式对话 Agent (SSE 流式返回)
+- **触发时机**: 新用户首次登录，系统无其画像时，前端进入“画像初始化”引导流程
+
+### Request
+
+```json
+{
+  "user_id": "u_123",
+  "session_id": "init_999",
+  "message": "我平时喜欢看视频学习，觉得指针很难。",
+  "recent_history": [
+    { "role": "assistant", "content": "你好！为了给你提供更好的学习体验，能告诉我你平时喜欢看视频还是看文字吗？觉得C语言里哪部分最难？" }
+  ]
+}
+```
+
+| 字段 | 类型 | 必填 | 来源 | 说明 |
+|------|------|------|------|------|
+| `user_id` | string | Y | 后端 | 用户标识 |
+| `session_id` | string | Y | 后端 | 会话标识 |
+| `message` | string | Y | 前端 | 用户回复内容 |
+| `recent_history` | array[object] | Y | 后端 | 引导对话历史 |
+
+### Response (SSE Stream)
+
+```text
+event: message
+data: {"type": "text", "content": "好的，了解了。那么你平时学习是每天坚持，还是考前突击比较多呢？"}
+
+event: message
+data: {"type": "profile_extracted", "content": {"modality_preference": {"video": 60, "text": 10, "chart": 10, "code": 10, "formula": 10}, "cognitive_blind_spots": ["指针"]}}
+
+event: done
+data: {"status": "finished"}
+```
+
+| event | data.type | 说明 |
+|-------|-----------|------|
+| `message` | `text` | 引导提问文本 |
+| `message` | `profile_extracted` | 当 Agent 认为收集到足够信息时，输出结构化画像数据，后端据此初始化 SQL |
+| `done` | — | 本次请求结束 |
+
+---
+
+## 6. 个性化学习路径规划
+
+- **POST** `/agent/v1/learning-path/plan`
+- **工作流模式**: Pipeline 状态机 (同步 JSON)
+- **触发时机**: 用户进入“学习路径”页面，或完成大章节测验后请求重新规划
+
+### Request
+
+```json
+{
+  "user_id": "u_123",
+  "user_profile": {
+    "guidance_level": "L2",
+    "discipline_base": "silver"
+  },
+  "all_mastery": {
+    "kp_array": 0.9,
+    "kp_linkedlist": 0.8,
+    "kp_recursion": 0.3,
+    "kp_binary_tree": 0.5
+  },
+  "target_goal": "掌握二叉树遍历"
+}
+```
+
+| 字段 | 类型 | 必填 | 来源 | 说明 |
+|------|------|------|------|------|
+| `user_id` | string | Y | 后端 | 用户标识 |
+| `user_profile` | object | Y | 后端 | 完整画像 |
+| `all_mastery` | object | Y | 后端 | 用户所有知识点的掌握度 `{"[kp_id]": float}` |
+| `target_goal` | string | N | 前端 | 用户可选的短期目标 |
+
+### Agent 内部处理流程
+
+```
+Step 1: Agent 读取本地 knowledge_graph.json 获取全局拓扑
+Step 2: 结合 all_mastery，找出前置已满足但尚未掌握的节点
+Step 3: LLM 根据 user_profile (如 discipline_base) 决定路径的陡峭程度和推荐顺序
+```
+
+### Response
+
+```json
+{
+  "path_nodes": [
+    {
+      "kp_id": "kp_recursion",
+      "name": "递归",
+      "status": "learning",
+      "reason": "二叉树遍历的前置基础，当前掌握度较低(0.3)，建议优先巩固。"
+    },
+    {
+      "kp_id": "kp_binary_tree",
+      "name": "二叉树",
+      "status": "locked",
+      "reason": "需先提升递归掌握度。"
+    },
+    {
+      "kp_id": "kp_traversal",
+      "name": "二叉树遍历",
+      "status": "locked",
+      "reason": "最终目标。"
+    }
+  ],
+  "estimated_hours": 5.5
+}
+```
+
+---
+
+## 7. 数据库归属总结
 
 | 数据 | 存储位置 | 归谁管 |
 |------|----------|--------|

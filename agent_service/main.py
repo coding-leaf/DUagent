@@ -1,12 +1,23 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from core.qdrant import init_collections
+from core.qdrant import init_collections, get_qdrant_client
 from api.v1.router import api_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize resources
+    init_collections()
+    yield
+    # Shutdown: Clean up resources (if needed)
+    # client = get_qdrant_client()
+    # client.close() # Qdrant local client doesn't strictly require explicit close, but good practice if available
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+    lifespan=lifespan
 )
 
 # Set all CORS enabled origins
@@ -17,14 +28,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-async def startup_event():
-    """
-    Initialize resources on startup.
-    """
-    init_collections()
-    # Initialize other resources (e.g., LLM models) here
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 

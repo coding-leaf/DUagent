@@ -48,15 +48,16 @@
 
 | 入口接口 | 工作流模式 | 智能体/工具 |
 |--------|--------|--------|
-| `POST /agent/v1/chat` | 单体 Agent + Tool Calling | 辅导 Agent（含 search_knowledge / draw_diagram / run_code） |
+| `POST /agent/v1/tutoring/chat` | 单体 Agent + Tool Calling | 辅导 Agent（含 search_knowledge / draw_diagram / run_code），自行查 Qdrant |
+| `POST /agent/v1/profile/initialize` | 单体 Agent 引导对话 | 冷启动画像 Agent |
 | `POST /agent/v1/assessment/evaluate` | Pipeline 状态机 | 对比答案 - 提取盲区 - 更新掌握度 - 推荐下一步 |
-| `POST /agent/v1/resource/generate` | Manager-Worker 并行 | Manager + 5 个 Worker（讲解/导图/习题/拓展/代码） |
+| `POST /agent/v1/resources/generate` | Manager-Worker 并行 | Manager + 5 个 Worker（讲解/导图/习题/拓展/代码），Webhook 回调 |
 | `POST /agent/v1/memory/compress` | Pipeline 状态机 | 摘要压缩 + 事实提取存 Qdrant |
 
 | 基础设施 | 职责 |
 |--------|------|
 | **工具层** | 知识检索（向量 + BM25 混合）、代码沙箱、内容安全过滤 |
-| **记忆管理** | 上下文组装（接收后端传入的历史 + 画像）+ 向量库记忆检索 |
+| **记忆管理** | 上下文组装 + Qdrant RAG 检索（Agent 自行查询，不依赖 Backend 预检索） |
 | **Prompt 管理** | 各智能体的 Prompt 模板集中管理，不硬编码在代码中 |
 
 ### 🌐 Backend（同学B）
@@ -149,12 +150,19 @@ EduAgent/
 
 ### Agent Service 暴露的接口（Backend -> Agent）
 
+> 完整的请求体/响应体见 [`API_Agent内部接口规范.md`](./API_Agent内部接口规范.md) 和 [`Agent-Service.openapi.json`](../Agent-Service.openapi.json)
+
 | 接口 | 方法 | 用途 | 返回方式 |
 |------|------|------|----------|
-| `/agent/v1/chat` | POST | 智能辅导对话 | SSE 流式 |
+| `/agent/v1/tutoring/chat` | POST | 智能辅导对话（Agent 自行查 Qdrant） | SSE 流式 |
+| `/agent/v1/profile/initialize` | POST | 冷启动画像引导对话 | SSE 流式 |
+| `/agent/v1/profile/generate` | POST | 生成/刷新用户画像 | 同步 JSON |
+| `/agent/v1/evaluation/generate` | POST | 生成学习效果评估 | 同步 JSON |
+| `/agent/v1/assessment/evaluate` | POST | 测验评估与诊断 | 同步 JSON |
+| `/agent/v1/learning-path/generate` | POST | 生成个性化学习路径 | 同步 JSON |
+| `/agent/v1/resources/generate` | POST | 异步多类型资源生成 | 202 + Webhook 回调 |
 | `/agent/v1/memory/compress` | POST | 记忆压缩与事实提取 | 同步 JSON |
-| `/agent/v1/assessment/evaluate` | POST | 测验评估与画像更新 | 同步 JSON |
-| `/agent/v1/resource/generate` | POST | 异步多类型资源生成 | 立即返回 + Webhook 回调 |
+| `/agent/v1/health` | GET | 健康检查 | 同步 JSON |
 
 ### SSE 事件统一格式
 
@@ -168,9 +176,11 @@ data: {"status": "finished"}\n\n
 
 | type | 含义 | 示例 |
 |------|------|------|
-| `status` | 阶段状态提示 | `正在检索知识库...` |
-| `text` | 回答内容片段 | 逐字/逐块输出 |
-| `tool_call` | 工具调用结果 | `{"tool_name":"draw_diagram","tool_args":{...}}` |
+| `chunk` | 文本内容片段 | 逐字/逐块输出 |
+| `diagram` | 图解数据 | Mermaid 语法或图表 JSON |
+| `knowledge_points` | 引用的知识点 | `[{"name":"二叉树","chapter":"第3章","mastery":60}]` |
+| `suggestion` | 学习建议 + 推送例题 | `{"text":"建议复习...","exercises":[...]}` |
+| `done` | 本轮对话完成 | `{"conversation_id":"...","message_id":"..."}` |
 
 ---
 

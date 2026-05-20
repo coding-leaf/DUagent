@@ -1,0 +1,2718 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Client-API",
+    "description": "> 基础 URL: `https://api.eduagent.com/v1` (生产) 或 `http://localhost:8001` (开发)\n> 除登录注册外，所有接口需 Header: `Authorization: Bearer <token>`\n>\n> **统一返回格式:**\n> ```json\n> { \"code\": 200, \"message\": \"success\", \"data\": { ... } }\n> ```\n> code: 200 成功 / 400 参数错误 / 401 未授权 / 500 服务器错误\n\n---",
+    "version": "1.0.0"
+  },
+  "tags": [
+    {
+      "name": "认证模块"
+    },
+    {
+      "name": "用户信息"
+    },
+    {
+      "name": "智能对话"
+    },
+    {
+      "name": "测验评估"
+    },
+    {
+      "name": "学习效果评估"
+    },
+    {
+      "name": "推荐与路径"
+    },
+    {
+      "name": "资源生成与浏览"
+    },
+    {
+      "name": "课程与班级管理"
+    },
+    {
+      "name": "系统管理 (Admin)"
+    },
+    {
+      "name": "后端 Webhook (Agent 回调)"
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/captcha": {
+      "get": {
+        "summary": "获取图形验证码",
+        "deprecated": false,
+        "description": "获取用于登录注册的人机验证登录码",
+        "tags": [
+          "认证模块"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "captcha_token": {
+                          "type": "string",
+                          "description": "验证码令牌，登录时回传",
+                          "title": "验证码token"
+                        },
+                        "captcha_image": {
+                          "type": "string",
+                          "title": "验证码图",
+                          "description": "base64传输"
+                        }
+                      },
+                      "title": "返回请求的数据",
+                      "required": [
+                        "captcha_token",
+                        "captcha_image"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "summary": "用户注册",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "认证模块"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "title": "注册邮箱",
+                    "description": "注册邮箱"
+                  },
+                  "username": {
+                    "type": "string",
+                    "title": "用户名"
+                  },
+                  "password": {
+                    "type": "string",
+                    "title": "密码"
+                  },
+                  "registration_code": {
+                    "type": "string",
+                    "description": "用于区分老师或者学生\n",
+                    "title": "注册码"
+                  }
+                },
+                "required": [
+                  "email",
+                  "username",
+                  "password",
+                  "registration_code"
+                ]
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "用户登录",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "认证模块"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "captcha_code": {
+                    "type": "string"
+                  },
+                  "captcha_token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email",
+                  "password",
+                  "captcha_code",
+                  "captcha_token"
+                ]
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "string",
+                          "title": "令牌,用于标识是否有登录权限"
+                        },
+                        "expires_in": {
+                          "type": "integer",
+                          "description": "标识token有效期\n"
+                        }
+                      },
+                      "title": "返回请求的数据",
+                      "required": [
+                        "token",
+                        "expires_in"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/send-code": {
+      "post": {
+        "summary": "邮箱验证码发送",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "认证模块"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "summary": "找回密码",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "认证模块"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "title": "邮箱"
+                  },
+                  "verification_code": {
+                    "type": "string"
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "title": "新密码"
+                  }
+                },
+                "required": [
+                  "email",
+                  "verification_code",
+                  "new_password"
+                ]
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/user/info": {
+      "get": {
+        "summary": "获取用户信息与画像",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "用户信息"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user_id": {
+                          "type": "string",
+                          "description": "用户唯一ID",
+                          "title": "用户唯一ID"
+                        },
+                        "role": {
+                          "type": "string",
+                          "title": "角色",
+                          "description": "\"student\" / \"teacher\" / \"admin\"",
+                          "enum": [
+                            "student",
+                            "teacher",
+                            "admin"
+                          ]
+                        },
+                        "profile": {
+                          "type": "object",
+                          "properties": {
+                            "modality_preference": {
+                              "type": "object",
+                              "properties": {
+                                "video": {
+                                  "type": "integer",
+                                  "title": "视频偏好"
+                                },
+                                "chart": {
+                                  "type": "integer",
+                                  "title": "图标偏好"
+                                },
+                                "text": {
+                                  "type": "integer",
+                                  "title": "文字偏好"
+                                },
+                                "code": {
+                                  "type": "integer",
+                                  "title": "代码偏好"
+                                },
+                                "formula": {
+                                  "type": "integer",
+                                  "title": "公式偏好"
+                                }
+                              },
+                              "title": "多维雷达数据",
+                              "description": "百分比整数,显式模态偏好,总和为100\n",
+                              "required": [
+                                "chart",
+                                "text",
+                                "code",
+                                "formula"
+                              ]
+                            },
+                            "guidance_level": {
+                              "type": "string",
+                              "title": "引导等级标识",
+                              "description": "\"L1\" 启发 / \"L2\" 伴学 / \"L3\" 保姆",
+                              "enum": [
+                                "L1",
+                                "L2",
+                                "L3"
+                              ]
+                            },
+                            "knowledge_coordinates": {
+                              "type": "object",
+                              "properties": {
+                                "mastered": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "title": "已掌握课程",
+                                  "description": "内放课程名"
+                                },
+                                "learning": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "title": "正在学习的课程",
+                                  "nullable": true
+                                }
+                              },
+                              "title": "知识点掌握情况",
+                              "nullable": true
+                            },
+                            "cognitive_blind_spots": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "title": "认知盲区/易错点列表"
+                            },
+                            "drive_intent": {
+                              "type": "string",
+                              "title": "当前学习等级",
+                              "description": "\"daily\" 日常 / \"exam_cram\" 突击",
+                              "enum": [
+                                "daily",
+                                "exam_cram"
+                              ]
+                            },
+                            "discipline_base": {
+                              "type": "string",
+                              "title": "等级标识",
+                              "enum": [
+                                "gold",
+                                "silver",
+                                "bronze"
+                              ],
+                              "description": "等级标明"
+                            }
+                          },
+                          "description": "五维雷达图数据，百分比整数",
+                          "required": [
+                            "modality_preference",
+                            "guidance_level",
+                            "knowledge_coordinates",
+                            "cognitive_blind_spots",
+                            "drive_intent",
+                            "discipline_base"
+                          ],
+                          "title": "用户数据"
+                        },
+                        "current_path_node": {
+                          "type": "string",
+                          "title": "当前学习分支",
+                          "description": "当前学习路径所在的知识点名称"
+                        }
+                      },
+                      "title": "返回请求的数据",
+                      "required": [
+                        "user_id",
+                        "role",
+                        "profile",
+                        "current_path_node"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/user/guidance-level": {
+      "put": {
+        "summary": "手动调整引导粒度",
+        "deprecated": false,
+        "description": "用户手动修改学习等级",
+        "tags": [
+          "用户信息"
+        ],
+        "parameters": [
+          {
+            "name": "guidance_level",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "example": "L1,L2,L3",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "title": "返回请求的数据",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/chat/completions": {
+      "post": {
+        "summary": "发送聊天消息",
+        "deprecated": false,
+        "description": "SSE 流式传输与显示,用与直接与ai聊天的界面与接口",
+        "tags": [
+          "智能对话"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "session_id": {
+                    "type": "string",
+                    "title": "对话id,首次对话则后端生成id"
+                  },
+                  "message": {
+                    "type": "string",
+                    "title": "用户消息"
+                  }
+                },
+                "required": [
+                  "session_id",
+                  "message"
+                ]
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "event": {
+                          "type": "string",
+                          "title": "聊天类型",
+                          "enum": [
+                            "status",
+                            "text"
+                          ]
+                        }
+                      },
+                      "title": "返回请求的数据",
+                      "required": [
+                        "event"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": "// 这是一个 SSE 流接口，响应头为 text/event-stream\r\n// 每次推送的文本块格式如下：\r\n\r\nevent: message\r\ndata: {\"code\": 200, \"message\": \"success\", \"data\": {\"type\": \"status\", \"content\": \"正在检索...\"}}\r\n\r\nevent: message\r\ndata: {\"code\": 200, \"message\": \"success\", \"data\": {\"type\": \"text\", \"content\": \"二叉树的遍历...\"}}\r\n\r\nevent: done\r\ndata: {\"code\": 200, \"message\": \"success\", \"data\": {\"status\": \"finished\"}}\r\n"
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/chat/history": {
+      "get": {
+        "summary": "获取对话历史",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "智能对话"
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "description": "对话id",
+            "required": false,
+            "example": "sess_9527",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页面",
+            "required": false,
+            "example": "1",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "description": "页面大小",
+            "required": false,
+            "example": "20",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "session_id": {
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "messages": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "title": "角色",
+                              "enum": [
+                                "user",
+                                "assistant"
+                              ]
+                            },
+                            "content": {
+                              "type": "string",
+                              "title": "当前条信息"
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "title": "创立信息"
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "content",
+                            "created_at"
+                          ]
+                        }
+                      },
+                      "title": "返回请求的数据",
+                      "required": [
+                        "session_id",
+                        "total",
+                        "page",
+                        "messages"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/chat/sessions": {
+      "get": {
+        "summary": "获取会话列表",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "智能对话"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "session_id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string",
+                          "title": "绘画的标题"
+                        },
+                        "last_message_at": {
+                          "type": "string",
+                          "title": "最后聊天时间"
+                        }
+                      },
+                      "title": "返回请求的数据",
+                      "required": [
+                        "session_id",
+                        "title",
+                        "last_message_at"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/assessment/quiz": {
+      "get": {
+        "summary": "获取测验题目",
+        "deprecated": false,
+        "description": "\n| questions[] 字段 | 类型 | 说明 |\n|-----------------|------|------|\n| `id` | string | 题目唯一 ID |\n| `type` | string | 题型标识，前端据此渲染不同的答题 UI 组件 |\n| `question` | string | 题干文本 |\n| `options` | object | 仅 `single_choice` 和 `multi_choice` 有此字段 |\n| `code_template` | string | 仅 `code` 题型有，提供代码模板 |\n| `language` | string | 仅 `code` 题型有，指定编程语言 |",
+        "tags": [
+          "测验评估"
+        ],
+        "parameters": [
+          {
+            "name": "knowledge_point_id",
+            "in": "query",
+            "description": "题目id",
+            "required": false,
+            "example": "kp_traversal",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "knowledge_point_id": {
+                          "type": "string",
+                          "title": "知识点ID"
+                        },
+                        "knowledge_point_name": {
+                          "type": "string",
+                          "title": "知识点名字"
+                        },
+                        "questions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "question": {
+                                "type": "string"
+                              },
+                              "options": {
+                                "type": "object",
+                                "properties": {
+                                  "A": {
+                                    "type": "string"
+                                  },
+                                  "B": {
+                                    "type": "string"
+                                  },
+                                  "C": {
+                                    "type": "string"
+                                  },
+                                  "D": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "A",
+                                  "B",
+                                  "C",
+                                  "D"
+                                ]
+                              },
+                              "code_template": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type",
+                              "question",
+                              "options"
+                            ]
+                          },
+                          "description": "id\tstring\t题目唯一 ID\ntype\tstring\t题型标识，前端据此渲染不同的答题 UI 组件\nquestion\tstring\t题干文本\noptions\tobject\t仅 single_choice 和 multi_choice 有此字段\ncode_template\tstring\t仅 code 题型有，提供代码模板\nlanguage\tstring\t仅 code 题型有，指定编程语言"
+                        }
+                      },
+                      "required": [
+                        "knowledge_point_id",
+                        "knowledge_point_name",
+                        "questions"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "knowledge_point_id": "kp_traversal",
+                    "knowledge_point_name": "二叉树遍历",
+                    "questions": [
+                      {
+                        "id": "q1",
+                        "type": "single_choice",
+                        "question": "前序遍历的顺序是？",
+                        "options": {
+                          "A": "根左右",
+                          "B": "左根右",
+                          "C": "左右根"
+                        }
+                      },
+                      {
+                        "id": "q2",
+                        "type": "multi_choice",
+                        "question": "以下哪些属于二叉树的遍历方式？（多选）",
+                        "options": {
+                          "A": "前序",
+                          "B": "冒泡",
+                          "C": "中序",
+                          "D": "后序"
+                        }
+                      },
+                      {
+                        "id": "q3",
+                        "type": "true_false",
+                        "question": "完全二叉树的叶子节点只能出现在最后两层。"
+                      },
+                      {
+                        "id": "q4",
+                        "type": "fill_blank",
+                        "question": "二叉树前序遍历的访问顺序是：___、左子树、右子树。"
+                      },
+                      {
+                        "id": "q5",
+                        "type": "code",
+                        "question": "请用 Python 实现二叉树的前序遍历函数。",
+                        "code_template": "def preorder(root):\n    # 请在此处编写代码\n    pass",
+                        "language": "python"
+                      },
+                      {
+                        "id": "q6",
+                        "type": "short_answer",
+                        "question": "请简述前序遍历和中序遍历的区别。"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/assessment/submit": {
+      "post": {
+        "summary": "提交测验答案",
+        "deprecated": false,
+        "description": "注意：answers 的 value 类型取决于题型。单选/判断/填空/简答/代码为 string，多选为 string[]。\n\n后端内部处理:\n\n从 SQL 查出题目（含正确答案）、用户当前 profile 和 mastery\n组装 JSON POST 到 Agent POST /agent/v1/assessment/evaluate\nAgent 返回评估结果后，后端 MERGE 更新 SQL 中的 profile 和 master",
+        "tags": [
+          "测验评估"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "knowledge_point_id": {
+                    "type": "string"
+                  },
+                  "answers": {
+                    "type": "object",
+                    "properties": {
+                      "q1": {
+                        "type": "string"
+                      },
+                      "q2": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "q3": {
+                        "type": "string"
+                      },
+                      "q4": {
+                        "type": "string"
+                      },
+                      "q5": {
+                        "type": "string"
+                      },
+                      "q6": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "q1",
+                      "q2",
+                      "q3",
+                      "q4",
+                      "q5",
+                      "q6"
+                    ]
+                  }
+                },
+                "required": [
+                  "knowledge_point_id",
+                  "answers"
+                ]
+              },
+              "example": {
+                "knowledge_point_id": "kp_traversal",
+                "answers": {
+                  "q1": "A",
+                  "q2": [
+                    "A",
+                    "C",
+                    "D"
+                  ],
+                  "q3": "true",
+                  "q4": "根节点",
+                  "q5": "def preorder(root):\n    if not root: return\n    print(root.val)\n    preorder(root.left)\n    preorder(root.right)",
+                  "q6": "前序遍历先访问根节点再访问左右子树，中序遍历先访问左子树再访问根节点最后访问右子树。"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "score": {
+                          "type": "integer"
+                        },
+                        "evaluation": {
+                          "type": "string"
+                        },
+                        "question_results": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "correct": {
+                                "type": "boolean"
+                              },
+                              "test_passed": {
+                                "type": "string"
+                              },
+                              "feedback": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "correct"
+                            ]
+                          }
+                        },
+                        "mastery_changed": {
+                          "type": "boolean"
+                        },
+                        "recommended_next": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kp_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "score",
+                        "evaluation",
+                        "question_results",
+                        "mastery_changed",
+                        "recommended_next"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "score": 75,
+                    "evaluation": "你对遍历方式的分类掌握得很好，但对前序遍历的定义还需要更精确的理解。代码实现正确，逻辑清晰。",
+                    "question_results": [
+                      {
+                        "id": "q1",
+                        "correct": true
+                      },
+                      {
+                        "id": "q2",
+                        "correct": true
+                      },
+                      {
+                        "id": "q3",
+                        "correct": true
+                      },
+                      {
+                        "id": "q4",
+                        "correct": true
+                      },
+                      {
+                        "id": "q5",
+                        "correct": true,
+                        "test_passed": "3/3"
+                      },
+                      {
+                        "id": "q6",
+                        "correct": false,
+                        "feedback": "回答基本正确，但遗漏了后序遍历的对比说明。"
+                      }
+                    ],
+                    "mastery_changed": true,
+                    "recommended_next": [
+                      {
+                        "kp_id": "kp_recursion",
+                        "name": "递归",
+                        "reason": "递归终止条件掌握不足"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/assessment/evaluation-charts": {
+      "get": {
+        "summary": "获取评估图表数据",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "学习效果评估"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "progress_data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "module": {
+                                "type": "string"
+                              },
+                              "progress": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "module",
+                              "progress"
+                            ]
+                          },
+                          "description": "各章节学习进度百分比 (后端 SQL 统计)"
+                        },
+                        "mastery_data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "knowledge_point": {
+                                "type": "string"
+                              },
+                              "kp_id": {
+                                "type": "string"
+                              },
+                              "score": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "knowledge_point",
+                              "kp_id",
+                              "score"
+                            ],
+                            "description": "各知识点掌握度 (后端从 user_mastery 查)"
+                          }
+                        },
+                        "resource_usage_data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "ratio": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "label",
+                              "ratio"
+                            ]
+                          },
+                          "description": "各资源类型使用比例 (后端 SQL 统计)"
+                        },
+                        "ai_summary": {
+                          "type": "string",
+                          "description": "后端调一次 LLM 生成的文字总结"
+                        }
+                      },
+                      "required": [
+                        "progress_data",
+                        "mastery_data",
+                        "resource_usage_data",
+                        "ai_summary"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "progress_data": [
+                      {
+                        "module": "线性表",
+                        "progress": 100
+                      },
+                      {
+                        "module": "树",
+                        "progress": 40
+                      },
+                      {
+                        "module": "图",
+                        "progress": 0
+                      }
+                    ],
+                    "mastery_data": [
+                      {
+                        "knowledge_point": "前序遍历",
+                        "kp_id": "kp_preorder",
+                        "score": 90
+                      },
+                      {
+                        "knowledge_point": "递归",
+                        "kp_id": "kp_recursion",
+                        "score": 45
+                      }
+                    ],
+                    "resource_usage_data": [
+                      {
+                        "type": "video",
+                        "label": "视频",
+                        "ratio": 0.3
+                      },
+                      {
+                        "type": "text",
+                        "label": "文档",
+                        "ratio": 0.25
+                      },
+                      {
+                        "type": "code",
+                        "label": "代码",
+                        "ratio": 0.2
+                      },
+                      {
+                        "type": "chart",
+                        "label": "图表",
+                        "ratio": 0.15
+                      },
+                      {
+                        "type": "formula",
+                        "label": "公式",
+                        "ratio": 0.1
+                      }
+                    ],
+                    "ai_summary": "该生近期在二叉树章节学习积极，但测试中反映出对递归的掌握仍有欠缺，偏好视频类资源。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/learning-path": {
+      "get": {
+        "summary": "获取学习路径",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "推荐与路径"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "current_node": {
+                          "type": "string",
+                          "description": "当前学习路径所在节点 ID"
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kp_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "mastery": {
+                                "type": "number"
+                              },
+                              "status": {
+                                "type": "string",
+                                "description": "\"mastered\" >= 0.7 / \"learning\" 当前 / \"weak\" < 0.3 / \"locked\" 前置未满足"
+                              }
+                            },
+                            "required": [
+                              "kp_id",
+                              "name",
+                              "mastery",
+                              "status"
+                            ]
+                          },
+                          "description": "所有知识点及其掌握度和状态"
+                        },
+                        "edges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "from": {
+                                "type": "string"
+                              },
+                              "to": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "to"
+                            ]
+                          },
+                          "description": "前置依赖关系（前端用于画有向图）"
+                        },
+                        "recommended_next": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kp_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "description": "推荐下一步学习的节点"
+                        }
+                      },
+                      "required": [
+                        "current_node",
+                        "nodes",
+                        "edges",
+                        "recommended_next"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "current_node": "kp_binary_tree",
+                    "nodes": [
+                      {
+                        "kp_id": "kp_array",
+                        "name": "数组",
+                        "mastery": 0.9,
+                        "status": "mastered"
+                      },
+                      {
+                        "kp_id": "kp_linkedlist",
+                        "name": "链表",
+                        "mastery": 0.8,
+                        "status": "mastered"
+                      },
+                      {
+                        "kp_id": "kp_recursion",
+                        "name": "递归",
+                        "mastery": 0.3,
+                        "status": "weak"
+                      },
+                      {
+                        "kp_id": "kp_binary_tree",
+                        "name": "二叉树",
+                        "mastery": 0.5,
+                        "status": "learning"
+                      },
+                      {
+                        "kp_id": "kp_traversal",
+                        "name": "二叉树遍历",
+                        "mastery": 0,
+                        "status": "locked"
+                      }
+                    ],
+                    "edges": [
+                      {
+                        "from": "kp_array",
+                        "to": "kp_linkedlist"
+                      },
+                      {
+                        "from": "kp_linkedlist",
+                        "to": "kp_binary_tree"
+                      },
+                      {
+                        "from": "kp_recursion",
+                        "to": "kp_binary_tree"
+                      },
+                      {
+                        "from": "kp_binary_tree",
+                        "to": "kp_traversal"
+                      }
+                    ],
+                    "recommended_next": [
+                      {
+                        "kp_id": "kp_recursion",
+                        "name": "递归",
+                        "reason": "前置依赖已满足，当前掌握度最低"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/recommendations/daily": {
+      "get": {
+        "summary": "获取主页推荐资源",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "推荐与路径"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "resource_id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "knowledge_point": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "resource_id",
+                          "type",
+                          "title",
+                          "knowledge_point",
+                          "created_at"
+                        ]
+                      },
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "resource_id": "res_001",
+                      "type": "mindmap",
+                      "title": "二叉树核心知识点导图",
+                      "knowledge_point": "二叉树",
+                      "created_at": "2026-04-28T08:00:00Z"
+                    },
+                    {
+                      "resource_id": "res_002",
+                      "type": "quiz",
+                      "title": "递归算法专项练习5题",
+                      "knowledge_point": "递归",
+                      "created_at": "2026-04-28T08:00:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/resource/generate": {
+      "post": {
+        "summary": "触发资源生成 (异步)",
+        "deprecated": false,
+        "description": "在 SQL tasks 表创建一条 status=pending 的记录\n从 SQL 查出用户画像\n异步 POST 到 Agent POST /agent/v1/resource/generate\n等待 Agent Webhook 回调后更新 SQL",
+        "tags": [
+          "资源生成与浏览"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "knowledge_point": {
+                    "type": "string",
+                    "title": "知识点"
+                  },
+                  "knowledge_point_id": {
+                    "type": "string",
+                    "title": "知识点id"
+                  },
+                  "resource_types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "需要生成哪些类型的资料"
+                  }
+                },
+                "required": [
+                  "knowledge_point",
+                  "knowledge_point_id",
+                  "resource_types"
+                ]
+              },
+              "example": {
+                "knowledge_point": "红黑树",
+                "knowledge_point_id": "kp_rbtree",
+                "resource_types": [
+                  "explanation_doc",
+                  "mindmap",
+                  "quiz",
+                  "extended_reading",
+                  "code_practice"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "task_id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "task_id",
+                        "status"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "任务已提交，后台生成中",
+                  "data": {
+                    "task_id": "task_8848",
+                    "status": "pending"
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/resource/task/{task_id}": {
+      "get": {
+        "summary": "查询生成任务状态",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "资源生成与浏览"
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "task_id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "resource_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "task_id",
+                        "status",
+                        "resource_ids"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "task_id": "task_8848",
+                    "status": "completed",
+                    "resource_ids": [
+                      "res_101",
+                      "res_102",
+                      "res_103",
+                      "res_104",
+                      "res_105"
+                    ]
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/resource/{source_id}": {
+      "get": {
+        "summary": "获取资源详情",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "资源生成与浏览"
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "knowledge_point": {
+                          "type": "string"
+                        },
+                        "content_md": {
+                          "type": "string"
+                        },
+                        "created_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "type",
+                        "title",
+                        "knowledge_point",
+                        "content_md",
+                        "created_at"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "resource_id": "res_101",
+                    "type": "explanation_doc",
+                    "title": "红黑树详解",
+                    "knowledge_point": "红黑树",
+                    "content_md": "# 红黑树\n\n红黑树是一种自平衡二叉搜索树...",
+                    "created_at": "2026-04-28T10:30:00Z"
+                  }
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/resources": {
+      "get": {
+        "summary": "获取资源列表",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "资源生成与浏览"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "example": "quiz",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "example": "1",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "example": "10",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer"
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "resources": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "resource_id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "knowledge_point": {
+                                "type": "string"
+                              },
+                              "created_at": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "page",
+                        "resources"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "total": 15,
+                    "page": 1,
+                    "resources": [
+                      {
+                        "resource_id": "res_103",
+                        "type": "quiz",
+                        "title": "红黑树专项练习",
+                        "knowledge_point": "红黑树",
+                        "created_at": "2026-04-28T10:30:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/course/generate-code": {
+      "post": {
+        "summary": "教师生成课程码",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "课程与班级管理"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "course_name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "course_name"
+                ]
+              },
+              "example": {
+                "course_name": "数据结构与算法(2026春)"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "course_id": {
+                          "type": "string"
+                        },
+                        "course_code": {
+                          "type": "string"
+                        },
+                        "course_name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "course_id",
+                        "course_code",
+                        "course_name"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "课程创建成功",
+                  "data": {
+                    "course_id": "c_1001",
+                    "course_code": "DS2026",
+                    "course_name": "数据结构与算法(2026春)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/course/join": {
+      "post": {
+        "summary": "学生加入课程",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "课程与班级管理"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "course_code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "course_code"
+                ]
+              },
+              "example": {
+                "course_code": "DS2026"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "null",
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "成功加入课程",
+                  "data": null
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/course/{course_id}/students": {
+      "get": {
+        "summary": "教师获取班级学生列表",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "课程与班级管理"
+        ],
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "profile": {
+                            "type": "object",
+                            "properties": {
+                              "modality_preference": {
+                                "type": "object",
+                                "properties": {
+                                  "video": {
+                                    "type": "integer"
+                                  },
+                                  "chart": {
+                                    "type": "integer"
+                                  },
+                                  "text": {
+                                    "type": "integer"
+                                  },
+                                  "code": {
+                                    "type": "integer"
+                                  },
+                                  "formula": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "video",
+                                  "chart",
+                                  "text",
+                                  "code",
+                                  "formula"
+                                ]
+                              },
+                              "guidance_level": {
+                                "type": "string"
+                              },
+                              "knowledge_coordinates": {
+                                "type": "object",
+                                "properties": {
+                                  "mastered": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "learning": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "mastered",
+                                  "learning"
+                                ]
+                              },
+                              "cognitive_blind_spots": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "drive_intent": {
+                                "type": "string"
+                              },
+                              "discipline_base": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "modality_preference",
+                              "guidance_level",
+                              "knowledge_coordinates",
+                              "cognitive_blind_spots",
+                              "drive_intent",
+                              "discipline_base"
+                            ]
+                          },
+                          "current_path_node": {
+                            "type": "string",
+                            "description": "这学生目前在学习路径的哪一步卡着"
+                          },
+                          "overall_mastery": {
+                            "type": "number",
+                            "description": "个学生对整门课的总掌握度"
+                          }
+                        }
+                      },
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "user_id": "u_123",
+                      "username": "student_01",
+                      "profile": {
+                        "modality_preference": {
+                          "video": 30,
+                          "chart": 25,
+                          "text": 15,
+                          "code": 20,
+                          "formula": 10
+                        },
+                        "guidance_level": "L2",
+                        "knowledge_coordinates": {
+                          "mastered": [
+                            "顺序表"
+                          ],
+                          "learning": [
+                            "二叉树遍历"
+                          ]
+                        },
+                        "cognitive_blind_spots": [
+                          "递归边界条件"
+                        ],
+                        "drive_intent": "daily",
+                        "discipline_base": "bronze"
+                      },
+                      "current_path_node": "二叉树遍历",
+                      "overall_mastery": 0.45
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/admin/registration-codes": {
+      "get": {
+        "summary": "分发注册码",
+        "deprecated": true,
+        "description": "> **说明**：为了简化比赛开发，注册码分发机制改为**硬编码**，不再提供动态生成接口。\n> \n> 系统默认内置以下几个长期有效的注册码供演示与测试使用（写死在代码/数据库中）：\n> - 学生注册码：`STU_TEST_2026`\n> - 教师注册码：`TCH_TEST_2026`",
+        "tags": [
+          "系统管理 (Admin)"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/admin/logs": {
+      "get": {
+        "summary": "获取系统日志",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "系统管理 (Admin)"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "example": "1",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "example": "20",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "title": "状态码"
+                    },
+                    "message": {
+                      "type": "string",
+                      "title": "消息类型"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer"
+                        },
+                        "logs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "time": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "details": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "time",
+                              "type",
+                              "value",
+                              "details"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "logs"
+                      ],
+                      "title": "返回请求的数据"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data"
+                  ]
+                },
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "total": 120,
+                    "logs": [
+                      {
+                        "time": "2026-04-28 10:00:00",
+                        "type": "agent_latency",
+                        "value": "1.2s",
+                        "details": "Chatbot response"
+                      },
+                      {
+                        "time": "2026-04-28 10:05:00",
+                        "type": "security_block",
+                        "value": "幻觉拦截",
+                        "details": "Blocked hallucinated content"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/internal/webhook/resource_completed": {
+      "post": {
+        "summary": "资源生成完成回调",
+        "deprecated": false,
+        "description": "由 Agent Service 在资源生成完成后调用，无需前端鉴权\n由agent发送给后端,后端无需请求,仅仅开放端口",
+        "tags": [
+          "后端 Webhook (Agent 回调)"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "responses": {},
+    "securitySchemes": {}
+  },
+  "servers": [],
+  "security": []
+}

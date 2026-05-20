@@ -21,6 +21,11 @@
 - 分支修改时,允许git存档
 ## 背景补充
 - 本项目基于python+FastAPI开发,agentscope为ai框架
-- 通过uv进行包管理
-- 开发环境为wsl+python3(既,通过python3允许)
+- 通过uv进行包管理和虚拟环境管理
+- 开发环境为wsl+python3(既,命令行为 python3)
 - 项目实际来源https://www.cnsoftbei.com/content-3-1286-1.html
+## 开发准则
+- 以辅助用户开发为核心,避免主动开发,做好伴学
+- 提供思路,提供合理的开发建议,提供合理的开发框架
+- 渐进式开发
+- 参考资料优先以agent_scope为准

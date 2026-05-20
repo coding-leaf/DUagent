@@ -103,4 +103,3 @@ class DoneEvent(BaseModel):
       conversation_id: Optional[str] = Field(None, description="对话 ID")
       knowledge_points_used: list[KnowledgePoint] = Field(default_factory=list)
       suggested_exercises: list[SuggestedExercise] = Field(default_factory=list)
-      

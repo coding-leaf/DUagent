@@ -17,14 +17,14 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  🌐 Web Backend (Port 8001)                                 │
 │  职责: 鉴权 · 静态托管 · 对话持久化 · 代理转发               │
-│  负责人: 同学B                                               │
+│  负责人: 前后端负责人                                         │
 └──────────────────────────┬──────────────────────────────────┘
                            │  HTTP API (/agent/*)
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  🧠 Agent Service (Port 8002)                               │
 │  职责: 智能辅导 · 记忆压缩 · 测验评估 · 资源生成 · RAG检索   │
-│  负责人: 同学A                                               │
+│  负责人: Agent 负责人                                         │
 └─────────┬───────────────┬───────────────┬───────────────────┘
           │               │               │
           ▼               ▼               ▼
@@ -40,7 +40,7 @@
 
 项目分为以下四个模块，各模块职责明确，实际目录结构由开发者自行组织。
 
-### 🧠 Agent Service（同学A）
+### 🧠 Agent Service（Agent 负责人）
 
 半无状态的 AI 计算服务。自身拥有 Qdrant 向量库（课程知识 + 用户记忆），不碰 SQL。
 
@@ -60,7 +60,7 @@
 | **记忆管理** | 上下文组装 + Qdrant RAG 检索（Agent 自行查询，不依赖 Backend 预检索） |
 | **Prompt 管理** | 各智能体的 Prompt 模板集中管理，不硬编码在代码中 |
 
-### 🌐 Backend（同学B）
+### 🌐 Backend（前后端负责人）
 
 薄网关层，管用户、管数据、管转发。自身不包含任何 AI 逻辑。
 
@@ -71,7 +71,7 @@
 | **数据库** | ORM 模型（对话历史、用户画像、资源记录等） |
 | **中间件** | 简单鉴权（JWT 或 Session） |
 
-### 💻 Frontend（同学B）
+### 💻 Frontend（前后端负责人）
 
 用户界面，重点关注流式渲染和多模态内容展示。
 
@@ -83,7 +83,7 @@
 | 资源浏览 | 多模态资源卡片化展示与下载 |
 | 在线答题 | 测验界面 |
 
-### 🗂️ Dataset（同学A）
+### 🗂️ Dataset（Agent 负责人）
 
 课程知识库原始资料及入库处理脚本。选取一门完整的高校专业课程作为切入点。
 
@@ -95,7 +95,7 @@
 
 ```
 EduAgent/
-├── agent_service/              # 🧠 Agent 核心服务 [同学A]
+├── agent_service/              # 🧠 Agent 核心服务 [Agent 负责人]
 │   ├── main.py                 #   服务入口 (port 8002)
 │   ├── agents/                 #   智能体定义
 │   ├── sub_agents/             #   资源生成子智能体
@@ -104,20 +104,20 @@ EduAgent/
 │   ├── prompts/                #   Prompt 模板
 │   └── models/                 #   数据模型 / Pydantic Schema
 │
-├── backend/                    # 🌐 Web 后端网关 [同学B]
+├── backend/                    # 🌐 Web 后端网关 [前后端负责人]
 │   ├── main.py                 #   服务入口 (port 8001)
 │   ├── api/                    #   路由定义
 │   ├── services/               #   业务逻辑 + Agent 通信
 │   ├── db/                     #   数据库 ORM + 迁移
 │   └── middleware/             #   鉴权等中间件
 │
-├── frontend/                   # 💻 Web 前端 [同学B]
+├── frontend/                   # 💻 Web 前端 [前后端负责人]
 │   └── src/
 │       ├── views/              #   页面
 │       ├── components/         #   通用组件
 │       └── api/                #   接口封装
 │
-├── dataset/                    # 🗂️ 课程知识库 [同学A]
+├── dataset/                    # 🗂️ 课程知识库 [Agent 负责人]
 │   ├── raw/                    #   原始文档
 │   ├── processed/              #   清洗切片后的数据
 │   └── scripts/                #   入库 & 校验脚本
@@ -150,7 +150,7 @@ EduAgent/
 
 ### Agent Service 暴露的接口（Backend -> Agent）
 
-> 完整的请求体/响应体见 [`API_Agent内部接口规范.md`](./API_Agent内部接口规范.md) 和 [`Agent-Service.openapi.json`](../Agent-Service.openapi.json)
+> 完整的请求体/响应体见 [`API_Agent内部接口规范.md`](./API_Agent内部接口规范.md) 和 [`Agent-Service.openapi.json`](./Agent-Service.openapi.json)
 
 | 接口 | 方法 | 用途 | 返回方式 |
 |------|------|------|----------|
@@ -166,12 +166,11 @@ EduAgent/
 
 ### SSE 事件统一格式
 
-```
-event: message
-data: {"type": "<event_type>", "content": "<content>"}\n\n
+请求体仍是 `application/json`，响应才是 `text/event-stream`。前后端以 `data.type` 判断事件类型；`event:` 字段可省略，或统一使用 `message`。
 
-event: done
-data: {"status": "finished"}\n\n
+```
+data: {"type": "<event_type>", "content": "<content>"}\n\n
+data: {"type": "done", "status": "finished"}\n\n
 ```
 
 | type | 含义 | 示例 |
@@ -253,8 +252,8 @@ data: {"status": "finished"}\n\n
 
 ### 分工边界
 
-- **同学A** 只在 `agent_service/` 和 `dataset/` 中开发
-- **同学B** 只在 `backend/` 和 `frontend/` 中开发
+- **Agent 负责人** 只在 `agent_service/` 和 `dataset/` 中开发
+- **前后端负责人** 只在 `backend/` 和 `frontend/` 中开发
 - 接口变更必须双方确认后再改
 
 ### Git 分支策略
@@ -262,14 +261,14 @@ data: {"status": "finished"}\n\n
 ```
 main              ← 稳定可运行版本，不直接提交
 ├── dev           ← 日常集成分支，双方合并到这里
-├── feat/agent-*  ← 同学A 的功能分支（如 feat/agent-router）
-└── feat/web-*    ← 同学B 的功能分支（如 feat/web-chat-ui）
+├── feat/agent-*  ← Agent 负责人功能分支（如 feat/agent-tutoring）
+└── feat/web-*    ← 前后端负责人功能分支（如 feat/web-chat-ui）
 ```
 
 ### Commit 规范
 
 ```
-feat(agent): 完成路由智能体意图分类
+feat(agent): 完成智能辅导检索链路
 feat(backend): 对话历史分页查询接口
 feat(frontend): 流式对话气泡组件
 fix(agent): 修复时间解析器时区问题

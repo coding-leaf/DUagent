@@ -46,11 +46,13 @@ JWT Bearer Token，登录后获取。Header: `Authorization: Bearer <access_toke
 
 ### 流式响应 (SSE)
 
-`Content-Type: text/event-stream`，每条消息格式：
+请求体仍使用 `Content-Type: application/json`；响应使用 `Content-Type: text/event-stream`。
+
+每条 SSE 消息格式：
 
 ```
 data: {"type": "chunk", "content": "你好，这道题考察的是..."}
-data: {"type": "tool_call", "tool": "diagram", "data": "graph TD; A-->B"}
+data: {"type": "diagram", "data": "graph TD; A-->B"}
 data: {"type": "done", "conversation_id": "conv_xxx"}
 ```
 
@@ -624,7 +626,7 @@ POST /api/v1/evaluation/refresh
 POST /api/v1/profile/initialize
 ```
 
-**Content-Type:** `text/event-stream` (SSE)
+**响应 Content-Type:** `text/event-stream` (SSE)
 
 **请求体 `application/json`：**
 
@@ -955,7 +957,7 @@ POST /api/v1/resources/generate
 POST /api/v1/tutoring/chat
 ```
 
-**Content-Type:** `text/event-stream` (SSE)
+**响应 Content-Type:** `text/event-stream` (SSE)
 
 **请求体 `application/json`：**
 

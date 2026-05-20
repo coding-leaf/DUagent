@@ -23,6 +23,10 @@ wheels/
 .venv
 venv/
 ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
 
 # Node
 node_modules/
@@ -48,9 +52,17 @@ Thumbs.db
 *.sqlite3
 *.sqlite3-journal
 *.db
+*.sqlite
+*.sqlite-journal
+
+# Local vector stores
+qdrant_data/
+**/qdrant_data/
 
 # Coverage & Build
 coverage/
+.coverage
+.coverage.*
 .nyc_output/
 htmlcov/
 .next/

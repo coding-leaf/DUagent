@@ -1,6 +1,7 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance
-from core.config import settings
+
+from agent_service.core.config import settings
 
 _qdrant_client: QdrantClient | None = None
 

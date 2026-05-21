@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from api.v1 import health
+
+from agent_service.api.v1 import health
 
 api_router = APIRouter()
 

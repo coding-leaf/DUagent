@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from core.config import settings
-from core.qdrant import init_collections, get_qdrant_client
-from api.v1.router import api_router
+
+from agent_service.api.v1.router import api_router
+from agent_service.core.config import settings
+from agent_service.core.qdrant import init_collections, get_qdrant_client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,4 +35,5 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8002, reload=True)
+
+    uvicorn.run("agent_service.main:app", host="0.0.0.0", port=8002, reload=True)

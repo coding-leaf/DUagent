@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eduagent-agent-service"
+version = "0.1.0"
+description = "Agent service for EDUagent."
+requires-python = ">=3.12"
+dependencies = [
+    "agentscope>=0.0.4",
+    "fastapi>=0.100.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "qdrant-client>=1.7.0",
+    "sse-starlette>=2.0.0",
+    "uvicorn>=0.23.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = [
+    "agent_service",
+    "agent_service.agents",
+    "agent_service.api",
+    "agent_service.api.v1",
+    "agent_service.core",
+    "agent_service.schemas",
+]
+
+[tool.setuptools.package-dir]
+agent_service = "."
+"agent_service.agents" = "agents"
+"agent_service.api" = "api"
+"agent_service.api.v1" = "api/v1"
+"agent_service.core" = "core"
+"agent_service.schemas" = "schemas"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

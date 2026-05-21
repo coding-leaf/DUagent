@@ -1,6 +1,6 @@
 # Agent Service 开发导读
 
-> 用途：这是一份面向后续开发的内部阅读文档，不替代正式接口规范。它基于 `agent_service/docs/`、根目录 `docs/`、当前 `agent_service/` 代码，以及 `agent_service/AGENTS.md` 整理而成，目标是让开发时先分清“项目想做什么”“当前做到哪一步”“接下来该按什么顺序落地”。
+> 用途：这是一份面向后续开发的内部阅读文档，不替代正式接口规范。它基于根目录 `docs/`、当前 `agent_service/` 代码，以及 `agent_service/AGENTS.md` 整理而成，目标是让开发时先分清“项目想做什么”“当前做到哪一步”“接下来该按什么顺序落地”。
 
 ---
 
@@ -10,19 +10,20 @@
 
 1. `agent_service/AGENTS.md`
    - 约束当前协作方式：先分析、再说明方案、最小改动、避免大范围重构。
-2. `docs/README.md`
-   - 这是当前仓库里最接近“总设计说明/README”的文件。
-   - 根目录没有单独的 `README.md`，因此项目意图应以这里为准。
-3. `agent_service/docs/API_Agent内部接口规范.md`
+2. `docs/20-agent-api/API_Agent内部接口规范.md`
    - Backend 与 Agent Service 的接口契约。
-4. `agent_service/docs/Agent-Service.openapi.json`
+3. `docs/20-agent-api/Agent-Service.openapi.json`
    - 契约的机器可读版本，适合后续对接、Mock、校验。
-5. `docs/superpowers/specs/2026-05-09-agent-service-design.md`
+4. `docs/10-client-api/API_前端接口规范.md` 与 `docs/10-client-api/Client-API.openapi.json`
+   - 用于理解 Backend 对前端暴露的正式业务契约，尤其是课程、画像、题目、任务状态、Webhook 等边界。
+5. `docs/00-overview/README.md`
+   - 只用于理解项目全貌和分层，不作为字段、端点、流程的最终依据。
+6. `docs/superpowers/specs/2026-05-09-agent-service-design.md`
    - 更偏实现思路和目录建议，不是最终代码现状。
-6. 当前 `agent_service/` 代码
+7. 当前 `agent_service/` 代码
    - 这是唯一代表“已经实现了什么”的来源。
 
-一句话总结：`docs/` 决定目标，`agent_service/` 当前代码决定现状，开发时不能把两者混为一谈。
+一句话总结：正式 API 文档和 OpenAPI 决定契约，`docs/00-overview/README.md` 只做总览，`agent_service/` 当前代码决定现状，开发时不能把三者混为一谈。
 
 ---
 
@@ -45,16 +46,16 @@ EduAgent 是一个面向教育场景的多智能体系统，整体拆成两个�
 
 ## 3. Agent Service 的目标职责
 
-根据 `docs/README.md` 和内部接口规范，`agent_service` 最终要提供 9 类能力：
+根据正式接口规范，`agent_service` 最终要提供 9 类能力：
 
 | 能力 | 接口 | 形态 |
 |------|------|------|
 | 健康检查 | `GET /agent/v1/health` | 同步 JSON |
 | 智能辅导 | `POST /agent/v1/tutoring/chat` | SSE |
-| 冷启动画像引导 | `POST /agent/v1/profile/initialize` | SSE |
 | 用户画像生成/刷新 | `POST /agent/v1/profile/generate` | 同步 JSON |
 | 学习效果评估 | `POST /agent/v1/evaluation/generate` | 同步 JSON |
 | 测验评估 | `POST /agent/v1/assessment/evaluate` | 同步 JSON |
+| 题目生成 | `POST /agent/v1/assessment/generate-questions` | 同步 JSON |
 | 学习路径生成 | `POST /agent/v1/learning-path/generate` | 同步 JSON |
 | 资源生成 | `POST /agent/v1/resources/generate` | 202 + webhook |
 | 记忆压缩 | `POST /agent/v1/memory/compress` | 同步 JSON |
@@ -65,7 +66,9 @@ EduAgent 是一个面向教育场景的多智能体系统，整体拆成两个�
 - `assessment/evaluate`：把学习行为转成诊断结果。
 - `profile/generate`：把诊断与统计转成稳定画像。
 - `memory/compress`：支撑长对话与长期记忆。
-- `resources/generate`：异步生成讲解、导图、习题、拓展、代码等资源。
+- `resources/generate`：异步生成讲解、导图、阅读材料、代码示例等课程学习资料。
+
+冷启动画像不属于 Agent Service。v1 由 Frontend 展示固定问卷，Backend 直接保存初始画像；后续刷新画像时再调用 `POST /agent/v1/profile/generate`。
 
 ---
 
@@ -177,7 +180,7 @@ EduAgent 是一个面向教育场景的多智能体系统，整体拆成两个�
 
 ### SSE
 
-聊天与画像引导是流式接口，事件类型至少包括：
+聊天是流式接口，事件类型至少包括：
 
 - `chunk`
 - `diagram`
@@ -272,8 +275,8 @@ EduAgent 是一个面向教育场景的多智能体系统，整体拆成两个�
 - 状态码/调用方式变化: <sync-json | sse | 202-webhook>
 
 文档位置:
-- agent_service/docs/API_Agent内部接口规范.md
-- agent_service/docs/Agent-Service_开发导读.md
+- docs/20-agent-api/API_Agent内部接口规范.md
+- docs/30-dev-guide/Agent-Service_开发导读.md
 ```
 
 ---
@@ -320,6 +323,7 @@ Qdrant 的长期记忆只是辅助上下文，不是用户状态的唯一来源�
 
 - 详细字段说明：看 `API_Agent内部接口规范.md`
 - 机器校验：看 `Agent-Service.openapi.json`
+- 前后端正式对外契约：看 `docs/10-client-api/API_前端接口规范.md` 和 `docs/10-client-api/Client-API.openapi.json`
 - 实际代码现状：看 `agent_service/` 源码
 
 ---

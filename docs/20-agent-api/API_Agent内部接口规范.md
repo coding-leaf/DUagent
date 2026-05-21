@@ -15,10 +15,6 @@
 { "code": 200, "message": "success", "data": {} }
 ```
 
-### 认证方式
-
-服务间调用，Header: `X-API-Key: <internal_key>`
-
 ### 流式响应 (SSE)
 
 请求体仍使用 `Content-Type: application/json`；响应使用 `Content-Type: text/event-stream`。
@@ -39,7 +35,7 @@ data: {"type": "done", ...}
 { "code": 202, "message": "accepted", "data": { "task_id": "...", "estimated_duration": 60 } }
 ```
 
-任务完成后，Agent Service POST `webhook_url` 回调 Backend。
+Backend 调用 Agent 前先生成 `task_id` 并传入请求体；Agent Service 返回和回调时必须原样使用该 `task_id`。任务完成后，Agent Service POST `webhook_url` 回调 Backend。内部链路无需额外鉴权；Agent Service 不直接写 Backend 数据库，只返回结构化结果，由 Backend 校验、落库并更新任务状态。
 
 ---
 
@@ -55,12 +51,13 @@ POST /agent/v1/tutoring/chat
 
 **请求体 `application/json`：**
 
-> **Qdrant 检索由 Agent Service 自行完成。** Agent 收到请求后，自行将用户消息向量化 → Qdrant 混合检索 → Rerank → 注入 Prompt。Backend 仅传入 SQL 数据（user_profile、conversation_summary、recent_messages）。
+> **Qdrant 检索由 Agent Service 自行完成。** Agent 收到请求后，每次回复前都将用户消息向量化，检索 `user_memory` 长期记忆和相关历史事实；`scope=course` 时再检索课程知识库并注入 Prompt。Backend 仅传入 SQL 数据（user_profile、conversation_summary、recent_messages），并负责全量保存原始对话消息及 meta 信息。
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | user_id | string | 是 | 用户 ID |
-| course_id | string | 是 | 课程 ID |
+| scope | string | 否 | course / global，默认 course |
+| course_id | string | 条件必填 | 课程 ID；scope=course 时必填，scope=global 时为空 |
 | conversation_id | string | 否 | 对话 ID（继续已有对话时传入） |
 | message | string | 是 | 用户当前消息 |
 | user_profile | object | 是 | 用户画像（由 Backend 从 SQL 组装） |
@@ -72,6 +69,12 @@ POST /agent/v1/tutoring/chat
 | recent_messages | array | 否 | 最近 N 轮缓冲消息 |
 | recent_messages[].role | string | 是 | user / assistant |
 | recent_messages[].content | string | 是 | 消息内容 |
+| recent_messages[].meta | object | 否 | Backend 保存的消息元信息 |
+
+**模式说明：**
+
+- `scope=course`：课程内智能辅导，使用课程知识库 RAG、用户画像、长期记忆。
+- `scope=global`：全局简单 AI Bot，不读取课程知识库，只使用通用能力和用户长期记忆。
 
 **SSE 事件类型：**
 
@@ -95,39 +98,9 @@ POST /agent/v1/tutoring/chat
 
 ## 二、用户画像 `/agent/v1/profile`
 
-### 2.1 冷启动引导对话
+**冷启动边界：** v1 冷启动由 Frontend 展示固定问卷，并由 Backend 按 `user_id + course_id` 保存初始画像；Agent Service 不提供多轮冷启动引导接口。Agent 仅负责后续的画像生成/刷新。
 
-```
-POST /agent/v1/profile/initialize
-```
-
-**响应 Content-Type:** `text/event-stream` (SSE)
-
-**请求体 `application/json`：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| user_id | string | 是 | 用户 ID |
-| course_id | string | 是 | 课程 ID |
-| user_basic_info | object | 是 | 用户基础信息 |
-| user_basic_info.major | string | 否 | 专业 |
-| user_basic_info.grade | string | 否 | 年级 |
-
-**SSE 事件类型：**
-
-| type | 说明 |
-|------|------|
-| message | Agent 提问（了解用户基础水平和偏好） |
-| chunk | 流式文本片段 |
-| done | 引导完成，携带初始画像 |
-
-**`done` 事件 `data`：**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| initial_profile | object | 初始画像数据，结构同 `/profile/generate` 响应 |
-
-### 2.2 生成/刷新画像
+### 2.1 生成/刷新画像
 
 ```
 POST /agent/v1/profile/generate
@@ -151,7 +124,7 @@ POST /agent/v1/profile/generate
 | resource_usage_stats.video_count | integer | 否 | 视频使用次数 |
 | resource_usage_stats.document_count | integer | 否 | 文档使用次数 |
 | resource_usage_stats.code_count | integer | 否 | 代码资源使用次数 |
-| resource_usage_stats.exercise_count | integer | 否 | 练习题使用次数 |
+| resource_usage_stats.quiz_count | integer | 否 | 做题次数 |
 | drive_intent_data | object | 否 | 近期学习频率（由 Backend 从 SQL 统计） |
 | drive_intent_data.recent_7d_sessions | integer | 否 | 近 7 天学习次数 |
 | drive_intent_data.recent_7d_duration | integer | 否 | 近 7 天学习时长（分钟） |
@@ -210,7 +183,7 @@ POST /agent/v1/evaluation/generate
 | quiz_results[].score | number | 是 | 正确率 |
 | quiz_results[].created_at | string | 是 | 完成时间 |
 | resource_usage | object | 是 | 资源使用统计 |
-| resource_usage.by_type | object | 是 | `{video: N, document: N, code: N, exercise: N}` |
+| resource_usage.by_type | object | 是 | `{document: N, mindmap: N, reading: N, code: N, video: N}` |
 | resource_usage.by_chapter | object | 否 | 各章节资源使用分布 |
 
 **响应 `data`：**
@@ -250,11 +223,11 @@ POST /agent/v1/assessment/evaluate
 | questions[].type | string | 是 | 题型 |
 | questions[].content | string | 是 | 题目内容 |
 | questions[].options | array | 否 | 选项列表 |
-| questions[].correct_answer | string | 是 | 正确答案 |
+| questions[].correct_answer | string/array | 是 | 正确答案（多选题为数组） |
 | questions[].knowledge_point | string | 是 | 关联知识点 |
 | answers | array | 是 | 用户答案 |
 | answers[].question_id | string | 是 | 题目 ID |
-| answers[].answer | string | 是 | 用户提交的答案 |
+| answers[].answer | string/array | 是 | 用户提交的答案（多选题为数组） |
 | user_mastery | object | 否 | 用户当前知识点掌握度 |
 
 **响应 `data`：**
@@ -272,6 +245,49 @@ POST /agent/v1/assessment/evaluate
 | diagnosis.weak_points[].name | string | 知识点名称 |
 | diagnosis.weak_points[].error_pattern | string | 错误模式描述 |
 | diagnosis.suggestions | array | 复习建议 |
+
+### 4.2 生成题目
+
+```
+POST /agent/v1/assessment/generate-questions
+```
+
+**说明：** Agent Service 只生成结构化题目 JSON，不直接写 SQL。Backend 调用本接口后负责校验题目结构、补充 `course_id` / `owner_user_id` / `source` 等数据库字段，并写入 `quiz_questions`。
+
+**请求体 `application/json`：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| user_id | string | 是 | 用户 ID |
+| course_id | string | 是 | 课程 ID |
+| knowledge_base_id | string | 否 | 课程知识库 ID；Backend 可由 course_id 解析后传入 |
+| chapter | string | 否 | 章节 |
+| knowledge_point | string | 否 | 知识点 |
+| question_types | array | 否 | 题型列表：single_choice / multi_choice / code / short_answer |
+| count | integer | 否 | 生成题数，默认 5 |
+| difficulty | string | 否 | easy / medium / hard |
+| personalized | boolean | 否 | 是否生成个性化题，默认 true |
+| personalization_context | object | 否 | 个性化上下文 |
+| personalization_context.evaluation | object | 否 | 最近学习效果评估 |
+| personalization_context.profile | object | 否 | 最近用户画像 |
+| personalization_context.wrong_points | array | 否 | 最近错题/薄弱知识点 |
+| personalization_context.current_path_node | object | 否 | 当前学习路径节点 |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| questions | array | 生成题目列表 |
+| questions[].type | string | single_choice / multi_choice / code / short_answer |
+| questions[].content | string | 题目内容 |
+| questions[].options | array | 选项列表，非选择题为空数组 |
+| questions[].options[].key | string | A/B/C/D |
+| questions[].options[].text | string | 选项文本 |
+| questions[].answer | string/array | 标准答案 |
+| questions[].explanation | string | 解析 |
+| questions[].chapter | string | 章节 |
+| questions[].knowledge_point | string | 关联知识点 |
+| questions[].difficulty | string | easy / medium / hard |
 
 ---
 
@@ -327,15 +343,17 @@ POST /agent/v1/resources/generate
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
+| task_id | string | 是 | Backend 预先创建的任务 ID，Agent 返回和回调时原样带回 |
 | user_id | string | 是 | 触发教师用户 ID |
 | course_id | string | 是 | 课程 ID |
-| course_materials | array | 是 | 课程原始资料列表。开发阶段由 Backend 请求时传入；后续若课程资料已稳定写入 `course_knowledge`，可演进为仅传 `course_id` 后由 Agent Service 检索/读取。 |
-| course_materials[].id | string | 是 | 资料 ID |
-| course_materials[].title | string | 是 | 资料标题 |
-| course_materials[].content | string | 是 | 资料文本内容 |
-| course_materials[].chapter | string | 是 | 所属章节 |
-| course_materials[].type | string | 是 | 资料类型 |
 | webhook_url | string | 是 | 完成回调 URL（Backend 的 `/api/v1/webhooks/agent`） |
+| chapter | string | 否 | 章节 |
+| knowledge_point | string | 否 | 知识点 |
+| resource_types | array | 否 | 资源类型列表：document / mindmap / reading / code；不传则默认生成这四类 |
+
+**资料来源：** Agent Service 根据 `course_id` 从已上传并向量化的 `course_knowledge` 知识库检索/读取课程资料。
+
+**生成范围：** 本接口只生成课程级学习资料，不生成个性化题目。个性化题目由 `/agent/v1/assessment/generate-questions` 生成，并由 Backend 写入题库。
 
 **响应：** HTTP 202
 
@@ -343,7 +361,7 @@ POST /agent/v1/resources/generate
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| task_id | string | 异步任务 ID |
+| task_id | string | Backend 传入的异步任务 ID |
 | estimated_duration | integer | 预计完成时间（秒） |
 
 **Webhook 回调 payload（Agent → Backend）：**
@@ -356,11 +374,19 @@ POST /agent/v1/resources/generate
 | result | object | 完成时携带 |
 | result.resources | array | 生成的资源列表 |
 | result.resources[].title | string | 资源标题 |
-| result.resources[].type | string | 类型：document / mindmap / exercise / reading / code |
+| result.resources[].type | string | 类型：document / mindmap / reading / code / video；video 为预留类型，v1 默认不生成 |
+| result.resources[].description | string | 资源描述 |
 | result.resources[].content | string | 资源内容 |
 | result.resources[].chapter | string | 所属章节 |
+| result.resources[].knowledge_point | string | 关联知识点 |
 | result.resources[].tags | array | 标签 |
 | error_message | string | 失败时携带 |
+
+**回调处理约定：**
+
+- Agent Service 只负责将生成结果 POST 给 Backend 的 `webhook_url`，并原样带回 Backend 传入的 `task_id`。
+- Backend 根据 `task_id` 查本地任务记录，校验 `task_type`，再把 `result.resources` 写入 SQL。
+- 回调允许重试；Backend 按 `task_id + status` 幂等处理，避免重复写入资源。
 
 ---
 
@@ -401,7 +427,9 @@ POST /agent/v1/memory/compress
 **长期记忆写入约定：**
 
 - Agent Service 负责将 `extracted_facts` 去重后写入 Qdrant 的 `user_memory` collection。
-- Backend 负责保存对话消息、`new_summary` 和调用结果，不直接写 Qdrant。
+- Backend 负责全量保存原始对话消息、消息 meta、`new_summary` 和调用结果，不直接写 Qdrant。
+- 记忆压缩只生成摘要和长期事实，不删除、不替代 Backend 中的原始对话消息。
+- 智能辅导每次回复前都检索 `user_memory`，并将召回结果与最近消息、摘要共同注入 Prompt。
 - 若 Backend 传入的当前画像与 Qdrant 旧事实冲突，以 Backend 传入的结构化画像为准。
 
 ---

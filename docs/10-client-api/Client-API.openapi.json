@@ -3,7 +3,7 @@
   "info": {
     "title": "EDUagent Client-API",
     "version": "5.0.0",
-    "description": "前端 (Vue3) ↔ Backend (FastAPI, Port 8001) 接口规范。\n统一返回格式: {code, message, data}。\n流式接口使用 SSE (text/event-stream)。\n异步任务使用 Webhook 回调。"
+    "description": "前端 (Vue3) ↔ Backend (FastAPI, Port 8001) 接口规范。\n统一返回格式: {code, message, data}。\n流式接口使用 SSE (text/event-stream)。\n前端发起刷新/生成接口后收到 task_id，并通过 /tasks/{task_id} 轮询；Backend 负责创建任务、记录归属用户和任务类型；Agent Service 长任务完成后由 Backend 接收 webhook 回调，前端不直接等待 webhook。"
   },
   "servers": [
     { "url": "http://localhost:8001/api/v1", "description": "本地开发环境" }
@@ -13,8 +13,8 @@
     "/auth/captcha": {
       "get": {
         "tags": ["Auth"],
-        "summary": "获取验证码",
-        "description": "返回数学算式验证码，无需认证",
+        "summary": "获取算术验证码",
+        "description": "返回数学算式验证码，无需认证。v1 开发阶段不接入短信/邮件/图形验证码，Backend 在内存中临时保存答案。",
         "security": [],
         "responses": {
           "200": {
@@ -39,7 +39,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "注册",
-        "description": "使用注册码+邮箱+密码+用户名注册。注册码硬编码区分角色（如 teacher、student）",
+        "description": "使用硬编码注册码+邮箱+密码+用户名+算术验证码注册。注册码区分角色：student 注册学生账号，teacher 注册教师账号；admin 不开放注册，由系统预置。",
         "security": [],
         "requestBody": {
           "required": true,
@@ -57,8 +57,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 201 },
+                    "message": { "type": "string", "example": "created" },
                     "data": { "$ref": "#/components/schemas/RegisterData" }
                   }
                 }
@@ -74,7 +74,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "登录",
-        "description": "邮箱+密码+图形验证码登录，返回 access_token + refresh_token",
+        "description": "邮箱+密码+算术验证码登录，返回单个 JWT token。v1 开发阶段暂不实现 refresh_token 轮换。",
         "security": [],
         "requestBody": {
           "required": true,
@@ -104,85 +104,6 @@
         }
       }
     },
-    "/auth/refresh": {
-      "post": {
-        "tags": ["Auth"],
-        "summary": "刷新 access_token",
-        "description": "使用 refresh_token 获取新的 access_token",
-        "security": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/RefreshRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "刷新成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/RefreshData" }
-                  }
-                }
-              }
-            }
-          },
-          "401": { "description": "refresh_token 无效或过期", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
-        }
-      }
-    },
-    "/auth/send-reset-code": {
-      "post": {
-        "tags": ["Auth"],
-        "summary": "发送重置密码验证码",
-        "description": "向注册邮箱发送验证码，不暴露邮箱是否存在",
-        "security": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["email"],
-                "properties": {
-                  "email": { "type": "string", "format": "email", "description": "注册邮箱" }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "发送成功（无论邮箱是否存在）" }
-        }
-      }
-    },
-    "/auth/reset-password": {
-      "post": {
-        "tags": ["Auth"],
-        "summary": "重置密码",
-        "description": "通过邮箱验证码重置密码",
-        "security": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ResetPasswordRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "重置成功" },
-          "400": { "description": "验证码错误或过期", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
-        }
-      }
-    },
     "/users/me": {
       "get": {
         "tags": ["Users"],
@@ -208,7 +129,7 @@
       "put": {
         "tags": ["Users"],
         "summary": "修改个人信息",
-        "description": "可修改姓名、学号/工号、专业、年级、引导粒度。email 和 role 不可通过此接口修改，课程走 /courses 域",
+        "description": "可修改姓名、学号/工号、专业、年级、引导粒度。email 和 role 不可通过此接口修改。个人信息只返回账号基础资料；课程列表走 /courses，课程内画像、评估、学习路径、练习记录、资源库等数据按 course_id 调用对应业务接口。",
         "requestBody": {
           "required": true,
           "content": {
@@ -240,7 +161,7 @@
       "get": {
         "tags": ["Courses"],
         "summary": "我的课程列表",
-        "description": "教师返回自己开的班，学生返回已加入的班",
+        "description": "教师返回自己开的班，学生返回已加入的班。前端课程页/课程按钮使用此接口渲染；用户点击某门课程后，将 courses[].id 作为后续接口的 course_id；教师视角中 class_id 与 courses[].id 同源。v1 中 course_id 表示教师创建的课程/班级空间 ID，不拆分课程模板与教学班。",
         "responses": {
           "200": {
             "description": "成功",
@@ -267,7 +188,7 @@
       "post": {
         "tags": ["Courses"],
         "summary": "创建课程/开班",
-        "description": "仅教师可操作，返回唯一课程码供学生加入",
+        "description": "仅教师可操作，返回唯一课程码 course_code 供学生加入。课程知识库由开发者预置并完成向量化，前端不上传课程原始资料；Backend 可为课程默认绑定预置知识库。",
         "requestBody": {
           "required": true,
           "content": {
@@ -284,8 +205,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 201 },
+                    "message": { "type": "string", "example": "created" },
                     "data": { "$ref": "#/components/schemas/CreateCourseData" }
                   }
                 }
@@ -300,7 +221,7 @@
       "post": {
         "tags": ["Courses"],
         "summary": "通过课程码加入课程",
-        "description": "仅学生可操作",
+        "description": "仅学生可操作。course_code 是教师创建课程后分发给学生的课程码，不同于账号注册用 registration_code。",
         "requestBody": {
           "required": true,
           "content": {
@@ -335,9 +256,9 @@
       "get": {
         "tags": ["Teaching"],
         "summary": "班级学生列表",
-        "description": "仅该班级教师可查看",
+        "description": "仅该班级教师可查看。class_id 与 /courses 返回的 courses[].id 同源；教师进入课程详情页后先调用该接口获取学生列表。",
         "parameters": [
-          { "name": "class_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "班级/课程 ID" },
+          { "name": "class_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "班级/课程 ID，与 /courses 返回的 courses[].id 相同" },
           { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 }, "description": "页码" },
           { "name": "page_size", "in": "query", "schema": { "type": "integer", "default": 20 }, "description": "每页条数" }
         ],
@@ -351,10 +272,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/StudentBrief" } },
-                    "total": { "type": "integer", "example": 30 },
-                    "page": { "type": "integer", "example": 1 },
-                    "page_size": { "type": "integer", "example": 20 }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "students": { "type": "array", "items": { "$ref": "#/components/schemas/StudentBrief" } },
+                        "total": { "type": "integer", "example": 30 },
+                        "page": { "type": "integer", "example": 1 },
+                        "page_size": { "type": "integer", "example": 20 }
+                      }
+                    }
                   }
                 }
               }
@@ -367,9 +293,9 @@
       "get": {
         "tags": ["Teaching"],
         "summary": "查看学生个人信息",
-        "description": "仅该班级教师可查看，返回结构与 /users/me 一致",
+        "description": "仅该班级教师可查看，返回结构与 /users/me 一致。只读查看学生账号基础资料，不返回课程列表、不返回密码。",
         "parameters": [
-          { "name": "class_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "class_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "班级/课程 ID，与 /courses 返回的 courses[].id 相同" },
           { "name": "student_id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
@@ -395,8 +321,9 @@
       "get": {
         "tags": ["Teaching"],
         "summary": "查看学生学习情况汇总",
+        "description": "教师只读查看学生在该课程内的学习看板，不触发学生画像、评估或学习路径刷新。该接口聚合学生端课程详情页核心展示数据。",
         "parameters": [
-          { "name": "class_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "class_id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "班级/课程 ID，与 /courses 返回的 courses[].id 相同" },
           { "name": "student_id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
@@ -439,10 +366,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/AdminUserItem" } },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" },
-                    "page_size": { "type": "integer" }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "users": { "type": "array", "items": { "$ref": "#/components/schemas/AdminUserItem" } },
+                        "total": { "type": "integer" },
+                        "page": { "type": "integer" },
+                        "page_size": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }
@@ -492,7 +424,21 @@
           { "name": "user_id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
-          "200": { "description": "移除成功" },
+          "200": {
+            "description": "移除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "success" },
+                    "data": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
           "403": { "description": "不可移除自己", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
           "404": { "description": "用户不存在", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
@@ -519,10 +465,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/AgentLogItem" } },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" },
-                    "page_size": { "type": "integer" }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "logs": { "type": "array", "items": { "$ref": "#/components/schemas/AgentLogItem" } },
+                        "total": { "type": "integer" },
+                        "page": { "type": "integer" },
+                        "page_size": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }
@@ -553,10 +504,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/OperationLogItem" } },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" },
-                    "page_size": { "type": "integer" }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "logs": { "type": "array", "items": { "$ref": "#/components/schemas/OperationLogItem" } },
+                        "total": { "type": "integer" },
+                        "page": { "type": "integer" },
+                        "page_size": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }
@@ -569,6 +525,7 @@
       "get": {
         "tags": ["Evaluation"],
         "summary": "获取学习效果评估",
+        "description": "只读取当前用户在该课程下最近一次学习效果评估，不实时调用 Agent。若尚无足够学习数据或尚未生成评估，返回空表格、空总结和 generated_at: null。",
         "parameters": [
           { "name": "course_id", "in": "query", "required": true, "schema": { "type": "string" }, "description": "课程 ID" }
         ],
@@ -595,7 +552,7 @@
       "post": {
         "tags": ["Evaluation"],
         "summary": "请求刷新学习效果评估",
-        "description": "返回 task_id，异步处理",
+        "description": "返回 task_id，异步处理。Backend 聚合练习记录、资源使用、学习路径进度、辅导对话摘要等 SQL 数据后调用 Agent 生成评估；完成后保存为该用户在该课程下的最近评估。",
         "requestBody": {
           "required": true,
           "content": {
@@ -618,8 +575,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 202 },
+                    "message": { "type": "string", "example": "accepted" },
                     "data": { "$ref": "#/components/schemas/TaskResponse" }
                   }
                 }
@@ -632,28 +589,29 @@
     "/profile/initialize": {
       "post": {
         "tags": ["Profile"],
-        "summary": "冷启动画像引导对话",
-        "description": "SSE 流式接口。Agent 通过对话了解用户基础水平与偏好",
+        "summary": "冷启动固定问卷",
+        "description": "v1 开发阶段冷启动不做 Agent 多轮引导，前端展示固定问卷并提交答案；Backend 按 user_id + course_id 保存初始画像。画像刷新时再调用 Agent。",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["course_id"],
-                "properties": {
-                  "course_id": { "type": "string", "description": "课程 ID" }
-                }
-              }
+              "schema": { "$ref": "#/components/schemas/ProfileInitializeRequest" }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "SSE 流",
+            "description": "初始化成功",
             "content": {
-              "text/event-stream": {
-                "schema": { "type": "string", "description": "SSE 事件流，done 事件携带 initial_profile" }
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "success" },
+                    "data": { "$ref": "#/components/schemas/ProfileData" }
+                  }
+                }
               }
             }
           }
@@ -664,6 +622,7 @@
       "get": {
         "tags": ["Profile"],
         "summary": "获取用户画像",
+        "description": "画像按 user_id + course_id 保存，本接口只读取最近一次画像，不触发 Agent 生成。若尚未初始化或刷新画像，返回默认空画像，前端可正常渲染空状态。",
         "parameters": [
           { "name": "course_id", "in": "query", "required": true, "schema": { "type": "string" } }
         ],
@@ -690,7 +649,7 @@
       "post": {
         "tags": ["Profile"],
         "summary": "请求刷新用户画像",
-        "description": "返回 task_id，异步处理",
+        "description": "返回 task_id，异步调用 Agent 生成新画像。Backend 根据最近的学习效果评估、练习、辅导对话、资源使用等数据生成，并覆盖该用户在该课程下的最近画像。",
         "requestBody": {
           "required": true,
           "content": {
@@ -713,8 +672,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 202 },
+                    "message": { "type": "string", "example": "accepted" },
                     "data": { "$ref": "#/components/schemas/TaskResponse" }
                   }
                 }
@@ -728,6 +687,7 @@
       "get": {
         "tags": ["LearningPath"],
         "summary": "获取学习路径",
+        "description": "只读取当前用户在该课程下最近一次学习路径，不实时调用 Agent。若尚未生成路径，返回 nodes: []、edges: []、current_position: null、generated_at: null。",
         "parameters": [
           { "name": "course_id", "in": "query", "required": true, "schema": { "type": "string" } }
         ],
@@ -754,6 +714,7 @@
       "post": {
         "tags": ["LearningPath"],
         "summary": "请求刷新学习路径",
+        "description": "Backend 读取该课程的静态知识图谱、最近学习效果评估和用户画像后异步调用 Agent。知识图谱决定可学习节点和前置依赖顺序，Agent 只负责个性化排序、推荐理由和当前节点建议，不允许脱离课程知识图谱自由编排路径。",
         "requestBody": {
           "required": true,
           "content": {
@@ -776,8 +737,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 202 },
+                    "message": { "type": "string", "example": "accepted" },
                     "data": { "$ref": "#/components/schemas/TaskResponse" }
                   }
                 }
@@ -791,6 +752,7 @@
       "get": {
         "tags": ["LearningPath"],
         "summary": "路径节点资源推送",
+        "description": "根据当前路径节点关联的知识点查询资源和练习。若资源不足，返回空数组，不视为错误。",
         "parameters": [
           { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
@@ -817,9 +779,14 @@
       "get": {
         "tags": ["Quiz"],
         "summary": "获取练习题目组",
+        "description": "只从题库取题，不实时调用 Agent。返回通用题和当前用户自己的个性化题；若题目不足或为空，返回空数组，前端可引导用户触发 /quiz/generate。",
         "parameters": [
           { "name": "course_id", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "chapter", "in": "query", "schema": { "type": "string" }, "description": "指定章节，为空则按当前进度出题" }
+          { "name": "chapter", "in": "query", "schema": { "type": "string" }, "description": "指定章节，为空则按当前进度出题" },
+          { "name": "knowledge_point", "in": "query", "schema": { "type": "string" }, "description": "指定知识点" },
+          { "name": "type", "in": "query", "schema": { "type": "string" }, "description": "题型：single_choice / multi_choice / code / short_answer" },
+          { "name": "source", "in": "query", "schema": { "type": "string" }, "description": "题目来源：common / personalized" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 }, "description": "返回题数" }
         ],
         "responses": {
           "200": {
@@ -840,11 +807,43 @@
         }
       }
     },
+    "/quiz/generate": {
+      "post": {
+        "tags": ["Quiz"],
+        "summary": "生成个性化题目",
+        "description": "学生在练习页触发个性化生题。Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 quiz_questions。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuizGenerateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "已接受",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 202 },
+                    "message": { "type": "string", "example": "accepted" },
+                    "data": { "$ref": "#/components/schemas/TaskResponse" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quiz/submit": {
       "post": {
         "tags": ["Quiz"],
         "summary": "提交答案",
-        "description": "两步流程：(1) 立即返回 SQL 对比的对错结果；(2) Backend 后台调 Agent 异步生成 LLM 诊断；(3) 前端 GET /quiz/result 获取诊断",
+        "description": "选择题由 Backend 直接判题；code / short_answer 可由 Agent 评估。Backend 后台调 Agent 生成 LLM 诊断，前端 GET /quiz/result 获取诊断。",
         "requestBody": {
           "required": true,
           "content": {
@@ -917,10 +916,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/QuizHistoryItem" } },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" },
-                    "page_size": { "type": "integer" }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "records": { "type": "array", "items": { "$ref": "#/components/schemas/QuizHistoryItem" } },
+                        "total": { "type": "integer" },
+                        "page": { "type": "integer" },
+                        "page_size": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }
@@ -933,9 +937,10 @@
       "get": {
         "tags": ["Resources"],
         "summary": "资源库页",
+        "description": "资源库只存学习资料，不承担练习题主链路。个性化题目生成、取题、判题统一走 /quiz。v1 资源类型为 document / mindmap / reading / code；video 为预留类型，默认不生成或返回视频内容。",
         "parameters": [
           { "name": "course_id", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "type", "in": "query", "schema": { "type": "string" }, "description": "资源类型：document / mindmap / exercise / reading / code" },
+          { "name": "type", "in": "query", "schema": { "type": "string" }, "description": "资源类型：document / mindmap / reading / code / video；video 为预留类型，v1 默认不生成或返回视频内容" },
           { "name": "keyword", "in": "query", "schema": { "type": "string" }, "description": "标题关键词搜索" },
           { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
           { "name": "page_size", "in": "query", "schema": { "type": "integer", "default": 20 } }
@@ -950,10 +955,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/ResourceItem" } },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" },
-                    "page_size": { "type": "integer" }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "resources": { "type": "array", "items": { "$ref": "#/components/schemas/ResourceItem" } },
+                        "total": { "type": "integer" },
+                        "page": { "type": "integer" },
+                        "page_size": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }
@@ -966,7 +976,7 @@
       "post": {
         "tags": ["Resources"],
         "summary": "触发资源生成",
-        "description": "仅教师，异步生成，Agent 完成后通过 Webhook 回调",
+        "description": "仅教师，异步生成课程级学习资料，Agent 完成后通过 Webhook 回调。该接口不生成个性化题目；个性化题目走 /quiz/generate。课程知识库由开发者在开发阶段自行上传并完成向量化，不通过前端接口上传课程原始资料。",
         "requestBody": {
           "required": true,
           "content": {
@@ -975,7 +985,14 @@
                 "type": "object",
                 "required": ["course_id"],
                 "properties": {
-                  "course_id": { "type": "string", "description": "课程 ID" }
+                  "course_id": { "type": "string", "description": "课程 ID" },
+                  "chapter": { "type": "string", "description": "章节" },
+                  "knowledge_point": { "type": "string", "description": "知识点" },
+                  "resource_types": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "资源类型列表：document / mindmap / reading / code；不传则默认生成这四类"
+                  }
                 }
               }
             }
@@ -989,8 +1006,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 202 },
+                    "message": { "type": "string", "example": "accepted" },
                     "data": { "$ref": "#/components/schemas/TaskResponse" }
                   }
                 }
@@ -1004,7 +1021,7 @@
       "post": {
         "tags": ["Tutoring"],
         "summary": "智能辅导对话",
-        "description": "SSE 流式接口。回复中可嵌入 Mermaid 图解。首次对话不传 conversation_id 即创建新对话",
+        "description": "SSE 流式接口。scope=course 为课程内智能辅导，必须传 course_id 并使用课程知识库 RAG；scope=global 为全局简单 AI Bot，不读取课程知识库。Backend 全量保存 user/assistant 消息并记录 meta，Agent 每次回复前检索用户长期记忆和相关历史事实。教师不能查看学生智能辅导对话。",
         "requestBody": {
           "required": true,
           "content": {
@@ -1029,7 +1046,10 @@
       "get": {
         "tags": ["Tutoring"],
         "summary": "对话历史列表",
+        "description": "仅返回当前登录用户自己的对话；教师不可通过该接口查看学生对话。",
         "parameters": [
+          { "name": "scope", "in": "query", "schema": { "type": "string" }, "description": "course / global" },
+          { "name": "course_id", "in": "query", "schema": { "type": "string" }, "description": "课程 ID；筛选课程内对话" },
           { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
           { "name": "page_size", "in": "query", "schema": { "type": "integer", "default": 20 } }
         ],
@@ -1043,10 +1063,15 @@
                   "properties": {
                     "code": { "type": "integer", "example": 200 },
                     "message": { "type": "string", "example": "success" },
-                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/ConversationBrief" } },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" },
-                    "page_size": { "type": "integer" }
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "conversations": { "type": "array", "items": { "$ref": "#/components/schemas/ConversationBrief" } },
+                        "total": { "type": "integer" },
+                        "page": { "type": "integer" },
+                        "page_size": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }
@@ -1059,6 +1084,7 @@
       "get": {
         "tags": ["Tutoring"],
         "summary": "对话历史详情",
+        "description": "仅当前登录用户本人可查看该对话详情；教师不可查看学生对话。",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "对话 ID" }
         ],
@@ -1085,7 +1111,7 @@
       "get": {
         "tags": ["Common"],
         "summary": "查询异步任务状态",
-        "description": "通用异步任务查询接口，用于 evaluation/profile/learning-path/resources 等刷新/生成任务",
+        "description": "通用异步任务查询接口，用于 evaluation/profile/learning-path/quiz/resources 等刷新/生成任务。功能：给前端轮询任务是否完成，前端不直接感知 Agent webhook。实现：Backend 在所有异步入口先创建任务表记录并返回 task_id；前端每 1-3 秒轮询，processing 继续等待，completed 后调用对应业务 GET 读取最新数据，failed 显示错误。需要用户 JWT；普通用户只能查询自己触发的任务，教师只能查询自己触发的课程资源生成任务。不存在或无权访问统一返回 404。",
         "parameters": [
           { "name": "task_id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
@@ -1112,7 +1138,7 @@
       "post": {
         "tags": ["Webhook"],
         "summary": "Agent 异步任务回调",
-        "description": "Agent 完成异步任务后回调，服务间调用，内部密钥校验",
+        "description": "Agent 完成长任务后回调，无需用户 JWT，仅供内部 Agent Service 回调，前端不调用。v1 无需额外鉴权，部署时通过内网地址或容器网络限制访问。实现：Backend 调用 Agent 前先创建本地任务并把同一个 task_id 传给 Agent；Agent 回调时原样带回 task_id。Backend 根据 task_id 校验任务存在、task_type 一致并幂等更新任务状态；completed 时校验 result 后写入 SQL，failed 时写入错误信息；重复 completed 回调不重复插入业务数据。Agent Service 不直接写 Backend 数据库。",
         "security": [],
         "requestBody": {
           "required": true,
@@ -1123,7 +1149,21 @@
           }
         },
         "responses": {
-          "200": { "description": "接收成功" }
+          "200": {
+            "description": "接收成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "success" },
+                    "data": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -1148,18 +1188,20 @@
       "CaptchaData": {
         "type": "object",
         "properties": {
-          "captcha_token": { "type": "string", "description": "验证码标识，登录时回传" },
+          "captcha_token": { "type": "string", "description": "验证码标识，注册或登录时回传" },
           "captcha_question": { "type": "string", "description": "数学算式（如 3 + 5 = ?）" }
         }
       },
       "RegisterRequest": {
         "type": "object",
-        "required": ["registration_code", "email", "password", "username"],
+        "required": ["registration_code", "email", "password", "username", "captcha_token", "captcha_code"],
         "properties": {
-          "registration_code": { "type": "string", "description": "注册码，区分角色（如 teacher、student）" },
+          "registration_code": { "type": "string", "description": "硬编码注册码：student 注册学生账号，teacher 注册教师账号" },
           "email": { "type": "string", "format": "email", "description": "邮箱地址" },
           "password": { "type": "string", "minLength": 8, "maxLength": 32, "description": "密码（8-32 位，含大小写字母+数字）" },
-          "username": { "type": "string", "minLength": 3, "maxLength": 20, "description": "用户名" }
+          "username": { "type": "string", "minLength": 3, "maxLength": 20, "description": "用户名" },
+          "captcha_token": { "type": "string", "description": "算术验证码标识" },
+          "captcha_code": { "type": "string", "description": "算术验证码答案" }
         }
       },
       "RegisterData": {
@@ -1183,9 +1225,8 @@
       "LoginData": {
         "type": "object",
         "properties": {
-          "access_token": { "type": "string", "description": "JWT 访问令牌" },
-          "refresh_token": { "type": "string", "description": "JWT 刷新令牌" },
-          "expires_in": { "type": "integer", "description": "access_token 有效期（秒），默认 1800" },
+          "token": { "type": "string", "description": "JWT 访问令牌" },
+          "expires_in": { "type": "integer", "description": "token 有效期（秒），开发阶段可设置为 7 天" },
           "user": { "$ref": "#/components/schemas/LoginUser" }
         }
       },
@@ -1196,29 +1237,6 @@
           "email": { "type": "string" },
           "username": { "type": "string" },
           "role": { "type": "string", "description": "student / teacher / admin" }
-        }
-      },
-      "RefreshRequest": {
-        "type": "object",
-        "required": ["refresh_token"],
-        "properties": {
-          "refresh_token": { "type": "string", "description": "登录时获取的 refresh_token" }
-        }
-      },
-      "RefreshData": {
-        "type": "object",
-        "properties": {
-          "access_token": { "type": "string", "description": "新 JWT 访问令牌" },
-          "expires_in": { "type": "integer", "description": "有效期（秒）" }
-        }
-      },
-      "ResetPasswordRequest": {
-        "type": "object",
-        "required": ["email", "reset_code", "new_password"],
-        "properties": {
-          "email": { "type": "string", "format": "email", "description": "注册邮箱" },
-          "reset_code": { "type": "string", "description": "邮箱收到的验证码" },
-          "new_password": { "type": "string", "minLength": 8, "maxLength": 32, "description": "新密码" }
         }
       },
       "UserInfo": {
@@ -1233,20 +1251,7 @@
           "major": { "type": "string", "description": "专业" },
           "grade": { "type": "string", "description": "年级" },
           "guidance_level": { "type": "string", "description": "引导粒度：L1 / L2 / L3" },
-          "courses": {
-            "type": "array",
-            "description": "已选课程列表（学生）或开课列表（教师）",
-            "items": { "$ref": "#/components/schemas/UserCourseBrief" }
-          },
           "created_at": { "type": "string", "format": "date-time", "description": "创建时间" }
-        }
-      },
-      "UserCourseBrief": {
-        "type": "object",
-        "properties": {
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "course_name": { "type": "string", "description": "课程名称" },
-          "course_code": { "type": "string", "description": "课程码" }
         }
       },
       "UpdateUserRequest": {
@@ -1317,6 +1322,15 @@
       "StudentLearning": {
         "type": "object",
         "properties": {
+          "student": {
+            "type": "object",
+            "description": "学生基础信息",
+            "properties": {
+              "id": { "type": "string", "description": "学生用户 ID" },
+              "real_name": { "type": "string", "description": "真实姓名" },
+              "student_id": { "type": "string", "description": "学号" }
+            }
+          },
           "evaluation_summary": {
             "type": "object",
             "properties": {
@@ -1347,6 +1361,23 @@
               "avg_score": { "type": "number", "description": "平均正确率 0-100" },
               "avg_time_spent": { "type": "integer", "description": "平均耗时（秒）" }
             }
+          },
+          "weak_points": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "薄弱知识点列表"
+          },
+          "recent_activity": {
+            "type": "array",
+            "description": "最近学习活动",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string", "description": "活动类型：quiz / resource / tutoring / path" },
+                "title": { "type": "string", "description": "活动标题" },
+                "created_at": { "type": "string", "format": "date-time", "description": "发生时间" }
+              }
+            }
           }
         }
       },
@@ -1372,7 +1403,7 @@
           "role": { "type": "string", "description": "角色" },
           "major": { "type": "string", "description": "专业" },
           "grade": { "type": "string", "description": "年级" },
-          "password": { "type": "string", "description": "重置密码（提供则覆盖旧密码）" }
+          "new_password": { "type": "string", "description": "管理员重置密码（提供则覆盖旧密码）" }
         }
       },
       "AgentLogItem": {
@@ -1384,7 +1415,7 @@
           "latency_ms": { "type": "integer", "description": "响应延迟（毫秒）" },
           "tokens_used": { "type": "integer", "description": "Token 消耗" },
           "status": { "type": "string", "description": "success / error" },
-          "error_message": { "type": "string", "description": "错误信息（成功时为 null）" },
+          "error_message": { "type": "string", "nullable": true, "description": "错误信息（成功时为 null）" },
           "security_blocked": { "type": "boolean", "description": "是否触发安全拦截" }
         }
       },
@@ -1393,21 +1424,22 @@
         "properties": {
           "timestamp": { "type": "string", "format": "date-time", "description": "时间戳" },
           "event_type": { "type": "string", "description": "login / logout / operation / system_error / security" },
-          "user_id": { "type": "string", "description": "关联用户 ID（系统事件时为 null）" },
+          "user_id": { "type": "string", "nullable": true, "description": "关联用户 ID（系统事件时为 null）" },
           "description": { "type": "string", "description": "事件描述" },
           "ip_address": { "type": "string", "description": "IP 地址" },
-          "detail": { "type": "object", "description": "事件详细数据" }
+          "detail": { "type": "object", "description": "事件详细数据；系统状态、流量检测、安全合规事件复用该字段承载" }
         }
       },
       "EvaluationData": {
         "type": "object",
+        "description": "用户在某门课程下的最近学习效果评估；尚未生成时返回空表格、空总结和 generated_at: null。",
         "properties": {
           "course_id": { "type": "string", "description": "课程 ID" },
           "progress_table": { "$ref": "#/components/schemas/TableData" },
           "mastery_table": { "$ref": "#/components/schemas/TableData" },
           "resource_usage_table": { "$ref": "#/components/schemas/TableData" },
           "summary_text": { "type": "string", "description": "LLM 文字总结" },
-          "generated_at": { "type": "string", "format": "date-time", "description": "生成时间" }
+          "generated_at": { "type": "string", "format": "date-time", "nullable": true, "description": "生成时间；尚未生成时为 null" }
         }
       },
       "TableData": {
@@ -1417,8 +1449,29 @@
           "rows": { "type": "array", "items": { "type": "object" }, "description": "数据行" }
         }
       },
+      "ProfileInitializeRequest": {
+        "type": "object",
+        "required": ["course_id", "answers"],
+        "properties": {
+          "course_id": { "type": "string", "description": "课程 ID" },
+          "answers": {
+            "type": "object",
+            "description": "固定问卷答案",
+            "properties": {
+              "guidance_level": { "type": "string", "description": "期望引导粒度：L1 / L2 / L3" },
+              "modal_preference": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "偏好的学习形式，如 text / diagram / code / formula"
+              },
+              "learning_goal": { "type": "string", "description": "学习目标，如 exam_sprint / daily_homework / casual" }
+            }
+          }
+        }
+      },
       "ProfileData": {
         "type": "object",
+        "description": "用户在某门课程下的最近画像；未初始化时返回默认空画像。",
         "properties": {
           "course_id": { "type": "string", "description": "课程 ID" },
           "modal_preference": {
@@ -1461,7 +1514,7 @@
               "streak_days": { "type": "integer", "description": "连续学习天数" }
             }
           },
-          "generated_at": { "type": "string", "format": "date-time", "description": "生成时间" }
+          "generated_at": { "type": "string", "format": "date-time", "nullable": true, "description": "生成时间；未初始化时可为 null" }
         }
       },
       "KnowledgeCoordinate": {
@@ -1469,7 +1522,7 @@
         "properties": {
           "name": { "type": "string", "description": "知识点名称" },
           "status": { "type": "string", "description": "mastered / learning" },
-          "mastered_at": { "type": "string", "format": "date-time", "description": "掌握时间（learning 时为 null）" }
+          "mastered_at": { "type": "string", "format": "date-time", "nullable": true, "description": "掌握时间（learning 时为 null）" }
         }
       },
       "CognitiveBlindspot": {
@@ -1482,6 +1535,7 @@
       },
       "LearningPathData": {
         "type": "object",
+        "description": "用户在某门课程下的最近学习路径；尚未生成时返回 nodes: []、edges: []、current_position: null、generated_at: null。",
         "properties": {
           "course_id": { "type": "string", "description": "课程 ID" },
           "nodes": {
@@ -1494,12 +1548,13 @@
           },
           "current_position": {
             "type": "object",
+            "nullable": true,
             "properties": {
               "node_id": { "type": "string", "description": "当前节点 ID" },
               "node_name": { "type": "string", "description": "当前节点名称" }
             }
           },
-          "generated_at": { "type": "string", "format": "date-time", "description": "生成时间" }
+          "generated_at": { "type": "string", "format": "date-time", "nullable": true, "description": "生成时间；尚未生成时为 null" }
         }
       },
       "PathNode": {
@@ -1509,7 +1564,8 @@
           "name": { "type": "string", "description": "知识点名称" },
           "status": { "type": "string", "description": "completed / in_progress / pending / recommended" },
           "mastery": { "type": "number", "description": "掌握度 0-100" },
-          "order": { "type": "integer", "description": "排序序号" }
+          "order": { "type": "integer", "description": "排序序号" },
+          "reason": { "type": "string", "description": "推荐或排序原因" }
         }
       },
       "PathEdge": {
@@ -1544,7 +1600,7 @@
               "type": "object",
               "properties": {
                 "title": { "type": "string" },
-                "type": { "type": "string", "description": "document / mindmap / slides / reading" },
+                "type": { "type": "string", "description": "document / mindmap / reading / code" },
                 "url": { "type": "string" }
               }
             }
@@ -1565,6 +1621,7 @@
       },
       "QuizQuestions": {
         "type": "object",
+        "description": "题目来自通用题库和当前用户个性化题库；Agent 不直接写数据库，个性化题由 Backend 调 Agent 后校验入库。",
         "properties": {
           "quiz_id": { "type": "string", "description": "本次练习 ID" },
           "course_id": { "type": "string", "description": "课程 ID" },
@@ -1581,10 +1638,12 @@
         "properties": {
           "id": { "type": "string", "description": "题目 ID" },
           "type": { "type": "string", "description": "single_choice / multi_choice / code / short_answer" },
+          "source": { "type": "string", "description": "common / personalized" },
+          "personalized": { "type": "boolean", "description": "是否个性化题" },
           "content": { "type": "string", "description": "题目内容" },
           "options": {
             "type": "array",
-            "description": "选项列表（非选择题时为 null）",
+            "description": "选项列表（非选择题时为空数组）",
             "items": {
               "type": "object",
               "properties": {
@@ -1593,6 +1652,23 @@
               }
             }
           }
+        }
+      },
+      "QuizGenerateRequest": {
+        "type": "object",
+        "required": ["course_id"],
+        "properties": {
+          "course_id": { "type": "string", "description": "课程 ID" },
+          "chapter": { "type": "string", "description": "章节" },
+          "knowledge_point": { "type": "string", "description": "知识点" },
+          "question_types": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "题型列表：single_choice / multi_choice / code / short_answer"
+          },
+          "count": { "type": "integer", "default": 5, "description": "生成题数" },
+          "difficulty": { "type": "string", "description": "easy / medium / hard" },
+          "personalized": { "type": "boolean", "default": true, "description": "是否按当前学生个性化生成" }
         }
       },
       "QuizSubmitRequest": {
@@ -1606,7 +1682,13 @@
               "type": "object",
               "properties": {
                 "question_id": { "type": "string" },
-                "answer": { "description": "答案内容（选择题为选项 key，多选为数组）" }
+                "answer": {
+                  "description": "答案内容（选择题为选项 key，多选为数组）",
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                }
               }
             }
           },
@@ -1628,8 +1710,13 @@
               "properties": {
                 "question_id": { "type": "string" },
                 "is_correct": { "type": "boolean" },
-                "correct_answer": { "type": "string" },
-                "explanation": { "type": "string" }
+                "correct_answer": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
+                "explanation": { "type": "string", "nullable": true }
               }
             }
           }
@@ -1668,6 +1755,7 @@
           },
           "diagnosis": {
             "type": "object",
+            "nullable": true,
             "properties": {
               "summary": { "type": "string", "description": "诊断总结" },
               "weak_points": {
@@ -1702,10 +1790,11 @@
         "properties": {
           "id": { "type": "string", "description": "资源 ID" },
           "title": { "type": "string", "description": "资源标题" },
-          "type": { "type": "string", "description": "document / mindmap / exercise / reading / code" },
+          "type": { "type": "string", "description": "document / mindmap / reading / code / video；video 为预留类型，v1 默认不生成或返回视频内容" },
           "description": { "type": "string", "description": "资源描述" },
           "tags": { "type": "array", "items": { "type": "string" }, "description": "标签列表" },
           "chapter": { "type": "string", "description": "所属章节" },
+          "knowledge_point": { "type": "string", "description": "关联知识点" },
           "view_count": { "type": "integer", "description": "浏览次数" },
           "created_at": { "type": "string", "format": "date-time", "description": "创建时间" }
         }
@@ -1715,14 +1804,17 @@
         "required": ["message"],
         "properties": {
           "message": { "type": "string", "description": "用户消息" },
-          "course_id": { "type": "string", "description": "课程上下文 ID" },
-          "conversation_id": { "type": "string", "description": "继续已有对话时传入；为空则创建新对话" }
+          "scope": { "type": "string", "description": "course / global，默认 course" },
+          "course_id": { "type": "string", "nullable": true, "description": "课程上下文 ID；scope=course 时必填，scope=global 时为空" },
+          "conversation_id": { "type": "string", "nullable": true, "description": "继续已有对话时传入；为空则创建新对话" }
         }
       },
       "ConversationBrief": {
         "type": "object",
         "properties": {
           "id": { "type": "string", "description": "对话 ID" },
+          "scope": { "type": "string", "description": "course / global" },
+          "course_id": { "type": "string", "nullable": true, "description": "课程 ID，全局对话为 null" },
           "title": { "type": "string", "description": "对话标题" },
           "last_message": { "type": "string", "description": "最后一条消息摘要" },
           "message_count": { "type": "integer", "description": "消息数" },
@@ -1733,6 +1825,8 @@
         "type": "object",
         "properties": {
           "id": { "type": "string", "description": "对话 ID" },
+          "scope": { "type": "string", "description": "course / global" },
+          "course_id": { "type": "string", "nullable": true, "description": "课程 ID，全局对话为 null" },
           "title": { "type": "string", "description": "对话标题" },
           "messages": {
             "type": "array",
@@ -1743,6 +1837,7 @@
                 "content": { "type": "string", "description": "消息内容" },
                 "diagrams": { "type": "array", "items": { "type": "string" }, "description": "内嵌图解" },
                 "knowledge_points": { "type": "array", "items": { "type": "string" }, "description": "引用的知识点" },
+                "meta": { "type": "object", "description": "消息元信息，如模型、token、检索命中、安全标记" },
                 "timestamp": { "type": "string", "format": "date-time", "description": "消息时间" }
               }
             }
@@ -1761,13 +1856,30 @@
         "type": "object",
         "properties": {
           "task_id": { "type": "string", "description": "任务 ID" },
-          "task_type": { "type": "string", "description": "evaluation / profile / learning_path / resource / memory_compress" },
-          "status": { "type": "string", "description": "processing / completed / failed" },
+          "task_type": {
+            "type": "string",
+            "enum": ["evaluation_refresh", "profile_refresh", "learning_path_refresh", "quiz_generation", "resource_generation"],
+            "description": "任务类型"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["processing", "completed", "failed"],
+            "description": "任务状态；v1 创建后即可为 processing"
+          },
           "progress": { "type": "integer", "description": "进度百分比 0-100" },
-          "result": { "type": "object", "description": "任务结果（completed 时有值）" },
-          "error_message": { "type": "string", "description": "错误信息（failed 时有值）" },
+          "result": {
+            "type": "object",
+            "description": "任务结果摘要。resource_generation 可返回 resource_ids；quiz_generation 可返回 question_ids；evaluation/profile/learning_path 刷新可返回 updated_at，前端再调用对应 GET 读取最新结果。",
+            "properties": {
+              "resource_ids": { "type": "array", "items": { "type": "string" } },
+              "question_ids": { "type": "array", "items": { "type": "string" } },
+              "updated_at": { "type": "string", "format": "date-time" }
+            }
+          },
+          "error_code": { "type": "string", "nullable": true, "description": "错误码（failed 时可选）" },
+          "error_message": { "type": "string", "nullable": true, "description": "错误信息（failed 时有值）" },
           "created_at": { "type": "string", "format": "date-time" },
-          "completed_at": { "type": "string", "format": "date-time", "description": "完成时间（未完成时为 null）" }
+          "completed_at": { "type": "string", "format": "date-time", "nullable": true, "description": "完成时间（未完成时为 null）" }
         }
       },
       "WebhookPayload": {
@@ -1775,9 +1887,17 @@
         "required": ["task_id", "task_type", "status"],
         "properties": {
           "task_id": { "type": "string", "description": "任务 ID" },
-          "task_type": { "type": "string", "description": "任务类型" },
-          "status": { "type": "string", "description": "completed / failed" },
-          "result": { "type": "object", "description": "任务结果（completed 时必填）" },
+          "task_type": {
+            "type": "string",
+            "enum": ["resource_generation"],
+            "description": "任务类型，v1 主要用于资源生成回调"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed", "failed"],
+            "description": "回调状态"
+          },
+          "result": { "type": "object", "description": "任务结果（completed 时必填）。Backend 校验后写入 SQL；重复回调按 task_id + status 幂等处理。" },
           "error_message": { "type": "string", "description": "错误信息（failed 时必填）" }
         }
       }

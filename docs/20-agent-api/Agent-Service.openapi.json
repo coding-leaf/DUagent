@@ -3,7 +3,7 @@
   "info": {
     "title": "EDUagent Agent-Service API",
     "version": "5.0.0",
-    "description": "Backend (FastAPI, Port 8001) ↔ Agent Service (FastAPI + AgentScope, Port 8002) 内部接口规范。\n流式接口请求体使用 application/json，响应使用 SSE (text/event-stream)。\n资源生成使用 HTTP 202 + 异步 Webhook 回调。\n认证方式: Header X-API-Key"
+    "description": "Backend (FastAPI, Port 8001) ↔ Agent Service (FastAPI + AgentScope, Port 8002) 内部接口规范。\n流式接口请求体使用 application/json，响应使用 SSE (text/event-stream)。\n资源生成使用 HTTP 202 + 异步 Webhook 回调。Backend 调用 Agent 前先生成 task_id 并传入请求体；Agent 返回和回调时必须原样使用该 task_id。内部链路无需额外鉴权；Agent Service 不直接写 Backend 数据库，只返回结构化结果，由 Backend 校验、落库并更新任务状态。"
   },
   "servers": [
     { "url": "http://localhost:8002/agent/v1", "description": "Agent Service 本地开发环境" }
@@ -13,7 +13,7 @@
       "post": {
         "tags": ["Tutoring"],
         "summary": "智能辅导对话",
-        "description": "SSE 流式接口。Agent 结合用户画像、长期记忆检索结果、课程知识库 RAG 上下文进行辅导。回复可嵌入 Mermaid 图解。",
+        "description": "SSE 流式接口。Agent 每次回复前检索用户长期记忆和相关历史事实；scope=course 时使用课程知识库 RAG，scope=global 时不读取课程知识库，作为简单 AI Bot。回复可嵌入 Mermaid 图解。",
         "requestBody": {
           "required": true,
           "content": {
@@ -34,36 +34,11 @@
         }
       }
     },
-    "/profile/initialize": {
-      "post": {
-        "tags": ["Profile"],
-        "summary": "冷启动画像引导对话",
-        "description": "SSE 流式接口。Agent 通过若干轮对话了解新用户的学科基础、学习偏好，生成初始画像。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ProfileInitializeRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "SSE 事件流",
-            "content": {
-              "text/event-stream": {
-                "schema": { "type": "string", "description": "事件类型: message / chunk / done。done 事件携带 initial_profile" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/profile/generate": {
       "post": {
         "tags": ["Profile"],
         "summary": "生成/刷新用户画像",
-        "description": "基于学习数据（评估、练习、资源使用、近期活跃度）生成 6 维用户画像",
+        "description": "v1 冷启动由 Frontend 固定问卷 + Backend 保存初始画像完成，Agent Service 不提供多轮冷启动引导。该接口仅用于基于学习数据（评估、练习、资源使用、近期活跃度）生成或刷新用户画像。",
         "requestBody": {
           "required": true,
           "content": {
@@ -155,6 +130,38 @@
         }
       }
     },
+    "/assessment/generate-questions": {
+      "post": {
+        "tags": ["Assessment"],
+        "summary": "生成题目",
+        "description": "Agent Service 只生成结构化题目 JSON，不直接写 SQL。Backend 负责校验题目结构、补充 course_id / owner_user_id / source 等数据库字段，并写入 quiz_questions。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuestionGenerateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "success" },
+                    "data": { "$ref": "#/components/schemas/QuestionGenerateResult" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/learning-path/generate": {
       "post": {
         "tags": ["LearningPath"],
@@ -191,7 +198,7 @@
       "post": {
         "tags": ["Resources"],
         "summary": "生成资源库",
-        "description": "异步任务。Agent 基于课程原始资料，多智能体并行生成文档/导图/题目/阅读材料/代码案例。完成后通过 Webhook 回调 Backend。",
+        "description": "异步任务。Backend 先创建本地任务并把 task_id 传给 Agent；Agent 返回和回调时原样带回该 task_id。Agent 根据 course_id 从已上传并向量化的 course_knowledge 知识库检索/读取课程资料，多智能体并行生成课程级学习资料：document / mindmap / reading / code。video 为预留类型，v1 默认不生成。个性化题目由 /assessment/generate-questions 生成。完成后通过 Webhook 回调 Backend。Agent 只返回结构化资源结果，不直接写 SQL；Backend 根据 task_id 校验并幂等落库。",
         "requestBody": {
           "required": true,
           "content": {
@@ -223,7 +230,7 @@
       "post": {
         "tags": ["Memory"],
         "summary": "记忆压缩与事实提取",
-        "description": "滑动窗口机制触发：融合旧摘要+新对话生成新摘要，同时提取语义事实（盲点/掌握点/偏好）。Agent Service 负责将去重后的 facts 写入 Qdrant user_memory；Backend 负责保存消息、摘要和调用结果。",
+        "description": "滑动窗口机制触发：融合旧摘要+新对话生成新摘要，同时提取语义事实（盲点/掌握点/偏好）。Agent Service 负责将去重后的 facts 写入 Qdrant user_memory；Backend 负责全量保存原始对话消息、消息 meta、摘要和调用结果。记忆压缩不删除、不替代原始对话。",
         "requestBody": {
           "required": true,
           "content": {
@@ -279,10 +286,11 @@
     "schemas": {
       "TutoringChatRequest": {
         "type": "object",
-        "required": ["user_id", "course_id", "message", "user_profile"],
+        "required": ["user_id", "message", "user_profile"],
         "properties": {
           "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
+          "scope": { "type": "string", "description": "course / global，默认 course" },
+          "course_id": { "type": "string", "description": "课程 ID；scope=course 时必填，scope=global 时为空" },
           "conversation_id": { "type": "string", "description": "对话 ID（继续已有对话时传入）" },
           "message": { "type": "string", "description": "用户当前消息" },
           "user_profile": {
@@ -304,24 +312,9 @@
               "type": "object",
               "properties": {
                 "role": { "type": "string", "description": "user / assistant" },
-                "content": { "type": "string", "description": "消息内容" }
+                "content": { "type": "string", "description": "消息内容" },
+                "meta": { "type": "object", "description": "Backend 保存的消息元信息" }
               }
-            }
-          }
-        }
-      },
-      "ProfileInitializeRequest": {
-        "type": "object",
-        "required": ["user_id", "course_id", "user_basic_info"],
-        "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "user_basic_info": {
-            "type": "object",
-            "description": "用户基础信息",
-            "properties": {
-              "major": { "type": "string", "description": "专业" },
-              "grade": { "type": "string", "description": "年级" }
             }
           }
         }
@@ -360,7 +353,7 @@
               "video_count": { "type": "integer", "description": "视频使用次数" },
               "document_count": { "type": "integer", "description": "文档使用次数" },
               "code_count": { "type": "integer", "description": "代码资源使用次数" },
-              "exercise_count": { "type": "integer", "description": "练习题使用次数" }
+              "quiz_count": { "type": "integer", "description": "做题次数" }
             }
           },
           "drive_intent_data": {
@@ -477,7 +470,7 @@
             "type": "object",
             "description": "资源使用统计",
             "properties": {
-              "by_type": { "type": "object", "description": "{video: N, document: N, code: N, exercise: N}" },
+              "by_type": { "type": "object", "description": "{document: N, mindmap: N, reading: N, code: N, video: N}" },
               "by_chapter": { "type": "object", "description": "各章节资源使用分布" }
             }
           }
@@ -531,7 +524,13 @@
                 "type": { "type": "string", "description": "题型" },
                 "content": { "type": "string", "description": "题目内容" },
                 "options": { "type": "array", "items": { "type": "object" }, "description": "选项列表" },
-                "correct_answer": { "type": "string", "description": "正确答案" },
+                "correct_answer": {
+                  "description": "正确答案，单选/简答为 string，多选为 array",
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
                 "knowledge_point": { "type": "string", "description": "关联知识点" }
               }
             }
@@ -543,7 +542,13 @@
               "type": "object",
               "properties": {
                 "question_id": { "type": "string", "description": "题目 ID" },
-                "answer": { "type": "string", "description": "用户提交的答案" }
+                "answer": {
+                  "description": "用户提交的答案，单选/简答为 string，多选为 array",
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                }
               }
             }
           },
@@ -551,6 +556,68 @@
             "type": "object",
             "description": "用户当前知识点掌握度"
           }
+        }
+      },
+      "QuestionGenerateRequest": {
+        "type": "object",
+        "required": ["user_id", "course_id"],
+        "properties": {
+          "user_id": { "type": "string", "description": "用户 ID" },
+          "course_id": { "type": "string", "description": "课程 ID" },
+          "knowledge_base_id": { "type": "string", "description": "课程知识库 ID；Backend 可由 course_id 解析后传入" },
+          "chapter": { "type": "string", "description": "章节" },
+          "knowledge_point": { "type": "string", "description": "知识点" },
+          "question_types": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "single_choice / multi_choice / code / short_answer"
+          },
+          "count": { "type": "integer", "default": 5, "description": "生成题数" },
+          "difficulty": { "type": "string", "description": "easy / medium / hard" },
+          "personalized": { "type": "boolean", "default": true, "description": "是否生成个性化题" },
+          "personalization_context": {
+            "type": "object",
+            "description": "个性化上下文",
+            "properties": {
+              "evaluation": { "type": "object", "description": "最近学习效果评估" },
+              "profile": { "type": "object", "description": "最近用户画像" },
+              "wrong_points": { "type": "array", "items": { "type": "object" }, "description": "最近错题/薄弱知识点" },
+              "current_path_node": { "type": "object", "description": "当前学习路径节点" }
+            }
+          }
+        }
+      },
+      "QuestionGenerateResult": {
+        "type": "object",
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/GeneratedQuestion" }
+          }
+        }
+      },
+      "GeneratedQuestion": {
+        "type": "object",
+        "required": ["type", "content", "answer", "explanation", "knowledge_point"],
+        "properties": {
+          "type": { "type": "string", "description": "single_choice / multi_choice / code / short_answer" },
+          "content": { "type": "string", "description": "题目内容" },
+          "options": {
+            "type": "array",
+            "description": "选项列表，非选择题为空数组",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string", "description": "A/B/C/D" },
+                "text": { "type": "string", "description": "选项文本" }
+              }
+            }
+          },
+          "answer": { "description": "标准答案，单选/简答为 string，多选可为 array" },
+          "explanation": { "type": "string", "description": "解析" },
+          "chapter": { "type": "string", "description": "章节" },
+          "knowledge_point": { "type": "string", "description": "关联知识点" },
+          "difficulty": { "type": "string", "description": "easy / medium / hard" }
         }
       },
       "AssessmentResult": {
@@ -675,31 +742,25 @@
       },
       "ResourceGenerateRequest": {
         "type": "object",
-        "required": ["user_id", "course_id", "course_materials", "webhook_url"],
+        "required": ["task_id", "user_id", "course_id", "webhook_url"],
         "properties": {
+          "task_id": { "type": "string", "description": "Backend 预先创建的任务 ID，Agent 返回和回调时原样带回" },
           "user_id": { "type": "string", "description": "触发教师用户 ID" },
           "course_id": { "type": "string", "description": "课程 ID" },
-          "course_materials": {
+          "webhook_url": { "type": "string", "description": "完成回调 URL" },
+          "chapter": { "type": "string", "description": "章节" },
+          "knowledge_point": { "type": "string", "description": "知识点" },
+          "resource_types": {
             "type": "array",
-            "description": "课程原始资料列表。开发阶段由 Backend 请求时传入；后续若课程资料已稳定写入 course_knowledge，可演进为仅传 course_id 后由 Agent Service 检索/读取。",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string", "description": "资料 ID" },
-                "title": { "type": "string", "description": "资料标题" },
-                "content": { "type": "string", "description": "资料文本内容" },
-                "chapter": { "type": "string", "description": "所属章节" },
-                "type": { "type": "string", "description": "资料类型" }
-              }
-            }
-          },
-          "webhook_url": { "type": "string", "description": "完成回调 URL" }
+            "items": { "type": "string" },
+            "description": "资源类型列表：document / mindmap / reading / code；不传则默认生成这四类"
+          }
         }
       },
       "ResourceTaskResponse": {
         "type": "object",
         "properties": {
-          "task_id": { "type": "string", "description": "异步任务 ID" },
+          "task_id": { "type": "string", "description": "Backend 传入的异步任务 ID" },
           "estimated_duration": { "type": "integer", "description": "预计完成时间（秒）" }
         }
       },

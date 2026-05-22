@@ -3,6 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from agent_service.schemas.common import ApiResponse
+
 GuidanceLevel = Literal["L1", "L2", "L3"]
 KnowledgeStatus = Literal["mastered", "learning"]
 BlindspotSeverity = Literal["high", "medium", "low"]
@@ -84,3 +86,7 @@ class ProfileData(BaseModel):
     cognitive_blindspots: list[CognitiveBlindspot] = Field(default_factory=list, description="认知盲区标签")
     drive_intent: DriveIntent | None = Field(None, description="驱动意图（状态光环）")
     discipline_badge: DisciplineBadge | None = Field(None, description="学科底座徽章")
+
+
+class ProfileGenerateResponse(ApiResponse[ProfileData]):
+    pass

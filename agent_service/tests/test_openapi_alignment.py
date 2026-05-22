@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
+from agent_service.main import app
 from agent_service.schemas.evaluation import EvaluationData, EvaluationGenerateRequest
 from agent_service.schemas.profile import ProfileData, ProfileGenerateRequest
 from agent_service.schemas.tutoring import TutoringChatRequest
@@ -15,6 +16,7 @@ class OpenAPIAlignmentTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.openapi = json.loads(OPENAPI_PATH.read_text())
         cls.schemas = cls.openapi["components"]["schemas"]
+        cls.app_openapi = app.openapi()
 
     def assert_schema_properties_match(self, model_schema: dict, openapi_name: str) -> None:
         openapi_schema = self.schemas[openapi_name]
@@ -28,6 +30,12 @@ class OpenAPIAlignmentTests(unittest.TestCase):
             set(openapi_schema.get("required", [])),
             openapi_name,
         )
+
+    def resolve_app_schema(self, schema: dict) -> dict:
+        if "$ref" not in schema:
+            return schema
+        ref_name = schema["$ref"].split("/")[-1]
+        return self.app_openapi["components"]["schemas"][ref_name]
 
     def test_tutoring_chat_request_matches_openapi(self) -> None:
         self.assert_schema_properties_match(TutoringChatRequest.model_json_schema(), "TutoringChatRequest")
@@ -65,6 +73,63 @@ class OpenAPIAlignmentTests(unittest.TestCase):
 
     def test_evaluation_data_matches_openapi(self) -> None:
         self.assert_schema_properties_match(EvaluationData.model_json_schema(), "EvaluationData")
+
+    def test_app_openapi_contains_expected_paths(self) -> None:
+        self.assertIn("/agent/v1/tutoring/chat", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/profile/generate", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/evaluation/generate", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/assessment/evaluate", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/assessment/generate-questions", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/learning-path/generate", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/resources/generate", self.app_openapi["paths"])
+        self.assertIn("/agent/v1/memory/compress", self.app_openapi["paths"])
+
+    def test_app_openapi_profile_generate_uses_json_wrapper(self) -> None:
+        response_schema = self.app_openapi["paths"]["/agent/v1/profile/generate"]["post"]["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+        response_schema = self.resolve_app_schema(response_schema)
+        self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
+    def test_app_openapi_evaluation_generate_uses_json_wrapper(self) -> None:
+        response_schema = self.app_openapi["paths"]["/agent/v1/evaluation/generate"]["post"]["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        response_schema = self.resolve_app_schema(response_schema)
+        self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
+    def test_app_openapi_tutoring_chat_uses_sse(self) -> None:
+        response_content = self.app_openapi["paths"]["/agent/v1/tutoring/chat"]["post"]["responses"]["200"]["content"]
+        self.assertIn("text/event-stream", response_content)
+
+    def test_app_openapi_assessment_routes_use_json_wrapper(self) -> None:
+        for path in ("/agent/v1/assessment/evaluate", "/agent/v1/assessment/generate-questions"):
+            response_schema = self.app_openapi["paths"][path]["post"]["responses"]["200"]["content"]["application/json"][
+                "schema"
+            ]
+            response_schema = self.resolve_app_schema(response_schema)
+            self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
+    def test_app_openapi_learning_path_uses_json_wrapper(self) -> None:
+        response_schema = self.app_openapi["paths"]["/agent/v1/learning-path/generate"]["post"]["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        response_schema = self.resolve_app_schema(response_schema)
+        self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
+    def test_app_openapi_resources_generate_returns_202_wrapper(self) -> None:
+        responses = self.app_openapi["paths"]["/agent/v1/resources/generate"]["post"]["responses"]
+        self.assertIn("202", responses)
+        response_schema = responses["202"]["content"]["application/json"]["schema"]
+        response_schema = self.resolve_app_schema(response_schema)
+        self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
+    def test_app_openapi_memory_compress_uses_json_wrapper(self) -> None:
+        response_schema = self.app_openapi["paths"]["/agent/v1/memory/compress"]["post"]["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        response_schema = self.resolve_app_schema(response_schema)
+        self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
 
 
 if __name__ == "__main__":

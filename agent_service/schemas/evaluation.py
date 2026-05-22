@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agent_service.schemas.common import ApiResponse
+
 
 class ChapterProgressItem(BaseModel):
     chapter: str = Field(..., description="章节名称")
@@ -48,3 +50,7 @@ class EvaluationData(BaseModel):
     mastery_table: TableData | None = Field(None, description="知识点掌握程度表")
     resource_usage_table: TableData | None = Field(None, description="资源使用习惯记录表")
     summary_text: str | None = Field(None, description="LLM 综合文字总结")
+
+
+class EvaluationGenerateResponse(ApiResponse[EvaluationData]):
+    pass

@@ -80,3 +80,7 @@ class DoneEvent(BaseModel):
 
 
 TutoringSSEEvent = ChunkEvent | DiagramEvent | KnowledgePointsEvent | SuggestionEvent | DoneEvent
+
+
+class SSEEventMessage(BaseModel):
+    data: TutoringSSEEvent = Field(..., description="SSE 事件负载")

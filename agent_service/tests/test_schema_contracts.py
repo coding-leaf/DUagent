@@ -53,6 +53,24 @@ class SchemaContractTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_agents_learning_path_imports_from_agent_service_directory(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-c", "import agent_service.agents.learning_path"],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_agents_memory_imports_from_agent_service_directory(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-c", "import agent_service.agents.memory"],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_tutoring_user_profile_rejects_unknown_guidance_level(self) -> None:
         with self.assertRaises(ValidationError):
             TutoringUserProfile(guidance_level="L4")

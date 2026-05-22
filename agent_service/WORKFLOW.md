@@ -57,23 +57,30 @@
 | `POST /agent/v1/evaluation/generate` | 已完成 | 已完成 | 已完成 | 规则版已完成 | 已覆盖 | 基于学习进度、练习结果、资源使用生成表格和摘要 |
 | `POST /agent/v1/assessment/evaluate` | 已完成 | 已完成 | 已完成 | 规则版已完成 | 已覆盖 | 基于标准答案和用户答案生成判分与诊断 |
 | `POST /agent/v1/assessment/generate-questions` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 根据题型、数量、章节、知识点生成结构化占位题目 |
-| `POST /agent/v1/learning-path/generate` | 已完成 | 已完成 | 未开始 | 未开始 | 已覆盖 | 仅占位 |
+| `POST /agent/v1/learning-path/generate` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 基于知识图谱、薄弱点和掌握度生成结构化学习路径 |
 | `POST /agent/v1/resources/generate` | 已完成 | 已完成 | 未开始 | 未开始 | 已覆盖 | 202 占位响应 |
-| `POST /agent/v1/memory/compress` | 已完成 | 已完成 | 未开始 | 未开始 | 已覆盖 | 仅占位 |
+| `POST /agent/v1/memory/compress` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 生成对话摘要并提取基础薄弱点事实 |
 
 ## 当前上下文
 
 - `POST /agent/v1/assessment/generate-questions` 已从 API 占位改为调用 `agents.assessment.generate_questions_data`。
 - 当前规则版生成器只负责结构化题目骨架：按 `count` 生成题目，按 `question_types` 循环选择题型，保留 `chapter` / `knowledge_point` / `difficulty`。
 - 当请求未传 `knowledge_point` 时，会优先从 `personalization_context.wrong_points` 提取第一个可用薄弱点，否则回退为“综合知识点”。
-- 该阶段不接 LLM、不写 SQL、不检索 Qdrant；后续可替换为 RAG/LLM 题目生成实现。
+- `POST /agent/v1/learning-path/generate` 已从 API 占位改为调用 `agents.learning_path.generate_learning_path_data`。
+- 当前学习路径规则版生成器会按 `knowledge_graph.nodes` 生成路径节点，按 `knowledge_graph.edges` 返回依赖边；命中画像薄弱点的节点标记为 `recommended`，掌握度高的节点标记为 `completed`。
+- `POST /agent/v1/memory/compress` 已从 API 占位改为调用 `agents.memory.compress_memory_data`。
+- 当前记忆压缩规则版会合并旧摘要与本轮消息，并从用户消息中提取基础 `blind_spot` 事实；暂不写 Qdrant。
+- 该阶段不接 LLM、不写 SQL、不检索 Qdrant；后续可替换为 RAG/LLM 和长期记忆写入实现。
 
 ## 最近测试结果
 
 - `./.venv/bin/pytest tests/test_assessment_agent.py`：6 passed
+- `./.venv/bin/pytest tests/test_learning_path_agent.py`：3 passed
+- `./.venv/bin/pytest tests/test_memory_agent.py`：3 passed
+- `./.venv/bin/pytest tests/test_schema_contracts.py`：16 passed
 - `./.venv/bin/pytest tests/test_openapi_alignment.py`：14 passed，存在既有 Pydantic v2 deprecation warning
-- `./.venv/bin/pytest`：42 passed，存在既有 Pydantic v2 deprecation warning
+- `./.venv/bin/pytest`：50 passed，存在既有 Pydantic v2 deprecation warning
 
 ## 下一步建议
 
-- 继续按小步推进 `POST /agent/v1/learning-path/generate` 的 Agent 承接层，或回到主链路 `POST /agent/v1/tutoring/chat` 做 SSE 规则版事件生成。
+- 继续按小步推进 `POST /agent/v1/resources/generate` 的异步任务骨架，或回到主链路 `POST /agent/v1/tutoring/chat` 做 SSE 规则版事件生成。

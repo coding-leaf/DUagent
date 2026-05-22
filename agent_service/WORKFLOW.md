@@ -1,53 +1,21 @@
-## agent_service暂行开发流程
+# WORKFLOW.md
 
-1. 契约层
-  先把所有接口补成“可启动、可出 OpenAPI、可过 schema 测试”。
-  范围是 api/ + schemas/。
-  你这次已经完成了其中一部分：tutoring/profile/evaluation。
+## 文件用途
 
-  2. 智能辅导主流程
-  按 POST /agent/v1/tutoring/chat 单独推进。
-  这是主链路，涉及：
+本文件用于记录 `agent_service` 当前开发进度、阶段目标、测试结果和跨窗口恢复上下文。
+本文件不是接口契约来源，接口契约以 `../docs/20-agent-api` 下的 OpenAPI 与接口规范为准。
 
-  - 请求解析
-  - SQL 画像注入
-  - Qdrant 检索
-  - Prompt 组装
-  - SSE 事件输出
-  - done 元数据回传
+## 本文件修改注意事项
 
-  这条链路最复杂，建议单独作为一阶段。
-
-  3. 评估与画像流程
-  把这两个接口串成一个业务链：
-
-  - POST /agent/v1/evaluation/generate
-  - POST /agent/v1/profile/generate
-
-  原因是画像生成天然依赖评估结果和学习统计，这两个接口耦合度高，适合一起做。
-  这一阶段重点是结构化输入转结构化输出，不一定先依赖复杂流式能力。
-
-  4. 测验/学习路径/资源生成流程
-  按文档再拆成 3 组：
-
-  - assessment：测验评估、题目生成
-  - learning-path：学习路径生成
-  - resources：异步任务 + webhook
-
-  这里面 resources 又是单独一类，因为它有 202 + task_id + webhook 异步模式，和普通同步接口不同。
-
-  5. 记忆与基础设施流程
-  最后补公共底座，而不是一开始就过度设计：
-
-  - memory/compress
-  - Qdrant 读写封装
-  - retriever
-  - prompts
-  - agents 层公共编排
-  - tools
+- 只记录跨窗口恢复开发所需的最小状态。
+- 保留接口进度、当前焦点、近期完成摘要、最近测试结果和下一步建议。
+- 不记录完整对话过程、详细推理过程、冗长历史背景。
+- 每次完成小阶段后更新本文件，但应优先压缩为状态摘要。
+- 不以更新本文件为理由扩大业务代码修改范围。
 
 ## 项目进度
-> 以下为当前项目的接口等开发进度,仅供参考
+
+> 以下为当前项目的接口开发进度，仅供恢复上下文使用。
 
 | 接口 | 契约层 | API骨架 | Agent承接层 | 业务实现 | 测试状态 | 备注 |
 |------|--------|---------|-------------|----------|----------|------|
@@ -61,21 +29,25 @@
 | `POST /agent/v1/resources/generate` | 已完成 | 已完成 | 已完成 | 规则版闭环骨架已完成 | 已覆盖 | 202 + 后台任务 + webhook payload 骨架，暂不接 LLM/Qdrant |
 | `POST /agent/v1/memory/compress` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 生成对话摘要并提取基础薄弱点事实 |
 
-## 当前上下文
+## 当前焦点
 
-- `POST /agent/v1/assessment/generate-questions` 已从 API 占位改为调用 `agents.assessment.generate_questions_data`。
-- 当前规则版生成器只负责结构化题目骨架：按 `count` 生成题目，按 `question_types` 循环选择题型，保留 `chapter` / `knowledge_point` / `difficulty`。
-- 当请求未传 `knowledge_point` 时，会优先从 `personalization_context.wrong_points` 提取第一个可用薄弱点，否则回退为“综合知识点”。
-- `POST /agent/v1/learning-path/generate` 已从 API 占位改为调用 `agents.learning_path.generate_learning_path_data`。
-- 当前学习路径规则版生成器会按 `knowledge_graph.nodes` 生成路径节点，按 `knowledge_graph.edges` 返回依赖边；命中画像薄弱点的节点标记为 `recommended`，掌握度高的节点标记为 `completed`。
-- `POST /agent/v1/memory/compress` 已从 API 占位改为调用 `agents.memory.compress_memory_data`。
-- 当前记忆压缩规则版会合并旧摘要与本轮消息，并从用户消息中提取基础 `blind_spot` 事实；暂不写 Qdrant。
-- `POST /agent/v1/resources/generate` 已从 API 固定响应改为调用 `agents.resources.accept_resource_generation`。
-- 当前资源生成规则版只负责异步任务承接：原样返回 Backend 传入的 `task_id`，按资源类型数量估算 `estimated_duration`；未传 `resource_types` 时默认使用 `document / mindmap / reading / code`，不默认生成预留的 `video`。
-- 资源生成闭环骨架已接入：API 层用 `BackgroundTasks` 注册后台任务；`agents.resources.run_resource_generation_task` 构造 completed/failed webhook payload 并 POST 到 `webhook_url`。
-- 当前 webhook payload 按《API_Agent内部接口规范》6.1 包含 `task_id`、`task_type=resource_generation`、`status`、`result.resources` 或 `error_message`。
-- 该阶段不接 LLM、不写 SQL、不检索 Qdrant；后续可替换为 RAG/LLM 和长期记忆写入实现。
-- 资源内容仍是规则版占位，不调用 LLM/Qdrant；webhook 发送使用标准库实现，测试通过注入 fake sender 避免真实网络调用。
+- 下一步推荐优先推进 `POST /agent/v1/tutoring/chat`：把当前 SSE 占位改为规则版事件流，先形成主链路可演示闭环。
+- 备选焦点是继续增强 `POST /agent/v1/resources/generate`：补 webhook 重试、超时和资源内容生成替换点。
+
+## 近期完成摘要
+
+- `POST /agent/v1/assessment/generate-questions`：已接入 `agents.assessment.generate_questions_data`，可生成规则版结构化占位题目。
+- `POST /agent/v1/learning-path/generate`：已接入 `agents.learning_path.generate_learning_path_data`，可基于知识图谱、薄弱点和掌握度生成规则版学习路径。
+- `POST /agent/v1/memory/compress`：已接入 `agents.memory.compress_memory_data`，可生成对话摘要并提取基础 `blind_spot` 事实，暂不写 Qdrant。
+- `POST /agent/v1/resources/generate`：已接入 `agents.resources`，支持 202 接收、后台任务和 completed/failed webhook payload。
+
+## 历史完成详情
+
+- `POST /agent/v1/profile/generate`：规则版已完成，基于练习历史、资源使用和近期活跃度生成基础画像。
+- `POST /agent/v1/evaluation/generate`：规则版已完成，基于学习进度、练习结果和资源使用生成评估摘要。
+- `POST /agent/v1/assessment/evaluate`：规则版已完成，基于标准答案和用户答案生成判分与诊断。
+- `GET /agent/v1/health`：健康检查接口已完成基础占位。
+- 当前所有规则版实现均不接 LLM、不写 SQL、不检索 Qdrant；后续可按接口逐步替换为 AgentScope / RAG / LLM 实现。
 
 ## 最近测试结果
 
@@ -89,4 +61,5 @@
 
 ## 下一步建议
 
-- 继续按小步推进 `POST /agent/v1/resources/generate` 的 webhook 重试/超时策略与资源内容生成替换点，或回到主链路 `POST /agent/v1/tutoring/chat` 做 SSE 规则版事件生成。
+- 首选：推进 `POST /agent/v1/tutoring/chat` 的 SSE 规则版事件流。
+- 次选：补 `POST /agent/v1/resources/generate` 的 webhook retry / timeout / backoff 策略。

@@ -58,7 +58,7 @@
 | `POST /agent/v1/assessment/evaluate` | 已完成 | 已完成 | 已完成 | 规则版已完成 | 已覆盖 | 基于标准答案和用户答案生成判分与诊断 |
 | `POST /agent/v1/assessment/generate-questions` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 根据题型、数量、章节、知识点生成结构化占位题目 |
 | `POST /agent/v1/learning-path/generate` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 基于知识图谱、薄弱点和掌握度生成结构化学习路径 |
-| `POST /agent/v1/resources/generate` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 202 异步任务承接层已接入，暂不发 webhook |
+| `POST /agent/v1/resources/generate` | 已完成 | 已完成 | 已完成 | 规则版闭环骨架已完成 | 已覆盖 | 202 + 后台任务 + webhook payload 骨架，暂不接 LLM/Qdrant |
 | `POST /agent/v1/memory/compress` | 已完成 | 已完成 | 已完成 | 规则版骨架已完成 | 已覆盖 | 生成对话摘要并提取基础薄弱点事实 |
 
 ## 当前上下文
@@ -72,19 +72,21 @@
 - 当前记忆压缩规则版会合并旧摘要与本轮消息，并从用户消息中提取基础 `blind_spot` 事实；暂不写 Qdrant。
 - `POST /agent/v1/resources/generate` 已从 API 固定响应改为调用 `agents.resources.accept_resource_generation`。
 - 当前资源生成规则版只负责异步任务承接：原样返回 Backend 传入的 `task_id`，按资源类型数量估算 `estimated_duration`；未传 `resource_types` 时默认使用 `document / mindmap / reading / code`，不默认生成预留的 `video`。
+- 资源生成闭环骨架已接入：API 层用 `BackgroundTasks` 注册后台任务；`agents.resources.run_resource_generation_task` 构造 completed/failed webhook payload 并 POST 到 `webhook_url`。
+- 当前 webhook payload 按《API_Agent内部接口规范》6.1 包含 `task_id`、`task_type=resource_generation`、`status`、`result.resources` 或 `error_message`。
 - 该阶段不接 LLM、不写 SQL、不检索 Qdrant；后续可替换为 RAG/LLM 和长期记忆写入实现。
-- 资源生成阶段同样不写 SQL、不调用 LLM/Qdrant、不实际 POST webhook；后续可在该承接层后接入后台 worker、AgentScope/RAG 和 webhook 重试。
+- 资源内容仍是规则版占位，不调用 LLM/Qdrant；webhook 发送使用标准库实现，测试通过注入 fake sender 避免真实网络调用。
 
 ## 最近测试结果
 
 - `./.venv/bin/pytest tests/test_assessment_agent.py`：6 passed
 - `./.venv/bin/pytest tests/test_learning_path_agent.py`：3 passed
 - `./.venv/bin/pytest tests/test_memory_agent.py`：3 passed
-- `./.venv/bin/pytest tests/test_resources_agent.py`：3 passed
+- `./.venv/bin/pytest tests/test_resources_agent.py`：6 passed
 - `./.venv/bin/pytest tests/test_schema_contracts.py`：17 passed
 - `./.venv/bin/pytest tests/test_openapi_alignment.py`：14 passed，存在既有 Pydantic v2 deprecation warning
-- `./.venv/bin/pytest`：54 passed，存在既有 Pydantic v2 deprecation warning
+- `./.venv/bin/pytest`：57 passed，存在既有 Pydantic v2 deprecation warning
 
 ## 下一步建议
 
-- 继续按小步推进 `POST /agent/v1/resources/generate` 的后台 worker/webhook payload 骨架，或回到主链路 `POST /agent/v1/tutoring/chat` 做 SSE 规则版事件生成。
+- 继续按小步推进 `POST /agent/v1/resources/generate` 的 webhook 重试/超时策略与资源内容生成替换点，或回到主链路 `POST /agent/v1/tutoring/chat` 做 SSE 规则版事件生成。

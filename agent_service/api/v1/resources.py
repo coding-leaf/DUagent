@@ -1,6 +1,6 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, BackgroundTasks, status
 
-from agent_service.agents.resources import accept_resource_generation
+from agent_service.agents.resources import accept_resource_generation, run_resource_generation_task
 from agent_service.schemas.resources import ResourceGenerateAcceptedResponse, ResourceGenerateRequest
 
 
@@ -14,10 +14,14 @@ router = APIRouter(prefix="/resources")
     tags=["Resources"],
     summary="生成资源库",
 )
-async def generate_resources(request: ResourceGenerateRequest) -> ResourceGenerateAcceptedResponse:
+async def generate_resources(
+    request: ResourceGenerateRequest,
+    background_tasks: BackgroundTasks,
+) -> ResourceGenerateAcceptedResponse:
     # 设计规范关联：api 层只做 FastAPI 路由、统一响应包装和异步协议适配；
-    # 资源生成的规则版承接逻辑放在 agents.resources，后续可替换为真实 worker/webhook 编排。
+    # 资源生成和 webhook 闭环放在 agents.resources，后续可替换为真实 worker/webhook 编排。
     task_response = accept_resource_generation(request)
+    background_tasks.add_task(run_resource_generation_task, request)
     return ResourceGenerateAcceptedResponse(
         code=202,
         message="accepted",

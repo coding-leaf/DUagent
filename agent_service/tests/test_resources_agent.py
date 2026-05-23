@@ -5,6 +5,7 @@ from agent_service.agents.resources import (
     build_resource_generation_result,
     normalize_resource_types,
     run_resource_generation_task,
+    send_webhook_with_retry,
 )
 from agent_service.schemas.resources import ResourceGenerateRequest
 
@@ -119,6 +120,74 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0][1]["task_type"], "resource_generation")
         self.assertEqual(calls[0][1]["status"], "failed")
         self.assertEqual(calls[0][1]["error_message"], "generation failed")
+
+    async def test_send_webhook_with_retry_retries_until_success(self) -> None:
+        calls = []
+        sleeps = []
+
+        async def flaky_sender(webhook_url: str, payload: dict) -> None:
+            calls.append((webhook_url, payload))
+            if len(calls) < 3:
+                raise RuntimeError("temporary network error")
+
+        async def fake_sleep(seconds: float) -> None:
+            sleeps.append(seconds)
+
+        await send_webhook_with_retry(
+            "https://backend.example.com/api/v1/webhooks/agent",
+            {"task_id": "task-resource-7", "status": "completed"},
+            sender=flaky_sender,
+            sleep=fake_sleep,
+            max_attempts=3,
+            base_delay_seconds=0.5,
+        )
+
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleeps, [0.5, 1.0])
+
+    async def test_run_resource_generation_task_does_not_raise_when_webhook_send_fails(self) -> None:
+        request = ResourceGenerateRequest(
+            task_id="task-resource-8",
+            user_id="teacher-1",
+            course_id="course-1",
+            webhook_url="https://backend.example.com/api/v1/webhooks/agent",
+        )
+        calls = []
+
+        async def failing_sender(webhook_url: str, payload: dict) -> None:
+            calls.append((webhook_url, payload))
+            raise RuntimeError("backend unavailable")
+
+        await run_resource_generation_task(
+            request,
+            send_webhook=failing_sender,
+            max_webhook_attempts=2,
+            webhook_base_delay_seconds=0,
+        )
+
+        self.assertEqual(len(calls), 2)
+
+    async def test_run_resource_generation_task_logs_final_webhook_failure(self) -> None:
+        request = ResourceGenerateRequest(
+            task_id="task-resource-9",
+            user_id="teacher-1",
+            course_id="course-1",
+            webhook_url="https://backend.example.com/api/v1/webhooks/agent",
+        )
+
+        async def failing_sender(webhook_url: str, payload: dict) -> None:
+            raise RuntimeError("backend unavailable")
+
+        with self.assertLogs("agent_service.agents.resources", level="WARNING") as logs:
+            await run_resource_generation_task(
+                request,
+                send_webhook=failing_sender,
+                max_webhook_attempts=1,
+                webhook_base_delay_seconds=0,
+            )
+
+        self.assertIn("Resource generation webhook failed", "\n".join(logs.output))
+        self.assertIn("task-resource-9", "\n".join(logs.output))
 
 
 if __name__ == "__main__":

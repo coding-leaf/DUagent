@@ -1,8 +1,10 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from agent_service.schemas.common import ApiResponse
+
+LearningPathNodeStatus = Literal["completed", "in_progress", "pending", "recommended"]
 
 
 class KnowledgeGraphNode(BaseModel):
@@ -32,7 +34,7 @@ class LearningPathGenerateRequest(BaseModel):
 class LearningPathNode(BaseModel):
     id: str | None = Field(None, description="节点 ID")
     name: str | None = Field(None, description="知识点名称")
-    status: str | None = Field(None, description="completed / in_progress / pending / recommended")
+    status: LearningPathNodeStatus | None = Field(None, description="completed / in_progress / pending / recommended")
     mastery: float | None = Field(None, ge=0, le=100, description="掌握度 0-100")
     order: int | None = Field(None, description="排序序号")
     reason: str | None = Field(None, description="排在该位置的原因说明")

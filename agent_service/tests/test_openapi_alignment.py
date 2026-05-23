@@ -98,6 +98,13 @@ class OpenAPIAlignmentTests(unittest.TestCase):
         response_schema = self.resolve_app_schema(response_schema)
         self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
 
+    def test_app_openapi_health_uses_json_wrapper(self) -> None:
+        response_schema = self.app_openapi["paths"]["/agent/v1/health"]["get"]["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+        response_schema = self.resolve_app_schema(response_schema)
+        self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
     def test_app_openapi_tutoring_chat_uses_sse(self) -> None:
         response_content = self.app_openapi["paths"]["/agent/v1/tutoring/chat"]["post"]["responses"]["200"]["content"]
         self.assertIn("text/event-stream", response_content)

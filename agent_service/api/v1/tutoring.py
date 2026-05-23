@@ -4,15 +4,16 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from agent_service.schemas.tutoring import DoneEvent, TutoringChatRequest
+from agent_service.agents.tutoring import generate_tutoring_events
+from agent_service.schemas.tutoring import TutoringChatRequest
 
 
 router = APIRouter(prefix="/tutoring")
 
 
-async def tutoring_event_stream() -> AsyncIterator[str]:
-    done_event = DoneEvent(message_id="stub-message-id")
-    yield f"data: {json.dumps(done_event.model_dump(), ensure_ascii=False)}\n\n"
+async def tutoring_event_stream(request: TutoringChatRequest) -> AsyncIterator[str]:
+    for event in generate_tutoring_events(request):
+        yield f"data: {json.dumps(event.model_dump(), ensure_ascii=False)}\n\n"
 
 
 @router.post(
@@ -33,5 +34,5 @@ async def tutoring_event_stream() -> AsyncIterator[str]:
         }
     },
 )
-async def tutoring_chat(_: TutoringChatRequest) -> StreamingResponse:
-    return StreamingResponse(tutoring_event_stream(), media_type="text/event-stream")
+async def tutoring_chat(request: TutoringChatRequest) -> StreamingResponse:
+    return StreamingResponse(tutoring_event_stream(request), media_type="text/event-stream")

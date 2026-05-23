@@ -1,19 +1,23 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from agent_service.schemas.common import ApiResponse
 
+MemoryRole = Literal["user", "assistant"]
+FactType = Literal["blind_spot", "mastered_point", "cognitive_preference"]
+
 
 class MemoryMessage(BaseModel):
-    role: str = Field(..., description="user / assistant")
+    role: MemoryRole = Field(..., description="user / assistant")
     content: str = Field(..., description="消息内容")
     timestamp: datetime = Field(..., description="消息时间")
 
 
 class ExtractedFact(BaseModel):
     content: str | None = Field(None, description="事实内容（如：用户在递归概念上卡壳）")
-    fact_type: str | None = Field(None, description="blind_spot / mastered_point / cognitive_preference")
+    fact_type: FactType | None = Field(None, description="blind_spot / mastered_point / cognitive_preference")
     knowledge_point: str | None = Field(None, description="关联知识点名称（如有）")
     confidence: float | None = Field(None, ge=0, le=1, description="置信度 0-1")
 

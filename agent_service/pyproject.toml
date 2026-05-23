@@ -32,6 +32,8 @@ packages = [
     "agent_service.api",
     "agent_service.api.v1",
     "agent_service.core",
+    "agent_service.memory",
+    "agent_service.prompts",
     "agent_service.schemas",
 ]
 
@@ -41,6 +43,8 @@ agent_service = "."
 "agent_service.api" = "api"
 "agent_service.api.v1" = "api/v1"
 "agent_service.core" = "core"
+"agent_service.memory" = "memory"
+"agent_service.prompts" = "prompts"
 "agent_service.schemas" = "schemas"
 
 [tool.pytest.ini_options]

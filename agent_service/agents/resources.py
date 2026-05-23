@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib import request as urllib_request
 
+from agent_service.core.logging import get_logger
 from agent_service.schemas.common import ResourceTaskResponse
 from agent_service.schemas.resources import ResourceGenerateRequest
 
@@ -19,6 +20,7 @@ RESOURCE_TYPE_LABELS = {
     "video": "视频资源",
 }
 TASK_TYPE = "resource_generation"
+logger = get_logger(__name__)
 
 WebhookPayload = dict[str, Any]
 WebhookSender = Callable[[str, WebhookPayload], Awaitable[None]]
@@ -71,6 +73,8 @@ async def run_resource_generation_task(
     request: ResourceGenerateRequest,
     send_webhook: WebhookSender | None = None,
     result_builder: ResultBuilder = build_resource_generation_result,
+    max_webhook_attempts: int = 3,
+    webhook_base_delay_seconds: float = 1.0,
 ) -> None:
     """Run the async resource workflow and notify Backend through webhook_url.
 
@@ -79,12 +83,23 @@ async def run_resource_generation_task(
     """
     # 设计规范关联：resources/generate 是 202 + webhook 异步模式。
     # api 层只注册后台任务；这里作为 agents 层承接点，后续替换为真实多智能体并行生成。
-    sender = send_webhook or post_webhook_payload
     try:
         payload = result_builder(request)
     except Exception as exc:
+        logger.warning("Resource generation failed before webhook: task_id=%s error=%s", request.task_id, exc)
         payload = build_resource_generation_failed_payload(request, str(exc))
-    await sender(request.webhook_url, payload)
+    try:
+        await send_webhook_with_retry(
+            request.webhook_url,
+            payload,
+            sender=send_webhook,
+            max_attempts=max_webhook_attempts,
+            base_delay_seconds=webhook_base_delay_seconds,
+        )
+    except Exception as exc:
+        # BackgroundTasks cannot return a status to Backend here; contain the failure and log it.
+        logger.warning("Resource generation webhook failed: task_id=%s error=%s", request.task_id, exc)
+        return
 
 
 def build_resource_generation_failed_payload(request: ResourceGenerateRequest, error_message: str) -> WebhookPayload:
@@ -102,6 +117,27 @@ async def post_webhook_payload(webhook_url: str, payload: WebhookPayload) -> Non
     # 设计规范关联：Agent 只回调 Backend 的 webhook_url，不直接接触 Backend SQL。
     # 该函数是可替换的基础设施边界；测试通过注入 fake sender 避免真实网络调用。
     await asyncio.to_thread(_post_json_payload, webhook_url, payload)
+
+
+async def send_webhook_with_retry(
+    webhook_url: str,
+    payload: WebhookPayload,
+    sender: WebhookSender | None = None,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    max_attempts: int = 3,
+    base_delay_seconds: float = 1.0,
+) -> None:
+    """发送 webhook 并按指数退避重试，输入回调地址和 payload，失败时最终抛出最后异常。"""
+    webhook_sender = sender or post_webhook_payload
+    attempts = max(1, max_attempts)
+    for attempt in range(attempts):
+        try:
+            await webhook_sender(webhook_url, payload)
+            return
+        except Exception:
+            if attempt == attempts - 1:
+                raise
+            await sleep(base_delay_seconds * (2**attempt))
 
 
 def _build_resource_payload(request: ResourceGenerateRequest, resource_type: str) -> dict[str, Any]:

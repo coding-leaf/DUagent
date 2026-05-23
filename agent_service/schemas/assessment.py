@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -6,11 +6,13 @@ from agent_service.schemas.common import ApiResponse
 
 
 AnswerValue = str | list[str]
+QuestionType = Literal["single_choice", "multi_choice", "code", "short_answer"]
+Difficulty = Literal["easy", "medium", "hard"]
 
 
 class AssessmentQuestion(BaseModel):
     id: str = Field(..., description="题目 ID")
-    type: str = Field(..., description="题型")
+    type: QuestionType = Field(..., description="题型")
     content: str = Field(..., description="题目内容")
     options: list[dict[str, Any]] = Field(default_factory=list, description="选项列表")
     correct_answer: AnswerValue = Field(..., description="正确答案，单选/简答为 string，多选为 array")
@@ -60,9 +62,12 @@ class QuestionGenerateRequest(BaseModel):
     knowledge_base_id: str | None = Field(None, description="课程知识库 ID；Backend 可由 course_id 解析后传入")
     chapter: str | None = Field(None, description="章节")
     knowledge_point: str | None = Field(None, description="知识点")
-    question_types: list[str] = Field(default_factory=list, description="single_choice / multi_choice / code / short_answer")
+    question_types: list[QuestionType] = Field(
+        default_factory=list,
+        description="single_choice / multi_choice / code / short_answer",
+    )
     count: int = Field(5, ge=1, description="生成题数")
-    difficulty: str | None = Field(None, description="easy / medium / hard")
+    difficulty: Difficulty | None = Field(None, description="easy / medium / hard")
     personalized: bool = Field(True, description="是否生成个性化题")
     personalization_context: dict[str, Any] | None = Field(None, description="个性化上下文")
 
@@ -73,14 +78,14 @@ class QuestionOption(BaseModel):
 
 
 class GeneratedQuestion(BaseModel):
-    type: str = Field(..., description="single_choice / multi_choice / code / short_answer")
+    type: QuestionType = Field(..., description="single_choice / multi_choice / code / short_answer")
     content: str = Field(..., description="题目内容")
     options: list[QuestionOption] = Field(default_factory=list, description="选项列表，非选择题为空数组")
     answer: Any = Field(..., description="标准答案，单选/简答为 string，多选可为 array")
     explanation: str = Field(..., description="解析")
     chapter: str | None = Field(None, description="章节")
     knowledge_point: str = Field(..., description="关联知识点")
-    difficulty: str | None = Field(None, description="easy / medium / hard")
+    difficulty: Difficulty | None = Field(None, description="easy / medium / hard")
 
 
 class QuestionGenerateResult(BaseModel):

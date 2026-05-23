@@ -43,6 +43,19 @@
 - 已完成 tutoring AI 骨架：Qdrant vector store、检索上下文构建、provider-neutral prompt/messages 转换、规则版 SSE 与 AI 检索边界兼容。
 - 已完成非 AI 工程收口：health 探针日志、resources webhook retry/backoff/失败日志、Pydantic v2 warning 清理。
 
+## 最近一轮审查结论
+
+- 规则版开发进度较高：接口契约、API 骨架、规则版业务逻辑、SSE/202 协议、测试覆盖基本齐备；按规则版交付口径，当前完成度约 `85%~90%`。
+- AI / RAG 闭环仍处于“骨架已搭好、主路径未完全串联”阶段；按文档目标口径，当前完成度约 `50%~60%`。
+- 已识别的关键缺口有 3 个：
+  - `memory.vector_store` 仍查询旧 collection 名 `user_memory` / `course_knowledge`，与当前 `*_v1_1024` 配置脱节。
+  - `/agent/v1/tutoring/chat` 运行时仍只走规则版 SSE，尚未把 `build_tutoring_retrieval_context_with_ai` 接入真实主路径。
+  - `/agent/v1/memory/compress` 目前只返回摘要和 facts，尚未按接口规范将长期记忆写入 Qdrant `user_memory`。
+- 推荐修复顺序：
+  - 先修正 vector store 使用配置化 collection 名。
+  - 再将 AI retrieval builder 接入 tutoring 主链路。
+  - 最后补 `memory/compress -> user_memory` 的写入闭环和集成测试。
+
 ## 向量化规划记录
 
 - 用户侧向量化主对象：`user_memory`。优先存记忆压缩后的 `facts` 与阶段性 `episode_summary`，不把全量原始对话作为主向量库内容。

@@ -30,3 +30,5 @@ def test_build_tutoring_messages_includes_profile_retrieval_and_current_question
     assert "用户容易把内外层顺序写反" in content
     assert "链式法则用于复合函数求导" in content
     assert "链式法则为什么要从外到内？" in content
+    assert "<agent_result>" in content
+    assert "knowledge_points" in content

@@ -85,6 +85,94 @@ def test_build_tutoring_retrieval_context_with_ai_queries_memory_and_course_know
     ]
 
 
+def test_build_tutoring_retrieval_context_with_ai_reranks_results() -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="链式法则怎么用？",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeEmbeddingProvider:
+        async def embed_texts(self, texts):
+            return [[0.1, 0.2, 0.3]]
+
+    class FakeRerankerProvider:
+        async def score(self, query, documents):
+            if documents == ["用户容易把内外层顺序写反", "用户容易漏写中间步骤"]:
+                return [0.1, 0.9]
+            return [0.2, 0.8]
+
+    class FakeVectorStore:
+        def search_user_memory(self, user_id, vector, limit=3):
+            return [
+                VectorSearchResult(text="用户容易把内外层顺序写反", score=0.8, payload={}),
+                VectorSearchResult(text="用户容易漏写中间步骤", score=0.7, payload={}),
+            ]
+
+        def search_course_knowledge(self, course_id, vector, limit=3):
+            return [
+                VectorSearchResult(text="链式法则用于复合函数求导", score=0.7, payload={}),
+                VectorSearchResult(text="链式法则要乘以内层导数", score=0.6, payload={}),
+            ]
+
+    context = asyncio.run(
+        build_tutoring_retrieval_context_with_ai(
+            request,
+            embedding_provider=FakeEmbeddingProvider(),
+            reranker_provider=FakeRerankerProvider(),
+            vector_store=FakeVectorStore(),
+        )
+    )
+
+    assert context.user_memory_facts == ["用户容易漏写中间步骤", "用户容易把内外层顺序写反"]
+    assert context.course_knowledge_chunks == ["链式法则要乘以内层导数", "链式法则用于复合函数求导"]
+
+
+def test_build_tutoring_retrieval_context_with_ai_keeps_original_order_when_reranker_fails(caplog) -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="链式法则怎么用？",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeEmbeddingProvider:
+        async def embed_texts(self, texts):
+            return [[0.1, 0.2, 0.3]]
+
+    class FailingRerankerProvider:
+        async def score(self, query, documents):
+            raise RuntimeError("reranker unavailable")
+
+    class FakeVectorStore:
+        def search_user_memory(self, user_id, vector, limit=3):
+            return [
+                VectorSearchResult(text="用户容易把内外层顺序写反", score=0.8, payload={}),
+                VectorSearchResult(text="用户容易漏写中间步骤", score=0.7, payload={}),
+            ]
+
+        def search_course_knowledge(self, course_id, vector, limit=3):
+            return [
+                VectorSearchResult(text="链式法则用于复合函数求导", score=0.7, payload={}),
+                VectorSearchResult(text="链式法则要乘以内层导数", score=0.6, payload={}),
+            ]
+
+    with caplog.at_level("WARNING", logger="agent_service.memory.tutoring_retrieval"):
+        context = asyncio.run(
+            build_tutoring_retrieval_context_with_ai(
+                request,
+                embedding_provider=FakeEmbeddingProvider(),
+                reranker_provider=FailingRerankerProvider(),
+                vector_store=FakeVectorStore(),
+            )
+        )
+
+    assert context.user_memory_facts == ["用户容易把内外层顺序写反", "用户容易漏写中间步骤"]
+    assert context.course_knowledge_chunks == ["链式法则用于复合函数求导", "链式法则要乘以内层导数"]
+    assert "Tutoring rerank failed" in caplog.text
+
+
 def test_build_tutoring_retrieval_context_with_ai_degrades_on_retrieval_failure(caplog) -> None:
     request = TutoringChatRequest(
         user_id="user-1",

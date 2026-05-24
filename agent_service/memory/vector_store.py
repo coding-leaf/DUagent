@@ -3,6 +3,7 @@ from typing import Any, Protocol, Sequence
 
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
+from agent_service.core.config import settings
 from agent_service.core.qdrant import get_qdrant_client
 
 
@@ -23,10 +24,12 @@ class QdrantVectorStore:
 
     def __init__(self, client: QdrantLikeClient | None = None) -> None:
         self.client = client or get_qdrant_client()
+        self.user_memory_collection = settings.QDRANT_USER_MEMORY_COLLECTION
+        self.course_knowledge_collection = settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION
 
     def search_user_memory(self, user_id: str, vector: Sequence[float], limit: int = 3) -> list[VectorSearchResult]:
         response = self.client.query_points(
-            collection_name="user_memory",
+            collection_name=self.user_memory_collection,
             query=list(vector),
             query_filter=_match_filter("user_id", user_id),
             limit=limit,
@@ -41,7 +44,7 @@ class QdrantVectorStore:
         limit: int = 3,
     ) -> list[VectorSearchResult]:
         response = self.client.query_points(
-            collection_name="course_knowledge",
+            collection_name=self.course_knowledge_collection,
             query=list(vector),
             query_filter=_match_filter("course_id", course_id),
             limit=limit,

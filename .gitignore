@@ -68,3 +68,5 @@ htmlcov/
 .next/
 out/
 .codex
+#规范
+AGENTS.md

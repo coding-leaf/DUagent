@@ -1,4 +1,9 @@
+from agent_service.core.ai import EmbeddingProvider, get_ai_providers
+from agent_service.core.logging import get_logger
+from agent_service.memory.user_memory_store import QdrantUserMemoryStore
 from agent_service.schemas.memory import ExtractedFact, MemoryCompressRequest, MemoryCompressResult, MemoryMessage
+
+logger = get_logger(__name__)
 
 
 def compress_memory_data(request: MemoryCompressRequest) -> MemoryCompressResult:
@@ -6,6 +11,36 @@ def compress_memory_data(request: MemoryCompressRequest) -> MemoryCompressResult
     new_summary = _build_summary(request.old_summary, request.messages_to_compress)
     extracted_facts = _extract_facts(request.messages_to_compress, set(request.existing_facts))
     return MemoryCompressResult(new_summary=new_summary, extracted_facts=extracted_facts)
+
+
+async def compress_and_persist_memory(
+    request: MemoryCompressRequest,
+    embedding_provider: EmbeddingProvider | None = None,
+    memory_store: QdrantUserMemoryStore | None = None,
+) -> MemoryCompressResult:
+    """压缩对话并尝试写入长期记忆，输入请求，输出不变的记忆压缩结果。"""
+    result = compress_memory_data(request)
+    if not result.extracted_facts:
+        return result
+
+    try:
+        provider = embedding_provider or get_ai_providers().embedding
+        store = memory_store or QdrantUserMemoryStore()
+        vectors = await provider.embed_texts([fact.content or "" for fact in result.extracted_facts])
+        await store.upsert_facts(
+            user_id=request.user_id,
+            conversation_id=request.conversation_id,
+            facts=result.extracted_facts,
+            vectors=vectors,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Memory persistence failed: user_id=%s conversation_id=%s error=%s",
+            request.user_id,
+            request.conversation_id,
+            exc,
+        )
+    return result
 
 
 def _build_summary(old_summary: str | None, messages: list[MemoryMessage]) -> str:

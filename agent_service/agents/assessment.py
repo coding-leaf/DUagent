@@ -1,5 +1,13 @@
+import json
+import re
 from collections import Counter
 
+from agent_service.core.ai import ChatMessage
+from agent_service.core.logging import get_logger
+from agent_service.prompts.assessment import (
+    build_question_generation_system_prompt,
+    build_question_generation_user_message,
+)
 from agent_service.schemas.assessment import (
     AnswerValue,
     AssessmentEvaluateRequest,
@@ -160,3 +168,69 @@ def _build_diagnosis(
         weak_points=weak_points,
         suggestions=[f"建议复习{item.name}，并完成相关巩固练习。" for item in weak_points if item.name],
     )
+
+
+logger = get_logger(__name__)
+_MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+
+
+async def generate_questions_with_llm(
+    request: QuestionGenerateRequest,
+    chat_provider,
+) -> list[GeneratedQuestion] | None:
+    """尝试用 LLM 生成题目，输入请求和 chat provider，输出 GeneratedQuestion 列表或 None（降级）。"""
+    if chat_provider is None:
+        return None
+    try:
+        messages = [
+            ChatMessage(role="system", content=build_question_generation_system_prompt()),
+            ChatMessage(role="user", content=build_question_generation_user_message(request)),
+        ]
+        raw = await chat_provider.complete(messages)
+        parsed = _parse_question_json(raw)
+        return _coerce_questions(parsed)
+    except Exception:
+        logger.warning("LLM question generation failed, falling back to skeleton", exc_info=True)
+        return None
+
+
+def _parse_question_json(raw: str) -> list[dict]:
+    text = raw.strip()
+    match = _MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise ValueError("LLM output is not a JSON array")
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _coerce_questions(items: list[dict]) -> list[GeneratedQuestion]:
+    questions: list[GeneratedQuestion] = []
+    for item in items:
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        questions.append(
+            GeneratedQuestion(
+                type=item.get("type", "single_choice"),
+                content=content.strip(),
+                options=_coerce_options(item.get("options")),
+                answer=item.get("answer", ""),
+                explanation=str(item.get("explanation", "")),
+                chapter=item.get("chapter"),
+                knowledge_point=str(item.get("knowledge_point", "")),
+                difficulty=item.get("difficulty"),
+            )
+        )
+    return questions
+
+
+def _coerce_options(raw_options) -> list:
+    if not isinstance(raw_options, list):
+        return []
+    result = []
+    for opt in raw_options:
+        if isinstance(opt, dict):
+            result.append({"key": str(opt.get("key", "")), "text": str(opt.get("text", ""))})
+    return result

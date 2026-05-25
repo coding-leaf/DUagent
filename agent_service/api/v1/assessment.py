@@ -1,11 +1,17 @@
 from fastapi import APIRouter
 
-from agent_service.agents.assessment import evaluate_assessment_data, generate_questions_data
+from agent_service.agents.assessment import (
+    evaluate_assessment_data,
+    generate_questions_data,
+    generate_questions_with_llm,
+)
+from agent_service.core.ai import get_ai_providers
 from agent_service.schemas.assessment import (
     AssessmentEvaluateRequest,
     AssessmentEvaluateResponse,
     QuestionGenerateRequest,
     QuestionGenerateResponse,
+    QuestionGenerateResult,
 )
 
 
@@ -24,4 +30,10 @@ async def evaluate_assessment(request: AssessmentEvaluateRequest) -> AssessmentE
     summary="生成题目",
 )
 async def generate_questions(request: QuestionGenerateRequest) -> QuestionGenerateResponse:
-    return QuestionGenerateResponse(code=200, message="success", data=generate_questions_data(request))
+    providers = get_ai_providers()
+    questions = await generate_questions_with_llm(request, getattr(providers, "chat", None))
+    if questions is None:
+        questions = generate_questions_data(request).questions
+    return QuestionGenerateResponse(
+        code=200, message="success", data=QuestionGenerateResult(questions=questions)
+    )

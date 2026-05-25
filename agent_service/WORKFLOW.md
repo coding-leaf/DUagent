@@ -21,7 +21,7 @@
 | `POST /agent/v1/profile/generate` | 规则版已完成 | 基于练习历史、资源使用、近期活跃度生成画像 |
 | `POST /agent/v1/evaluation/generate` | 规则版已完成 | 基于学习进度、练习结果、资源使用生成评估 |
 | `POST /agent/v1/assessment/evaluate` | 规则版已完成 | 基于标准答案和用户答案生成判分与诊断 |
-| `POST /agent/v1/assessment/generate-questions` | 规则版骨架已完成 | 生成结构化占位题目 |
+| `POST /agent/v1/assessment/generate-questions` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 骨架占位题 |
 | `POST /agent/v1/learning-path/generate` | 规则版骨架已完成 | 生成结构化学习路径 |
 | `POST /agent/v1/resources/generate` | 规则版闭环骨架已完成 | 202 + 后台任务 + webhook payload + retry/backoff |
 | `POST /agent/v1/memory/compress` | 规则版闭环已完成 | 生成摘要和 facts；Qdrant 写入保持 best-effort |
@@ -46,16 +46,12 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**153 passed**（2026-05-25 API smoke 超时处理补测后验证）
-- ReAct LLM smoke **通过**（2026-05-25）：`deepseek-v4-flash`，ReActAgent → JSON parse 主路径验证成功，elapsed 6.50s
-- `retrieve_course_knowledge` toolkit 已实现并挂载，新增 5 个测试
-- API smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_tutoring_api`
-- QdrantVectorStore 改为请求级共享实例，消除 retrieval / ReAct toolkit 双重创建导致的文件锁冲突
+- `./.venv/bin/pytest -q`：**158 passed**（2026-05-26 assessment/generate-questions LLM 接入后验证）
+- assessment/generate-questions：LLM + 规则版 fallback 已完成，新增 5 个测试
+- tutoring/chat：ReActAgent 主链路 + toolkit + API smoke 已验证通过
 - OpenAPI 对齐未变化
-- **API smoke 端到端验证通过**（2026-05-25 23:53）：ReAct LLM 主路径完成，SSE 5 事件完整输出（chunk×2 → knowledge_points → suggestion → done），elapsed 6.34s。Qdrant local 锁导致 `_build_shared_vector_store()` 失败属已知限制，retrieval 降级到 fallback context，不阻断请求。toolkit 完整路径待后续 Qdrant server 模式单独验证。
 
 ## 下一步
 
-- 后续可选：挂载 `retrieve_user_memory` 工具
-- Qdrant toolkit 完整路径验证（需先完成 Qdrant server 模式或 shared client 改造，单独开任务）
-- 继续推进其他接口或能力
+- 推进 `learning-path/generate`：从规则版骨架升级
+- 中期：挂载 `retrieve_user_memory` 工具

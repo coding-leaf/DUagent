@@ -142,6 +142,122 @@ def test_generate_questions_uses_wrong_points_when_knowledge_point_missing() -> 
     assert result.questions[0].type == "single_choice"
 
 
+# ── generate_questions_with_llm tests ─────────────────────────────
+
+import asyncio
+
+
+class FakeChatProvider:
+    def __init__(self, output: str | None = None, should_raise: bool = False) -> None:
+        self.calls: list[list] = []
+        self._output = output
+        self._should_raise = should_raise
+
+    async def complete(self, messages):
+        self.calls.append(messages)
+        if self._should_raise:
+            raise RuntimeError("LLM unavailable")
+        return self._output
+
+
+def test_generate_questions_with_llm_parses_valid_json_array() -> None:
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProvider(
+        output=(
+            '[{"type":"single_choice","content":"一次函数 y=2x+1 的斜率是？",'
+            '"options":[{"key":"A","text":"2"},{"key":"B","text":"1"}],'
+            '"answer":"A","explanation":"一次函数 y=kx+b 中 k 是斜率。",'
+            '"knowledge_point":"一次函数","difficulty":"easy"}]'
+        )
+    )
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="一次函数", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is not None
+    assert len(result) == 1
+    q = result[0]
+    assert q.type == "single_choice"
+    assert q.content == "一次函数 y=2x+1 的斜率是？"
+    assert q.answer == "A"
+    assert q.options[0].text == "2"
+
+
+def test_generate_questions_with_llm_strips_markdown_fences() -> None:
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProvider(
+        output=(
+            '```json\n'
+            '[{"type":"short_answer","content":"什么是导数？",'
+            '"answer":"函数在某点的变化率","explanation":"导数定义。",'
+            '"knowledge_point":"导数","difficulty":"medium"}]\n'
+            '```'
+        )
+    )
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="导数", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is not None
+    assert result[0].type == "short_answer"
+
+
+def test_generate_questions_with_llm_returns_none_on_invalid_json() -> None:
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProvider(output="not valid json at all")
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is None
+
+
+def test_generate_questions_with_llm_returns_none_when_provider_is_none() -> None:
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1", count=1,
+            ),
+            None,
+        )
+    )
+    assert result is None
+
+
+def test_generate_questions_with_llm_returns_none_when_llm_raises() -> None:
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProvider(should_raise=True)
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is None
+
+
 def _build_request(
     questions: list[AssessmentQuestion],
     answers: list[AssessmentAnswer],

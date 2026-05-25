@@ -12,6 +12,7 @@ from agent_service.agents.tutoring import (
 from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
 from agent_service.core.ai import get_ai_providers
 from agent_service.core.logging import get_logger
+from agent_service.memory.vector_store import QdrantVectorStore
 
 logger = get_logger(__name__)
 from agent_service.memory.tutoring_retrieval import (
@@ -34,8 +35,15 @@ async def tutoring_event_stream(request: TutoringChatRequest) -> AsyncIterator[s
     fallback_result = build_tutoring_generation_result(request)
     yield f"data: {json.dumps({'type': 'chunk', 'content': fallback_result.chunk_text}, ensure_ascii=False)}\n\n"
 
-    retrieval_context = await _build_runtime_retrieval_context(request)
-    model_response = await _build_model_response(request, retrieval_context)
+    providers = get_ai_providers()
+    embedding = getattr(providers, "embedding", None)
+    vector_store = _build_shared_vector_store(embedding)
+    retrieval_context = await _build_runtime_retrieval_context(
+        request, providers, vector_store=vector_store
+    )
+    model_response = await _build_model_response(
+        request, retrieval_context, providers, vector_store=vector_store
+    )
     runtime_result = build_tutoring_generation_result(
         request,
         retrieval_context=retrieval_context,
@@ -48,35 +56,48 @@ async def tutoring_event_stream(request: TutoringChatRequest) -> AsyncIterator[s
         yield f"data: {json.dumps(event.model_dump(), ensure_ascii=False)}\n\n"
 
 
-async def _build_runtime_retrieval_context(request: TutoringChatRequest) -> TutoringRetrievalContext:
-    providers = get_ai_providers()
+async def _build_runtime_retrieval_context(request, providers, *, vector_store=None) -> TutoringRetrievalContext:
     reranker_provider = getattr(providers, "reranker", None)
     try:
         if reranker_provider is None:
             return await build_tutoring_retrieval_context_with_ai(
                 request,
                 embedding_provider=providers.embedding,
+                vector_store=vector_store,
             )
         return await build_tutoring_retrieval_context_with_ai(
             request,
             embedding_provider=providers.embedding,
             reranker_provider=reranker_provider,
+            vector_store=vector_store,
         )
     except Exception:
         logger.warning("Tutoring retrieval failed, using fallback context", exc_info=True)
         return build_tutoring_retrieval_context(request)
 
 
-async def _build_model_response(request: TutoringChatRequest, retrieval_context: TutoringRetrievalContext) -> TutoringModelResponse | None:
-    providers = get_ai_providers()
+async def _build_model_response(request, retrieval_context, providers, *, vector_store=None) -> TutoringModelResponse | None:
     chat_provider = getattr(providers, "chat", None)
+    embedding = getattr(providers, "embedding", None)
     react_response = await generate_tutoring_react_response(
         request, retrieval_context, chat_provider,
-        embedding_provider=getattr(providers, "embedding", None),
+        embedding_provider=embedding,
+        vector_store=vector_store,
     )
     if react_response is not None:
         return react_response
     return await generate_tutoring_model_response(request, retrieval_context, chat_provider)
+
+
+def _build_shared_vector_store(embedding_provider) -> QdrantVectorStore | None:
+    """请求生命周期内创建一次 QdrantVectorStore，避免多次 new 导致文件锁冲突。"""
+    if embedding_provider is None:
+        return None
+    try:
+        return QdrantVectorStore()
+    except Exception:
+        logger.warning("Failed to create shared QdrantVectorStore", exc_info=True)
+        return None
 
 
 def _build_runtime_events(request: TutoringChatRequest, result):

@@ -370,19 +370,13 @@ def test_build_model_response_uses_chat_provider_without_react_agent(monkeypatch
 
     class FakeProviders:
         chat = FakeChatProvider()
+        embedding = object()
 
-    class FakeReactAgent:
-        async def generate(self, user_message):
-            return (
-                '{"model_text":"react 不应进入默认链路",'
-                '"knowledge_points":["ReAct"],'
-                '"suggestion":"不应使用。"}'
-            )
-
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "TutorReActAgent", lambda **kwargs: FakeReactAgent(), raising=False)
-
-    response = asyncio.run(tutoring_api._build_model_response(request, context))
+    response = asyncio.run(
+        tutoring_api._build_model_response(
+            request, context, FakeProviders(), vector_store=None
+        )
+    )
 
     assert response.model_text == "chat 单路径回答"
     assert response.knowledge_point_names == ["链式法则"]

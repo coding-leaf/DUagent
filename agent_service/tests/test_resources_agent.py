@@ -190,5 +190,173 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("task-resource-9", "\n".join(logs.output))
 
 
+# ── generate_resources_with_llm tests ──────────────────────────────
+
+
+class FakeChatProvider:
+    def __init__(self, outputs: list[str] | None = None, should_raise: bool = False) -> None:
+        self._outputs = outputs or []
+        self._should_raise = should_raise
+        self._index = 0
+        self.calls: list[list] = []
+
+    async def complete(self, messages):
+        self.calls.append(messages)
+        if self._should_raise:
+            raise RuntimeError("LLM unavailable")
+        if self._index >= len(self._outputs):
+            return "{}"
+        result = self._outputs[self._index]
+        self._index += 1
+        return result
+
+
+_V1_TYPES = ["document", "mindmap", "reading", "code"]
+
+
+class GenerateResourcesWithLLMTests(unittest.IsolatedAsyncioTestCase):
+    def _request(self, **kwargs) -> ResourceGenerateRequest:
+        defaults = dict(
+            task_id="task-1", user_id="u1", course_id="c1",
+            webhook_url="https://example.com/webhook",
+            chapter="函数", knowledge_point="一次函数",
+        )
+        defaults.update(kwargs)
+        return ResourceGenerateRequest(**defaults)
+
+    async def test_llm_generates_two_resource_types_with_correct_shape(self) -> None:
+        from agent_service.agents.resources import generate_resources_with_llm
+
+        provider = FakeChatProvider(
+            outputs=[
+                '{"title":"一次函数讲解","description":"基础概念","content":"一次函数是..."}',
+                '{"title":"一次函数导图","description":"思维导图","content":"- 定义\\n- 性质"}',
+            ]
+        )
+        result = await generate_resources_with_llm(
+            self._request(resource_types=["document", "mindmap"]), provider
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["type"], "document")
+        self.assertEqual(result[0]["title"], "一次函数讲解")
+        self.assertEqual(result[0]["content"], "一次函数是...")
+        self.assertEqual(result[0]["chapter"], "函数")
+        self.assertEqual(result[0]["knowledge_point"], "一次函数")
+        self.assertIn("tags", result[0])
+        self.assertEqual(result[1]["type"], "mindmap")
+
+    async def test_llm_returns_none_when_one_resource_fails(self) -> None:
+        from agent_service.agents.resources import generate_resources_with_llm
+
+        provider = FakeChatProvider(should_raise=True)
+        result = await generate_resources_with_llm(
+            self._request(resource_types=["document", "code"]), provider
+        )
+        self.assertIsNone(result)
+
+    async def test_llm_returns_none_on_invalid_json(self) -> None:
+        from agent_service.agents.resources import generate_resources_with_llm
+
+        provider = FakeChatProvider(outputs=["not valid json at all"])
+        result = await generate_resources_with_llm(
+            self._request(resource_types=["document"]), provider
+        )
+        self.assertIsNone(result)
+
+    async def test_llm_returns_none_when_provider_is_none(self) -> None:
+        from agent_service.agents.resources import generate_resources_with_llm
+
+        result = await generate_resources_with_llm(
+            self._request(resource_types=["document"]), None
+        )
+        self.assertIsNone(result)
+
+    async def test_llm_returns_none_for_video_resource_type(self) -> None:
+        from agent_service.agents.resources import generate_resources_with_llm
+
+        provider = FakeChatProvider(outputs=['{"title":"video","content":"x"}'])
+        result = await generate_resources_with_llm(
+            self._request(resource_types=["document", "video"]), provider
+        )
+        self.assertIsNone(result)
+
+    async def test_llm_covers_all_requested_types_in_parallel(self) -> None:
+        from agent_service.agents.resources import generate_resources_with_llm
+
+        provider = FakeChatProvider(
+            outputs=[
+                '{"title":"doc","content":"d"}',
+                '{"title":"map","content":"m"}',
+                '{"title":"read","content":"r"}',
+                '{"title":"code","content":"c"}',
+            ]
+        )
+        result = await generate_resources_with_llm(
+            self._request(),  # default: all 4 v1 types
+            provider,
+        )
+
+        self.assertIsNotNone(result)
+        types = [r["type"] for r in result]
+        self.assertEqual(set(types), set(_V1_TYPES))
+
+    async def test_run_task_uses_llm_resources_and_preserves_webhook_shape(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.resources import run_resource_generation_task
+
+        request = self._request(resource_types=["document"])
+        calls = []
+
+        async def fake_sender(webhook_url, payload):
+            calls.append(payload)
+
+        class FakeProviders:
+            chat = FakeChatProvider(
+                outputs=['{"title":"LLM Doc","description":"d","content":"LLM content"}']
+            )
+
+        with patch(
+            "agent_service.agents.resources.get_ai_providers",
+            return_value=FakeProviders(),
+        ):
+            await run_resource_generation_task(request, send_webhook=fake_sender)
+
+        self.assertEqual(len(calls), 1)
+        payload = calls[0]
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["task_id"], "task-1")
+        resource = payload["result"]["resources"][0]
+        self.assertEqual(resource["title"], "LLM Doc")
+        self.assertEqual(resource["content"], "LLM content")
+
+    async def test_run_task_falls_back_when_llm_returns_none(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.resources import run_resource_generation_task
+
+        request = self._request(resource_types=["document"])
+        calls = []
+
+        async def fake_sender(webhook_url, payload):
+            calls.append(payload)
+
+        class FakeProviders:
+            chat = FakeChatProvider(should_raise=True)
+
+        with patch(
+            "agent_service.agents.resources.get_ai_providers",
+            return_value=FakeProviders(),
+        ):
+            await run_resource_generation_task(request, send_webhook=fake_sender)
+
+        self.assertEqual(len(calls), 1)
+        payload = calls[0]
+        self.assertEqual(payload["status"], "completed")
+        self.assertIn("规则版资源占位内容", payload["result"]["resources"][0]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()

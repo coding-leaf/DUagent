@@ -45,15 +45,12 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**150 passed**（2026-05-25 ReAct 最小垂直链路完成后验证）
-- 新增测试：`test_tutoring_react_flow.py` +5（ReAct 成功路径、非 AgentScope 降级、异常降级、None 降级、纯文本解析）
+- `./.venv/bin/pytest -q`：**147 passed**（2026-05-25 旧实验代码清理后验证）
+- 删除 `generate_tutoring_events()` 死代码和 3 个对应测试
+- `agents/tutoring.py` `__all__` 收缩为 5 个自有符号，不再 re-export schemas
 - OpenAPI 对齐未变化（本次不涉及 API 变更）
 
 ## 下一步建议
 
 1. 可选：在真实 LLM 环境下运行 tutoring/chat 验证 ReActAgent 主路径
-   ```bash
-   uv run python -m agent_service.main
-   ```
 2. 可选：为 ReActAgent 挂载知识检索 toolkit（复用 QdrantVectorStore）
-3. ReAct 链路稳定后，清理旧 `TutorAgent` 实验残留

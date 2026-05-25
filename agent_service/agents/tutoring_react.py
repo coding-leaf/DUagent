@@ -1,6 +1,6 @@
 """基于 AgentScope ReActAgent 的 tutoring 适配器，提供 reasoning loop + knowledge + toolkit + memory。
 
-失败时降级到现有 generate_tutoring_model_response() → rule-based generate_tutoring_events()。
+失败时降级到现有 generate_tutoring_model_response() → rule-based fallback。
 """
 
 from agentscope.agent import ReActAgent

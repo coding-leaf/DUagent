@@ -7,20 +7,12 @@ from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext, build_tutoring_retrieval_context
 from agent_service.prompts.tutoring import build_tutoring_messages
 from agent_service.schemas.tutoring import (
-    ChunkEvent,
-    DiagramEvent,
-    DoneEvent,
     KnowledgePoint,
-    KnowledgePointsEvent,
-    RecentMessage,
     SuggestedExercise,
-    SuggestionEvent,
     TutoringChatRequest,
     TutoringUserProfile,
 )
 
-UserProfile = TutoringUserProfile
-ChatRequest = TutoringChatRequest
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
 logger = get_logger(__name__)
 
@@ -39,37 +31,6 @@ class TutoringGenerationResult:
     suggestion_text: str
     suggested_exercises: list[SuggestedExercise]
     used_rule_fallback: bool
-
-
-def generate_tutoring_events(
-    request: TutoringChatRequest,
-    retrieval_context: TutoringRetrievalContext | None = None,
-    model_text: str | None = None,
-    knowledge_point_names: list[str] | None = None,
-    suggestion_text: str | None = None,
-) -> list[ChunkEvent | KnowledgePointsEvent | SuggestionEvent | DoneEvent]:
-    """生成规则版智能辅导 SSE 事件，输入对话请求，输出结构化事件序列。"""
-    result = build_tutoring_generation_result(
-        request,
-        retrieval_context=retrieval_context,
-        model_response=TutoringModelResponse(
-            model_text=model_text,
-            knowledge_point_names=knowledge_point_names or [],
-            suggestion_text=suggestion_text,
-        ),
-    )
-    chunk = ChunkEvent(content=result.chunk_text)
-    knowledge_event = KnowledgePointsEvent(knowledge_points=result.knowledge_points)
-    suggestion_event = SuggestionEvent(
-        suggestion=result.suggestion_text,
-        suggested_exercises=result.suggested_exercises,
-    )
-    done_event = DoneEvent(
-        message_id=_build_message_id(request),
-        knowledge_points_used=result.knowledge_points,
-        suggested_exercises=result.suggested_exercises,
-    )
-    return [chunk, knowledge_event, suggestion_event, done_event]
 
 
 def build_tutoring_generation_result(
@@ -229,28 +190,10 @@ def _build_chunk_content(request: TutoringChatRequest, focus_text: str, context:
     return f"{retrieval_text}{guidance_text}{summary_text}这次重点看{focus_text}。"
 
 
-def _build_message_id(request: TutoringChatRequest) -> str:
-    conversation_part = request.conversation_id or "new"
-    return f"msg_{request.user_id}_{conversation_part}"
-
 __all__ = [
-    "ChatRequest",
-    "ChunkEvent",
-    "DiagramEvent",
-    "DoneEvent",
-    "KnowledgePoint",
-    "KnowledgePointsEvent",
-    "RecentMessage",
-    "SuggestedExercise",
-    "SuggestionEvent",
-    "TutoringRetrievalContext",
     "TutoringModelResponse",
     "TutoringGenerationResult",
     "build_tutoring_generation_result",
     "generate_tutoring_model_response",
-    "generate_tutoring_events",
     "parse_tutoring_model_response",
-    "TutoringChatRequest",
-    "TutoringUserProfile",
-    "UserProfile",
 ]

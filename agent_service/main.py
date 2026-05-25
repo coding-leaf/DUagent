@@ -5,16 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent_service.api.v1.router import api_router
 from agent_service.core.config import settings
-from agent_service.core.qdrant import init_collections, get_qdrant_client
+from agent_service.memory.qdrant_store import build_qdrant_store
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize resources
-    init_collections()
+    # Startup: ensure Qdrant collections exist via AgentScope QdrantStore
+    build_qdrant_store(settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION)
+    build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
     yield
-    # Shutdown: Clean up resources (if needed)
-    # client = get_qdrant_client()
-    # client.close() # Qdrant local client doesn't strictly require explicit close, but good practice if available
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -26,7 +24,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
+import inspect
 import json
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 from urllib import request as urllib_request
 
 from agent_service.core.config import settings
@@ -50,79 +53,38 @@ class UnconfiguredChatProvider:
         raise NotImplementedError("Chat provider is not configured")
 
 
-class OpenAICompatibleEmbeddingProvider:
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        model: str,
-        request_sender=None,
-    ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+class AgentScopeEmbeddingProvider:
+    def __init__(self, model: Any) -> None:
         self.model = model
-        self.request_sender = request_sender or _post_openai_compatible_json
-        self.run_request_in_thread = request_sender is None
 
     async def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
-        payload = {"model": self.model, "input": list(texts)}
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        if self.run_request_in_thread:
-            response = await asyncio.to_thread(
-                self.request_sender,
-                f"{self.base_url}/embeddings",
-                headers,
-                payload,
-            )
-        else:
-            response = self.request_sender(
-                f"{self.base_url}/embeddings",
-                headers,
-                payload,
-            )
-        return _parse_embedding_vectors(response)
+        response = await self.model(list(texts))
+        embeddings = getattr(response, "embeddings", None)
+        if not isinstance(embeddings, list):
+            raise ValueError("AgentScope embedding response missing embeddings list")
+        return [[float(value) for value in embedding] for embedding in embeddings]
 
 
-class OpenAICompatibleChatProvider:
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        model: str,
-        request_sender=None,
-    ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+class AgentScopeChatProvider:
+    def __init__(self, model, formatter, json_mode: bool = False) -> None:
         self.model = model
-        self.request_sender = request_sender or _post_openai_compatible_json
-        self.run_request_in_thread = request_sender is None
+        self.formatter = formatter
+        self.json_mode = json_mode
 
     async def complete(self, messages: Sequence[ChatMessage]) -> str:
-        payload = {
-            "model": self.model,
-            "messages": [{"role": message.role, "content": message.content} for message in messages],
-        }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        if self.run_request_in_thread:
-            response = await asyncio.to_thread(
-                self.request_sender,
-                f"{self.base_url}/chat/completions",
-                headers,
-                payload,
-            )
-        else:
-            response = self.request_sender(
-                f"{self.base_url}/chat/completions",
-                headers,
-                payload,
-            )
-        return _parse_chat_completion_text(response)
+        from agentscope.message import Msg
+
+        kwargs: dict = {}
+        if self.json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = await self.model(await self._format_messages(messages, Msg), **kwargs)
+        return _parse_agentscope_chat_response_text(response)
+
+    async def _format_messages(self, messages: Sequence[ChatMessage], msg_cls) -> list:
+        formatted = self.formatter.format(_to_agentscope_msgs(messages, msg_cls))
+        if inspect.isawaitable(formatted):
+            formatted = await formatted
+        return formatted
 
 
 class OpenAICompatibleRerankerProvider:
@@ -180,30 +142,46 @@ def get_ai_providers(
 
 def _build_embedding_provider_from_settings() -> EmbeddingProvider:
     if (
-        getattr(settings, "EMBEDDING_PROVIDER", None) == "openai_compatible"
+        getattr(settings, "EMBEDDING_PROVIDER", None) == "agentscope_openai"
         and getattr(settings, "EMBEDDING_BASE_URL", None)
         and getattr(settings, "EMBEDDING_API_KEY", None)
         and getattr(settings, "EMBEDDING_MODEL", None)
     ):
-        return OpenAICompatibleEmbeddingProvider(
-            base_url=settings.EMBEDDING_BASE_URL,
-            api_key=settings.EMBEDDING_API_KEY,
-            model=settings.EMBEDDING_MODEL,
+        from agentscope.embedding import OpenAITextEmbedding
+
+        return AgentScopeEmbeddingProvider(
+            OpenAITextEmbedding(
+                api_key=settings.EMBEDDING_API_KEY,
+                model_name=settings.EMBEDDING_MODEL,
+                dimensions=getattr(settings, "EMBEDDING_DIMENSION", 1024),
+                base_url=settings.EMBEDDING_BASE_URL,
+            )
         )
     return UnconfiguredEmbeddingProvider()
 
 
 def _build_chat_provider_from_settings() -> ChatProvider:
     if (
-        getattr(settings, "LLM_PROVIDER", None) == "openai_compatible"
+        getattr(settings, "LLM_PROVIDER", None) == "agentscope_openai"
         and getattr(settings, "LLM_BASE_URL", None)
         and getattr(settings, "LLM_API_KEY", None)
         and getattr(settings, "LLM_MODEL", None)
     ):
-        return OpenAICompatibleChatProvider(
-            base_url=settings.LLM_BASE_URL,
-            api_key=settings.LLM_API_KEY,
-            model=settings.LLM_MODEL,
+        from agentscope.formatter import DeepSeekChatFormatter
+        from agentscope.model import OpenAIChatModel
+
+        json_mode_enabled = getattr(settings, "LLM_JSON_MODE_ENABLED", None)
+        if json_mode_enabled is None:
+            json_mode_enabled = getattr(settings, "LLM_STRUCTURED_OUTPUT_ENABLED", False)
+        return AgentScopeChatProvider(
+            model=OpenAIChatModel(
+                model_name=settings.LLM_MODEL,
+                api_key=settings.LLM_API_KEY,
+                stream=False,
+                client_kwargs={"base_url": settings.LLM_BASE_URL},
+            ),
+            formatter=DeepSeekChatFormatter(),
+            json_mode=json_mode_enabled,
         )
     return UnconfiguredChatProvider()
 
@@ -230,54 +208,69 @@ def _post_openai_compatible_json(url: str, headers: dict[str, str], payload: dic
         return json.loads(response.read().decode("utf-8"))
 
 
-def _parse_embedding_vectors(response: dict) -> list[list[float]]:
-    data = response.get("data")
-    if not isinstance(data, list):
-        raise ValueError("Embedding response missing data list")
-
-    indexed_embeddings: list[tuple[int, list[float]]] = []
-    for item in data:
-        if not isinstance(item, dict):
-            raise ValueError("Embedding response item must be an object")
-        index = item.get("index")
-        embedding = item.get("embedding")
-        if not isinstance(index, int) or not isinstance(embedding, list):
-            raise ValueError("Embedding response item missing index or embedding")
-        indexed_embeddings.append((index, [float(value) for value in embedding]))
-
-    indexed_embeddings.sort(key=lambda item: item[0])
-    return [embedding for _, embedding in indexed_embeddings]
+def _parse_agentscope_chat_response_text(response) -> str:
+    text = _parse_optional_agentscope_chat_response_text(response)
+    if text is None:
+        raise ValueError("AgentScope chat response missing text content")
+    return text
 
 
-def _parse_chat_completion_text(response: dict) -> str:
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        raise ValueError("Chat completion response missing choices list")
-    message = choices[0].get("message") if isinstance(choices[0], dict) else None
-    if not isinstance(message, dict):
-        raise ValueError("Chat completion response missing message object")
-    content = message.get("content")
-    if not isinstance(content, str):
-        raise ValueError("Chat completion response missing text content")
-    return content
+def _parse_optional_agentscope_chat_response_text(response) -> str | None:
+    content = getattr(response, "content", None)
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        raise ValueError("AgentScope chat response missing content list")
+
+    parts = []
+    for block in content:
+        if isinstance(block, str):
+            parts.append(block)
+            continue
+        if isinstance(block, dict):
+            text = block.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+            continue
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            parts.append(text)
+    if not parts:
+        return None
+    return "".join(parts)
+
+
+def _to_agentscope_msgs(messages: Sequence[ChatMessage], msg_cls) -> list:
+    return [
+        msg_cls(name=message.role, role=message.role, content=message.content)
+        for message in messages
+    ]
 
 
 def _parse_reranker_scores(response: dict, expected_documents: int) -> list[float]:
     data = response.get("data")
-    if not isinstance(data, list):
-        raise ValueError("Reranker response missing data list")
-
-    indexed_scores: list[tuple[int, float]] = []
-    for item in data:
-        if not isinstance(item, dict):
-            raise ValueError("Reranker response item must be an object")
-        index = item.get("index")
-        score = item.get("score")
-        if not isinstance(index, int) or not isinstance(score, int | float):
-            raise ValueError("Reranker response item missing index or score")
-        indexed_scores.append((index, float(score)))
+    if isinstance(data, list):
+        indexed_scores = _parse_indexed_scores(data, score_key="score")
+    else:
+        results = response.get("results")
+        if not isinstance(results, list):
+            raise ValueError("Reranker response missing data or results list")
+        indexed_scores = _parse_indexed_scores(results, score_key="relevance_score")
 
     indexed_scores.sort(key=lambda item: item[0])
     if len(indexed_scores) != expected_documents:
         raise ValueError("Reranker response length does not match documents")
     return [score for _, score in indexed_scores]
+
+
+def _parse_indexed_scores(items: list, score_key: str) -> list[tuple[int, float]]:
+    indexed_scores: list[tuple[int, float]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("Reranker response item must be an object")
+        index = item.get("index")
+        score = item.get(score_key)
+        if not isinstance(index, int) or not isinstance(score, int | float):
+            raise ValueError("Reranker response item missing index or score")
+        indexed_scores.append((index, float(score)))
+    return indexed_scores

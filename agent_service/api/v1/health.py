@@ -4,7 +4,8 @@ from collections.abc import Callable
 from fastapi import APIRouter
 
 from agent_service.core.logging import get_logger
-from agent_service.core.qdrant import get_qdrant_client
+from agent_service.core.config import settings
+from agent_service.memory.qdrant_store import build_qdrant_store
 from agent_service.schemas.common import HealthResponse
 
 
@@ -37,8 +38,8 @@ def build_health_data(
 
 
 def _probe_qdrant() -> bool:
-    client = get_qdrant_client()
-    client.get_collections()
+    store = build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
+    store.get_client()
     return True
 
 

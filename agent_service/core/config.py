@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     PROJECT_NAME: str = "EduAgent Agent Service API"
     VERSION: str = "5.0"
@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     QDRANT_PATH: str = "./qdrant_data"
     QDRANT_USER_MEMORY_COLLECTION: str = "user_memory_v1_1024"
     QDRANT_COURSE_KNOWLEDGE_COLLECTION: str = "course_knowledge_v1_1024"
-
     # AI 供应商相关配置。密钥类字段应通过 .env 注入，不应写入提交到仓库的配置文件。
     AI_PROVIDER: str = "none"
     EMBEDDING_PROVIDER: str = "none"
@@ -28,6 +27,8 @@ class Settings(BaseSettings):
     LLM_MODEL: str | None = None
     LLM_BASE_URL: str | None = None
     LLM_API_KEY: str | None = None
+    LLM_STRUCTURED_OUTPUT_ENABLED: bool = False
+    LLM_JSON_MODE_ENABLED: bool | None = None
 
 
 settings = Settings()

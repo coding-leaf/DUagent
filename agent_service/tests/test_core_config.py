@@ -21,7 +21,7 @@ def test_settings_import_has_no_pydantic_v2_config_warning() -> None:
 def test_settings_exposes_ai_provider_defaults() -> None:
     from agent_service.core.config import Settings
 
-    settings = Settings()
+    settings = Settings(_env_file=None)
 
     assert settings.QDRANT_PATH == "./qdrant_data"
     assert settings.QDRANT_USER_MEMORY_COLLECTION == "user_memory_v1_1024"
@@ -40,3 +40,5 @@ def test_settings_exposes_ai_provider_defaults() -> None:
     assert settings.LLM_MODEL is None
     assert settings.LLM_BASE_URL is None
     assert settings.LLM_API_KEY is None
+    assert settings.LLM_STRUCTURED_OUTPUT_ENABLED is False
+    assert settings.LLM_JSON_MODE_ENABLED is None

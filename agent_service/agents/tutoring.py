@@ -2,7 +2,10 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from agent_service.core.ai import ChatProvider
+from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext, build_tutoring_retrieval_context
+from agent_service.prompts.tutoring import build_tutoring_messages
 from agent_service.schemas.tutoring import (
     ChunkEvent,
     DiagramEvent,
@@ -19,6 +22,7 @@ from agent_service.schemas.tutoring import (
 UserProfile = TutoringUserProfile
 ChatRequest = TutoringChatRequest
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -95,8 +99,16 @@ def build_tutoring_generation_result(
 
 
 def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
+    """解析模型输出为 TutoringModelResponse，输入模型原始文本，输出结构化结果。
+
+    解析链：json.loads 整段 JSON → <agent_result> 正则提取 → 原始文本作为 model_text。
+    """
     if not model_output:
         return TutoringModelResponse()
+
+    json_result = _try_parse_json_mode_output(model_output)
+    if json_result is not None:
+        return json_result
 
     match = _AGENT_RESULT_PATTERN.search(model_output)
     if match is None:
@@ -108,6 +120,30 @@ def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
     except json.JSONDecodeError:
         return TutoringModelResponse(model_text=cleaned_text)
 
+    return _build_response_from_payload(cleaned_text, payload)
+
+
+def _try_parse_json_mode_output(model_output: str) -> TutoringModelResponse | None:
+    """尝试将整个输出解析为 JSON object，成功则提取字段，失败返回 None。"""
+    stripped = model_output.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    # 不校验 JSON schema：prompt 约定字段后，仅提取已知 key，未知 key 静默忽略
+    model_text = payload.get("model_text")
+    return _build_response_from_payload(
+        model_text.strip() if isinstance(model_text, str) and model_text.strip() else None,
+        payload,
+    )
+
+
+def _build_response_from_payload(model_text: str | None, payload: dict) -> TutoringModelResponse:
+    """从已解析的 payload dict 提取 knowledge_points 和 suggestion。"""
     knowledge_point_names = payload.get("knowledge_points")
     suggestion_text = payload.get("suggestion")
     parsed_names = (
@@ -117,10 +153,29 @@ def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
     )
     parsed_suggestion = suggestion_text.strip() if isinstance(suggestion_text, str) and suggestion_text.strip() else None
     return TutoringModelResponse(
-        model_text=cleaned_text,
+        model_text=model_text,
         knowledge_point_names=parsed_names,
         suggestion_text=parsed_suggestion,
     )
+
+
+async def generate_tutoring_model_response(
+    request: TutoringChatRequest,
+    retrieval_context: TutoringRetrievalContext,
+    chat_provider: ChatProvider | None,
+) -> TutoringModelResponse | None:
+    """调用 tutoring 模型编排，输入请求和检索上下文，输出可合并进 SSE 的内部模型结果。
+
+    降级链：chat provider (JSON mode) → None（上层 fallback 规则版）。
+    """
+    if chat_provider is None:
+        return None
+    messages = build_tutoring_messages(request, retrieval_context)
+    try:
+        return parse_tutoring_model_response(await chat_provider.complete(messages))
+    except Exception as exc:
+        logger.warning("Tutoring chat generation failed: user_id=%s error=%s", request.user_id, exc)
+        return None
 
 
 def _build_knowledge_points(
@@ -192,6 +247,7 @@ __all__ = [
     "TutoringModelResponse",
     "TutoringGenerationResult",
     "build_tutoring_generation_result",
+    "generate_tutoring_model_response",
     "generate_tutoring_events",
     "parse_tutoring_model_response",
     "TutoringChatRequest",

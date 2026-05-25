@@ -1,28 +1,21 @@
 from __future__ import annotations
 
 import hashlib
-import asyncio
 from collections.abc import Sequence
 from datetime import datetime, UTC
-from typing import Protocol
 
 from qdrant_client.models import PointStruct
 
 from agent_service.core.config import settings
-from agent_service.core.qdrant import get_qdrant_client
+from agent_service.memory.qdrant_store import build_qdrant_store
 from agent_service.schemas.memory import ExtractedFact
 
 
-class QdrantUpsertClient(Protocol):
-    def upsert(self, **kwargs): ...
-
-
 class QdrantUserMemoryStore:
-    """写入用户长期记忆，输入 facts 和 vectors，输出 Qdrant upsert 副作用。"""
+    """写入用户长期记忆，通过 AgentScope QdrantStore 异步 upsert facts。"""
 
-    def __init__(self, client: QdrantUpsertClient | None = None) -> None:
-        self.client = client or get_qdrant_client()
-        self.collection_name = settings.QDRANT_USER_MEMORY_COLLECTION
+    def __init__(self, store=None) -> None:
+        self._store = store or _build_qdrant_store()
 
     async def upsert_facts(
         self,
@@ -46,12 +39,16 @@ class QdrantUserMemoryStore:
         ]
         if not points:
             return
-        await asyncio.to_thread(
-            self.client.upsert,
-            collection_name=self.collection_name,
+        client = self._store.get_client()
+        await client.upsert(
+            collection_name=self._store.collection_name,
             points=points,
             wait=True,
         )
+
+
+def _build_qdrant_store():
+    return build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
 
 
 def _fact_point_id(*, user_id: str, conversation_id: str, fact_text: str) -> str:

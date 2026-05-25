@@ -6,7 +6,7 @@ from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
 
 
-def test_tutoring_chat_returns_rule_based_sse_events() -> None:
+def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
     request = TutoringChatRequest(
         user_id="user-1",
         course_id="course-1",
@@ -17,6 +17,12 @@ def test_tutoring_chat_returns_rule_based_sse_events() -> None:
             knowledge_weak=["导数"],
         ),
     )
+
+    class FakeProviders:
+        def __init__(self) -> None:
+            self.embedding = object()
+
+    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -246,7 +252,7 @@ def test_tutoring_chat_emits_model_chunk_after_first_rule_chunk(monkeypatch) -> 
     assert calls["messages"][-1].role == "user"
 
 
-def test_tutoring_chat_uses_structured_model_output_for_metadata(monkeypatch) -> None:
+def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> None:
     request = TutoringChatRequest(
         user_id="user-1",
         course_id="course-1",
@@ -332,6 +338,55 @@ def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
     ]
 
     assert [event["type"] for event in events] == ["chunk", "knowledge_points", "suggestion", "done"]
+
+
+def test_build_model_response_uses_chat_provider_without_react_agent(monkeypatch) -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="链式法则怎么用？",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+    context = TutoringRetrievalContext(
+        user_id="user-1",
+        course_id="course-1",
+        query_text="链式法则怎么用？",
+        include_course_knowledge=True,
+        knowledge_points=["导数"],
+        user_memory_facts=[],
+        course_knowledge_chunks=[],
+    )
+
+    class FakeChatProvider:
+        model = object()
+        formatter = object()
+
+        async def complete(self, messages):
+            return (
+                '{"model_text":"chat 单路径回答",'
+                '"knowledge_points":["链式法则"],'
+                '"suggestion":"继续做同类题。"}'
+            )
+
+    class FakeProviders:
+        chat = FakeChatProvider()
+
+    class FakeReactAgent:
+        async def generate(self, user_message):
+            return (
+                '{"model_text":"react 不应进入默认链路",'
+                '"knowledge_points":["ReAct"],'
+                '"suggestion":"不应使用。"}'
+            )
+
+    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
+    monkeypatch.setattr(tutoring_api, "TutorReActAgent", lambda **kwargs: FakeReactAgent(), raising=False)
+
+    response = asyncio.run(tutoring_api._build_model_response(request, context))
+
+    assert response.model_text == "chat 单路径回答"
+    assert response.knowledge_point_names == ["链式法则"]
+    assert response.suggestion_text == "继续做同类题。"
 
 
 async def _consume_response_body(body_iterator) -> str:

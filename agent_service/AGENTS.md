@@ -111,6 +111,7 @@ sed -n '1,260p' agent_service/WORKFLOW.md
 - 默认在 `feat/agent` 或用户当前指定的 agent 功能分支开发。
 - 修改前如工作区已有未提交内容，必须先识别哪些是用户改动，不能回滚或覆盖无关改动。
 - 如需使用 `git stash`，必须先告知用户。
+- 允许每次按照功能修改后的git存档(并非git push)
 
 ## Testing
 
@@ -147,6 +148,14 @@ uv run python -m agent_service.main
 ```
 
 不要在仓库根目录直接运行 `uv sync`。
+
+## AgentScope Boundary
+
+  - 官方文档索引优先使用 `https://docs.agentscope.io/llms.txt`；本仓库导航使用 `docs/skills/agentscope-framework/SKILL.md`。
+  - 若官方文档、当前安装版本和历史示例冲突，优先以官方当前文档和本地安装包 introspection 为准。
+  - 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在 `WORKFLOW.md` 标注后续替换点。
+  -关于例如RAG,AgentMessage等与ai相关联的代码实现,可优先查询Agentscope框架是否有现成的提供方案供使用
+
 
 ## Completion Summary
 

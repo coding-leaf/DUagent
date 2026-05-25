@@ -70,7 +70,10 @@ async def _build_runtime_retrieval_context(request: TutoringChatRequest) -> Tuto
 async def _build_model_response(request: TutoringChatRequest, retrieval_context: TutoringRetrievalContext) -> TutoringModelResponse | None:
     providers = get_ai_providers()
     chat_provider = getattr(providers, "chat", None)
-    react_response = await generate_tutoring_react_response(request, retrieval_context, chat_provider)
+    react_response = await generate_tutoring_react_response(
+        request, retrieval_context, chat_provider,
+        embedding_provider=getattr(providers, "embedding", None),
+    )
     if react_response is not None:
         return react_response
     return await generate_tutoring_model_response(request, retrieval_context, chat_provider)

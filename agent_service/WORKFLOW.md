@@ -34,6 +34,7 @@
 - 课程知识摄入 CLI 已完成幂等闭环：支持 PDF/MD/TXT，重复执行跳过已摄入源文件。
 - `knowledge_base/` 已加入 `.gitignore`，含 `README.md` 说明用法。
 - ReActAgent 最小垂直链路已接入 `tutoring/chat`：`agents/tutoring_react_flow.py` 做胶水层，`_build_model_response()` 内部顺序 ReAct → chat JSON → None。
+- `retrieve_course_knowledge` toolkit 已挂载：闭包隐藏 course_id/embedding_provider/store/limit，模型只暴露 query。
 - 《数据结构（C语言版）》PDF 可被 AgentScope PDFReader 解析，约 760 chunks。
 - embedding provider 已验证可返回 1024 维向量。
 
@@ -45,14 +46,12 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**147 passed**
-- ReAct LLM smoke **通过**（2026-05-25）：`deepseek-v4-flash` 上 ReActAgent → JSON parse 主路径验证成功
-  - model_text / knowledge_points / suggestion 均正确解析，elapsed 6.50s
-  - 合成检索上下文被正确纳入 reasoning
+- `./.venv/bin/pytest -q`：**152 passed**（2026-05-25 toolkit 挂载完成后验证）
+- ReAct LLM smoke **通过**：`deepseek-v4-flash` 上 ReActAgent → JSON parse 主路径验证成功
+- `retrieve_course_knowledge` toolkit 已实现并挂载，新增 5 个测试
 - OpenAPI 对齐未变化
 
 ## 下一步
 
-- 设计并实现单一 `retrieve_course_knowledge` toolkit，挂载到 `TutorReActAgent`
-  - 闭包固定 `course_id`，工具只暴露 `query` 参数
-  - 失败降级为空列表，不影响 ReAct 主路径
+- 可选：在真实 LLM + Qdrant 环境下运行 `/tutoring/chat`，验证 ReActAgent + toolkit 端到端效果
+- 后续可选：挂载 `retrieve_user_memory` 工具

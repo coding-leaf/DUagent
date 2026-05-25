@@ -4,17 +4,22 @@ from agent_service.memory.course_knowledge_store import QdrantCourseKnowledgeSto
 
 
 class FakeAsyncQdrantClient:
-    def __init__(self) -> None:
+    def __init__(self, scroll_points=None) -> None:
         self.calls = []
+        self._scroll_points = scroll_points or []
 
     async def upsert(self, **kwargs):
         self.calls.append(kwargs)
 
+    async def scroll(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._scroll_points, None
+
 
 class FakeQdrantStore:
-    def __init__(self) -> None:
+    def __init__(self, scroll_points=None) -> None:
         self.collection_name = "course_knowledge_v1_1024"
-        self._client = FakeAsyncQdrantClient()
+        self._client = FakeAsyncQdrantClient(scroll_points=scroll_points)
         self.calls = self._client.calls
 
     def get_client(self):
@@ -84,3 +89,38 @@ def test_upsert_chunks_empty_points_no_call() -> None:
     asyncio.run(course_store.upsert_chunks(chunks=[], vectors=[]))
 
     assert len(store.calls) == 0
+
+
+class FakeScrollPoint:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = payload
+
+
+def test_list_ingested_source_files_returns_unique_source_files() -> None:
+    store = FakeQdrantStore(
+        scroll_points=[
+            FakeScrollPoint({"source_file": "chapter_01.md"}),
+            FakeScrollPoint({"source_file": "chapter_02.md"}),
+            FakeScrollPoint({"source_file": "chapter_01.md"}),
+        ]
+    )
+    course_store = QdrantCourseKnowledgeStore(store=store)
+
+    ingested = asyncio.run(course_store.list_ingested_source_files("course-1"))
+
+    assert ingested == {"chapter_01.md", "chapter_02.md"}
+    assert store.calls[0]["collection_name"] == "course_knowledge_v1_1024"
+
+
+def test_list_ingested_source_files_ignores_missing_source_file_payload() -> None:
+    store = FakeQdrantStore(
+        scroll_points=[
+            FakeScrollPoint({"source_file": "chapter_01.md"}),
+            FakeScrollPoint({"other_field": "value"}),
+        ]
+    )
+    course_store = QdrantCourseKnowledgeStore(store=store)
+
+    ingested = asyncio.run(course_store.list_ingested_source_files("course-1"))
+
+    assert ingested == {"chapter_01.md"}

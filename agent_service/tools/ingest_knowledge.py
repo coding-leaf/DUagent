@@ -20,7 +20,7 @@ class KnowledgeIngestionResult:
     chunk_count: int
 
 
-ChunkLoader = Callable[[Path], Awaitable[list[CourseKnowledgeChunk]]]
+ChunkLoader = Callable[..., Awaitable[list[CourseKnowledgeChunk]]]
 
 
 async def ingest_course_knowledge(
@@ -30,18 +30,23 @@ async def ingest_course_knowledge(
     store: QdrantCourseKnowledgeStore | None = None,
     chunk_loader: ChunkLoader | None = None,
 ) -> KnowledgeIngestionResult:
-    """导入本地课程资料，输入课程目录，输出导入的课程 ID 和切片数量。"""
+    """导入本地课程资料，输入课程目录，输出导入的课程 ID 和切片数量。
+
+    已摄入的源文件会被跳过，重复执行对同一课程目录为幂等操作。
+    """
     root = Path(course_dir)
+    course_id = root.stem if root.suffix else root.name
+    target_store = store or QdrantCourseKnowledgeStore()
+    ingested_files = await target_store.list_ingested_source_files(course_id)
     loader = chunk_loader or load_course_knowledge_chunks
-    chunks = await loader(root)
+    chunks = await loader(root, ingested_files=ingested_files)
     if not chunks:
-        return KnowledgeIngestionResult(course_id=root.stem if root.is_file() else root.name, chunk_count=0)
+        return KnowledgeIngestionResult(course_id=course_id, chunk_count=0)
 
     provider = embedding_provider or get_ai_providers().embedding
     vectors = await provider.embed_texts([chunk.content for chunk in chunks])
-    target_store = store or QdrantCourseKnowledgeStore()
     await target_store.upsert_chunks(chunks=chunks, vectors=vectors)
-    return KnowledgeIngestionResult(course_id=chunks[0].course_id, chunk_count=len(chunks))
+    return KnowledgeIngestionResult(course_id=course_id, chunk_count=len(chunks))
 
 
 def main() -> None:

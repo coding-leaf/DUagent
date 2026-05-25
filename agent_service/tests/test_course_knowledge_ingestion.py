@@ -110,3 +110,22 @@ def test_load_course_knowledge_chunks_rejects_missing_directory(tmp_path: Path) 
         assert "course path does not exist" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_load_course_knowledge_chunks_skips_ingested_files(tmp_path: Path) -> None:
+    course_dir = tmp_path / "course-1"
+    course_dir.mkdir()
+    (course_dir / "chapter_01.md").write_text("链式法则", encoding="utf-8")
+    (course_dir / "chapter_02.md").write_text("偏导数", encoding="utf-8")
+
+    chunks = asyncio.run(
+        load_course_knowledge_chunks(
+            course_dir,
+            reader=FakeReader(),
+            ingested_files={"chapter_01.md"},
+        )
+    )
+
+    source_files = [chunk.source_file for chunk in chunks]
+    assert "chapter_01.md" not in source_files
+    assert "chapter_02.md" in source_files

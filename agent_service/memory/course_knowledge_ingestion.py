@@ -28,17 +28,25 @@ async def load_course_knowledge_chunks(
     course_dir: Path | str,
     *,
     reader: AgentScopeReader | None = None,
+    ingested_files: set[str] | None = None,
 ) -> list[CourseKnowledgeChunk]:
-    """读取课程资料目录或单个课程文件，输入路径，输出可写入课程知识库的切片。"""
+    """读取课程资料目录或单个课程文件，输入路径，输出可写入课程知识库的切片。
+
+    已摄入的源文件（ingested_files）会被跳过，避免重复读取和切片。
+    """
     root = Path(course_dir)
     if not root.exists():
         raise ValueError(f"course path does not exist: {root}")
 
     course_id = root.stem if root.is_file() else root.name
     source_root = root.parent if root.is_file() else root
+    skipped_files = ingested_files or set()
     chunks: list[CourseKnowledgeChunk] = []
     for source_path in _iter_supported_sources(root):
         if not source_path.is_file() or source_path.suffix.lower() not in {".md", ".txt", ".pdf"}:
+            continue
+        relative_path = source_path.relative_to(source_root).as_posix()
+        if relative_path in skipped_files:
             continue
         file_reader = reader or _build_reader_for_file(source_path)
         documents = await file_reader(str(source_path))

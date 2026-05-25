@@ -40,6 +40,32 @@ class QdrantCourseKnowledgeStore:
             wait=True,
         )
 
+    async def list_ingested_source_files(self, course_id: str) -> set[str]:
+        """返回已摄入的源文件集合，输入课程 ID，输出该课程下所有 source_file 的去重集合。"""
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        client = self._store.get_client()
+        source_files: set[str] = set()
+        offset = None
+        while True:
+            points, offset = await client.scroll(
+                collection_name=self._store.collection_name,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="course_id", match=MatchValue(value=course_id))]
+                ),
+                with_payload=["source_file"],
+                limit=256,
+                offset=offset,
+            )
+            for point in points:
+                payload = point.payload or {}
+                source_file = payload.get("source_file")
+                if isinstance(source_file, str) and source_file:
+                    source_files.add(source_file)
+            if offset is None:
+                break
+        return source_files
+
 
 def _build_qdrant_store():
     return build_qdrant_store(settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION)

@@ -17,7 +17,7 @@
 | 接口 | 状态 | 备注 |
 |------|------|------|
 | `GET /agent/v1/health` | 已完成基础版 | Qdrant 探针 + uptime；模型状态后续统一定义 |
-| `POST /agent/v1/tutoring/chat` | 旧规则版/AI 骨架存在，暂停继续收口 | 后续改为 AgentScope ReActAgent 编排，不再围绕旧链路新增复杂逻辑 |
+| `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
 | `POST /agent/v1/profile/generate` | 规则版已完成 | 基于练习历史、资源使用、近期活跃度生成画像 |
 | `POST /agent/v1/evaluation/generate` | 规则版已完成 | 基于学习进度、练习结果、资源使用生成评估 |
 | `POST /agent/v1/assessment/evaluate` | 规则版已完成 | 基于标准答案和用户答案生成判分与诊断 |
@@ -29,27 +29,31 @@
 ## 当前已确认能力
 
 - FastAPI API 骨架、Pydantic schemas、OpenAPI 对齐测试体系已建立。
-- 多个非 tutoring 接口已有规则版实现和测试覆盖，可作为后续 AI 替换的稳定外壳。
-- AgentScope 依赖已进入项目，后续可用于 ReActAgent、Reader、Embedding、QdrantStore。
-- 本地课程资料目录已建立：`knowledge_base/data_structures/`。
-- 放入的《数据结构（C语言版）》PDF 可被 AgentScope `PDFReader` 读取，当前解析约 `760` 个 chunks。
-- embedding provider 已验证可返回 `1024` 维向量。
+- 多个非 tutoring 接口已有规则版实现和测试覆盖。
+- AgentScope 依赖已进入项目，ReActAgent、Reader、Embedding、QdrantStore 可用。
+- 课程知识摄入 CLI 已完成幂等闭环：支持 PDF/MD/TXT，重复执行跳过已摄入源文件。
+- `knowledge_base/` 已加入 `.gitignore`，含 `README.md` 说明用法。
+- ReActAgent 最小垂直链路已接入 `tutoring/chat`：`agents/tutoring_react_flow.py` 做胶水层，`_build_model_response()` 内部顺序 ReAct → chat JSON → None。
+- 《数据结构（C语言版）》PDF 可被 AgentScope PDFReader 解析，约 760 chunks。
+- embedding provider 已验证可返回 1024 维向量。
 
 ## 当前不继续推进的事项
 
 - 不继续修旧 `tutoring/chat` 的单路径 JSON mode / fallback 细节。
 - 不继续围绕 Qdrant local 文件锁、UUID point id、shared client 做扩大修补。
-- 不继续执行耗时的全量 PDF 入库 smoke；如需验证，优先小样本或正式 ReAct 方案中统一处理。
+- 不继续执行耗时的全量 PDF 入库 smoke。
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：15 passed（上一轮已验证）。
-- `./.venv/bin/pytest -q`：140 passed（上一轮旧收口后已验证；本轮清理后仍需按需复跑）。
-- PDF 解析检查：`knowledge_base/data_structures/` 下 PDF 可解析，约 `760` chunks。
-- 小样本 embedding：前 10 个 chunks 可生成 `10` 条 `1024` 维向量。
+- `./.venv/bin/pytest -q`：**150 passed**（2026-05-25 ReAct 最小垂直链路完成后验证）
+- 新增测试：`test_tutoring_react_flow.py` +5（ReAct 成功路径、非 AgentScope 降级、异常降级、None 降级、纯文本解析）
+- OpenAPI 对齐未变化（本次不涉及 API 变更）
 
 ## 下一步建议
 
-1. 先清理当前工作区，把旧 tutoring 收口、UUIDv5、未完成 Qdrant shared-client 相关改动撤掉或隔离。
-2. 为 AgentScope ReActAgent 版 tutoring 写一个小设计，只定义请求数据如何转成 ReAct 输入、工具/知识如何挂载、输出如何映射回现有 SSE。
-3. PDF 入库暂时作为 RAG 输入准备，不把本地 Qdrant 细节作为当前主要开发目标。
+1. 可选：在真实 LLM 环境下运行 tutoring/chat 验证 ReActAgent 主路径
+   ```bash
+   uv run python -m agent_service.main
+   ```
+2. 可选：为 ReActAgent 挂载知识检索 toolkit（复用 QdrantVectorStore）
+3. ReAct 链路稳定后，清理旧 `TutorAgent` 实验残留

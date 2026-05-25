@@ -46,10 +46,10 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**152 passed**（2026-05-25 API smoke 脚本完成后验证）
+- `./.venv/bin/pytest -q`：**153 passed**（2026-05-25 API smoke 超时处理补测后验证）
 - ReAct LLM smoke **通过**（2026-05-25）：`deepseek-v4-flash`，ReActAgent → JSON parse 主路径验证成功，elapsed 6.50s
 - `retrieve_course_knowledge` toolkit 已实现并挂载，新增 5 个测试
-- API smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_tutoring_api`
+- API smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_tutoring_api`；httpx/asyncio 超时会稳定输出失败信息并 exit 1
 - OpenAPI 对齐未变化
 
 ## 下一步

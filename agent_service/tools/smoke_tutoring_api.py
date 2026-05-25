@@ -42,7 +42,7 @@ async def main() -> None:
                 "POST", "/agent/v1/tutoring/chat", json=request.model_dump()
             ) as response:
                 events = await _collect_events(response)
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, httpx.TimeoutException):
             print("FAIL: request timed out after 30s")
             sys.exit(1)
 

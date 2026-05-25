@@ -45,14 +45,14 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**147 passed**（2026-05-25 ReAct smoke 脚本完成后验证）
-- ReAct LLM smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_react`
+- `./.venv/bin/pytest -q`：**147 passed**
+- ReAct LLM smoke **通过**（2026-05-25）：`deepseek-v4-flash` 上 ReActAgent → JSON parse 主路径验证成功
+  - model_text / knowledge_points / suggestion 均正确解析，elapsed 6.50s
+  - 合成检索上下文被正确纳入 reasoning
 - OpenAPI 对齐未变化
 
-## 下一步建议
+## 下一步
 
-1. 在配置好 LLM 的环境运行 ReAct smoke，验证主路径：
-   ```bash
-   ./.venv/bin/python -m agent_service.tools.smoke_react
-   ```
-2. Smoke 通过后，可选：为 ReActAgent 挂载单一 `retrieve_course_knowledge` toolkit
+- 设计并实现单一 `retrieve_course_knowledge` toolkit，挂载到 `TutorReActAgent`
+  - 闭包固定 `course_id`，工具只暴露 `query` 参数
+  - 失败降级为空列表，不影响 ReAct 主路径

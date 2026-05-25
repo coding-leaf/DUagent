@@ -45,12 +45,14 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**147 passed**（2026-05-25 旧实验代码清理后验证）
-- 删除 `generate_tutoring_events()` 死代码和 3 个对应测试
-- `agents/tutoring.py` `__all__` 收缩为 5 个自有符号，不再 re-export schemas
-- OpenAPI 对齐未变化（本次不涉及 API 变更）
+- `./.venv/bin/pytest -q`：**147 passed**（2026-05-25 ReAct smoke 脚本完成后验证）
+- ReAct LLM smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_react`
+- OpenAPI 对齐未变化
 
 ## 下一步建议
 
-1. 可选：在真实 LLM 环境下运行 tutoring/chat 验证 ReActAgent 主路径
-2. 可选：为 ReActAgent 挂载知识检索 toolkit（复用 QdrantVectorStore）
+1. 在配置好 LLM 的环境运行 ReAct smoke，验证主路径：
+   ```bash
+   ./.venv/bin/python -m agent_service.tools.smoke_react
+   ```
+2. Smoke 通过后，可选：为 ReActAgent 挂载单一 `retrieve_course_knowledge` toolkit

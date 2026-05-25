@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.db.base import Base
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
+engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG, pool_size=10, max_overflow=20)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -19,14 +19,13 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
-# Import all models so they register with Base.metadata before init_db
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 import app.models.user  # noqa: E402
 import app.models.course  # noqa: E402
 import app.models.quiz  # noqa: E402
 import app.models.conversation  # noqa: E402
 import app.models.others  # noqa: E402
-
-
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select, case
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
@@ -20,7 +20,7 @@ async def list_users(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(User)
+    query = select(User).where(User.is_deleted == False)
     if role:
         query = query.where(User.role == role)
     if keyword:
@@ -38,22 +38,24 @@ async def list_users(
     return {
         "code": 200,
         "message": "success",
-        "data": [
-            {
-                "id": u.id,
-                "username": u.username,
-                "email": u.email,
-                "real_name": u.real_name,
-                "role": u.role,
-                "major": u.major,
-                "grade": u.grade,
-                "created_at": u.created_at.isoformat() if u.created_at else "",
-            }
-            for u in users
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "data": {
+            "users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "real_name": u.real_name,
+                    "role": u.role,
+                    "major": u.major,
+                    "grade": u.grade,
+                    "created_at": u.create_time.isoformat() if u.create_time else "",
+                }
+                for u in users
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     }
 
 
@@ -64,7 +66,9 @@ async def update_user(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.is_deleted == False)
+    )
     target = result.scalar_one_or_none()
     if target is None:
         raise HTTPException(
@@ -84,8 +88,8 @@ async def update_user(
         target.major = req.major
     if req.grade is not None:
         target.grade = req.grade
-    if req.password is not None:
-        target.password_hash = hash_password(req.password)
+    if req.new_password is not None:
+        target.password_hash = hash_password(req.new_password)
     await db.flush()
     await db.refresh(target)
 
@@ -97,13 +101,10 @@ async def update_user(
             "username": target.username,
             "email": target.email,
             "real_name": target.real_name,
-            "student_id": target.student_id,
             "role": target.role,
             "major": target.major,
             "grade": target.grade,
-            "guidance_level": target.guidance_level,
-            "courses": [],
-            "created_at": target.created_at.isoformat() if target.created_at else "",
+            "created_at": target.create_time.isoformat() if target.create_time else "",
         },
     }
 
@@ -120,7 +121,9 @@ async def remove_user(
             detail={"code": 40302, "message": "不可移除自己", "data": None},
         )
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.is_deleted == False)
+    )
     target = result.scalar_one_or_none()
     if target is None:
         raise HTTPException(
@@ -130,7 +133,7 @@ async def remove_user(
 
     target.is_active = False
     await db.flush()
-    return {"code": 200, "message": "用户已禁用", "data": {}}
+    return {"code": 200, "message": "success", "data": {}}
 
 
 @router.get("/logs/agent")
@@ -142,7 +145,7 @@ async def agent_logs(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(AgentLog)
+    query = select(AgentLog).where(AgentLog.is_deleted == False)
     if start_date:
         query = query.where(AgentLog.timestamp >= start_date)
     if end_date:
@@ -152,28 +155,32 @@ async def agent_logs(
     total = count_r.scalar() or 0
 
     offset = (page - 1) * page_size
-    result = await db.execute(query.order_by(AgentLog.timestamp.desc()).offset(offset).limit(page_size))
+    result = await db.execute(
+        query.order_by(AgentLog.timestamp.desc()).offset(offset).limit(page_size)
+    )
     logs = result.scalars().all()
 
     return {
         "code": 200,
         "message": "success",
-        "data": [
-            {
-                "timestamp": l.timestamp.isoformat() if l.timestamp else "",
-                "agent_type": l.agent_type,
-                "endpoint": l.endpoint,
-                "latency_ms": l.latency_ms,
-                "tokens_used": l.tokens_used,
-                "status": l.status,
-                "error_message": l.error_message,
-                "security_blocked": l.security_blocked,
-            }
-            for l in logs
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "data": {
+            "logs": [
+                {
+                    "timestamp": l.timestamp.isoformat() if l.timestamp else "",
+                    "agent_type": l.agent_type,
+                    "endpoint": l.endpoint,
+                    "latency_ms": l.latency_ms,
+                    "tokens_used": l.tokens_used,
+                    "status": l.status,
+                    "error_message": l.error_message,
+                    "security_blocked": l.security_blocked,
+                }
+                for l in logs
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     }
 
 
@@ -187,7 +194,7 @@ async def operation_logs(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(OperationLog)
+    query = select(OperationLog).where(OperationLog.is_deleted == False)
     if event_type:
         query = query.where(OperationLog.event_type == event_type)
     if start_date:
@@ -199,24 +206,28 @@ async def operation_logs(
     total = count_r.scalar() or 0
 
     offset = (page - 1) * page_size
-    result = await db.execute(query.order_by(OperationLog.timestamp.desc()).offset(offset).limit(page_size))
+    result = await db.execute(
+        query.order_by(OperationLog.timestamp.desc()).offset(offset).limit(page_size)
+    )
     logs = result.scalars().all()
 
     return {
         "code": 200,
         "message": "success",
-        "data": [
-            {
-                "timestamp": l.timestamp.isoformat() if l.timestamp else "",
-                "event_type": l.event_type,
-                "user_id": l.user_id,
-                "description": l.description,
-                "ip_address": l.ip_address,
-                "detail": l.detail,
-            }
-            for l in logs
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "data": {
+            "logs": [
+                {
+                    "timestamp": l.timestamp.isoformat() if l.timestamp else "",
+                    "event_type": l.event_type,
+                    "user_id": l.user_id,
+                    "description": l.description,
+                    "ip_address": l.ip_address,
+                    "detail": l.detail,
+                }
+                for l in logs
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     }

@@ -15,13 +15,26 @@ async def get_task_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(AsyncTask).where(AsyncTask.id == task_id))
+    result = await db.execute(
+        select(AsyncTask).where(
+            AsyncTask.id == task_id,
+            AsyncTask.is_deleted == False,
+        )
+    )
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": 40400, "message": "任务不存在", "data": None},
         )
+
+    # Permission: user owns the task, or teacher owns resource_generation
+    if task.user_id and task.user_id != current_user.id:
+        if not (current_user.role == "teacher" and task.task_type == "resource_generation"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": 40400, "message": "任务不存在", "data": None},
+            )
 
     return {
         "code": 200,
@@ -32,8 +45,9 @@ async def get_task_status(
             "status": task.status,
             "progress": task.progress,
             "result": task.result,
+            "error_code": task.error_code,
             "error_message": task.error_message,
-            "created_at": task.created_at.isoformat() if task.created_at else "",
+            "created_at": task.create_time.isoformat() if task.create_time else "",
             "completed_at": task.completed_at.isoformat() if task.completed_at else None,
         },
     }

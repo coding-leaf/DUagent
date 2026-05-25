@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, JSON, Float
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, Text, func, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -17,28 +17,39 @@ class Resource(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    type: Mapped[str] = mapped_column(String(30), nullable=False)  # document / mindmap / exercise / reading / code / slides
-    description: Mapped[str] = mapped_column(Text, default="")
-    tags: Mapped[list] = mapped_column(JSON, default=list)
+    type: Mapped[str] = mapped_column(String(30), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     chapter: Mapped[str] = mapped_column(String(100), default="")
+    knowledge_point: Mapped[str] = mapped_column(String(100), default="")
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     url: Mapped[str] = mapped_column(String(500), default="")
     view_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AsyncTask(Base):
     __tablename__ = "async_tasks"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
-    task_type: Mapped[str] = mapped_column(String(30), nullable=False)  # evaluation / profile / learning_path / resource / memory_compress
-    status: Mapped[str] = mapped_column(String(20), default="processing")  # processing / completed / failed
+    task_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="processing")
     progress: Mapped[int] = mapped_column(Integer, default=0)
-    user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id"), nullable=True)
-    course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=True)
-    result: Mapped[dict] = mapped_column(JSON, nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("users.id"), nullable=True)
+    course_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("courses.id"), nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     error_message: Mapped[str] = mapped_column(String(500), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Evaluation(Base):
@@ -47,11 +58,16 @@ class Evaluation(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id"), nullable=False)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
-    progress_table: Mapped[dict] = mapped_column(JSON, default=dict)
-    mastery_table: Mapped[dict] = mapped_column(JSON, default=dict)
-    resource_usage_table: Mapped[dict] = mapped_column(JSON, default=dict)
-    summary_text: Mapped[str] = mapped_column(Text, default="")
-    generated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    progress_table: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    mastery_table: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    resource_usage_table: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class UserProfile(Base):
@@ -60,14 +76,19 @@ class UserProfile(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id"), nullable=False)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
-    modal_preference: Mapped[dict] = mapped_column(JSON, default=dict)
+    modal_preference: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     guidance_level_current: Mapped[str] = mapped_column(String(5), default="L2")
-    guidance_level_updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    knowledge_coordinates: Mapped[list] = mapped_column(JSON, default=list)
-    cognitive_blindspots: Mapped[list] = mapped_column(JSON, default=list)
-    drive_intent: Mapped[dict] = mapped_column(JSON, default=dict)
-    discipline_badge: Mapped[dict] = mapped_column(JSON, default=dict)
-    generated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    guidance_level_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    knowledge_coordinates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cognitive_blindspots: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    drive_intent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    discipline_badge: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class LearningPath(Base):
@@ -76,34 +97,49 @@ class LearningPath(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id"), nullable=False)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
-    nodes: Mapped[list] = mapped_column(JSON, default=list)
-    edges: Mapped[list] = mapped_column(JSON, default=list)
+    nodes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    edges: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     current_node_id: Mapped[str] = mapped_column(String(32), default="")
     current_node_name: Mapped[str] = mapped_column(String(100), default="")
-    generated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class AgentLog(Base):
     __tablename__ = "agent_logs"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    agent_type: Mapped[str] = mapped_column(String(20), nullable=False)  # tutoring / evaluation / profile / resource
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    agent_type: Mapped[str] = mapped_column(String(20), nullable=False)
     endpoint: Mapped[str] = mapped_column(String(200), default="")
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String(10), default="success")  # success / error
-    error_message: Mapped[str] = mapped_column(String(500), default="")
-    security_blocked: Mapped[bool] = mapped_column(default=False)
+    status: Mapped[str] = mapped_column(String(10), default="success")
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    security_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class OperationLog(Base):
     __tablename__ = "operation_logs"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    event_type: Mapped[str] = mapped_column(String(30), nullable=False)  # login / logout / operation / system_error / security
-    user_id: Mapped[str] = mapped_column(String(32), nullable=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     description: Mapped[str] = mapped_column(String(300), default="")
     ip_address: Mapped[str] = mapped_column(String(45), default="")
-    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)

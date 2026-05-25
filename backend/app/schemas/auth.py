@@ -6,6 +6,8 @@ class RegisterRequest(BaseModel):
     email: str
     password: str = Field(min_length=8, max_length=32)
     username: str = Field(min_length=3, max_length=50)
+    captcha_token: str
+    captcha_code: str
 
 
 class LoginRequest(BaseModel):
@@ -13,17 +15,3 @@ class LoginRequest(BaseModel):
     password: str
     captcha_token: str
     captcha_code: str
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
-class SendResetCodeRequest(BaseModel):
-    email: str
-
-
-class ResetPasswordRequest(BaseModel):
-    email: str
-    reset_code: str
-    new_password: str = Field(min_length=8, max_length=32)

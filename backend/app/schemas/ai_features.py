@@ -3,17 +3,12 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class EvaluationRefreshRequest(BaseModel):
-    course_id: str
-
-
 class ProfileInitializeRequest(BaseModel):
     course_id: str
+    answers: dict = {}
 
 
-class ProfileRefreshRequest(BaseModel):
-    course_id: str
-
-
-class LearningPathRefreshRequest(BaseModel):
-    course_id: str
+class ProfileQuestionnaire(BaseModel):
+    guidance_level: Optional[str] = None
+    modal_preference: Optional[list[str]] = None
+    learning_goal: Optional[str] = None

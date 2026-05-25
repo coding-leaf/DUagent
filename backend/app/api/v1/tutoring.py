@@ -21,9 +21,21 @@ async def tutoring_chat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Create or reuse conversation
+    # Validate scope
+    if req.scope == "course" and not req.course_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40001, "message": "scope=course 时必须提供 course_id", "data": None},
+        )
+
     if req.conversation_id:
-        result = await db.execute(select(Conversation).where(Conversation.id == req.conversation_id))
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == req.conversation_id,
+                Conversation.user_id == current_user.id,
+                Conversation.is_deleted == False,
+            )
+        )
         conv = result.scalar_one_or_none()
         if conv is None:
             raise HTTPException(
@@ -34,7 +46,8 @@ async def tutoring_chat(
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         conv = Conversation(
             user_id=current_user.id,
-            course_id=req.course_id,
+            scope=req.scope,
+            course_id=req.course_id if req.scope == "course" else None,
             title=title,
         )
         db.add(conv)
@@ -46,78 +59,35 @@ async def tutoring_chat(
         conversation_id=conv.id,
         role="user",
         content=req.message,
+        meta_json={"scope": req.scope, "course_id": req.course_id},
     )
     db.add(user_msg)
     await db.flush()
 
     conversation_id = conv.id
-    assistant_msg_id = Message(
+    assistant_msg = Message(
         conversation_id=conv.id,
         role="assistant",
         content="",
+        meta_json={"scope": req.scope, "course_id": req.course_id},
     )
-    db.add(assistant_msg_id)
+    db.add(assistant_msg)
     await db.flush()
-    a_msg_id = assistant_msg_id.id
+    a_msg_id = assistant_msg.id
 
-    conv.updated_at = datetime.now(timezone.utc)
+    conv.update_time = datetime.now(timezone.utc)
     await db.flush()
 
     async def event_generator():
-        # Simulated tutoring response
-        response_text = f"你好！关于「{req.message}」这个问题，我来为你解答...\n\n这道题考察的是核心概念的理解。首先我们需要明确定义，然后逐步推导..."
-        words = response_text
+        response_text = f"你好！关于这个问题，我来为你解答..."
+        for i in range(0, len(response_text), 5):
+            chunk = response_text[i : i + 5]
+            yield {"event": "chunk", "data": json.dumps({"type": "chunk", "content": chunk})}
+            await asyncio.sleep(0.03)
 
-        # Stream chunks
-        chunk_size = 5
-        for i in range(0, len(words), chunk_size):
-            chunk = words[i : i + chunk_size]
-            yield {
-                "event": "chunk",
-                "data": json.dumps({"type": "chunk", "content": chunk}),
-            }
-            await asyncio.sleep(0.05)
-
-        # Send diagram
-        yield {
-            "event": "diagram",
-            "data": json.dumps({
-                "type": "diagram",
-                "content": "graph TD\n  A[概念] --> B[推导]\n  B --> C[结论]",
-                "mermaid": True,
-            }),
-        }
-
-        # Send knowledge points
-        yield {
-            "event": "knowledge_points",
-            "data": json.dumps({
-                "type": "knowledge_points",
-                "points": [
-                    {"name": "核心概念", "status": "mastered"},
-                    {"name": "推导过程", "status": "learning"},
-                ],
-            }),
-        }
-
-        # Send suggestion
-        yield {
-            "event": "suggestion",
-            "data": json.dumps({
-                "type": "suggestion",
-                "content": "建议你继续练习类似题型巩固理解",
-                "related_exercises": [{"id": "ex1", "title": "配套练习1"}],
-            }),
-        }
-
-        # Done
         yield {
             "event": "done",
-            "data": json.dumps({
-                "type": "done",
-                "conversation_id": conversation_id,
-                "message_id": a_msg_id,
-            }),
+            "data": json.dumps({"type": "done", "conversation_id": conversation_id, "message_id": a_msg_id}),
         }
 
     return EventSourceResponse(event_generator())
@@ -125,51 +95,65 @@ async def tutoring_chat(
 
 @router.get("/conversations")
 async def list_conversations(
+    scope: str = Query(None),
+    course_id: str = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Conversation).where(Conversation.user_id == current_user.id)
+    query = select(Conversation).where(
+        Conversation.user_id == current_user.id, Conversation.is_deleted == False
+    )
+    if scope:
+        query = query.where(Conversation.scope == scope)
+    if course_id:
+        query = query.where(Conversation.course_id == course_id)
 
     count_r = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_r.scalar() or 0
 
     offset = (page - 1) * page_size
-    result = await db.execute(query.order_by(Conversation.updated_at.desc()).offset(offset).limit(page_size))
+    result = await db.execute(
+        query.order_by(Conversation.update_time.desc()).offset(offset).limit(page_size)
+    )
     convs = result.scalars().all()
 
     conv_list = []
     for c in convs:
-        # Count messages
         mc_r = await db.execute(
-            select(func.count(Message.id)).where(Message.conversation_id == c.id)
+            select(func.count(Message.id)).where(
+                Message.conversation_id == c.id, Message.is_deleted == False
+            )
         )
         msg_count = mc_r.scalar() or 0
 
-        # Last message
         lm_r = await db.execute(
             select(Message)
-            .where(Message.conversation_id == c.id)
-            .order_by(Message.timestamp.desc())
+            .where(Message.conversation_id == c.id, Message.is_deleted == False)
+            .order_by(Message.create_time.desc())
         )
         last_msg = lm_r.scalars().first()
 
         conv_list.append({
             "id": c.id,
+            "scope": c.scope,
+            "course_id": c.course_id,
             "title": c.title,
             "last_message": last_msg.content[:50] if last_msg and last_msg.content else "",
             "message_count": msg_count,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else "",
+            "updated_at": c.update_time.isoformat() if c.update_time else "",
         })
 
     return {
         "code": 200,
         "message": "success",
-        "data": conv_list,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "data": {
+            "conversations": conv_list,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     }
 
 
@@ -179,7 +163,13 @@ async def get_conversation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    c_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    c_result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+            Conversation.is_deleted == False,
+        )
+    )
     conv = c_result.scalar_one_or_none()
     if conv is None:
         raise HTTPException(
@@ -189,8 +179,8 @@ async def get_conversation(
 
     m_result = await db.execute(
         select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.timestamp.asc())
+        .where(Message.conversation_id == conversation_id, Message.is_deleted == False)
+        .order_by(Message.create_time.asc())
     )
     messages = m_result.scalars().all()
 
@@ -199,18 +189,21 @@ async def get_conversation(
         "message": "success",
         "data": {
             "id": conv.id,
+            "scope": conv.scope,
+            "course_id": conv.course_id,
             "title": conv.title,
             "messages": [
                 {
                     "role": m.role,
-                    "content": m.content,
-                    "diagrams": m.diagrams,
-                    "knowledge_points": m.knowledge_points,
-                    "timestamp": m.timestamp.isoformat() if m.timestamp else "",
+                    "content": m.content or "",
+                    "diagrams": m.diagrams or [],
+                    "knowledge_points": m.knowledge_points or [],
+                    "meta": m.meta_json or {},
+                    "timestamp": m.create_time.isoformat() if m.create_time else "",
                 }
                 for m in messages
             ],
-            "created_at": conv.created_at.isoformat() if conv.created_at else "",
-            "updated_at": conv.updated_at.isoformat() if conv.updated_at else "",
+            "created_at": conv.create_time.isoformat() if conv.create_time else "",
+            "updated_at": conv.update_time.isoformat() if conv.update_time else "",
         },
     }

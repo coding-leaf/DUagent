@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, HTTPException, Header, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,13 +23,13 @@ async def get_current_user(
         )
     token = credentials.credentials
     payload = decode_token(token)
-    if payload is None or payload.get("type") != "access":
+    if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": 40100, "message": "Token 无效或已过期", "data": None},
         )
     user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(
@@ -49,14 +49,3 @@ def require_role(*roles: str):
         return current_user
 
     return role_checker
-
-
-async def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
-    from app.core.config import settings
-
-    if x_internal_key != settings.AGENT_INTERNAL_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": 40300, "message": "内部密钥无效", "data": None},
-        )
-    return True

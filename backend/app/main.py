@@ -5,19 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
-    admin,
-    auth,
-    courses,
-    evaluation,
-    learning_path,
-    profile,
-    quiz,
-    resources,
-    tasks,
-    teaching,
-    tutoring,
-    users,
-    webhooks,
+    admin, auth, courses, evaluation, learning_path,
+    profile, quiz, resources, tasks, teaching, tutoring,
+    users, webhooks,
 )
 from app.core.config import settings
 from app.db.session import init_db
@@ -35,7 +25,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -45,12 +34,10 @@ app.add_middleware(
 )
 
 
-# Global exception handler for HTTPException with custom detail format
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    from fastapi.exceptions import HTTPException
-
-    if isinstance(exc, HTTPException):
+    from fastapi.exceptions import HTTPException as FastAPIHTTPException
+    if isinstance(exc, FastAPIHTTPException):
         detail = exc.detail
         if isinstance(detail, dict) and "code" in detail:
             return JSONResponse(status_code=exc.status_code, content=detail)
@@ -64,7 +51,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Include routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(courses.router)
@@ -87,5 +73,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)

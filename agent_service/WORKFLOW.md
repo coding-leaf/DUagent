@@ -52,11 +52,10 @@
 - API smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_tutoring_api`
 - QdrantVectorStore 改为请求级共享实例，消除 retrieval / ReAct toolkit 双重创建导致的文件锁冲突
 - OpenAPI 对齐未变化
+- **API smoke 端到端验证通过**（2026-05-25 23:53）：ReAct LLM 主路径完成，SSE 5 事件完整输出（chunk×2 → knowledge_points → suggestion → done），elapsed 6.34s。Qdrant local 锁导致 `_build_shared_vector_store()` 失败属已知限制，retrieval 降级到 fallback context，不阻断请求。toolkit 完整路径待后续 Qdrant server 模式单独验证。
 
 ## 下一步
 
-- 运行 API smoke 验证 ReAct + toolkit 在真实 LLM 下的完整 SSE 链路：
-  ```bash
-  ./.venv/bin/python -m agent_service.tools.smoke_tutoring_api
-  ```
 - 后续可选：挂载 `retrieve_user_memory` 工具
+- Qdrant toolkit 完整路径验证（需先完成 Qdrant server 模式或 shared client 改造，单独开任务）
+- 继续推进其他接口或能力

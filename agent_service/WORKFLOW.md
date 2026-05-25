@@ -46,12 +46,16 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**152 passed**（2026-05-25 toolkit 挂载完成后验证）
-- ReAct LLM smoke **通过**：`deepseek-v4-flash` 上 ReActAgent → JSON parse 主路径验证成功
+- `./.venv/bin/pytest -q`：**152 passed**（2026-05-25 API smoke 脚本完成后验证）
+- ReAct LLM smoke **通过**（2026-05-25）：`deepseek-v4-flash`，ReActAgent → JSON parse 主路径验证成功，elapsed 6.50s
 - `retrieve_course_knowledge` toolkit 已实现并挂载，新增 5 个测试
+- API smoke 脚本已就绪：`./.venv/bin/python -m agent_service.tools.smoke_tutoring_api`
 - OpenAPI 对齐未变化
 
 ## 下一步
 
-- 可选：在真实 LLM + Qdrant 环境下运行 `/tutoring/chat`，验证 ReActAgent + toolkit 端到端效果
+- 运行 API smoke 验证 ReAct + toolkit 在真实 LLM 下的完整 SSE 链路：
+  ```bash
+  ./.venv/bin/python -m agent_service.tools.smoke_tutoring_api
+  ```
 - 后续可选：挂载 `retrieve_user_memory` 工具

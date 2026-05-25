@@ -22,7 +22,7 @@
 | `POST /agent/v1/evaluation/generate` | 规则版已完成 | 基于学习进度、练习结果、资源使用生成评估 |
 | `POST /agent/v1/assessment/evaluate` | 规则版已完成 | 基于标准答案和用户答案生成判分与诊断 |
 | `POST /agent/v1/assessment/generate-questions` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 骨架占位题 |
-| `POST /agent/v1/learning-path/generate` | 规则版骨架已完成 | 生成结构化学习路径 |
+| `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
 | `POST /agent/v1/resources/generate` | 规则版闭环骨架已完成 | 202 + 后台任务 + webhook payload + retry/backoff |
 | `POST /agent/v1/memory/compress` | 规则版闭环已完成 | 生成摘要和 facts；Qdrant 写入保持 best-effort |
 
@@ -46,12 +46,13 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**158 passed**（2026-05-26 assessment/generate-questions LLM 接入后验证）
-- assessment/generate-questions：LLM + 规则版 fallback 已完成，新增 5 个测试
+- `./.venv/bin/pytest -q`：**167 passed**（2026-05-26 learning-path LLM 接入后验证）
+- learning-path/generate：LLM + 规则版 fallback 已完成，新增 9 个测试（7 agent + 2 API）
+- assessment/generate-questions：LLM + 规则版 fallback 已完成
 - tutoring/chat：ReActAgent 主链路 + toolkit + API smoke 已验证通过
-- OpenAPI 对齐未变化
+- OpenAPI 对齐：15 passed
 
 ## 下一步
 
-- 推进 `learning-path/generate`：从规则版骨架升级
 - 中期：挂载 `retrieve_user_memory` 工具
+- 长期：Qdrant server 模式 / shared client 改造

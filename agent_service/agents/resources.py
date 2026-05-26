@@ -191,6 +191,12 @@ _V1_RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
 _MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
 
 
+def _truncate_chunk(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "..."
+
+
 async def _build_course_knowledge_context(
     request: ResourceGenerateRequest,
     embedding_provider,
@@ -216,7 +222,7 @@ async def _build_course_knowledge_context(
         )
         if not results:
             return ""
-        chunks = [r.text for r in results if r.text]
+        chunks = [_truncate_chunk(r.text, 1000) for r in results if r.text]
         if not chunks:
             return ""
         return "\n---\n".join(chunks)

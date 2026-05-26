@@ -75,6 +75,8 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("tags", resource)
 
     async def test_run_resource_generation_task_posts_completed_payload(self) -> None:
+        from unittest.mock import patch
+
         request = ResourceGenerateRequest(
             task_id="task-resource-5",
             user_id="teacher-1",
@@ -87,7 +89,12 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         async def fake_sender(webhook_url: str, payload: dict) -> None:
             calls.append((webhook_url, payload))
 
-        await run_resource_generation_task(request, send_webhook=fake_sender)
+        class _NoopProviders:
+            chat = None
+            embedding = None
+
+        with patch("agent_service.agents.resources.get_ai_providers", return_value=_NoopProviders()):
+            await run_resource_generation_task(request, send_webhook=fake_sender)
 
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][0], request.webhook_url)
@@ -95,6 +102,8 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0][1]["status"], "completed")
 
     async def test_run_resource_generation_task_posts_failed_payload_when_generation_fails(self) -> None:
+        from unittest.mock import patch
+
         request = ResourceGenerateRequest(
             task_id="task-resource-6",
             user_id="teacher-1",
@@ -109,11 +118,16 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         async def fake_sender(webhook_url: str, payload: dict) -> None:
             calls.append((webhook_url, payload))
 
-        await run_resource_generation_task(
-            request,
-            send_webhook=fake_sender,
-            result_builder=failing_builder,
-        )
+        class _NoopProviders:
+            chat = None
+            embedding = None
+
+        with patch("agent_service.agents.resources.get_ai_providers", return_value=_NoopProviders()):
+            await run_resource_generation_task(
+                request,
+                send_webhook=fake_sender,
+                result_builder=failing_builder,
+            )
 
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][1]["task_id"], "task-resource-6")
@@ -146,6 +160,8 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sleeps, [0.5, 1.0])
 
     async def test_run_resource_generation_task_does_not_raise_when_webhook_send_fails(self) -> None:
+        from unittest.mock import patch
+
         request = ResourceGenerateRequest(
             task_id="task-resource-8",
             user_id="teacher-1",
@@ -158,16 +174,23 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
             calls.append((webhook_url, payload))
             raise RuntimeError("backend unavailable")
 
-        await run_resource_generation_task(
-            request,
-            send_webhook=failing_sender,
-            max_webhook_attempts=2,
-            webhook_base_delay_seconds=0,
-        )
+        class _NoopProviders:
+            chat = None
+            embedding = None
+
+        with patch("agent_service.agents.resources.get_ai_providers", return_value=_NoopProviders()):
+            await run_resource_generation_task(
+                request,
+                send_webhook=failing_sender,
+                max_webhook_attempts=2,
+                webhook_base_delay_seconds=0,
+            )
 
         self.assertEqual(len(calls), 2)
 
     async def test_run_resource_generation_task_logs_final_webhook_failure(self) -> None:
+        from unittest.mock import patch
+
         request = ResourceGenerateRequest(
             task_id="task-resource-9",
             user_id="teacher-1",
@@ -178,13 +201,18 @@ class ResourceGenerationWorkerTests(unittest.IsolatedAsyncioTestCase):
         async def failing_sender(webhook_url: str, payload: dict) -> None:
             raise RuntimeError("backend unavailable")
 
+        class _NoopProviders:
+            chat = None
+            embedding = None
+
         with self.assertLogs("agent_service.agents.resources", level="WARNING") as logs:
-            await run_resource_generation_task(
-                request,
-                send_webhook=failing_sender,
-                max_webhook_attempts=1,
-                webhook_base_delay_seconds=0,
-            )
+            with patch("agent_service.agents.resources.get_ai_providers", return_value=_NoopProviders()):
+                await run_resource_generation_task(
+                    request,
+                    send_webhook=failing_sender,
+                    max_webhook_attempts=1,
+                    webhook_base_delay_seconds=0,
+                )
 
         self.assertIn("Resource generation webhook failed", "\n".join(logs.output))
         self.assertIn("task-resource-9", "\n".join(logs.output))

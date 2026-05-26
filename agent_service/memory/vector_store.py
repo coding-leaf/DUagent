@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, Sequence
+from typing import Any
 
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-from agent_service.core.qdrant import get_qdrant_client
+from agent_service.core.config import settings
+from agent_service.memory.qdrant_store import build_qdrant_store
 
 
 @dataclass(frozen=True)
@@ -13,20 +17,26 @@ class VectorSearchResult:
     payload: dict[str, Any]
 
 
-class QdrantLikeClient(Protocol):
-    def query_points(self, **kwargs: Any) -> Any:
-        """执行 Qdrant 向量查询，输入 query_points 参数，输出 Qdrant 查询响应。"""
-
-
 class QdrantVectorStore:
-    """封装 tutoring 需要的 Qdrant 检索，输入用户/课程范围和向量，输出结构化文本结果。"""
+    """封装 Qdrant 检索，通过 AgentScope QdrantStore 异步访问用户记忆和课程知识。"""
 
-    def __init__(self, client: QdrantLikeClient | None = None) -> None:
-        self.client = client or get_qdrant_client()
+    def __init__(self, user_memory_store=None, course_knowledge_store=None) -> None:
+        self._user_store = user_memory_store or build_qdrant_store(
+            settings.QDRANT_USER_MEMORY_COLLECTION,
+        )
+        self._course_store = course_knowledge_store or build_qdrant_store(
+            settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION,
+        )
 
-    def search_user_memory(self, user_id: str, vector: Sequence[float], limit: int = 3) -> list[VectorSearchResult]:
-        response = self.client.query_points(
-            collection_name="user_memory",
+    async def search_user_memory(
+        self,
+        user_id: str,
+        vector: Sequence[float],
+        limit: int = 3,
+    ) -> list[VectorSearchResult]:
+        client = self._user_store.get_client()
+        response = await client.query_points(
+            collection_name=self._user_store.collection_name,
             query=list(vector),
             query_filter=_match_filter("user_id", user_id),
             limit=limit,
@@ -34,20 +44,22 @@ class QdrantVectorStore:
         )
         return _map_query_response(response)
 
-    def search_course_knowledge(
+    async def search_course_knowledge(
         self,
         course_id: str,
         vector: Sequence[float],
         limit: int = 3,
     ) -> list[VectorSearchResult]:
-        response = self.client.query_points(
-            collection_name="course_knowledge",
+        client = self._course_store.get_client()
+        response = await client.query_points(
+            collection_name=self._course_store.collection_name,
             query=list(vector),
             query_filter=_match_filter("course_id", course_id),
             limit=limit,
             with_payload=True,
         )
         return _map_query_response(response)
+
 
 
 def _match_filter(field: str, value: str) -> Filter:

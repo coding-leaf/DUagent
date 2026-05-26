@@ -1,3 +1,6 @@
+import asyncio
+
+from agent_service.memory import vector_store as vector_store_module
 from agent_service.memory.vector_store import QdrantVectorStore, VectorSearchResult
 
 
@@ -12,11 +15,11 @@ class FakeQueryResponse:
         self.points = points
 
 
-class FakeQdrantClient:
+class FakeAsyncQdrantClient:
     def __init__(self) -> None:
         self.calls = []
 
-    def query_points(self, **kwargs):
+    async def query_points(self, **kwargs):
         self.calls.append(kwargs)
         return FakeQueryResponse(
             [
@@ -26,26 +29,38 @@ class FakeQdrantClient:
         )
 
 
-def test_search_user_memory_filters_by_user_id_and_maps_payload_text() -> None:
-    client = FakeQdrantClient()
-    store = QdrantVectorStore(client=client)
+class FakeQdrantStore:
+    def __init__(self, collection_name: str) -> None:
+        self.collection_name = collection_name
+        self._client = FakeAsyncQdrantClient()
+        self.calls = self._client.calls
 
-    results = store.search_user_memory(user_id="user-1", vector=[0.1, 0.2], limit=2)
+    def get_client(self):
+        return self._client
+
+
+def test_search_user_memory_filters_by_user_id_and_maps_payload_text() -> None:
+    user_store = FakeQdrantStore("user_memory_v1_1024")
+    course_store = FakeQdrantStore("course_knowledge_v1_1024")
+    store = QdrantVectorStore(user_memory_store=user_store, course_knowledge_store=course_store)
+
+    results = asyncio.run(store.search_user_memory(user_id="user-1", vector=[0.1, 0.2], limit=2))
 
     assert results[0] == VectorSearchResult(text="用户容易混淆链式法则", score=0.8, payload=results[0].payload)
-    assert client.calls[0]["collection_name"] == "user_memory"
-    assert client.calls[0]["limit"] == 2
-    assert client.calls[0]["query"] == [0.1, 0.2]
-    assert "user_id" in repr(client.calls[0]["query_filter"])
+    assert user_store.calls[0]["collection_name"] == "user_memory_v1_1024"
+    assert user_store.calls[0]["limit"] == 2
+    assert user_store.calls[0]["query"] == [0.1, 0.2]
+    assert "user_id" in repr(user_store.calls[0]["query_filter"])
 
 
 def test_search_course_knowledge_filters_by_course_id_and_maps_content() -> None:
-    client = FakeQdrantClient()
-    store = QdrantVectorStore(client=client)
+    user_store = FakeQdrantStore("user_memory_v1_1024")
+    course_store = FakeQdrantStore("course_knowledge_v1_1024")
+    store = QdrantVectorStore(user_memory_store=user_store, course_knowledge_store=course_store)
 
-    results = store.search_course_knowledge(course_id="course-1", vector=[0.1, 0.2], limit=1)
+    results = asyncio.run(store.search_course_knowledge(course_id="course-1", vector=[0.1, 0.2], limit=1))
 
     assert results[1].text == "链式法则用于复合函数求导"
     assert results[1].score == 0.7
-    assert client.calls[0]["collection_name"] == "course_knowledge"
-    assert "course_id" in repr(client.calls[0]["query_filter"])
+    assert course_store.calls[0]["collection_name"] == "course_knowledge_v1_1024"
+    assert "course_id" in repr(course_store.calls[0]["query_filter"])

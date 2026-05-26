@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from agent_service.core.ai import EmbeddingProvider
+from agent_service.core.ai import EmbeddingProvider, RerankerProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.vector_store import QdrantVectorStore
 from agent_service.schemas.tutoring import KnowledgePoint, TutoringChatRequest
@@ -44,6 +44,7 @@ def build_tutoring_retrieval_context(request: TutoringChatRequest) -> TutoringRe
 async def build_tutoring_retrieval_context_with_ai(
     request: TutoringChatRequest,
     embedding_provider: EmbeddingProvider,
+    reranker_provider: RerankerProvider | None = None,
     vector_store: QdrantVectorStore | None = None,
     limit: int = 3,
 ) -> TutoringRetrievalContext:
@@ -53,20 +54,36 @@ async def build_tutoring_retrieval_context_with_ai(
         vectors = await embedding_provider.embed_texts([request.message])
         query_vector = vectors[0] if vectors else []
         store = vector_store or QdrantVectorStore()
-        user_results = store.search_user_memory(request.user_id, query_vector, limit=limit)
-        course_results = (
-            store.search_course_knowledge(context.course_id, query_vector, limit=limit)
-            if context.include_course_knowledge and context.course_id
-            else []
-        )
+        user_results = await store.search_user_memory(request.user_id, query_vector, limit=limit)
     except Exception as exc:
         logger.warning("Tutoring retrieval failed: user_id=%s error=%s", request.user_id, exc)
         return context
 
+    course_results = []
+    if context.include_course_knowledge and context.course_id:
+        try:
+            course_results = await store.search_course_knowledge(context.course_id, query_vector, limit=limit)
+        except Exception as exc:
+            logger.warning(
+                "Tutoring course knowledge retrieval failed: user_id=%s course_id=%s error=%s",
+                request.user_id,
+                context.course_id,
+                exc,
+            )
+
+    user_texts = [result.text for result in user_results if result.text]
+    course_texts = [result.text for result in course_results if result.text]
+
+    try:
+        user_texts = await _rerank_texts(request.message, user_texts, reranker_provider)
+        course_texts = await _rerank_texts(request.message, course_texts, reranker_provider)
+    except Exception as exc:
+        logger.warning("Tutoring rerank failed: user_id=%s error=%s", request.user_id, exc)
+
     return context.model_copy(
         update={
-            "user_memory_facts": [result.text for result in user_results if result.text],
-            "course_knowledge_chunks": [result.text for result in course_results if result.text],
+            "user_memory_facts": user_texts,
+            "course_knowledge_chunks": course_texts,
         }
     )
 
@@ -85,3 +102,15 @@ def _profile_knowledge_points(request: TutoringChatRequest) -> list[KnowledgePoi
         for name in names[:3]
         if name
     ]
+
+
+async def _rerank_texts(
+    query: str,
+    documents: list[str],
+    reranker_provider: RerankerProvider | None,
+) -> list[str]:
+    if reranker_provider is None or len(documents) <= 1:
+        return documents
+    scores = await reranker_provider.score(query, documents)
+    ranked = sorted(zip(documents, scores, strict=True), key=lambda item: item[1], reverse=True)
+    return [document for document, _ in ranked]

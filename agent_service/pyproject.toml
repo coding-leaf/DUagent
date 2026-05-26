@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
+    "pypdf>=6.12.1",
     "qdrant-client>=1.7.0",
     "sse-starlette>=2.0.0",
     "uvicorn>=0.23.0",
@@ -35,6 +36,7 @@ packages = [
     "agent_service.memory",
     "agent_service.prompts",
     "agent_service.schemas",
+    "agent_service.tools",
 ]
 
 [tool.setuptools.package-dir]
@@ -46,6 +48,7 @@ agent_service = "."
 "agent_service.memory" = "memory"
 "agent_service.prompts" = "prompts"
 "agent_service.schemas" = "schemas"
+"agent_service.tools" = "tools"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

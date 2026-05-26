@@ -1,7 +1,16 @@
+import json
+import re
 from typing import Any
 
+from agent_service.core.ai import ChatMessage
+from agent_service.core.logging import get_logger
+from agent_service.prompts.learning_path import (
+    build_learning_path_system_prompt,
+    build_learning_path_user_message,
+)
 from agent_service.schemas.learning_path import (
     CurrentPosition,
+    KnowledgeGraphNode,
     LearningPathData,
     LearningPathEdge,
     LearningPathGenerateRequest,
@@ -125,3 +134,127 @@ def _extract_mastery_items(items: list[Any]) -> dict[str, float]:
         if isinstance(name, str) and isinstance(mastery, int | float):
             mastery_by_name[name] = float(mastery)
     return mastery_by_name
+
+
+logger = get_logger(__name__)
+_MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+_VALID_STATUSES = {"completed", "in_progress", "pending", "recommended"}
+
+
+async def generate_learning_path_with_llm(
+    request: LearningPathGenerateRequest,
+    chat_provider,
+) -> LearningPathData | None:
+    """尝试用 LLM 增强学习路径规划，输入请求和 chat provider，输出 LearningPathData 或 None（降级）。"""
+    if chat_provider is None:
+        return None
+    try:
+        nodes_by_id = {
+            node.id: node
+            for node in request.knowledge_graph.nodes
+            if node.id
+        }
+        messages = [
+            ChatMessage(role="system", content=build_learning_path_system_prompt()),
+            ChatMessage(role="user", content=build_learning_path_user_message(request)),
+        ]
+        raw = await chat_provider.complete(messages)
+        data = _parse_learning_path_json(raw)
+        llm_nodes = data.get("nodes")
+        if not isinstance(llm_nodes, list):
+            raise ValueError("LLM output missing nodes array")
+        coerced_nodes = _coerce_path_nodes(llm_nodes, nodes_by_id)
+        edges = [
+            LearningPathEdge.model_validate({"from": e.from_, "to": e.to})
+            for e in request.knowledge_graph.edges
+        ]
+        current_position = _coerce_current_position(
+            data.get("current_position"),
+            {n.id for n in coerced_nodes if n.id},
+            nodes_by_id,
+            coerced_nodes,
+        )
+        logger.info("LLM generation succeeded: %s", "learning-path/generate")
+        return LearningPathData(
+            nodes=coerced_nodes, edges=edges, current_position=current_position
+        )
+    except Exception:
+        logger.warning(
+            "LLM learning path generation failed, falling back to rule-based",
+            exc_info=True,
+        )
+        return None
+
+
+def _parse_learning_path_json(raw: str) -> dict:
+    text = raw.strip()
+    match = _MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("LLM output is not a JSON object")
+    return data
+
+
+def _coerce_path_nodes(
+    llm_nodes: list[dict],
+    nodes_by_id: dict[str, KnowledgeGraphNode],
+) -> list[LearningPathNode]:
+    valid_ids = set(nodes_by_id.keys())
+    result: list[LearningPathNode] = []
+    for item in llm_nodes:
+        if not isinstance(item, dict):
+            continue
+        node_id = item.get("id")
+        if not isinstance(node_id, str) or node_id not in valid_ids:
+            continue
+        input_node = nodes_by_id[node_id]
+        status = item.get("status")
+        if status not in _VALID_STATUSES:
+            status = "pending"
+        mastery = item.get("mastery")
+        if isinstance(mastery, int | float):
+            mastery = max(0.0, min(100.0, float(mastery)))
+        else:
+            mastery = None
+        order = item.get("order")
+        if isinstance(order, int | float):
+            order = int(order)
+        else:
+            order = len(result) + 1
+        reason = item.get("reason")
+        if not isinstance(reason, str):
+            reason = ""
+        result.append(
+            LearningPathNode(
+                id=node_id,
+                name=input_node.name,
+                status=status,
+                mastery=mastery,
+                order=order,
+                reason=reason,
+            )
+        )
+    return result
+
+
+def _coerce_current_position(
+    llm_cp,
+    valid_ids: set[str],
+    nodes_by_id: dict[str, KnowledgeGraphNode],
+    nodes: list[LearningPathNode],
+) -> CurrentPosition | None:
+    if isinstance(llm_cp, dict):
+        node_id = llm_cp.get("node_id")
+        if isinstance(node_id, str) and node_id in valid_ids:
+            return CurrentPosition(
+                node_id=node_id, node_name=nodes_by_id[node_id].name
+            )
+    for status in ("recommended", "in_progress", "pending"):
+        for node in nodes:
+            if node.status == status:
+                return CurrentPosition(
+                    node_id=node.id, node_name=nodes_by_id[node.id].name
+                )
+    return None

@@ -16,7 +16,7 @@
 4. 当前 `agent_service/` 代码
 5. `WORKFLOW.md`
 
-如果文档与历史实现冲突，优先以当前非归档文档为准。
+- 如果文档与历史实现冲突，优先以当前非归档文档为准。
 
 `WORKFLOW.md` 是开发进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
 
@@ -45,11 +45,12 @@
 - 用户确认后，才允许修改文件。
 - 保持命名风格和当前项目结构。
 - 只能小范围重构，以 minimal diff 为准则。
-- 不要一次性修改过多文件。
+- 不要一次性修改超过5个文件,若有需要,请提出申请。
 - 不要过度工程化；除非能简化代码或减少真实重复，否则不要引入复杂抽象。
 - `WORKFLOW.md` 可随已确认的开发任务同步更新，但不能以更新进度为理由扩大业务代码修改范围。
-- 修改的代码,方法等,需要添加注释,以表明当前新增方法/修改方法 当前作用,所需传参和输出什么
-
+- 新增对外承接函数、Agent 编排函数、协议转换函数时，需要添加简短注释，说明作用、主要输入和输出。
+- 简单私有辅助函数不强制添加长注释，优先用清晰命名表达意图。
+- 注释应与 `API_Agent内部接口规范.md` 的语义保持一致，不要编造协议字段。
 ## Incremental Development
 
 - 默认一次只推进一个接口或一个明确子能力。
@@ -61,6 +62,7 @@
   5. 更新 `WORKFLOW.md`
 - 除非用户明确要求，不要一次性实现多个接口的业务逻辑。
 - 渐进式开发，优先规则版可用实现，再逐步接入 AgentScope、LLM、Qdrant、工具调用。
+- 非必要功能可最小实现,优先满足主要功能的实现而非注重细枝末节
 
 ## Documentation Boundary
 
@@ -74,6 +76,14 @@
 - 涉及 AgentScope API、用法、配置时，优先参考 AgentScope 官方文档和项目当前已有代码。
 - 不凭空编造 AgentScope 接口。
 - 若无法确认 AgentScope 行为，先实现规则版或接口承接层，并在 `WORKFLOW.md` 标注后续替换点。
+
+## AgentScope Boundary
+
+  - 官方文档索引优先使用 `https://docs.agentscope.io/llms.txt`；本仓库导航使用 `docs/skills/agentscope-framework/SKILL.md`。
+  - 若官方文档、当前安装版本和历史示例冲突，优先以官方当前文档和本地安装包 introspection 为准。
+  - 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在 `WORKFLOW.md` 标注后续替换点。
+  -关于例如RAG,AgentMessage等与ai相关联的代码实现,可优先查询Agentscope框架是否有现成的提供方案供使用
+
 
 ## Progress Tracking
 
@@ -110,6 +120,7 @@ sed -n '1,260p' agent_service/WORKFLOW.md
 - 默认在 `feat/agent` 或用户当前指定的 agent 功能分支开发。
 - 修改前如工作区已有未提交内容，必须先识别哪些是用户改动，不能回滚或覆盖无关改动。
 - 如需使用 `git stash`，必须先告知用户。
+- 每次文件修改后需要总结修改内容并git commit(并非git push)
 
 ## Testing
 
@@ -146,6 +157,9 @@ uv run python -m agent_service.main
 ```
 
 不要在仓库根目录直接运行 `uv sync`。
+
+
+
 
 ## Completion Summary
 

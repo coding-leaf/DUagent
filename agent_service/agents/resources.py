@@ -1,10 +1,16 @@
 import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib import request as urllib_request
 
+from agent_service.core.ai import ChatMessage, get_ai_providers
 from agent_service.core.logging import get_logger
+from agent_service.prompts.resources import (
+    build_resource_system_prompt,
+    build_resource_user_message,
+)
 from agent_service.schemas.common import ResourceTaskResponse
 from agent_service.schemas.resources import ResourceGenerateRequest
 
@@ -80,13 +86,36 @@ async def run_resource_generation_task(
 
     输入：资源生成请求、可注入的 webhook 发送函数、可注入的结果构造器。
     输出：无直接返回值；按规范 POST completed/failed payload 到 webhook_url。
+
+    优先尝试 LLM 生成（附 RAG 课程知识上下文），失败时降级到 result_builder。
+    result_builder 抛异常时仍按现有逻辑发 failed webhook payload。
     """
-    # 设计规范关联：resources/generate 是 202 + webhook 异步模式。
-    # api 层只注册后台任务；这里作为 agents 层承接点，后续替换为真实多智能体并行生成。
     try:
-        payload = result_builder(request)
+        providers = get_ai_providers()
+        course_knowledge_context = await _build_course_knowledge_context(
+            request,
+            getattr(providers, "embedding", None),
+        )
+        llm_resources = await generate_resources_with_llm(
+            request,
+            getattr(providers, "chat", None),
+            course_knowledge_context=course_knowledge_context,
+        )
+        if llm_resources is not None:
+            payload = {
+                "task_id": request.task_id,
+                "task_type": TASK_TYPE,
+                "status": "completed",
+                "result": {"resources": llm_resources},
+            }
+        else:
+            payload = result_builder(request)
     except Exception as exc:
-        logger.warning("Resource generation failed before webhook: task_id=%s error=%s", request.task_id, exc)
+        logger.warning(
+            "Resource generation failed before webhook: task_id=%s error=%s",
+            request.task_id,
+            exc,
+        )
         payload = build_resource_generation_failed_payload(request, str(exc))
     try:
         await send_webhook_with_retry(
@@ -97,8 +126,11 @@ async def run_resource_generation_task(
             base_delay_seconds=webhook_base_delay_seconds,
         )
     except Exception as exc:
-        # BackgroundTasks cannot return a status to Backend here; contain the failure and log it.
-        logger.warning("Resource generation webhook failed: task_id=%s error=%s", request.task_id, exc)
+        logger.warning(
+            "Resource generation webhook failed: task_id=%s error=%s",
+            request.task_id,
+            exc,
+        )
         return
 
 
@@ -153,6 +185,141 @@ def _build_resource_payload(request: ResourceGenerateRequest, resource_type: str
         "knowledge_point": knowledge_point,
         "tags": [chapter, knowledge_point, resource_type],
     }
+
+
+_V1_RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
+_MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+
+
+def _truncate_chunk(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "..."
+
+
+async def _build_course_knowledge_context(
+    request: ResourceGenerateRequest,
+    embedding_provider,
+    limit: int = 5,
+) -> str:
+    """检索课程知识库中与请求相关的片段，输入请求和 embedding provider，输出拼接后的上下文字符串。
+
+    无 embedding provider 或检索失败时返回空字符串，不抛异常。
+    """
+    if embedding_provider is None:
+        return ""
+    try:
+        from agent_service.memory.vector_store import QdrantVectorStore
+
+        query_text = " ".join(
+            part for part in [request.chapter, request.knowledge_point]
+            if part
+        ) or request.course_id
+        vectors = await embedding_provider.embed_texts([query_text])
+        store = QdrantVectorStore()
+        results = await store.search_course_knowledge(
+            request.course_id, vectors[0], limit=limit
+        )
+        if not results:
+            return ""
+        chunks = [_truncate_chunk(r.text, 1000) for r in results if r.text]
+        logger.info("RAG retrieved %d chunks for course_id=%s", len(chunks), request.course_id)
+        if not chunks:
+            return ""
+        return "\n---\n".join(chunks)
+    except Exception:
+        logger.warning(
+            "Course knowledge retrieval failed: course_id=%s",
+            request.course_id,
+            exc_info=True,
+        )
+        return ""
+
+
+async def generate_resources_with_llm(
+    request: ResourceGenerateRequest,
+    chat_provider,
+    course_knowledge_context: str | None = None,
+) -> list[dict] | None:
+    """尝试用 LLM 生成课程资源，输入请求、chat provider 和可选的 RAG 上下文，输出资源 payload 列表或 None（降级）。
+
+    任一资源类型生成失败，整体返回 None。非 v1 四类（含 video）整体返回 None。
+    """
+    if chat_provider is None:
+        return None
+    resource_types = normalize_resource_types(request)
+    if not set(resource_types).issubset(_V1_RESOURCE_TYPES):
+        return None
+    try:
+        tasks = [
+            _generate_single_resource(request, rt, chat_provider, course_knowledge_context)
+            for rt in resource_types
+        ]
+        results = await asyncio.gather(*tasks)
+        logger.info("LLM generation succeeded: %s", "resources/generate")
+        return list(results)
+    except Exception:
+        logger.warning(
+            "LLM resource generation failed, falling back to skeleton",
+            exc_info=True,
+        )
+        return None
+
+
+async def _generate_single_resource(
+    request: ResourceGenerateRequest,
+    resource_type: str,
+    chat_provider,
+    course_knowledge_context: str | None = None,
+) -> dict:
+    messages = [
+        ChatMessage(
+            role="system", content=build_resource_system_prompt(resource_type)
+        ),
+        ChatMessage(
+            role="user",
+            content=build_resource_user_message(
+                request, resource_type, course_knowledge_context=course_knowledge_context
+            ),
+        ),
+    ]
+    raw = await chat_provider.complete(messages)
+    data = _parse_resource_json(raw)
+    return _coerce_resource_item(data, request, resource_type)
+
+
+def _parse_resource_json(raw: str) -> dict:
+    text = raw.strip()
+    match = _MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("LLM output is not a JSON object")
+    return data
+
+
+def _coerce_resource_item(
+    data: dict,
+    request: ResourceGenerateRequest,
+    resource_type: str,
+) -> dict[str, Any]:
+    chapter = request.chapter or "课程整体"
+    knowledge_point = request.knowledge_point or "综合知识点"
+    label = RESOURCE_TYPE_LABELS.get(resource_type, resource_type)
+    return {
+        "title": _str_or(data.get("title"), f"{chapter} - {knowledge_point} - {label}"),
+        "type": resource_type,
+        "description": _str_or(data.get("description"), f"面向 {knowledge_point} 的{label}。"),
+        "content": _str_or(data.get("content"), f"LLM 生成内容：围绕 {chapter} / {knowledge_point} 生成 {label}。"),
+        "chapter": chapter,
+        "knowledge_point": knowledge_point,
+        "tags": [chapter, knowledge_point, resource_type],
+    }
+
+
+def _str_or(value, default: str) -> str:
+    return value if isinstance(value, str) and value.strip() else default
 
 
 def _post_json_payload(webhook_url: str, payload: WebhookPayload) -> None:

@@ -38,6 +38,54 @@
 - 《数据结构（C语言版）》PDF 可被 AgentScope PDFReader 解析，约 760 chunks。
 - embedding provider 已验证可返回 1024 维向量。
 
+## AgentScope 使用审查
+
+### 已使用的框架能力
+
+| 能力 | 当前文件 | 用途 |
+|------|----------|------|
+| AgentScope ChatModel + Formatter | `core/ai.py` | `AgentScopeChatProvider` 封装 OpenAIChatModel + DeepSeekChatFormatter，作为项目 `ChatProvider` 边界实现 |
+| AgentScope Embedding | `core/ai.py` | `AgentScopeEmbeddingProvider` 封装 OpenAITextEmbedding，作为项目 `EmbeddingProvider` 边界实现 |
+| ReActAgent | `agents/tutoring_react.py` | tutoring/chat 的 ReAct 编排适配器，失败时回落到 chat JSON / rule-based |
+| Msg / InMemoryMemory | `agents/tutoring_react.py` | 将用户消息转为 AgentScope Msg，并为 ReActAgent 提供短期内存 |
+| Toolkit / ToolResponse | `agents/tutoring_tools.py` | 挂载 `retrieve_course_knowledge`、`retrieve_user_memory` 两个模型可调用工具 |
+| Reader / PDFReader 路径 | `tools/ingest_knowledge.py`、`memory/course_knowledge_store.py` | 课程知识摄入：PDF/MD/TXT → chunks → embedding → Qdrant course_knowledge |
+
+### 可用但尚未充分使用的框架能力
+
+| AgentScope 能力 | 推荐状态 | 说明 |
+|-----------------|----------|------|
+| Structured output | 推荐优先评估 | 可替代当前多处 `json.loads` / markdown fence / prompt-only JSON 解析，降低 LLM 输出脆弱性 |
+| Knowledge / Generic RAG | 推荐用于 tutoring/chat | 可把课程知识作为 ReActAgent knowledge 注入，和现有工具检索形成对照；先保持现有 Qdrant 检索 fallback |
+| Agentic RAG / retrieve_knowledge tool | 暂缓 | 依赖模型稳定 tool-use，当前已手写 retrieve_course_knowledge 工具，短期够用 |
+| Planning / multi-step workflow | 适合 resources/generate 后续升级 | resources/generate 是多资源并行/多步骤任务，适合后续 AgentScope workflow/planning；不要先用于简单 deterministic 接口 |
+| Memory/session/state | 暂缓 | 当前长期记忆 schema 和 Qdrant 写入是产品边界，先不迁移到 AgentScope memory |
+| Observability/evaluation hooks | 生产化后推荐 | 适合后续追踪 ReAct tool call、LLM 输出、降级路径；不影响当前 OpenAPI |
+
+### 推荐使用 AgentScope 的链路优先级
+
+1. `POST /agent/v1/tutoring/chat`
+   - 推荐方向：Structured output 或 Generic Knowledge 集成。
+   - 涉及文件：`agents/tutoring_react.py`、`agents/tutoring_react_flow.py`、`agents/tutoring_tools.py`、`prompts/tutoring.py`、`memory/tutoring_retrieval.py`。
+   - 原因：当前已经有 ReActAgent + toolkit，继续用 AgentScope 的收益最高；仍需保持 SSE 输出和 rule fallback。
+
+2. `POST /agent/v1/resources/generate`
+   - 推荐方向：后续引入 AgentScope planning / workflow 编排四类资源生成。
+   - 涉及文件：`agents/resources.py`、`prompts/resources.py`、`tests/test_resources_agent.py`。
+   - 原因：资源生成是多步骤异步任务，适合 workflow；但 webhook worker 调试复杂，应排在 readiness 之后。
+
+3. `POST /agent/v1/assessment/generate-questions`
+   - 推荐方向：Structured output，不优先 ReActAgent。
+   - 涉及文件：`agents/assessment.py`、`prompts/assessment.py`、`tests/test_assessment_agent.py`。
+   - 原因：已有 RAG + LLM 主路径，主要痛点是结构化题目输出稳定性。
+
+### 不推荐优先使用 AgentScope 的链路
+
+- `GET /agent/v1/health` / provider readiness：基础设施确定性检查，不需要 Agent。
+- `POST /agent/v1/assessment/evaluate`：判分必须由规则确定，LLM 只做诊断 enrichment。
+- `POST /agent/v1/profile/generate`、`POST /agent/v1/evaluation/generate`：当前 guarded schema enrichment 已清晰可控，除非先验证 structured output，否则不引入 ReActAgent。
+- `POST /agent/v1/memory/compress`：可后续评估 AgentScope memory，但当前 fact 类型和 Qdrant 写入属于产品记忆边界，暂不迁移。
+
 ## 当前不继续推进的事项
 
 - 不继续修旧 `tutoring/chat` 的单路径 JSON mode / fallback 细节。
@@ -53,6 +101,6 @@
 
 ## 下一步
 
-- 短期：evaluation/generate full LLM enrichment ← **已完成**
-- 中期：memory/compress 规则增强（mastered_point / cognitive_preference 规则提取）
+- 短期：provider readiness CLI（默认不发请求，`--live` 才探针）
+- 中期：tutoring/chat AgentScope structured output 或 Generic Knowledge 集成
 - 远期：Qdrant server 模式 / shared client 改造

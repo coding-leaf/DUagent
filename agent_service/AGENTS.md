@@ -2,7 +2,7 @@
 
 ## Scope
 
-- 只负责 `agent_service` 内部的智能体服务。
+- 负责 `agent_service` 内部的智能体服务与backend联动调试。
 - 不负责主业务后端、前端、SQL 数据库业务系统。
 - Agent Service 不直接写 Backend 数据库，只接收 Backend 传入的结构化数据并返回结构化结果。
 

@@ -45,6 +45,8 @@
 - Readiness 不再调用 `get_ai_providers()` 混用全局 settings，直接使用注入的 provider。
 - Structured output 结果可从 `ChatResponse.metadata` 提取，避免正文为空时路径失效。
 - Agent observability INFO 日志：LLM enrichment/generation 成功、RAG 检索 chunk 数、ReAct/structured output 命中，共 12 条。
+- API 边界收束已完成：health 探针逻辑下沉到 `agents/health.py`；tutoring API 恢复薄路由且不暴露测试注入参数；assessment 出题不再从 API 层导入 agents 私有函数。
+- OpenAPI 对齐测试已扩展到主要 request/result schema，当前 25 个 alignment 测试覆盖 HealthData、assessment、learning-path、resources、memory、tutoring SSE 参数等。
 
 ## AgentScope 使用审查
 
@@ -102,13 +104,13 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**245 passed**
-- OpenAPI 对齐：24 个测试覆盖全部主要 request/result schema
+- `./.venv/bin/pytest -q`：**246 passed**
+- OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
+- `./.venv/bin/python -m agent_service.tools.smoke_all`：9/9 PASS；smoke 工具直接调用 API handlers，避免本地验收依赖外部 Qdrant/TestClient lifespan/webhook
 - LearningPath / KnowledgeGraph edge alias 支持 Python 内部 `from_` + OpenAPI `from` 输出
 
 ## 下一步
 
-- 短期：provider readiness CLI ← **已完成**
-- 中期：tutoring/chat AgentScope structured output 替换 prompt JSON 解析
-- 中期：tutoring/chat AgentScope structured output 或 Generic Knowledge 集成
+- 短期：backend 只读契约检查与联调测试计划
+- 中期：真实环境 `readiness_check --live` + 课程知识入库 + backend 触发端到端 smoke
 - 远期：Qdrant server 模式 / shared client 改造

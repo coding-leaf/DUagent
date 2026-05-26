@@ -118,6 +118,10 @@ class OpenAPIAlignmentTests(unittest.TestCase):
         response_content = self.app_openapi["paths"]["/agent/v1/tutoring/chat"]["post"]["responses"]["200"]["content"]
         self.assertIn("text/event-stream", response_content)
 
+    def test_app_openapi_tutoring_chat_has_no_test_injection_parameters(self) -> None:
+        parameters = self.app_openapi["paths"]["/agent/v1/tutoring/chat"]["post"].get("parameters", [])
+        self.assertNotIn("_providers", {parameter["name"] for parameter in parameters})
+
     def test_app_openapi_assessment_routes_use_json_wrapper(self) -> None:
         for path in ("/agent/v1/assessment/evaluate", "/agent/v1/assessment/generate-questions"):
             response_schema = self.app_openapi["paths"][path]["post"]["responses"]["200"]["content"]["application/json"][

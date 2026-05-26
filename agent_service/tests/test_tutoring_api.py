@@ -2,8 +2,13 @@ import asyncio
 import json
 
 from agent_service.api.v1 import tutoring as tutoring_api
+from agent_service.agents.tutoring import generate_tutoring_model_response
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
+
+
+def _patch_providers(monkeypatch, providers) -> None:
+    monkeypatch.setattr("agent_service.core.ai.get_ai_providers", lambda: providers)
 
 
 def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
@@ -22,7 +27,7 @@ def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
         def __init__(self) -> None:
             self.embedding = object()
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -63,8 +68,11 @@ def test_tutoring_chat_uses_ai_retrieval_context_in_sse_output(monkeypatch) -> N
             course_knowledge_chunks=["链式法则用于复合函数求导"],
         )
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", fake_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        fake_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -98,8 +106,11 @@ def test_tutoring_chat_degrades_when_ai_retrieval_fails(monkeypatch) -> None:
     async def failing_build_context(request_arg, embedding_provider, vector_store=None, limit=3):
         raise RuntimeError("retrieval unavailable")
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", failing_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        failing_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -139,8 +150,11 @@ def test_tutoring_chat_global_scope_does_not_query_course_knowledge(monkeypatch)
             course_knowledge_chunks=[],
         )
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", fake_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        fake_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -185,8 +199,11 @@ def test_tutoring_chat_streams_first_chunk_before_slow_retrieval(monkeypatch) ->
             course_knowledge_chunks=["链式法则用于复合函数求导"],
         )
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", slow_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        slow_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     async def consume_first_chunk():
         response = await tutoring_api.tutoring_chat(request)
@@ -235,8 +252,11 @@ def test_tutoring_chat_emits_model_chunk_after_first_rule_chunk(monkeypatch) -> 
             course_knowledge_chunks=["链式法则用于复合函数求导"],
         )
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", fake_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        fake_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -283,8 +303,11 @@ def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> Non
             course_knowledge_chunks=["链式法则用于复合函数求导"],
         )
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", fake_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        fake_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -326,8 +349,11 @@ def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
             course_knowledge_chunks=["链式法则用于复合函数求导"],
         )
 
-    monkeypatch.setattr(tutoring_api, "get_ai_providers", lambda: FakeProviders())
-    monkeypatch.setattr(tutoring_api, "build_tutoring_retrieval_context_with_ai", fake_build_context)
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        fake_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
     body = asyncio.run(_consume_response_body(response.body_iterator))
@@ -373,11 +399,10 @@ def test_build_model_response_uses_chat_provider_without_react_agent(monkeypatch
         embedding = object()
 
     response = asyncio.run(
-        tutoring_api._build_model_response(
-            request, context, FakeProviders(), vector_store=None
-        )
+        generate_tutoring_model_response(request, context, FakeChatProvider())
     )
 
+    assert response is not None
     assert response.model_text == "chat 单路径回答"
     assert response.knowledge_point_names == ["链式法则"]
     assert response.suggestion_text == "继续做同类题。"

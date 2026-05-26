@@ -26,5 +26,5 @@ router = APIRouter(prefix="/tutoring")
         }
     },
 )
-async def tutoring_chat(request: TutoringChatRequest, _providers=None) -> StreamingResponse:
-    return StreamingResponse(generate_tutoring_sse_events(request, providers=_providers), media_type="text/event-stream")
+async def tutoring_chat(request: TutoringChatRequest) -> StreamingResponse:
+    return StreamingResponse(generate_tutoring_sse_events(request), media_type="text/event-stream")

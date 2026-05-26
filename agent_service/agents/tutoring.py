@@ -220,10 +220,83 @@ def _build_chunk_content(request: TutoringChatRequest, focus_text: str, context:
     return f"{retrieval_text}{guidance_text}{summary_text}这次重点看{focus_text}。"
 
 
+async def generate_tutoring_sse_events(request, providers=None):
+    """生成 tutoring SSE 事件流，处理 provider 查找和降级链，输入请求和可选 providers，输出 AsyncIterator[str]."""
+    import json
+    from collections.abc import AsyncIterator
+
+    from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
+    from agent_service.core.ai import get_ai_providers
+    from agent_service.memory.tutoring_retrieval import (
+        build_tutoring_retrieval_context,
+        build_tutoring_retrieval_context_with_ai,
+    )
+    from agent_service.memory.vector_store import QdrantVectorStore
+    from agent_service.schemas.tutoring import (
+        DoneEvent,
+        KnowledgePointsEvent,
+        SuggestionEvent,
+    )
+
+    if providers is None:
+        providers = get_ai_providers()
+    embedding = getattr(providers, "embedding", None)
+    vector_store = None
+    if embedding is not None:
+        try:
+            vector_store = QdrantVectorStore()
+        except Exception:
+            logger.warning("Failed to create QdrantVectorStore", exc_info=True)
+
+    fallback_result = build_tutoring_generation_result(request)
+    yield f"data: {json.dumps({'type': 'chunk', 'content': fallback_result.chunk_text}, ensure_ascii=False)}\n\n"
+
+    reranker = getattr(providers, "reranker", None)
+    try:
+        if reranker is None:
+            retrieval_context = await build_tutoring_retrieval_context_with_ai(
+                request, embedding_provider=providers.embedding, vector_store=vector_store
+            )
+        else:
+            retrieval_context = await build_tutoring_retrieval_context_with_ai(
+                request, embedding_provider=providers.embedding, reranker_provider=reranker, vector_store=vector_store
+            )
+    except Exception:
+        logger.warning("Tutoring retrieval failed, using fallback context", exc_info=True)
+        retrieval_context = build_tutoring_retrieval_context(request)
+
+    chat = getattr(providers, "chat", None)
+    react_response = await generate_tutoring_react_response(
+        request, retrieval_context, chat,
+        embedding_provider=embedding,
+        vector_store=vector_store,
+    )
+    if react_response is None:
+        react_response = await generate_tutoring_model_response(request, retrieval_context, chat)
+
+    runtime_result = build_tutoring_generation_result(
+        request, retrieval_context=retrieval_context, model_response=react_response
+    )
+    if react_response and react_response.model_text:
+        yield f"data: {json.dumps({'type': 'chunk', 'content': runtime_result.chunk_text}, ensure_ascii=False)}\n\n"
+
+    for event in [
+        KnowledgePointsEvent(knowledge_points=runtime_result.knowledge_points),
+        SuggestionEvent(suggestion=runtime_result.suggestion_text, suggested_exercises=runtime_result.suggested_exercises),
+        DoneEvent(
+            message_id=f"msg_{request.user_id}_{request.conversation_id or 'new'}",
+            knowledge_points_used=runtime_result.knowledge_points,
+            suggested_exercises=runtime_result.suggested_exercises,
+        ),
+    ]:
+        yield f"data: {json.dumps(event.model_dump(), ensure_ascii=False)}\n\n"
+
+
 __all__ = [
     "TutoringModelResponse",
     "TutoringGenerationResult",
     "build_tutoring_generation_result",
     "generate_tutoring_model_response",
+    "generate_tutoring_sse_events",
     "parse_tutoring_model_response",
 ]

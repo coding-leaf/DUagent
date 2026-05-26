@@ -332,7 +332,7 @@ def _truncate_chunk(text: str, max_chars: int) -> str:
     return text[:max_chars] + "..."
 
 
-async def _build_question_generation_knowledge_context(
+async def build_question_generation_knowledge_context(
     request: QuestionGenerateRequest,
     embedding_provider,
     limit: int = 5,

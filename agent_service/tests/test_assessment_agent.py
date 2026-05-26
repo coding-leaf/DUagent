@@ -553,16 +553,16 @@ class TestQuestionRAG:
         assert result[0].type == "short_answer"
 
     def test_retrieval_returns_empty_when_embedding_is_none(self) -> None:
-        from agent_service.agents.assessment import _build_question_generation_knowledge_context
+        from agent_service.agents.assessment import build_question_generation_knowledge_context
 
         context = asyncio.run(
-            _build_question_generation_knowledge_context(self._request(), None)
+            build_question_generation_knowledge_context(self._request(), None)
         )
         assert context == ""
 
     def test_retrieval_returns_empty_on_qdrant_failure(self) -> None:
         from unittest.mock import patch
-        from agent_service.agents.assessment import _build_question_generation_knowledge_context
+        from agent_service.agents.assessment import build_question_generation_knowledge_context
 
         class FakeEmbedding:
             async def embed_texts(self, texts):
@@ -577,7 +577,7 @@ class TestQuestionRAG:
             return_value=FailingVectorStore(),
         ):
             context = asyncio.run(
-                _build_question_generation_knowledge_context(
+                build_question_generation_knowledge_context(
                     self._request(), FakeEmbedding()
                 )
             )
@@ -594,7 +594,7 @@ class TestQuestionRAG:
             return None
 
         with (
-            patch("agent_service.api.v1.assessment._build_question_generation_knowledge_context", _fake_retrieval),
+            patch("agent_service.api.v1.assessment.build_question_generation_knowledge_context", _fake_retrieval),
             patch("agent_service.api.v1.assessment.generate_questions_with_llm", _fake_llm),
         ):
             response = asyncio.run(generate_questions(self._request()))

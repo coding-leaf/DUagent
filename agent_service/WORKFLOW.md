@@ -113,6 +113,6 @@
 
 ## 下一步
 
-- 短期：backend 只读契约检查与联调测试计划
-- 中期：真实环境 `readiness_check --live` + 课程知识入库 + backend 触发端到端 smoke
+- 短期：按 `docs/superpowers/plans/2026-05-26-backend-agent-integration.md` 从最新 `main` 的 backend 开始联调；推荐先做 Agent client + profile refresh 垂直链路。
+- 中期：tutoring/chat SSE proxy、resources/generate webhook 落库、quiz/generate 题库写入。
 - 远期：Qdrant server 模式 / shared client 改造

@@ -1,6 +1,9 @@
 import json
 import re
 from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import BaseModel
 
 from agent_service.core.ai import ChatProvider
 from agent_service.core.logging import get_logger
@@ -12,6 +15,17 @@ from agent_service.schemas.tutoring import (
     TutoringChatRequest,
     TutoringUserProfile,
 )
+
+
+class _TutoringStructuredOutput(BaseModel):
+    """AgentScope structured output schema for tutoring chat JSON path.
+
+    不暴露到 schemas/，不泄漏 AgentScope 类型到 API 层。
+    """
+
+    model_text: str | None = None
+    knowledge_points: list[str] = []
+    suggestion: str | None = None
 
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
 logger = get_logger(__name__)
@@ -127,16 +141,31 @@ async def generate_tutoring_model_response(
 ) -> TutoringModelResponse | None:
     """调用 tutoring 模型编排，输入请求和检索上下文，输出可合并进 SSE 的内部模型结果。
 
-    降级链：chat provider (JSON mode) → None（上层 fallback 规则版）。
+    降级链：structured output → text JSON parse → None（上层 fallback 规则版）。
     """
     if chat_provider is None:
         return None
     messages = build_tutoring_messages(request, retrieval_context)
     try:
-        return parse_tutoring_model_response(await chat_provider.complete(messages))
+        raw = await _try_structured_output(messages, chat_provider)
+        if raw is not None:
+            return parse_tutoring_model_response(raw)
+        raw = await chat_provider.complete(messages)
+        return parse_tutoring_model_response(raw)
     except Exception as exc:
         logger.warning("Tutoring chat generation failed: user_id=%s error=%s", request.user_id, exc)
         return None
+
+
+async def _try_structured_output(messages, chat_provider) -> str | None:
+    """尝试用 AgentScope structured_model 生成输出，成功返回 JSON 文本，失败返回 None。"""
+    try:
+        raw = await chat_provider.complete(messages, structured_model=_TutoringStructuredOutput)
+        if raw and raw.strip():
+            return raw.strip()
+    except Exception:
+        pass
+    return None
 
 
 def _build_knowledge_points(

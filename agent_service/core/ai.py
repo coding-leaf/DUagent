@@ -56,11 +56,13 @@ class AgentScopeChatProvider:
         self.formatter = formatter
         self.json_mode = json_mode
 
-    async def complete(self, messages: Sequence[ChatMessage]) -> str:
+    async def complete(self, messages: Sequence[ChatMessage], structured_model=None) -> str:
         from agentscope.message import Msg
 
         kwargs: dict = {}
-        if self.json_mode:
+        if structured_model is not None:
+            kwargs["structured_model"] = structured_model
+        elif self.json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         response = await self.model(await self._format_messages(messages, Msg), **kwargs)
         return _parse_agentscope_chat_response_text(response)

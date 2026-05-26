@@ -158,7 +158,7 @@ def test_generate_tutoring_model_response_uses_chat_provider_and_prompt_messages
     assert response.suggestion_text == "先确认外层函数。"
 
 
-def test_generate_tutoring_model_response_uses_single_json_chat_path() -> None:
+def test_generate_tutoring_model_response_uses_structured_output() -> None:
     request = TutoringChatRequest(
         user_id="user-1",
         course_id="course-1",
@@ -175,33 +175,69 @@ def test_generate_tutoring_model_response_uses_single_json_chat_path() -> None:
         course_knowledge_chunks=["链式法则用于复合函数求导"],
     )
 
-    class LegacyStructuredResult:
-        text = "链式法则先看外层函数。"
-        metadata = {"knowledge_points": ["链式法则"], "suggestion": "先确认外层函数。"}
+    class FakeChatProvider:
+        def __init__(self) -> None:
+            self.complete_calls = []
+
+        async def complete(self, messages, structured_model=None):
+            self.complete_calls.append(structured_model)
+            if structured_model is not None:
+                return (
+                    '{"model_text":"链式法则先看外层求导。",'
+                    '"knowledge_points":["链式法则","复合函数"],'
+                    '"suggestion":"先确认外层函数，再逐层求导。"}'
+                )
+            return "fallback text"
+
+    provider = FakeChatProvider()
+
+    response = asyncio.run(generate_tutoring_model_response(request, context, provider))
+
+    assert len(provider.complete_calls) == 1  # structured success, no fallback needed
+    assert provider.complete_calls[0] is not None
+    assert response.model_text == "链式法则先看外层求导。"
+    assert response.knowledge_point_names == ["链式法则", "复合函数"]
+    assert response.suggestion_text == "先确认外层函数，再逐层求导。"
+
+
+def test_generate_tutoring_model_response_falls_back_on_structured_output_failure() -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="帮我讲一下链式法则",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+    context = TutoringRetrievalContext(
+        user_id="user-1",
+        course_id="course-1",
+        query_text="帮我讲一下链式法则",
+        include_course_knowledge=True,
+        knowledge_points=["导数"],
+        user_memory_facts=[],
+        course_knowledge_chunks=[],
+    )
 
     class FakeChatProvider:
         def __init__(self) -> None:
-            self.legacy_structured_model = None
-            self.complete_calls = 0
+            self.calls = []
 
-        async def complete_structured(self, messages, structured_model):
-            self.legacy_structured_model = structured_model
-            return LegacyStructuredResult()
-
-        async def complete(self, messages):
-            self.complete_calls += 1
+        async def complete(self, messages, structured_model=None):
+            self.calls.append(structured_model)
+            if structured_model is not None:
+                raise RuntimeError("structured output not supported")
             return (
-                '{"model_text":"链式法则先看外层函数。",'
-                '"knowledge_points":["链式法则"],'
-                '"suggestion":"先确认外层函数。"}'
+                "链式法则先看外层函数。"
+                "\n<agent_result>{\"knowledge_points\":[\"链式法则\"],"
+                "\"suggestion\":\"先确认外层函数。\"}</agent_result>"
             )
 
     provider = FakeChatProvider()
 
     response = asyncio.run(generate_tutoring_model_response(request, context, provider))
 
-    assert provider.legacy_structured_model is None
-    assert provider.complete_calls == 1
+    assert len(provider.calls) == 2  # structured failed, then text fallback
+    assert provider.calls[0] is not None
+    assert provider.calls[1] is None
     assert response.model_text == "链式法则先看外层函数。"
     assert response.knowledge_point_names == ["链式法则"]
     assert response.suggestion_text == "先确认外层函数。"

@@ -33,6 +33,7 @@ async def generate_tutoring_react_response(
                 course_id=request.course_id,
                 embedding_provider=embedding_provider,
                 vector_store=vector_store,
+                user_id=request.user_id,
             )
         agent = TutorReActAgent(
             chat_model=chat_provider.model,

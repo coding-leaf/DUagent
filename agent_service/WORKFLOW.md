@@ -34,7 +34,7 @@
 - 课程知识摄入 CLI 已完成幂等闭环：支持 PDF/MD/TXT，重复执行跳过已摄入源文件。
 - `knowledge_base/` 已加入 `.gitignore`，含 `README.md` 说明用法。
 - ReActAgent 最小垂直链路已接入 `tutoring/chat`：`agents/tutoring_react_flow.py` 做胶水层，`_build_model_response()` 内部顺序 ReAct → chat JSON → None。
-- `retrieve_course_knowledge` toolkit 已挂载：闭包隐藏 course_id/embedding_provider/store/limit，模型只暴露 query。
+- `retrieve_course_knowledge` + `retrieve_user_memory` toolkit 已挂载：两个工具均闭包隐藏内部参数，模型只暴露 query。user_memory_facts 首轮注入保持不变。
 - 《数据结构（C语言版）》PDF 可被 AgentScope PDFReader 解析，约 760 chunks。
 - embedding provider 已验证可返回 1024 维向量。
 
@@ -46,14 +46,15 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**175 passed**（2026-05-26 resources/generate LLM 接入后验证）
+- `./.venv/bin/pytest -q`：**181 passed**（2026-05-26 retrieve_user_memory 工具挂载后验证）
+- retrieve_user_memory 工具：11 个测试（含 5 个新工具用例 + flow 传播用例 + schema 按名查找）
 - resources/generate：LLM 并行生成四类资源 + skeleton fallback，webhook shape 不变，新增 8 个测试
 - learning-path/generate：LLM + rule-based fallback
 - assessment/generate-questions：LLM + skeleton fallback
-- tutoring/chat：ReActAgent + toolkit + API smoke
+- tutoring/chat：ReActAgent + 双工具 toolkit + API smoke
 - OpenAPI 对齐：15 passed
 
 ## 下一步
 
-- 中期：挂载 `retrieve_user_memory` 工具
+- 中期：挂载 `retrieve_user_memory` 工具 ← **已完成**
 - 长期：Qdrant server 模式 / shared client 改造

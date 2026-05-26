@@ -30,7 +30,7 @@ retrieve_user_memory(query: str) → ToolResponse
 ```
 
 - 闭包捕获：`user_id`、`embedding_provider`、`vector_store`、`limit`
-- `user_id` 为空时返回"当前对话无用户记忆数据"
+- `user_id` 为空时直接返回"当前对话无用户记忆数据"，不调用 embedding 或 vector store
 - 异常时返回"用户记忆检索暂时不可用"，不抛异常
 - 返回内容受 `limit` 控制条数，每个 chunk 截断到 500 字符
 
@@ -63,9 +63,11 @@ tutoring/chat 请求
 ### 测试
 
 - `test_retrieve_user_memory_returns_facts` — 正常返回
-- `test_retrieve_user_memory_empty_user_id` — user_id 为空
+- `test_retrieve_user_memory_empty_user_id` — user_id 为空，断言 embedding/vector_store 均未被调用
 - `test_retrieve_user_memory_search_failure` — 异常分支
+- `test_build_tutoring_toolkit_user_id_propagation` — patch `build_tutoring_toolkit()`，断言 `generate_tutoring_react_response()` 调用时传入 `user_id="user-1"`，防止默认 None 漏传
 - 集成测试：ReActAgent 挂载两个工具后正常生成
+- schema 测试：按 function name 查找 `retrieve_course_knowledge` 和 `retrieve_user_memory` 两个 schema，各断言只暴露 `query` 参数
 
 ### WORKFLOW.md
 

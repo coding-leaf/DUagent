@@ -83,7 +83,17 @@ def test_generate_evaluation_with_llm_enriches_summary_text() -> None:
 
     rule_result = generate_evaluation_data(_build_request())
     llm_output = _json.dumps({
-        "summary_text": "你已完成函数和导数两个章节的学习。函数章节掌握良好（完成率80%，正确率90%），导数章节需要加强（完成率40%，正确率55%）。资源使用以文档为主，建议增加视频讲解以辅助理解抽象概念。下一步重点：提升导数章节的完成率和正确率。",
+        "summary_text": (
+            "你已完成函数和导数两个章节，平均完成率60%，平均正确率72.5%。"
+            "函数章节掌握良好（完成率80%，正确率90%），已达到strong水平；"
+            "导数章节需要重点加强（完成率40%，正确率55%），处于weak水平。"
+            "从练习时间看，导数练习（5月21日）正确率较函数（5月20日）下降了35个百分点，"
+            "说明在从函数过渡到导数时遇到了概念理解困难，可能因为极限定义尚未牢固。"
+            "资源使用以文档为主（3次），建议额外增加视频讲解（当前1次）辅助理解导数的几何意义，"
+            "同时增加代码练习来直观感受变化率概念。"
+            "下一步建议：（1）优先完成导数章节剩余60%内容，重点吃透极限定义章节；"
+            "（2）配合完成导数章节至少2道代码练习题；（3）观看导数相关视频讲解至少1次。"
+        ),
     })
     provider = FakeChatProvider(output=llm_output)
 
@@ -92,9 +102,14 @@ def test_generate_evaluation_with_llm_enriches_summary_text() -> None:
     )
 
     assert result is not None
-    assert "函数" in (result.summary_text or "")
-    assert "导数" in (result.summary_text or "")
-    assert "80%" in (result.summary_text or "")
+    summary = result.summary_text or ""
+    assert "函数" in summary
+    assert "导数" in summary
+    assert "80%" in summary
+    # verify deeper analysis content
+    assert "下降" in summary or "趋势" in summary or "过渡" in summary  # trend analysis
+    assert "视频" in summary  # resource effectiveness correlation
+    assert "极限" in summary or "建议" in summary  # root cause or actionable advice
     assert result.progress_table == rule_result.progress_table
     assert result.mastery_table == rule_result.mastery_table
     assert result.resource_usage_table == rule_result.resource_usage_table

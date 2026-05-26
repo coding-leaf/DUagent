@@ -19,7 +19,7 @@
 | `GET /agent/v1/health` | 已完成基础版 | Qdrant 探针 + uptime；模型状态后续统一定义 |
 | `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
 | `POST /agent/v1/profile/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 guidance_level_suggestion.reason |
-| `POST /agent/v1/evaluation/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 summary_text；表格全保持规则版 |
+| `POST /agent/v1/evaluation/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 增强 summary_text（趋势分析+薄弱点根因+资源效果关联+可操作建议）；表格全保持规则版 |
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
 | `POST /agent/v1/assessment/generate-questions` | LLM + RAG + fallback 已完成 | 降级链：LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |

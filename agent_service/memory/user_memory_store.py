@@ -39,6 +39,9 @@ class QdrantUserMemoryStore:
         ]
         if not points:
             return
+        from agent_service.memory.qdrant_store import ensure_collection_exists
+
+        await ensure_collection_exists(self._store)
         client = self._store.get_client()
         await client.upsert(
             collection_name=self._store.collection_name,

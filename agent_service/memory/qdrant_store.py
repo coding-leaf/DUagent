@@ -10,3 +10,30 @@ def build_qdrant_store(collection_name: str):
         dimensions=settings.EMBEDDING_DIMENSION,
         client_kwargs={"path": settings.QDRANT_PATH, "check_compatibility": False},
     )
+
+
+async def ensure_collection_exists(store) -> None:
+    """确保 Qdrant collection 存在，不存在则创建。fresh Qdrant 首次写入前调用。
+
+    创建失败时静默跳过（如测试 fake client 不支持 create_collection），依赖 upsert 自身报错。
+    """
+    from qdrant_client.models import Distance, VectorParams
+
+    client = store.get_client()
+    try:
+        collections = await client.get_collections()
+        names = {c.name for c in collections.collections}
+        if store.collection_name in names:
+            return
+    except Exception:
+        pass
+    try:
+        await client.create_collection(
+            collection_name=store.collection_name,
+            vectors_config=VectorParams(
+                size=settings.EMBEDDING_DIMENSION,
+                distance=Distance.COSINE,
+            ),
+        )
+    except Exception:
+        pass

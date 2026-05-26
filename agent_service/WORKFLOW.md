@@ -41,6 +41,7 @@
 - tutoring/chat structured output 已接入：`generate_tutoring_model_response()` 优先用 AgentScope `structured_model` → 失败回落 `parse_tutoring_model_response()` → 再失败回落 rule-based；不改 SSE/API/schema。
 - E2E smoke 验收工具已完成：`./.venv/bin/python -m agent_service.tools.smoke_all` 一次命令验证全部 9 接口最小可用。
 - Knowledge ingestion 闭环 smoke 已完成：ingest → retrieve → RAG context 端到端验证，幂等，fake embedding/Qdrant 隔离。
+- Qdrant collection 自动创建：`ensure_collection_exists()` 在 course_knowledge 和 user_memory 首次写入前确保 collection 存在，fresh Qdrant 不再报错。
 
 ## AgentScope 使用审查
 

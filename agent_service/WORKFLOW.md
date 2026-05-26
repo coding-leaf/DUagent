@@ -24,7 +24,7 @@
 | `POST /agent/v1/assessment/generate-questions` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 骨架占位题 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
 | `POST /agent/v1/resources/generate` | LLM + 规则版 fallback 已完成 | 202 + 后台任务 + LLM 并行生成四类资源 + skeleton fallback；暂不接 Qdrant/RAG |
-| `POST /agent/v1/memory/compress` | 规则版闭环已完成 | 生成摘要和 facts；Qdrant 写入保持 best-effort |
+| `POST /agent/v1/memory/compress` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 规则版；LLM 提取 3 种 fact 类型 + 生成摘要；Qdrant 写入 best-effort |
 
 ## 当前已确认能力
 
@@ -46,8 +46,8 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**181 passed**（2026-05-26 retrieve_user_memory 工具挂载后验证）
-- retrieve_user_memory 工具：11 个测试（含 5 个新工具用例 + flow 传播用例 + schema 按名查找）
+- `./.venv/bin/pytest -q`：**187 passed**（2026-05-26 memory/compress LLM 接入后验证）
+- memory/compress LLM：13 个测试（含 6 个新 LLM 用例，覆盖正常/chat_provider=None/无效JSON/异常/markdown fence/compress_result 传播）
 - resources/generate：LLM 并行生成四类资源 + skeleton fallback，webhook shape 不变，新增 8 个测试
 - learning-path/generate：LLM + rule-based fallback
 - assessment/generate-questions：LLM + skeleton fallback
@@ -56,5 +56,7 @@
 
 ## 下一步
 
-- 短期：ReAct 工具调用可观测性 —— 为 tutoring/chat 增加日志/测试手段，确认 ReAct 推理中实际调用了 `retrieve_course_knowledge` / `retrieve_user_memory`。不改 API 契约、不改 Qdrant schema、不扩大主链路。
+- 短期：memory/compress LLM 主路径 ← **已完成**
+- 短期：assessment/evaluate LLM 解析诊断 —— 判分仍规则确定，LLM 只生成 explanation、diagnosis.summary、weak_points.error_pattern、suggestions。失败 fallback 当前规则版。
+- 中期：profile/generate LLM 画像刷新
 - 长期：Qdrant server 模式 / shared client 改造

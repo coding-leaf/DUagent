@@ -1,9 +1,19 @@
-from agent_service.core.ai import EmbeddingProvider, get_ai_providers
+import json
+import re
+
+from agent_service.core.ai import ChatMessage, EmbeddingProvider, get_ai_providers
 from agent_service.core.logging import get_logger
 from agent_service.memory.user_memory_store import QdrantUserMemoryStore
+from agent_service.prompts.memory import (
+    build_memory_compress_system_prompt,
+    build_memory_compress_user_message,
+)
 from agent_service.schemas.memory import ExtractedFact, MemoryCompressRequest, MemoryCompressResult, MemoryMessage
 
 logger = get_logger(__name__)
+
+_MEMORY_MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+_VALID_FACT_TYPES = {"blind_spot", "mastered_point", "cognitive_preference"}
 
 
 def compress_memory_data(request: MemoryCompressRequest) -> MemoryCompressResult:
@@ -13,13 +23,37 @@ def compress_memory_data(request: MemoryCompressRequest) -> MemoryCompressResult
     return MemoryCompressResult(new_summary=new_summary, extracted_facts=extracted_facts)
 
 
+async def compress_memory_with_llm(
+    request: MemoryCompressRequest,
+    chat_provider,
+) -> MemoryCompressResult | None:
+    """尝试用 LLM 压缩记忆并提取事实，输入请求和 chat provider，输出 MemoryCompressResult 或 None（降级）。"""
+    if chat_provider is None:
+        return None
+    try:
+        messages = [
+            ChatMessage(role="system", content=build_memory_compress_system_prompt()),
+            ChatMessage(role="user", content=build_memory_compress_user_message(request)),
+        ]
+        raw = await chat_provider.complete(messages)
+        parsed = _parse_memory_compress_json(raw)
+        return _coerce_memory_compress_result(parsed)
+    except Exception:
+        logger.warning("LLM memory compression failed, falling back to rule-based", exc_info=True)
+        return None
+
+
 async def compress_and_persist_memory(
     request: MemoryCompressRequest,
     embedding_provider: EmbeddingProvider | None = None,
     memory_store: QdrantUserMemoryStore | None = None,
+    compress_result: MemoryCompressResult | None = None,
 ) -> MemoryCompressResult:
-    """压缩对话并尝试写入长期记忆，输入请求，输出不变的记忆压缩结果。"""
-    result = compress_memory_data(request)
+    """压缩对话并尝试写入长期记忆，输入请求和可选的预压缩结果，输出不变的记忆压缩结果。
+
+    compress_result 非 None 时跳过规则压缩直接持久化；为 None 时走规则版 compress_memory_data。
+    """
+    result = compress_result or compress_memory_data(request)
     if not result.extracted_facts:
         return result
 
@@ -41,6 +75,56 @@ async def compress_and_persist_memory(
             exc,
         )
     return result
+
+
+def _parse_memory_compress_json(raw: str) -> dict:
+    text = raw.strip()
+    match = _MEMORY_MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("LLM output is not a JSON object")
+    return data
+
+
+def _coerce_memory_compress_result(data: dict) -> MemoryCompressResult:
+    new_summary = data.get("new_summary")
+    if not isinstance(new_summary, str) or not new_summary.strip():
+        new_summary = None
+    facts_list = data.get("extracted_facts")
+    if not isinstance(facts_list, list):
+        facts_list = []
+    facts = _coerce_extracted_facts(facts_list)
+    return MemoryCompressResult(new_summary=new_summary, extracted_facts=facts)
+
+
+def _coerce_extracted_facts(items: list[dict]) -> list[ExtractedFact]:
+    facts: list[ExtractedFact] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        fact_type = item.get("fact_type")
+        if fact_type not in _VALID_FACT_TYPES:
+            fact_type = "blind_spot"
+        knowledge_point = item.get("knowledge_point")
+        if not isinstance(knowledge_point, str):
+            knowledge_point = None
+        confidence = item.get("confidence")
+        if isinstance(confidence, int | float):
+            confidence = max(0.0, min(1.0, float(confidence)))
+        else:
+            confidence = 0.5
+        facts.append(ExtractedFact(
+            content=content.strip(),
+            fact_type=fact_type,
+            knowledge_point=knowledge_point,
+            confidence=confidence,
+        ))
+    return facts
 
 
 def _build_summary(old_summary: str | None, messages: list[MemoryMessage]) -> str:

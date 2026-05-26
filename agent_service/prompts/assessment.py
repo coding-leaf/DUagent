@@ -1,6 +1,10 @@
 """assessment 接口的 LLM prompt 模板。"""
 
-from agent_service.schemas.assessment import QuestionGenerateRequest
+from agent_service.schemas.assessment import (
+    AssessmentEvaluateRequest,
+    AssessmentResult,
+    QuestionGenerateRequest,
+)
 
 
 def build_question_generation_system_prompt() -> str:
@@ -43,3 +47,83 @@ def _format_context(context: dict | None) -> str:
         ]
         parts.append(f"薄弱知识点：{', '.join(n for n in names if n)}")
     return "; ".join(parts) if parts else "无"
+
+
+def build_evaluate_system_prompt() -> str:
+    return (
+        "你是 EDUagent 的评测诊断助手。根据题目、标准答案、用户答案和系统已完成的判分结果，"
+        "为每道题生成详细解析，并给出综合诊断。\n\n"
+        "判分（is_correct）已由系统完成，你不需要也不应该修改判分结果。"
+        "你的任务是：解释为什么对/错、找出错误共性、给出复习建议。\n\n"
+        "输出必须是一个 JSON 对象，包含以下字段：\n"
+        "- per_question_results: 数组，每个元素为 {question_id, explanation, related_knowledge_points}\n"
+        "  - question_id: 题目 ID（必填，必须与输入完全一致）\n"
+        "  - explanation: 详细解析。正确时简要说明思路，错误时分析原因并给出正确解法（必填）\n"
+        "  - related_knowledge_points: 关联知识点名称数组\n"
+        "- diagnosis: 对象，包含 {summary, weak_points, suggestions}\n"
+        "  - summary: 整体诊断总结，涵盖表现概览、共性问题和改进方向（必填）\n"
+        "  - weak_points: 数组，每个元素为 {name, error_pattern}\n"
+        "    - name: 薄弱知识点名称（必填）\n"
+        "    - error_pattern: 具体的错误模式描述，如\"混淆了概念X和Y\"（必填）\n"
+        "  - suggestions: 复习建议数组，每条建议应具体可操作（必填）\n\n"
+        "规则：\n"
+        "- 每个输入题目都必须出现在 per_question_results 中，不要漏题或新增题目\n"
+        "- 解释要针对该题的具体错误，不要泛泛而谈\n"
+        "- 建议要具体（如\"完成递归章节的前3道练习题\"），不要只说\"多练习\"\n"
+        "- 只输出 JSON 对象，不要加 markdown 代码块标记，不要加任何其他文字"
+    )
+
+
+def build_evaluate_user_message(
+    request: AssessmentEvaluateRequest,
+    rule_result: AssessmentResult,
+) -> str:
+    parts: list[str] = []
+    parts.append(f"用户ID：{request.user_id}")
+    parts.append(f"课程ID：{request.course_id}")
+    mastery_text = _format_mastery(request.user_mastery)
+    parts.append(f"用户掌握度：{mastery_text}")
+    parts.append("")
+    parts.append("题目与判分结果：")
+    for pr in rule_result.per_question_results:
+        question = _find_question(request.questions, pr.question_id)
+        submitted = _find_answer(request.answers, pr.question_id)
+        if question is None:
+            continue
+        parts.append(f"  ---")
+        parts.append(f"  题目ID：{question.id}")
+        parts.append(f"  题型：{question.type}")
+        parts.append(f"  题目内容：{question.content}")
+        parts.append(f"  标准答案：{_format_answer_str(question.correct_answer)}")
+        parts.append(f"  用户答案：{_format_answer_str(submitted.answer) if submitted else '未提交'}")
+        parts.append(f"  判分结果：{'正确' if pr.is_correct else '错误'}")
+        parts.append(f"  知识点：{question.knowledge_point}")
+    return "\n".join(parts)
+
+
+def _find_question(questions, question_id: str):
+    for q in questions:
+        if q.id == question_id:
+            return q
+    return None
+
+
+def _find_answer(answers, question_id: str):
+    for a in answers:
+        if a.question_id == question_id:
+            return a
+    return None
+
+
+def _format_answer_str(answer) -> str:
+    if isinstance(answer, list):
+        return "、".join(sorted(str(item).strip() for item in answer))
+    return str(answer).strip()
+
+
+def _format_mastery(mastery: dict | None) -> str:
+    if not mastery:
+        return "无"
+    import json
+
+    return json.dumps(mastery, ensure_ascii=False)

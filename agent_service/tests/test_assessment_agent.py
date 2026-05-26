@@ -258,6 +258,241 @@ def test_generate_questions_with_llm_returns_none_when_llm_raises() -> None:
     assert result is None
 
 
+# ── evaluate_assessment_with_llm tests ─────────────────────────────
+
+
+def test_evaluate_with_llm_enriches_explanation_and_diagnosis() -> None:
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    llm_output = _json.dumps({
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "正确答案是B，你选了A，混淆了加法和乘法的概念。", "related_knowledge_points": ["加法", "算术基础"]},
+        ],
+        "diagnosis": {
+            "summary": "你在加法基础概念上存在混淆，建议从加法定义开始复习。",
+            "weak_points": [{"name": "加法", "error_pattern": "混淆了加法和乘法的运算规则"}],
+            "suggestions": ["完成加法章节前3道练习题", "区分加法与乘法的定义"],
+        },
+    })
+    provider = FakeChatProvider(output=llm_output)
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert result.per_question_results[0].is_correct is False
+    assert "混淆了加法" in (result.per_question_results[0].explanation or "")
+    assert "算术基础" in result.per_question_results[0].related_knowledge_points
+    assert result.diagnosis is not None
+    assert "加法基础概念" in (result.diagnosis.summary or "")
+    assert result.diagnosis.weak_points[0].error_pattern == "混淆了加法和乘法的运算规则"
+    assert "完成加法章节前3道练习题" in result.diagnosis.suggestions
+
+
+def test_evaluate_with_llm_preserves_rule_result_on_missing_question() -> None:
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                AssessmentQuestion(id="q2", type="short_answer", content="什么是导数？", correct_answer="变化率", knowledge_point="导数"),
+            ],
+            answers=[
+                AssessmentAnswer(question_id="q1", answer="A"),
+                AssessmentAnswer(question_id="q2", answer="变化率"),
+            ],
+        )
+    )
+
+    llm_output = _json.dumps({
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "你选了A，正确答案是B。", "related_knowledge_points": ["加法"]},
+        ],
+        "diagnosis": {
+            "summary": "加法概念需要加强。",
+            "weak_points": [],
+            "suggestions": ["复习加法"],
+        },
+    })
+    provider = FakeChatProvider(output=llm_output)
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                    AssessmentQuestion(id="q2", type="short_answer", content="什么是导数？", correct_answer="变化率", knowledge_point="导数"),
+                ],
+                answers=[
+                    AssessmentAnswer(question_id="q1", answer="A"),
+                    AssessmentAnswer(question_id="q2", answer="变化率"),
+                ],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert result.per_question_results[0].is_correct is False
+    assert "你选了A" in (result.per_question_results[0].explanation or "")
+    assert result.per_question_results[1].is_correct is True
+    assert result.per_question_results[1].explanation == "答案正确。"
+    assert len(result.per_question_results) == 2
+
+
+def test_evaluate_with_llm_returns_none_when_chat_provider_is_none() -> None:
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            None,
+        )
+    )
+
+    assert result is None
+
+
+def test_evaluate_with_llm_returns_none_on_invalid_json() -> None:
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    provider = FakeChatProvider(output="not valid json at all")
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is None
+
+
+def test_evaluate_with_llm_returns_none_on_exception(caplog) -> None:
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    with caplog.at_level("WARNING", logger="agent_service.agents.assessment"):
+        result = asyncio.run(
+            evaluate_assessment_with_llm(
+                _build_request(
+                    questions=[
+                        AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                    ],
+                    answers=[AssessmentAnswer(question_id="q1", answer="A")],
+                ),
+                rule_result,
+                FakeChatProvider(should_raise=True),
+            )
+        )
+
+    assert result is None
+    assert "LLM evaluation enrichment failed" in caplog.text
+
+
+def test_evaluate_with_llm_handles_markdown_wrapped_json() -> None:
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    payload = _json.dumps({
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "正确答案是B，不是A。", "related_knowledge_points": ["加法"]},
+        ],
+        "diagnosis": {
+            "summary": "需加强加法练习。",
+            "weak_points": [{"name": "加法", "error_pattern": "基础概念错误"}],
+            "suggestions": ["多练习"],
+        },
+    })
+    provider = FakeChatProvider(output=f"```json\n{payload}\n```")
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert result.per_question_results[0].is_correct is False
+    assert "正确答案是B" in (result.per_question_results[0].explanation or "")
+
+
 def _build_request(
     questions: list[AssessmentQuestion],
     answers: list[AssessmentAnswer],

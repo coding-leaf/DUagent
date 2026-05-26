@@ -5,6 +5,8 @@ from collections import Counter
 from agent_service.core.ai import ChatMessage
 from agent_service.core.logging import get_logger
 from agent_service.prompts.assessment import (
+    build_evaluate_system_prompt,
+    build_evaluate_user_message,
     build_question_generation_system_prompt,
     build_question_generation_user_message,
 )
@@ -22,14 +24,23 @@ from agent_service.schemas.assessment import (
 )
 
 
+def _compute_correctness(questions, answers) -> dict[str, bool]:
+    """规则判分：逐题比对用户答案和标准答案，返回 {question_id: is_correct}。"""
+    answers_by_question = {answer.question_id: answer.answer for answer in answers}
+    result: dict[str, bool] = {}
+    for question in questions:
+        submitted = answers_by_question.get(question.id)
+        result[question.id] = submitted is not None and _answers_equal(submitted, question.correct_answer)
+    return result
+
+
 def evaluate_assessment_data(request: AssessmentEvaluateRequest) -> AssessmentResult:
-    answers_by_question = {answer.question_id: answer.answer for answer in request.answers}
-    per_question_results = []
+    correct_map = _compute_correctness(request.questions, request.answers)
     weak_point_counts: Counter[str] = Counter()
+    per_question_results: list[PerQuestionResult] = []
 
     for question in request.questions:
-        submitted_answer = answers_by_question.get(question.id)
-        is_correct = submitted_answer is not None and _answers_equal(submitted_answer, question.correct_answer)
+        is_correct = correct_map[question.id]
 
         if not is_correct:
             weak_point_counts[question.knowledge_point] += 1
@@ -38,7 +49,11 @@ def evaluate_assessment_data(request: AssessmentEvaluateRequest) -> AssessmentRe
             PerQuestionResult(
                 question_id=question.id,
                 is_correct=is_correct,
-                explanation=_build_explanation(submitted_answer, question.correct_answer, is_correct),
+                explanation=_build_explanation(
+                    _get_submitted_answer(request.answers, question.id),
+                    question.correct_answer,
+                    is_correct,
+                ),
                 related_knowledge_points=[question.knowledge_point],
             )
         )
@@ -47,6 +62,134 @@ def evaluate_assessment_data(request: AssessmentEvaluateRequest) -> AssessmentRe
         per_question_results=per_question_results,
         diagnosis=_build_diagnosis(len(request.questions), per_question_results, weak_point_counts),
     )
+
+
+async def evaluate_assessment_with_llm(
+    request: AssessmentEvaluateRequest,
+    rule_result: AssessmentResult,
+    chat_provider,
+) -> AssessmentResult | None:
+    """尝试用 LLM 增强规则版评估结果，输入请求、规则结果和 chat provider，输出增强后的 AssessmentResult 或 None（降级）。
+
+    以 rule_result 为基底，按 question_id 匹配 LLM 输出，只覆盖 explanation / diagnosis 字段。
+    is_correct 和结果数量/顺序始终由 rule_result 定义。
+    """
+    if chat_provider is None:
+        return None
+    try:
+        messages = [
+            ChatMessage(role="system", content=build_evaluate_system_prompt()),
+            ChatMessage(role="user", content=build_evaluate_user_message(request, rule_result)),
+        ]
+        raw = await chat_provider.complete(messages)
+        data = _parse_evaluate_json(raw)
+        return _enrich_rule_result(rule_result, data)
+    except Exception:
+        logger.warning("LLM evaluation enrichment failed, falling back to rule-based", exc_info=True)
+        return None
+
+
+def _parse_evaluate_json(raw: str) -> dict:
+    text = raw.strip()
+    match = _MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("LLM output is not a JSON object")
+    return data
+
+
+def _enrich_rule_result(rule_result: AssessmentResult, llm_data: dict) -> AssessmentResult:
+    llm_per_question = _index_llm_per_question(llm_data.get("per_question_results"))
+    llm_diagnosis = llm_data.get("diagnosis") if isinstance(llm_data.get("diagnosis"), dict) else {}
+
+    enriched_questions = []
+    for pr in rule_result.per_question_results:
+        qid = pr.question_id or ""
+        llm_item = llm_per_question.get(qid, {})
+        explanation = _first_valid_str(llm_item.get("explanation")) or pr.explanation
+        llm_kps = llm_item.get("related_knowledge_points")
+        related_knowledge_points = (
+            [str(kp) for kp in llm_kps if isinstance(kp, str) and kp.strip()]
+            if isinstance(llm_kps, list)
+            else []
+        ) or pr.related_knowledge_points
+
+        enriched_questions.append(
+            PerQuestionResult(
+                question_id=pr.question_id,
+                is_correct=pr.is_correct,
+                explanation=explanation,
+                related_knowledge_points=related_knowledge_points,
+            )
+        )
+
+    rule_diag = rule_result.diagnosis
+    enriched_diag = Diagnosis(
+        summary=_first_valid_str(llm_diagnosis.get("summary")) or (rule_diag.summary if rule_diag else None),
+        weak_points=_enrich_weak_points(
+            rule_diag.weak_points if rule_diag else [],
+            llm_diagnosis.get("weak_points"),
+        ),
+        suggestions=_enrich_suggestions(
+            rule_diag.suggestions if rule_diag else [],
+            llm_diagnosis.get("suggestions"),
+        ),
+    )
+
+    return AssessmentResult(
+        per_question_results=enriched_questions,
+        diagnosis=enriched_diag,
+    )
+
+
+def _index_llm_per_question(items) -> dict[str, dict]:
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, dict] = {}
+    for item in items:
+        if isinstance(item, dict) and isinstance(item.get("question_id"), str):
+            result[item["question_id"]] = item
+    return result
+
+
+def _first_valid_str(value) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _enrich_weak_points(rule_weak_points, llm_weak_points) -> list[WeakPoint]:
+    if not isinstance(llm_weak_points, list):
+        return rule_weak_points
+    llm_by_name: dict[str, str] = {}
+    for item in llm_weak_points:
+        if isinstance(item, dict):
+            name = item.get("name")
+            pattern = item.get("error_pattern")
+            if isinstance(name, str) and name.strip() and isinstance(pattern, str) and pattern.strip():
+                llm_by_name[name.strip()] = pattern.strip()
+
+    if not llm_by_name:
+        return rule_weak_points
+
+    enriched: list[WeakPoint] = []
+    for wp in rule_weak_points:
+        key = wp.name or ""
+        if key in llm_by_name:
+            enriched.append(WeakPoint(name=wp.name, error_pattern=llm_by_name[key]))
+        else:
+            enriched.append(wp)
+    return enriched
+
+
+def _enrich_suggestions(rule_suggestions, llm_suggestions) -> list[str]:
+    if isinstance(llm_suggestions, list):
+        valid = [str(s).strip() for s in llm_suggestions if isinstance(s, str) and s.strip()]
+        if valid:
+            return valid
+    return rule_suggestions
 
 
 def generate_questions_data(request: QuestionGenerateRequest) -> QuestionGenerateResult:
@@ -64,6 +207,13 @@ def generate_questions_data(request: QuestionGenerateRequest) -> QuestionGenerat
         for index in range(request.count)
     ]
     return QuestionGenerateResult(questions=questions)
+
+
+def _get_submitted_answer(answers, question_id: str) -> AnswerValue | None:
+    for answer in answers:
+        if answer.question_id == question_id:
+            return answer.answer
+    return None
 
 
 def _answers_equal(submitted_answer: AnswerValue, correct_answer: AnswerValue) -> bool:

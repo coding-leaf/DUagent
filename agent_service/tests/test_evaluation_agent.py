@@ -77,42 +77,100 @@ class FakeChatProvider:
         return self._output
 
 
-def test_generate_evaluation_with_llm_enriches_summary_text() -> None:
+def test_generate_evaluation_with_llm_enriches_full_evaluation_data() -> None:
     import json as _json
     from agent_service.agents.evaluation import generate_evaluation_with_llm
 
-    rule_result = generate_evaluation_data(_build_request())
+    request = _build_request()
+    rule_result = generate_evaluation_data(request)
     llm_output = _json.dumps({
-        "summary_text": (
-            "你已完成函数和导数两个章节，平均完成率60%，平均正确率72.5%。"
-            "函数章节掌握良好（完成率80%，正确率90%），已达到strong水平；"
-            "导数章节需要重点加强（完成率40%，正确率55%），处于weak水平。"
-            "从练习时间看，导数练习（5月21日）正确率较函数（5月20日）下降了35个百分点，"
-            "说明在从函数过渡到导数时遇到了概念理解困难，可能因为极限定义尚未牢固。"
-            "资源使用以文档为主（3次），建议额外增加视频讲解（当前1次）辅助理解导数的几何意义，"
-            "同时增加代码练习来直观感受变化率概念。"
-            "下一步建议：（1）优先完成导数章节剩余60%内容，重点吃透极限定义章节；"
-            "（2）配合完成导数章节至少2道代码练习题；（3）观看导数相关视频讲解至少1次。"
-        ),
+        "progress_table": {
+            "columns": [
+                {"key": "chapter", "title": "章节"},
+                {"key": "completion_rate", "title": "完成率"},
+                {"key": "time_spent", "title": "学习时长（分钟）"},
+                {"key": "progress_insight", "title": "进度分析"},
+            ],
+            "rows": [
+                {"chapter": "函数", "completion_rate": 80.0, "time_spent": 120, "progress_insight": "进度稳定"},
+                {"chapter": "导数", "completion_rate": 40.0, "time_spent": 60, "progress_insight": "进度偏慢"},
+            ],
+        },
+        "mastery_table": {
+            "columns": [
+                {"key": "chapter", "title": "章节"},
+                {"key": "average_score", "title": "平均正确率"},
+                {"key": "quiz_count", "title": "练习次数"},
+                {"key": "mastery_level", "title": "掌握水平"},
+                {"key": "root_cause", "title": "薄弱根因"},
+            ],
+            "rows": [
+                {"chapter": "函数", "average_score": 90.0, "quiz_count": 1, "mastery_level": "strong", "root_cause": "基础稳定"},
+                {"chapter": "导数", "average_score": 55.0, "quiz_count": 1, "mastery_level": "weak", "root_cause": "极限概念不牢"},
+            ],
+        },
+        "resource_usage_table": {
+            "columns": [
+                {"key": "resource_type", "title": "资源类型"},
+                {"key": "count", "title": "使用次数"},
+                {"key": "effectiveness_hint", "title": "效果提示"},
+            ],
+            "rows": [
+                {"resource_type": "document", "count": 3, "effectiveness_hint": "文档偏多但导数仍弱"},
+                {"resource_type": "video", "count": 1, "effectiveness_hint": "可增加视频辅助理解"},
+            ],
+        },
+        "summary_text": "导数正确率55%，较函数90%明显偏低，建议增加视频讲解和代码练习。",
     })
     provider = FakeChatProvider(output=llm_output)
 
-    result = asyncio.run(
-        generate_evaluation_with_llm(_build_request(), rule_result, provider)
-    )
+    result = asyncio.run(generate_evaluation_with_llm(request, rule_result, provider))
 
     assert result is not None
-    summary = result.summary_text or ""
-    assert "函数" in summary
-    assert "导数" in summary
-    assert "80%" in summary
-    # verify deeper analysis content
-    assert "下降" in summary or "趋势" in summary or "过渡" in summary  # trend analysis
-    assert "视频" in summary  # resource effectiveness correlation
-    assert "极限" in summary or "建议" in summary  # root cause or actionable advice
-    assert result.progress_table == rule_result.progress_table
-    assert result.mastery_table == rule_result.mastery_table
-    assert result.resource_usage_table == rule_result.resource_usage_table
+    assert result.progress_table.rows[1]["progress_insight"] == "进度偏慢"
+    assert result.mastery_table.rows[1]["root_cause"] == "极限概念不牢"
+    assert result.resource_usage_table.rows[1]["effectiveness_hint"] == "可增加视频辅助理解"
+    assert "导数正确率55%" in (result.summary_text or "")
+
+
+def test_generate_evaluation_with_llm_rejects_invalid_or_fabricated_rows() -> None:
+    import json as _json
+    from agent_service.agents.evaluation import generate_evaluation_with_llm
+
+    request = _build_request()
+    rule_result = generate_evaluation_data(request)
+    provider = FakeChatProvider(output=_json.dumps({
+        "progress_table": {
+            "columns": [{"key": "chapter", "title": "章节"}, {"key": "completion_rate", "title": "完成率"}],
+            "rows": [
+                {"chapter": "fabricated", "completion_rate": 99},
+                {"chapter": "导数", "completion_rate": 180, "time_spent": -1, "progress_insight": "保留有效章节"},
+            ],
+        },
+        "mastery_table": {
+            "columns": [{"key": "chapter", "title": "章节"}, {"key": "average_score", "title": "平均正确率"}],
+            "rows": [
+                {"chapter": "fabricated", "average_score": 100},
+                {"chapter": "导数", "average_score": -5, "quiz_count": -2, "mastery_level": "invalid"},
+            ],
+        },
+        "resource_usage_table": {
+            "columns": [{"key": "resource_type", "title": "资源类型"}, {"key": "count", "title": "使用次数"}],
+            "rows": [
+                {"resource_type": "unknown", "count": 9},
+                {"resource_type": "video", "count": -3, "effectiveness_hint": "保留有效资源"},
+            ],
+        },
+        "summary_text": "有效总结。",
+    }))
+
+    result = asyncio.run(generate_evaluation_with_llm(request, rule_result, provider))
+
+    assert result is not None
+    assert result.progress_table.rows == [{"chapter": "导数", "completion_rate": 100.0, "time_spent": 0, "progress_insight": "保留有效章节"}]
+    assert result.mastery_table.rows == [{"chapter": "导数", "average_score": 0.0, "quiz_count": 0, "mastery_level": "weak"}]
+    assert result.resource_usage_table.rows == [{"resource_type": "video", "count": 0, "effectiveness_hint": "保留有效资源"}]
+    assert result.summary_text == "有效总结。"
 
 
 def test_generate_evaluation_with_llm_does_not_mutate_rule_result() -> None:

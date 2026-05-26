@@ -5,23 +5,21 @@ from agent_service.schemas.evaluation import EvaluationData, EvaluationGenerateR
 
 def build_evaluation_system_prompt() -> str:
     return (
-        "你是 EDUagent 的学习评估助手。根据用户的学习进度、练习结果和资源使用数据，"
-        "生成一份综合学习效果总结（summary_text）。\n\n"
-        "学习评估的表格数据（progress_table、mastery_table、resource_usage_table）"
-        "已由系统计算确定，你不需要也不能修改这些表格。只需输出 summary_text 文本。\n\n"
-        "输出必须是一个 JSON 对象：{\"summary_text\": \"...\"}\n\n"
-        "summary_text 要求（4-8 句话，数据驱动）：\n"
-        "1. 整体概况：总章节数、平均完成率、平均正确率，一句话概括学习状态\n"
-        "2. 章节对比：掌握最好和最薄弱的章节，引用具体正确率，解释差距可能的根因\n"
-        "   （如\"导数章节正确率仅55%，可能是因为极限概念未牢固，导致求导运算困难\"）\n"
-        "3. 趋势分析：如果 quiz_results 包含不同时间点的练习，分析正确率变化趋势\n"
-        "   （上升/下降/波动），推断学习效果是否在改善\n"
-        "4. 资源效果关联：分析资源使用偏好（视频/文档/代码）与学习效果的关联\n"
-        "   （如\"文档使用3次但正确率偏低，建议增加视频讲解辅助理解\"）\n"
-        "5. 可操作建议：给出 2-3 条具体的下一步行动，必须指定章节名和资源类型\n"
-        "   （如\"优先完成导数章节剩余60%内容，配合代码练习巩固求导公式\"）\n"
-        "不要泛泛而谈（如\"继续努力\"），每条建议都要引用数据、指定章节。\n\n"
-        "只输出 JSON 对象，不要加 markdown 代码块标记，不要加任何其他文字。"
+        "你是 EDUagent 的学习评估助手。根据学习进度、练习结果、资源使用和系统规则评估，"
+        "生成完整 EvaluationData JSON 对象。\n\n"
+        "输出字段必须完整：progress_table、mastery_table、resource_usage_table、summary_text。\n"
+        "每个表格必须包含 columns 和 rows。\n\n"
+        "progress_table 固定基础列：chapter、completion_rate、time_spent；可增加 progress_insight。\n"
+        "mastery_table 固定基础列：chapter、average_score、quiz_count、mastery_level；可增加 root_cause。\n"
+        "resource_usage_table 固定基础列：resource_type、count；可增加 effectiveness_hint。\n\n"
+        "约束：\n"
+        "- 不要编造输入中没有出现的章节或资源类型\n"
+        "- completion_rate、average_score 必须在 0-100\n"
+        "- time_spent、quiz_count、count 必须为非负整数\n"
+        "- mastery_level 只能是 strong/learning/weak\n"
+        "- 如果证据不足，沿用系统规则表格对应行\n"
+        "- summary_text 必须包含整体概况、章节对比、趋势、资源关联、可操作建议\n"
+        "- 只输出 JSON 对象，不要加 markdown 代码块标记，不要加任何其他文字"
     )
 
 
@@ -32,6 +30,8 @@ def build_evaluation_user_message(
     parts: list[str] = []
     parts.append(f"用户ID：{request.user_id}")
     parts.append(f"课程ID：{request.course_id}")
+    parts.append("")
+    parts.append("评估生成要求：请输出完整 EvaluationData JSON。若某表格字段证据不足，请沿用系统规则表格。")
     parts.append("")
     parts.append("学习进度：")
     for item in request.learning_progress.chapter_progress:

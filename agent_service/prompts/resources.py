@@ -30,11 +30,16 @@ def build_resource_system_prompt(resource_type: str) -> str:
 
 
 def build_resource_user_message(
-    request: ResourceGenerateRequest, resource_type: str
+    request: ResourceGenerateRequest,
+    resource_type: str,
+    course_knowledge_context: str | None = None,
 ) -> str:
-    return (
-        f"课程ID：{request.course_id}\n"
-        f"章节：{request.chapter or '课程整体'}\n"
-        f"知识点：{request.knowledge_point or '综合'}\n"
-        f"资源类型：{resource_type}\n"
-    )
+    parts = [
+        f"课程ID：{request.course_id}",
+        f"章节：{request.chapter or '课程整体'}",
+        f"知识点：{request.knowledge_point or '综合'}",
+        f"资源类型：{resource_type}",
+    ]
+    if course_knowledge_context:
+        parts.append(f"\n课程参考资料（以下内容来自课程知识库，请基于这些内容生成资源）：\n{course_knowledge_context}")
+    return "\n".join(parts)

@@ -23,7 +23,7 @@
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
 | `POST /agent/v1/assessment/generate-questions` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 骨架占位题 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
-| `POST /agent/v1/resources/generate` | LLM + 规则版 fallback 已完成 | 202 + 后台任务 + LLM 并行生成四类资源 + skeleton fallback；暂不接 Qdrant/RAG |
+| `POST /agent/v1/resources/generate` | LLM + RAG + fallback 已完成 | 202 + 后台任务；LLM 并行生成四类资源 + course_knowledge RAG 检索注入 prompt；skeleton fallback → webhook completed |
 | `POST /agent/v1/memory/compress` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 规则版；LLM 提取 3 种 fact 类型 + 生成摘要；Qdrant 写入 best-effort |
 
 ## 当前已确认能力
@@ -46,8 +46,8 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**208 passed**（2026-05-26 evaluation/generate LLM 接入后验证）
-- evaluation/generate LLM：11 个测试（含 7 个新 LLM enrichment 用例，覆盖 summary 增强/不原地修改/chat_provider=None/无效JSON/异常/markdown fence/API fallback）
+- `./.venv/bin/pytest -q`：**213 passed**（2026-05-26 resources/generate RAG 接入后验证）
+- resources/generate RAG：22 个测试（含 5 个新 RAG 用例，覆盖 context 拼接/embedding=None/检索异常/空结果/RAG→LLM集成）
 - resources/generate：LLM 并行生成四类资源 + skeleton fallback，webhook shape 不变，新增 8 个测试
 - learning-path/generate：LLM + rule-based fallback
 - assessment/generate-questions：LLM + skeleton fallback
@@ -57,5 +57,6 @@
 ## 下一步
 
 - 短期：evaluation/generate LLM summary ← **已完成**
-- 中期：resources/generate 接课程知识 RAG —— 根据 course_id 从 course_knowledge 检索/读取课程资料
+- 短期：resources/generate 接课程知识 RAG ← **已完成**
+- 短期：LLM 配置文档 + health 模型状态 + 无 provider 时日志降噪
 - 长期：Qdrant server 模式 / shared client 改造

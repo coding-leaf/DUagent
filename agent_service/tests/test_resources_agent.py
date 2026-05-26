@@ -358,5 +358,140 @@ class GenerateResourcesWithLLMTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("规则版资源占位内容", payload["result"]["resources"][0]["content"])
 
 
+class ResourceRAGTests(unittest.IsolatedAsyncioTestCase):
+    def _request(self, **kwargs) -> ResourceGenerateRequest:
+        defaults = dict(
+            task_id="task-rag-1", user_id="u1", course_id="data-structures",
+            webhook_url="https://example.com/webhook",
+            chapter="线性表", knowledge_point="顺序存储结构",
+        )
+        defaults.update(kwargs)
+        return ResourceGenerateRequest(**defaults)
+
+    def _fake_embedding_provider(self):
+        class FakeEmbedding:
+            def __init__(self) -> None:
+                self.calls: list[list] = []
+
+            async def embed_texts(self, texts):
+                self.calls.append(list(texts))
+                return [[0.1, 0.2, 0.3] for _ in texts]
+
+        return FakeEmbedding()
+
+    async def test_build_course_knowledge_context_returns_joined_chunks(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.resources import _build_course_knowledge_context
+
+        embedding = self._fake_embedding_provider()
+        chunks = ["线性表是相同类型数据元素的有限序列。", "顺序存储用一组连续地址存放元素。"]
+
+        class FakeVectorStore:
+            async def search_course_knowledge(self, course_id, vector, limit=5):
+                return [
+                    type("_R", (), {"text": t})()
+                    for t in chunks
+                ]
+
+        with patch(
+            "agent_service.memory.vector_store.QdrantVectorStore",
+            return_value=FakeVectorStore(),
+        ):
+            context = await _build_course_knowledge_context(
+                self._request(), embedding, limit=5
+            )
+
+        self.assertIn("线性表", context)
+        self.assertIn("---", context)
+        self.assertIn("顺序存储", context)
+
+    async def test_build_course_knowledge_context_returns_empty_when_embedding_is_none(self) -> None:
+        from agent_service.agents.resources import _build_course_knowledge_context
+
+        context = await _build_course_knowledge_context(self._request(), None)
+        self.assertEqual(context, "")
+
+    async def test_build_course_knowledge_context_returns_empty_on_retrieval_failure(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.resources import _build_course_knowledge_context
+
+        embedding = self._fake_embedding_provider()
+
+        class FailingVectorStore:
+            async def search_course_knowledge(self, course_id, vector, limit=5):
+                raise RuntimeError("Qdrant unavailable")
+
+        with patch(
+            "agent_service.memory.vector_store.QdrantVectorStore",
+            return_value=FailingVectorStore(),
+        ):
+            context = await _build_course_knowledge_context(
+                self._request(), embedding, limit=5
+            )
+
+        self.assertEqual(context, "")
+
+    async def test_build_course_knowledge_context_returns_empty_with_no_results(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.resources import _build_course_knowledge_context
+
+        embedding = self._fake_embedding_provider()
+
+        class EmptyVectorStore:
+            async def search_course_knowledge(self, course_id, vector, limit=5):
+                return []
+
+        with patch(
+            "agent_service.memory.vector_store.QdrantVectorStore",
+            return_value=EmptyVectorStore(),
+        ):
+            context = await _build_course_knowledge_context(
+                self._request(), embedding, limit=5
+            )
+
+        self.assertEqual(context, "")
+
+    async def test_run_task_injects_rag_context_into_llm_user_message(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.resources import run_resource_generation_task
+
+        request = self._request(resource_types=["document"])
+        calls = []
+        chat_calls: list[list] = []
+
+        async def fake_sender(webhook_url, payload):
+            calls.append(payload)
+
+        _embedding = self._fake_embedding_provider()
+
+        class FakeVectorStore:
+            async def search_course_knowledge(self, course_id, vector, limit=5):
+                return [type("_R", (), {"text": "顺序存储的关键是地址连续。"})()]
+
+        class FakeChatProvider:
+            def __init__(self) -> None:
+                self.calls = []
+
+            async def complete(self, messages):
+                chat_calls.extend(messages)
+                self.calls.append(messages)
+                return '{"title":"LLM Doc","description":"RAG生成","content":"基于顺序存储的内容。"}'
+
+        class FakeProviders:
+            chat = FakeChatProvider()
+            embedding = _embedding
+
+        with (
+            patch("agent_service.agents.resources.get_ai_providers", return_value=FakeProviders()),
+            patch("agent_service.memory.vector_store.QdrantVectorStore", return_value=FakeVectorStore()),
+        ):
+            await run_resource_generation_task(request, send_webhook=fake_sender)
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["status"], "completed")
+        user_msg = str(chat_calls[1])
+        self.assertIn("顺序存储的关键是地址连续。", user_msg)
+
+
 if __name__ == "__main__":
     unittest.main()

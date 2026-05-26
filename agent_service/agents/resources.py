@@ -87,13 +87,19 @@ async def run_resource_generation_task(
     输入：资源生成请求、可注入的 webhook 发送函数、可注入的结果构造器。
     输出：无直接返回值；按规范 POST completed/failed payload 到 webhook_url。
 
-    优先尝试 LLM 生成，失败时降级到 result_builder（保留现有注入语义）。
+    优先尝试 LLM 生成（附 RAG 课程知识上下文），失败时降级到 result_builder。
     result_builder 抛异常时仍按现有逻辑发 failed webhook payload。
     """
     try:
         providers = get_ai_providers()
+        course_knowledge_context = await _build_course_knowledge_context(
+            request,
+            getattr(providers, "embedding", None),
+        )
         llm_resources = await generate_resources_with_llm(
-            request, getattr(providers, "chat", None)
+            request,
+            getattr(providers, "chat", None),
+            course_knowledge_context=course_knowledge_context,
         )
         if llm_resources is not None:
             payload = {
@@ -185,11 +191,50 @@ _V1_RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
 _MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
 
 
+async def _build_course_knowledge_context(
+    request: ResourceGenerateRequest,
+    embedding_provider,
+    limit: int = 5,
+) -> str:
+    """检索课程知识库中与请求相关的片段，输入请求和 embedding provider，输出拼接后的上下文字符串。
+
+    无 embedding provider 或检索失败时返回空字符串，不抛异常。
+    """
+    if embedding_provider is None:
+        return ""
+    try:
+        from agent_service.memory.vector_store import QdrantVectorStore
+
+        query_text = " ".join(
+            part for part in [request.chapter, request.knowledge_point]
+            if part
+        ) or request.course_id
+        vectors = await embedding_provider.embed_texts([query_text])
+        store = QdrantVectorStore()
+        results = await store.search_course_knowledge(
+            request.course_id, vectors[0], limit=limit
+        )
+        if not results:
+            return ""
+        chunks = [r.text for r in results if r.text]
+        if not chunks:
+            return ""
+        return "\n---\n".join(chunks)
+    except Exception:
+        logger.warning(
+            "Course knowledge retrieval failed: course_id=%s",
+            request.course_id,
+            exc_info=True,
+        )
+        return ""
+
+
 async def generate_resources_with_llm(
     request: ResourceGenerateRequest,
     chat_provider,
+    course_knowledge_context: str | None = None,
 ) -> list[dict] | None:
-    """尝试用 LLM 生成课程资源，输入请求和 chat provider，输出资源 payload 列表或 None（降级）。
+    """尝试用 LLM 生成课程资源，输入请求、chat provider 和可选的 RAG 上下文，输出资源 payload 列表或 None（降级）。
 
     任一资源类型生成失败，整体返回 None。非 v1 四类（含 video）整体返回 None。
     """
@@ -200,7 +245,7 @@ async def generate_resources_with_llm(
         return None
     try:
         tasks = [
-            _generate_single_resource(request, rt, chat_provider)
+            _generate_single_resource(request, rt, chat_provider, course_knowledge_context)
             for rt in resource_types
         ]
         results = await asyncio.gather(*tasks)
@@ -217,6 +262,7 @@ async def _generate_single_resource(
     request: ResourceGenerateRequest,
     resource_type: str,
     chat_provider,
+    course_knowledge_context: str | None = None,
 ) -> dict:
     messages = [
         ChatMessage(
@@ -224,7 +270,9 @@ async def _generate_single_resource(
         ),
         ChatMessage(
             role="user",
-            content=build_resource_user_message(request, resource_type),
+            content=build_resource_user_message(
+                request, resource_type, course_knowledge_context=course_knowledge_context
+            ),
         ),
     ]
     raw = await chat_provider.complete(messages)

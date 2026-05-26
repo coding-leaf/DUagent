@@ -37,7 +37,9 @@ async def compress_memory_with_llm(
         ]
         raw = await chat_provider.complete(messages)
         parsed = _parse_memory_compress_json(raw)
-        return _coerce_memory_compress_result(parsed)
+        result = _coerce_memory_compress_result(parsed)
+        logger.info("LLM generation succeeded: %s", "memory/compress")
+        return result
     except Exception:
         logger.warning("LLM memory compression failed, falling back to rule-based", exc_info=True)
         return None

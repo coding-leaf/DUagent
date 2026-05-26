@@ -223,6 +223,7 @@ async def _build_course_knowledge_context(
         if not results:
             return ""
         chunks = [_truncate_chunk(r.text, 1000) for r in results if r.text]
+        logger.info("RAG retrieved %d chunks for course_id=%s", len(chunks), request.course_id)
         if not chunks:
             return ""
         return "\n---\n".join(chunks)
@@ -255,6 +256,7 @@ async def generate_resources_with_llm(
             for rt in resource_types
         ]
         results = await asyncio.gather(*tasks)
+        logger.info("LLM generation succeeded: %s", "resources/generate")
         return list(results)
     except Exception:
         logger.warning(

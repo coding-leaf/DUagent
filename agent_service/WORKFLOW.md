@@ -44,6 +44,7 @@
 - Qdrant collection 自动创建：`ensure_collection_exists()` 在 course_knowledge 和 user_memory 首次写入前确保 collection 存在，fresh Qdrant 不再报错。
 - Readiness 不再调用 `get_ai_providers()` 混用全局 settings，直接使用注入的 provider。
 - Structured output 结果可从 `ChatResponse.metadata` 提取，避免正文为空时路径失效。
+- Agent observability INFO 日志：LLM enrichment/generation 成功、RAG 检索 chunk 数、ReAct/structured output 命中，共 12 条。
 
 ## AgentScope 使用审查
 

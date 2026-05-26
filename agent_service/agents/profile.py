@@ -50,7 +50,9 @@ async def generate_profile_with_llm(
         ]
         raw = await chat_provider.complete(messages)
         data = _parse_profile_json(raw)
-        return _enrich_profile_result(request, rule_result, data)
+        result = _enrich_profile_result(request, rule_result, data)
+        logger.info("LLM enrichment succeeded: %s", "profile/generate")
+        return result
     except Exception:
         logger.warning("LLM profile enrichment failed, falling back to rule-based", exc_info=True)
         return None

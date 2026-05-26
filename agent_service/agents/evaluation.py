@@ -127,7 +127,9 @@ async def generate_evaluation_with_llm(
         ]
         raw = await chat_provider.complete(messages)
         data = _parse_evaluation_json(raw)
-        return _enrich_evaluation_result(request, rule_result, data)
+        result = _enrich_evaluation_result(request, rule_result, data)
+        logger.info("LLM enrichment succeeded: %s", "evaluation/generate")
+        return result
     except Exception:
         logger.warning("LLM evaluation enrichment failed, falling back to rule-based", exc_info=True)
         return None

@@ -1,6 +1,9 @@
 """ReActAgent 工具集，提供课程知识检索工具供 tutoring ReAct 编排使用。"""
 
 from agentscope.tool import Toolkit, ToolResponse
+from agent_service.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_tutoring_toolkit(
@@ -25,6 +28,7 @@ def build_tutoring_toolkit(
             results = await vector_store.search_course_knowledge(
                 course_id, vectors[0], limit=limit
             )
+            logger.info("RAG retrieved %d chunks for course_id=%s", len(results) if results else 0, course_id)
             if not results:
                 return ToolResponse(content=[{"text": "未找到相关课程知识。"}])
             text = "\n---\n".join(r.text for r in results if r.text)

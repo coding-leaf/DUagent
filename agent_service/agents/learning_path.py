@@ -174,6 +174,7 @@ async def generate_learning_path_with_llm(
             nodes_by_id,
             coerced_nodes,
         )
+        logger.info("LLM generation succeeded: %s", "learning-path/generate")
         return LearningPathData(
             nodes=coerced_nodes, edges=edges, current_position=current_position
         )

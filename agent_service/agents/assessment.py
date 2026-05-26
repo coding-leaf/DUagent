@@ -83,7 +83,9 @@ async def evaluate_assessment_with_llm(
         ]
         raw = await chat_provider.complete(messages)
         data = _parse_evaluate_json(raw)
-        return _enrich_rule_result(rule_result, data)
+        result = _enrich_rule_result(rule_result, data)
+        logger.info("LLM enrichment succeeded: %s", "assessment/evaluate")
+        return result
     except Exception:
         logger.warning("LLM evaluation enrichment failed, falling back to rule-based", exc_info=True)
         return None
@@ -358,6 +360,7 @@ async def _build_question_generation_knowledge_context(
         if not results:
             return ""
         chunks = [_truncate_chunk(r.text, 1000) for r in results if r.text]
+        logger.info("RAG retrieved %d chunks for course_id=%s", len(chunks), request.course_id)
         if not chunks:
             return ""
         return "\n---\n".join(chunks)
@@ -390,7 +393,9 @@ async def generate_questions_with_llm(
         ]
         raw = await chat_provider.complete(messages)
         parsed = _parse_question_json(raw)
-        return _coerce_questions(parsed)
+        result = _coerce_questions(parsed)
+        logger.info("LLM generation succeeded: %s", "assessment/generate-questions")
+        return result
     except Exception:
         logger.warning("LLM question generation failed, falling back to skeleton", exc_info=True)
         return None

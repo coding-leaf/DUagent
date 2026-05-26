@@ -41,6 +41,7 @@ async def generate_tutoring_react_response(
             toolkit=toolkit,
         )
         model_output = await agent.generate(user_message)
+        logger.info("Tutoring ReAct succeeded")
         if model_output is None:
             return None
         return parse_tutoring_model_response(model_output)

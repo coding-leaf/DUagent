@@ -161,6 +161,7 @@ async def _try_structured_output(messages, chat_provider) -> str | None:
     """尝试用 AgentScope structured_model 生成输出，成功返回 JSON 文本，失败返回 None。"""
     try:
         raw = await chat_provider.complete(messages, structured_model=_TutoringStructuredOutput)
+        logger.info("Tutoring structured output succeeded")
         if raw and raw.strip():
             return raw.strip()
     except Exception:

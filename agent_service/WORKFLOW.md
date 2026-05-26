@@ -56,5 +56,5 @@
 
 ## 下一步
 
-- 中期：挂载 `retrieve_user_memory` 工具 ← **已完成**
+- 短期：ReAct 工具调用可观测性 —— 为 tutoring/chat 增加日志/测试手段，确认 ReAct 推理中实际调用了 `retrieve_course_knowledge` / `retrieve_user_memory`。不改 API 契约、不改 Qdrant schema、不扩大主链路。
 - 长期：Qdrant server 模式 / shared client 改造

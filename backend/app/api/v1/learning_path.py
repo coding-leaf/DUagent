@@ -9,7 +9,6 @@ from app.api.deps import get_current_user, get_db
 from app.models.course import CourseEnrollment
 from app.models.others import AsyncTask, LearningPath
 from app.models.user import User
-from app.schemas.ai_features import LearningPathRefreshRequest
 
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
 
@@ -22,7 +21,11 @@ async def get_learning_path(
 ):
     result = await db.execute(
         select(LearningPath)
-        .where(LearningPath.user_id == current_user.id, LearningPath.course_id == course_id)
+        .where(
+            LearningPath.user_id == current_user.id,
+            LearningPath.course_id == course_id,
+            LearningPath.is_deleted == False,
+        )
     )
     lp = result.scalar_one_or_none()
 
@@ -34,8 +37,8 @@ async def get_learning_path(
                 "course_id": course_id,
                 "nodes": [],
                 "edges": [],
-                "current_position": {"node_id": "", "node_name": ""},
-                "generated_at": "",
+                "current_position": None,
+                "generated_at": None,
             },
         }
 
@@ -44,20 +47,20 @@ async def get_learning_path(
         "message": "success",
         "data": {
             "course_id": lp.course_id,
-            "nodes": lp.nodes,
-            "edges": lp.edges,
+            "nodes": lp.nodes or [],
+            "edges": lp.edges or [],
             "current_position": {
                 "node_id": lp.current_node_id,
                 "node_name": lp.current_node_name,
-            },
-            "generated_at": lp.generated_at.isoformat() if lp.generated_at else "",
+            } if lp.current_node_id else None,
+            "generated_at": lp.generated_at.isoformat() if lp.generated_at else None,
         },
     }
 
 
 @router.post("/refresh")
 async def refresh_learning_path(
-    req: LearningPathRefreshRequest,
+    course_id: str = Query(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -65,7 +68,8 @@ async def refresh_learning_path(
         check = await db.execute(
             select(CourseEnrollment).where(
                 CourseEnrollment.student_id == current_user.id,
-                CourseEnrollment.course_id == req.course_id,
+                CourseEnrollment.course_id == course_id,
+                CourseEnrollment.is_deleted == False,
             )
         )
         if not check.scalar_one_or_none():
@@ -75,62 +79,37 @@ async def refresh_learning_path(
             )
 
     task = AsyncTask(
-        task_type="learning_path",
+        task_type="learning_path_refresh",
         status="processing",
         user_id=current_user.id,
-        course_id=req.course_id,
+        course_id=course_id,
     )
     db.add(task)
     await db.flush()
     await db.refresh(task)
 
-    # Simulate completion
     task.status = "completed"
-    task.result = {"message": "学习路径刷新完成"}
+    task.result = {"updated_at": datetime.now(timezone.utc).isoformat()}
     task.completed_at = datetime.now(timezone.utc)
     await db.flush()
 
     return JSONResponse(
         status_code=202,
-        content={"code": 200, "message": "success", "data": {"task_id": task.id}},
+        content={"code": 202, "message": "accepted", "data": {"task_id": task.id}},
     )
 
 
 @router.get("/nodes/{node_id}/resources")
-async def get_node_resources(
-    node_id: str,
-    current_user: User = Depends(get_current_user),
-):
-    # In production: query resources for the specific knowledge node
+async def get_node_resources(node_id: str, current_user: User = Depends(get_current_user)):
     return {
         "code": 200,
         "message": "success",
         "data": {
             "node_id": node_id,
             "node_name": "示例知识点",
-            "weak_point_tutorials": [
-                {"title": "基础概念讲解", "content": "这个知识点主要涉及..."},
-            ],
-            "exercises": [
-                {
-                    "id": "ex1",
-                    "type": "single_choice",
-                    "content": "以下哪个选项是正确的？",
-                },
-            ],
-            "chapter_materials": [
-                {
-                    "title": "章节教材",
-                    "type": "document",
-                    "url": "/files/materials/chapter1.pdf",
-                },
-            ],
-            "full_exercise_set": [
-                {
-                    "id": "ex_full_1",
-                    "type": "multi_choice",
-                    "content": "综合练习题...",
-                },
-            ],
+            "weak_point_tutorials": [],
+            "exercises": [],
+            "chapter_materials": [],
+            "full_exercise_set": [],
         },
     }

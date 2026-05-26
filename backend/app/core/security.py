@@ -13,10 +13,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # In-memory captcha store (use Redis in production)
 _captcha_store: dict[str, dict] = {}
-# In-memory reset code store
-_reset_code_store: dict[str, dict] = {}
-# In-memory refresh token blacklist
-_refresh_token_blacklist: set[str] = set()
 
 
 def hash_password(password: str) -> str:
@@ -27,24 +23,12 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(user_id: str, role: str) -> str:
+def create_token(user_id: str, role: str) -> str:
+    """v1: Single JWT token, 7-day expiry."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
         "role": role,
-        "type": "access",
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-    }
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
-
-
-def create_refresh_token(user_id: str, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    payload = {
-        "sub": user_id,
-        "role": role,
-        "type": "refresh",
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -57,14 +41,6 @@ def decode_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
-
-
-def invalidate_refresh_token(token: str) -> None:
-    _refresh_token_blacklist.add(token)
-
-
-def is_refresh_token_invalid(token: str) -> bool:
-    return token in _refresh_token_blacklist
 
 
 def generate_captcha() -> dict:
@@ -90,21 +66,3 @@ def verify_captcha(token: str, code: str) -> bool:
     if time.time() > entry["expires_at"]:
         return False
     return entry["answer"] == code.strip()
-
-
-def generate_reset_code(email: str) -> str:
-    code = f"{random.randint(100000, 999999)}"
-    _reset_code_store[email] = {
-        "code": code,
-        "expires_at": time.time() + settings.CAPTCHA_EXPIRE_SECONDS,
-    }
-    return code
-
-
-def verify_reset_code(email: str, code: str) -> bool:
-    entry = _reset_code_store.pop(email, None)
-    if entry is None:
-        return False
-    if time.time() > entry["expires_at"]:
-        return False
-    return entry["code"] == code.strip()

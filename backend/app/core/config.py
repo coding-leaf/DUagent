@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -7,14 +6,21 @@ class Settings(BaseSettings):
     APP_VERSION: str = "5.0"
     DEBUG: bool = True
 
-    # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./duagent.db"
+    # MySQL Database
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 3306
+    DB_USER: str = "root"
+    DB_PASSWORD: str = "123456"
+    DB_NAME: str = "duagent"
 
-    # JWT
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset=utf8mb4"
+
+    # JWT — v1 single token, 7-day expiry
     JWT_SECRET_KEY: str = "duagent-jwt-secret-change-in-production"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
 
     # Server
     HOST: str = "0.0.0.0"
@@ -22,7 +28,6 @@ class Settings(BaseSettings):
 
     # Agent service (internal)
     AGENT_SERVICE_URL: str = "http://localhost:8002"
-    AGENT_INTERNAL_KEY: str = "agent-internal-secret-key"
 
     # Captcha
     CAPTCHA_EXPIRE_SECONDS: int = 300

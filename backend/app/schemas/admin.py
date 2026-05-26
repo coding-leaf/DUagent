@@ -10,4 +10,4 @@ class AdminUpdateUserRequest(BaseModel):
     role: Optional[str] = None
     major: Optional[str] = None
     grade: Optional[str] = None
-    password: Optional[str] = None
+    new_password: Optional[str] = None

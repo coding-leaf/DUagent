@@ -3,8 +3,17 @@ import unittest
 from pathlib import Path
 
 from agent_service.main import app
+from agent_service.schemas.assessment import (
+    AssessmentEvaluateRequest,
+    AssessmentResult,
+    QuestionGenerateRequest,
+    QuestionGenerateResult,
+)
 from agent_service.schemas.evaluation import EvaluationData, EvaluationGenerateRequest
+from agent_service.schemas.learning_path import LearningPathData, LearningPathGenerateRequest
+from agent_service.schemas.memory import MemoryCompressRequest, MemoryCompressResult
 from agent_service.schemas.profile import ProfileData, ProfileGenerateRequest
+from agent_service.schemas.resources import ResourceGenerateRequest
 from agent_service.schemas.tutoring import TutoringChatRequest
 
 
@@ -130,6 +139,33 @@ class OpenAPIAlignmentTests(unittest.TestCase):
         response_schema = responses["202"]["content"]["application/json"]["schema"]
         response_schema = self.resolve_app_schema(response_schema)
         self.assertEqual(set(response_schema["properties"]), {"code", "message", "data"})
+
+    def test_assessment_evaluate_request_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(AssessmentEvaluateRequest.model_json_schema(), "AssessmentEvaluateRequest")
+
+    def test_assessment_result_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(AssessmentResult.model_json_schema(), "AssessmentResult")
+
+    def test_question_generate_request_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(QuestionGenerateRequest.model_json_schema(), "QuestionGenerateRequest")
+
+    def test_question_generate_result_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(QuestionGenerateResult.model_json_schema(), "QuestionGenerateResult")
+
+    def test_learning_path_generate_request_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(LearningPathGenerateRequest.model_json_schema(), "LearningPathGenerateRequest")
+
+    def test_learning_path_data_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(LearningPathData.model_json_schema(), "LearningPathData")
+
+    def test_memory_compress_request_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(MemoryCompressRequest.model_json_schema(), "MemoryCompressRequest")
+
+    def test_memory_compress_result_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(MemoryCompressResult.model_json_schema(), "MemoryCompressResult")
+
+    def test_resource_generate_request_matches_openapi(self) -> None:
+        self.assert_schema_properties_match(ResourceGenerateRequest.model_json_schema(), "ResourceGenerateRequest")
 
     def test_app_openapi_memory_compress_uses_json_wrapper(self) -> None:
         response_schema = self.app_openapi["paths"]["/agent/v1/memory/compress"]["post"]["responses"]["200"][

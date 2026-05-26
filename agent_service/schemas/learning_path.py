@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from agent_service.schemas.common import ApiResponse
 
@@ -14,6 +14,7 @@ class KnowledgeGraphNode(BaseModel):
 
 
 class KnowledgeGraphEdge(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     from_: str | None = Field(None, alias="from", description="前置节点 ID")
     to: str | None = Field(None, description="后置节点 ID")
 
@@ -41,6 +42,7 @@ class LearningPathNode(BaseModel):
 
 
 class LearningPathEdge(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     from_: str | None = Field(None, alias="from", description="前置节点 ID")
     to: str | None = Field(None, description="后置节点 ID")
 

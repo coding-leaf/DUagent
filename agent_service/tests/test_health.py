@@ -1,25 +1,15 @@
 import asyncio
 
-from agent_service.api.v1.health import build_health_data, health_check
+from agent_service.agents.health import build_health_data
+from agent_service.api.v1.health import health_check
 
 
 def test_build_health_data_reports_qdrant_and_uptime(monkeypatch) -> None:
     class FakeSettings:
         LLM_PROVIDER = "agentscope_openai"
-        LLM_BASE_URL = "https://llm.example.com/v1"
-        LLM_API_KEY = "sk-test"
         LLM_MODEL = "test-model"
-        EMBEDDING_PROVIDER = "agentscope_openai"
-        EMBEDDING_BASE_URL = "https://emb.example.com/v1"
-        EMBEDDING_API_KEY = "sk-test"
-        EMBEDDING_MODEL = "test-emb"
-        RERANKER_PROVIDER = "none"
-        RERANKER_BASE_URL = None
-        RERANKER_API_KEY = None
-        RERANKER_MODEL = None
-        QDRANT_USER_MEMORY_COLLECTION = "user_memory_v1_1024"
 
-    monkeypatch.setattr("agent_service.api.v1.health.settings", FakeSettings())
+    monkeypatch.setattr("agent_service.agents.health.settings", FakeSettings())
 
     data = build_health_data(qdrant_probe=lambda: True, monotonic_now=lambda: 125.5, started_at=100.0)
 
@@ -28,10 +18,6 @@ def test_build_health_data_reports_qdrant_and_uptime(monkeypatch) -> None:
     assert data["model_loaded"] is True
     assert data["model_name"] == "test-model"
     assert data["uptime_seconds"] == 25
-    assert data["llm_configured"] is True
-    assert data["embedding_configured"] is True
-    assert data["reranker_configured"] is False
-    assert data["qdrant_collection"] == "user_memory_v1_1024"
 
 
 def test_build_health_data_marks_degraded_when_qdrant_probe_fails() -> None:
@@ -49,7 +35,7 @@ def test_build_health_data_logs_probe_failure(caplog) -> None:
     def failing_probe() -> bool:
         raise RuntimeError("qdrant unavailable")
 
-    with caplog.at_level("WARNING", logger="agent_service.api.v1.health"):
+    with caplog.at_level("WARNING", logger="agent_service.agents.health"):
         build_health_data(qdrant_probe=failing_probe, monotonic_now=lambda: 101.0, started_at=100.0)
 
     assert "Health probe failed" in caplog.text

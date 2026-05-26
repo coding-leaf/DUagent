@@ -16,7 +16,7 @@
 
 | 接口 | 状态 | 备注 |
 |------|------|------|
-| `GET /agent/v1/health` | 已完成 | Qdrant 探针 + uptime + llm_configured / embedding_configured / reranker_configured / qdrant_collection；纯读 settings 不发请求 |
+| `GET /agent/v1/health` | 已完成 | Qdrant 探针 + model_loaded/model_name/uptime；HealthData 5 字段严格匹配 OpenAPI；探针逻辑在 agents/health.py，API 层薄路由 |
 | `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
 | `POST /agent/v1/profile/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full ProfileData enrichment → 规则版；LLM 输出经 schema/枚举/范围/观测名称保护后合并 |
 | `POST /agent/v1/evaluation/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full EvaluationData enrichment → 规则版；表格和 summary 均经列/范围/观测名称保护后合并 |

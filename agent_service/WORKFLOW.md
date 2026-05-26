@@ -18,7 +18,7 @@
 |------|------|------|
 | `GET /agent/v1/health` | 已完成基础版 | Qdrant 探针 + uptime；模型状态后续统一定义 |
 | `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
-| `POST /agent/v1/profile/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 guidance_level_suggestion.reason |
+| `POST /agent/v1/profile/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full ProfileData enrichment → 规则版；LLM 输出经 schema/枚举/范围/观测名称保护后合并 |
 | `POST /agent/v1/evaluation/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 增强 summary_text（趋势分析+薄弱点根因+资源效果关联+可操作建议）；表格全保持规则版 |
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
 | `POST /agent/v1/assessment/generate-questions` | LLM + RAG + fallback 已完成 | 降级链：LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
@@ -46,7 +46,9 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**213 passed**（2026-05-26 resources/generate RAG 接入后验证）
+- `./.venv/bin/pytest -q`：**219 passed**（2026-05-26 profile/generate full enrichment）
+- `./.venv/bin/pytest tests/test_profile_agent.py -v`：**13 passed**（2026-05-26 profile/generate full enrichment）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -v`：**15 passed**
 - resources/generate RAG：22 个测试（含 5 个新 RAG 用例，覆盖 context 拼接/embedding=None/检索异常/空结果/RAG→LLM集成）
 - resources/generate：LLM 并行生成四类资源 + skeleton fallback，webhook shape 不变，新增 8 个测试
 - learning-path/generate：LLM + rule-based fallback
@@ -56,7 +58,7 @@
 
 ## 下一步
 
-- 短期：assessment/generate-questions RAG + 质量约束 ← **已完成**
+- 短期：profile/generate full LLM enrichment ← **已完成**
 - 中期：memory/compress 规则增强（mastered_point / cognitive_preference 规则提取）
 - 远期：Qdrant server 模式 / shared client 改造
 - 长期：Qdrant server 模式 / shared client 改造

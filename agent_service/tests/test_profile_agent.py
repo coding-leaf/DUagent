@@ -68,59 +68,122 @@ class FakeChatProvider:
         return self._output
 
 
-def test_generate_profile_with_llm_enriches_reason_text() -> None:
+def test_generate_profile_with_llm_enriches_full_profile_data() -> None:
     import json as _json
     from agent_service.agents.profile import generate_profile_with_llm
 
-    rule_result = generate_profile_data(_build_request())
+    request = _build_request()
+    rule_result = generate_profile_data(request)
     llm_output = _json.dumps({
+        "modal_preference": {
+            "video_animation": 60.0,
+            "chart_logic": 35.0,
+            "text_analysis": 90.0,
+            "code_practice": 45.0,
+            "formula_derivation": 20.0,
+        },
         "guidance_level_suggestion": {
             "recommended": "L1",
-            "reason": "你的函数章节掌握得很好(90%)，但导数只有60%，建议在导数上加强分步引导，先巩固极限概念再进入求导运算。",
+            "reason": "导数最近只有60%，且资源使用偏文档，建议用更细的步骤和例题拆解极限到导数的过渡。",
         },
+        "knowledge_coordinates": [
+            {"name": "函数", "status": "mastered"},
+            {"name": "导数", "status": "learning"},
+        ],
+        "cognitive_blindspots": [
+            {"name": "导数", "error_count": 2, "severity": "high"},
+        ],
+        "drive_intent": {"type": "exam_sprint", "intensity": 82.0},
+        "discipline_badge": {"subject": "course-1", "level": "sprint", "streak_days": 5},
     })
     provider = FakeChatProvider(output=llm_output)
 
     result = asyncio.run(
-        generate_profile_with_llm(_build_request(), rule_result, provider)
+        generate_profile_with_llm(request, rule_result, provider)
     )
 
     assert result is not None
-    assert "函数章节掌握得很好" in (result.guidance_level_suggestion.reason or "")
-    assert "导数只有60%" in (result.guidance_level_suggestion.reason or "")
-    assert result.guidance_level_suggestion.recommended == "L2"
-    assert result.modal_preference == rule_result.modal_preference
-    assert result.knowledge_coordinates == rule_result.knowledge_coordinates
-    assert result.cognitive_blindspots == rule_result.cognitive_blindspots
-    assert result.drive_intent == rule_result.drive_intent
-    assert result.discipline_badge == rule_result.discipline_badge
+    assert result.modal_preference.video_animation == 60.0
+    assert result.modal_preference.text_analysis == 90.0
+    assert result.guidance_level_suggestion.recommended == "L1"
+    assert "导数最近只有60%" in (result.guidance_level_suggestion.reason or "")
+    assert [(item.name, item.status) for item in result.knowledge_coordinates] == [
+        ("函数", "mastered"),
+        ("导数", "learning"),
+    ]
+    assert [(item.name, item.error_count, item.severity) for item in result.cognitive_blindspots] == [
+        ("导数", 2, "high"),
+    ]
+    assert result.drive_intent.type == "exam_sprint"
+    assert result.drive_intent.intensity == 82.0
+    assert result.discipline_badge.subject == "course-1"
+    assert result.discipline_badge.level == "sprint"
+    assert result.discipline_badge.streak_days == 5
 
 
-def test_generate_profile_with_llm_rejects_llm_structured_fields() -> None:
+def test_generate_profile_with_llm_rejects_invalid_or_fabricated_fields() -> None:
     import json as _json
     from agent_service.agents.profile import generate_profile_with_llm
 
-    rule_result = generate_profile_data(_build_request())
+    request = _build_request()
+    rule_result = generate_profile_data(request)
     llm_output = _json.dumps({
-        "guidance_level_suggestion": {
-            "recommended": "L3",
-            "reason": "加强版理由。",
+        "modal_preference": {
+            "video_animation": 999.0,
+            "text_analysis": -20.0,
         },
-        "modal_preference": {"video_animation": 99.0},
-        "knowledge_coordinates": [{"name": "fabricated", "status": "mastered"}],
-        "cognitive_blindspots": [],
-        "drive_intent": {"type": "casual", "intensity": 10.0},
-        "discipline_badge": {"subject": "hacked", "level": "advanced", "streak_days": 999},
+        "guidance_level_suggestion": {
+            "recommended": "L9",
+            "reason": "保留这个有效理由。",
+        },
+        "knowledge_coordinates": [
+            {"name": "fabricated", "status": "mastered"},
+            {"name": "函数", "status": "invalid"},
+            {"name": "导数", "status": "learning"},
+        ],
+        "cognitive_blindspots": [
+            {"name": "fabricated", "error_count": 99, "severity": "high"},
+            {"name": "导数", "error_count": -3, "severity": "invalid"},
+        ],
+        "drive_intent": {"type": "invalid", "intensity": 500.0},
+        "discipline_badge": {"subject": "hacked", "level": "advanced", "streak_days": -1},
     })
     provider = FakeChatProvider(output=llm_output)
 
     result = asyncio.run(
-        generate_profile_with_llm(_build_request(), rule_result, provider)
+        generate_profile_with_llm(request, rule_result, provider)
     )
 
     assert result is not None
-    assert result.guidance_level_suggestion.reason == "加强版理由。"
+    assert result.modal_preference.video_animation == 100.0
+    assert result.modal_preference.text_analysis == 0.0
     assert result.guidance_level_suggestion.recommended == "L2"
+    assert result.guidance_level_suggestion.reason == "保留这个有效理由。"
+    assert [(item.name, item.status) for item in result.knowledge_coordinates] == [("导数", "learning")]
+    assert [(item.name, item.error_count, item.severity) for item in result.cognitive_blindspots] == [("导数", 0, "medium")]
+    assert result.drive_intent == rule_result.drive_intent
+    assert result.discipline_badge.subject == "course-1"
+    assert result.discipline_badge.level == "advanced"
+    assert result.discipline_badge.streak_days == rule_result.discipline_badge.streak_days
+
+
+def test_generate_profile_with_llm_fills_missing_fields_from_rule_result() -> None:
+    import json as _json
+    from agent_service.agents.profile import generate_profile_with_llm
+
+    request = _build_request()
+    rule_result = generate_profile_data(request)
+    provider = FakeChatProvider(output=_json.dumps({
+        "guidance_level_suggestion": {
+            "reason": "只增强理由，其余字段沿用规则结果。",
+        },
+    }))
+
+    result = asyncio.run(generate_profile_with_llm(request, rule_result, provider))
+
+    assert result is not None
+    assert result.guidance_level_suggestion.reason == "只增强理由，其余字段沿用规则结果。"
+    assert result.guidance_level_suggestion.recommended == rule_result.guidance_level_suggestion.recommended
     assert result.modal_preference == rule_result.modal_preference
     assert result.knowledge_coordinates == rule_result.knowledge_coordinates
     assert result.cognitive_blindspots == rule_result.cognitive_blindspots

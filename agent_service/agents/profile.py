@@ -50,7 +50,7 @@ async def generate_profile_with_llm(
         ]
         raw = await chat_provider.complete(messages)
         data = _parse_profile_json(raw)
-        return _enrich_profile_result(rule_result, data)
+        return _enrich_profile_result(request, rule_result, data)
     except Exception:
         logger.warning("LLM profile enrichment failed, falling back to rule-based", exc_info=True)
         return None
@@ -67,15 +67,37 @@ def _parse_profile_json(raw: str) -> dict:
     return data
 
 
-def _enrich_profile_result(rule_result: ProfileData, llm_data: dict) -> ProfileData:
+def _enrich_profile_result(request: ProfileGenerateRequest, rule_result: ProfileData, llm_data: dict) -> ProfileData:
     enriched = rule_result.model_copy(deep=True)
+    observed_names = _observed_profile_names(request, rule_result)
 
-    llm_reason = _extract_llm_reason(llm_data)
-    if llm_reason and enriched.guidance_level_suggestion:
-        enriched.guidance_level_suggestion = GuidanceLevelSuggestion(
-            recommended=enriched.guidance_level_suggestion.recommended,
-            reason=llm_reason,
-        )
+    enriched.modal_preference = _coerce_modal_preference(
+        llm_data.get("modal_preference"),
+        rule_result.modal_preference,
+    )
+    enriched.guidance_level_suggestion = _coerce_guidance_level(
+        llm_data.get("guidance_level_suggestion"),
+        rule_result.guidance_level_suggestion,
+    )
+    enriched.knowledge_coordinates = _coerce_knowledge_coordinates(
+        llm_data.get("knowledge_coordinates"),
+        rule_result.knowledge_coordinates,
+        observed_names,
+    )
+    enriched.cognitive_blindspots = _coerce_cognitive_blindspots(
+        llm_data.get("cognitive_blindspots"),
+        rule_result.cognitive_blindspots,
+        observed_names,
+    )
+    enriched.drive_intent = _coerce_drive_intent(
+        llm_data.get("drive_intent"),
+        rule_result.drive_intent,
+    )
+    enriched.discipline_badge = _coerce_discipline_badge(
+        llm_data.get("discipline_badge"),
+        rule_result.discipline_badge,
+        request.course_id,
+    )
 
     return enriched
 
@@ -88,6 +110,133 @@ def _extract_llm_reason(llm_data: dict) -> str | None:
     if isinstance(reason, str) and reason.strip():
         return reason.strip()
     return None
+
+
+def _coerce_modal_preference(raw, fallback: ModalPreference | None) -> ModalPreference | None:
+    if not isinstance(raw, dict):
+        return fallback
+    base = fallback or ModalPreference()
+    return ModalPreference(
+        video_animation=_coerce_score(raw.get("video_animation"), base.video_animation),
+        chart_logic=_coerce_score(raw.get("chart_logic"), base.chart_logic),
+        text_analysis=_coerce_score(raw.get("text_analysis"), base.text_analysis),
+        code_practice=_coerce_score(raw.get("code_practice"), base.code_practice),
+        formula_derivation=_coerce_score(raw.get("formula_derivation"), base.formula_derivation),
+    )
+
+
+def _coerce_guidance_level(raw, fallback: GuidanceLevelSuggestion | None) -> GuidanceLevelSuggestion | None:
+    if not isinstance(raw, dict):
+        return fallback
+    base = fallback or GuidanceLevelSuggestion()
+    recommended = raw.get("recommended")
+    if recommended not in _VALID_GUIDANCE_LEVELS:
+        recommended = base.recommended
+    reason = raw.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        reason = base.reason
+    return GuidanceLevelSuggestion(recommended=recommended, reason=reason)
+
+
+def _coerce_knowledge_coordinates(
+    raw,
+    fallback: list[KnowledgeCoordinate],
+    observed_names: set[str],
+) -> list[KnowledgeCoordinate]:
+    if not isinstance(raw, list):
+        return fallback
+    result: list[KnowledgeCoordinate] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        status = item.get("status")
+        if not isinstance(name, str) or name not in observed_names or name in seen:
+            continue
+        if status not in _VALID_KNOWLEDGE_STATUSES:
+            continue
+        result.append(KnowledgeCoordinate(name=name, status=status))
+        seen.add(name)
+    return result or fallback
+
+
+def _coerce_cognitive_blindspots(
+    raw,
+    fallback: list[CognitiveBlindspot],
+    observed_names: set[str],
+) -> list[CognitiveBlindspot]:
+    if not isinstance(raw, list):
+        return fallback
+    result: list[CognitiveBlindspot] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or name not in observed_names or name in seen:
+            continue
+        severity = item.get("severity")
+        if severity not in _VALID_BLINDSPOT_SEVERITIES:
+            severity = "medium"
+        result.append(CognitiveBlindspot(
+            name=name,
+            error_count=_coerce_non_negative_int(item.get("error_count"), 0),
+            severity=severity,
+        ))
+        seen.add(name)
+    return result or fallback
+
+
+def _coerce_drive_intent(raw, fallback: DriveIntent | None) -> DriveIntent | None:
+    if not isinstance(raw, dict):
+        return fallback
+    intent_type = raw.get("type")
+    if intent_type not in _VALID_DRIVE_INTENTS:
+        return fallback
+    return DriveIntent(
+        type=intent_type,
+        intensity=_coerce_score(raw.get("intensity"), fallback.intensity if fallback else None),
+    )
+
+
+def _coerce_discipline_badge(
+    raw,
+    fallback: DisciplineBadge | None,
+    course_id: str,
+) -> DisciplineBadge | None:
+    if not isinstance(raw, dict):
+        return fallback
+    base = fallback or DisciplineBadge(subject=course_id, level=None, streak_days=0)
+    level = raw.get("level")
+    if not isinstance(level, str) or not level.strip():
+        level = base.level
+    return DisciplineBadge(
+        subject=course_id,
+        level=level,
+        streak_days=_coerce_non_negative_int(raw.get("streak_days"), base.streak_days or 0),
+    )
+
+
+def _observed_profile_names(request: ProfileGenerateRequest, rule_result: ProfileData) -> set[str]:
+    names = {item.chapter for item in request.quiz_history if item.chapter}
+    names.update(item.name for item in rule_result.knowledge_coordinates)
+    names.update(item.name for item in rule_result.cognitive_blindspots)
+    return {name for name in names if name}
+
+
+def _coerce_score(value, fallback: float | None) -> float | None:
+    if isinstance(value, int | float):
+        return max(0.0, min(100.0, float(value)))
+    return fallback
+
+
+def _coerce_non_negative_int(value, fallback: int) -> int:
+    if isinstance(value, int | float):
+        coerced = int(value)
+        if coerced >= 0:
+            return coerced
+    return fallback
 
 
 def _build_modal_preference(request: ProfileGenerateRequest) -> ModalPreference:
@@ -212,3 +361,7 @@ def _blindspot_severity(score: float) -> str:
 
 logger = get_logger(__name__)
 _MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+_VALID_GUIDANCE_LEVELS = {"L1", "L2", "L3"}
+_VALID_KNOWLEDGE_STATUSES = {"mastered", "learning"}
+_VALID_BLINDSPOT_SEVERITIES = {"high", "medium", "low"}
+_VALID_DRIVE_INTENTS = {"exam_sprint", "daily_homework", "casual"}

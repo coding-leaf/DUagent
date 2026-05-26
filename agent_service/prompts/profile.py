@@ -5,18 +5,21 @@ from agent_service.schemas.profile import ProfileData, ProfileGenerateRequest
 
 def build_profile_system_prompt() -> str:
     return (
-        "你是 EDUagent 的画像分析助手。根据用户的练习历史、资源使用统计、学习频率和系统已计算的画像数据，"
-        "为引导级别建议生成个性化的理由（reason）文本。\n\n"
-        "画像的结构字段（recommended 引导级别、modal_preference 模态偏好、knowledge_coordinates 知识坐标、"
-        "cognitive_blindspots 认知盲区、drive_intent 驱动意图、discipline_badge 学科徽章）已由系统计算确定，"
-        "你不需要也不能修改这些字段。\n\n"
-        "输出必须是一个 JSON 对象，包含完整的 ProfileData 结构，但除 guidance_level_suggestion.reason 外的"
-        "所有字段应原样复制输入值。只需重写 reason 文本。\n\n"
-        "reason 要求：\n"
-        "- 基于用户的实际练习数据（正确率、薄弱章节、错误分布）给出具体理由\n"
-        "- 避免泛泛而谈，要引用具体章节名和分数\n"
-        "- 风格亲切、有建设性\n"
-        "- 1-3 句话\n\n"
+        "你是 EDUagent 的学习画像分析助手。你需要根据用户练习历史、资源使用、近期学习强度和系统规则画像，"
+        "生成完整 ProfileData JSON 对象。\n\n"
+        "输出字段必须完整：\n"
+        "- modal_preference: {video_animation, chart_logic, text_analysis, code_practice, formula_derivation}，每项 0-100\n"
+        "- guidance_level_suggestion: {recommended, reason}，recommended 只能是 L1/L2/L3\n"
+        "- knowledge_coordinates: [{name, status}]，status 只能是 mastered/learning\n"
+        "- cognitive_blindspots: [{name, error_count, severity}]，severity 只能是 high/medium/low\n"
+        "- drive_intent: {type, intensity}，type 只能是 exam_sprint/daily_homework/casual，intensity 为 0-100\n"
+        "- discipline_badge: {subject, level, streak_days}\n\n"
+        "约束：\n"
+        "- 不要编造输入中没有出现的章节、知识点或课程 ID\n"
+        "- 结构字段可以基于证据修正，但必须与输入数据一致\n"
+        "- 分数、强度和偏好值必须在 0-100 范围内\n"
+        "- reason 要引用具体章节、正确率、资源使用或学习频率，避免泛泛而谈\n"
+        "- 如果证据不足，沿用系统规则画像中的对应字段\n"
         "只输出 JSON 对象，不要加 markdown 代码块标记，不要加任何其他文字。"
     )
 
@@ -29,12 +32,27 @@ def build_profile_user_message(
     parts.append(f"用户ID：{request.user_id}")
     parts.append(f"课程ID：{request.course_id}")
     parts.append("")
+    parts.append("画像生成要求：请输出完整 ProfileData JSON。若某字段证据不足，请沿用系统已计算画像。")
+    parts.append("")
     parts.append("练习历史：")
     for item in request.quiz_history:
         parts.append(
             f"  - 章节：{item.chapter or '未知'}，正确率：{item.score}%，"
             f"时间：{item.created_at.isoformat()}"
         )
+    if request.quiz_history:
+        scores = [item.score for item in request.quiz_history]
+        first = request.quiz_history[0]
+        last = request.quiz_history[-1]
+        weak = [item for item in request.quiz_history if item.score < 70]
+        parts.append(
+            f"练习摘要：平均正确率 {sum(scores) / len(scores):.1f}%，"
+            f"首次 {first.chapter or '未知'} {first.score}%，"
+            f"最近 {last.chapter or '未知'} {last.score}%，"
+            f"低于70%的记录 {len(weak)} 条"
+        )
+    else:
+        parts.append("练习摘要：无练习历史")
     parts.append("")
     if request.resource_usage_stats:
         stats = request.resource_usage_stats

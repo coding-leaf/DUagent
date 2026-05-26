@@ -19,7 +19,7 @@
 | `GET /agent/v1/health` | 已完成基础版 | Qdrant 探针 + uptime；模型状态后续统一定义 |
 | `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
 | `POST /agent/v1/profile/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 guidance_level_suggestion.reason |
-| `POST /agent/v1/evaluation/generate` | 规则版已完成 | 基于学习进度、练习结果、资源使用生成评估 |
+| `POST /agent/v1/evaluation/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 summary_text；表格全保持规则版 |
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
 | `POST /agent/v1/assessment/generate-questions` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 骨架占位题 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
@@ -46,8 +46,8 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**201 passed**（2026-05-26 profile/generate LLM 接入后验证）
-- profile/generate LLM：12 个测试（含 8 个新 LLM enrichment 用例，覆盖 reason 增强/字段保护/不原地修改/chat_provider=None/无效JSON/异常/markdown fence/API fallback）
+- `./.venv/bin/pytest -q`：**208 passed**（2026-05-26 evaluation/generate LLM 接入后验证）
+- evaluation/generate LLM：11 个测试（含 7 个新 LLM enrichment 用例，覆盖 summary 增强/不原地修改/chat_provider=None/无效JSON/异常/markdown fence/API fallback）
 - resources/generate：LLM 并行生成四类资源 + skeleton fallback，webhook shape 不变，新增 8 个测试
 - learning-path/generate：LLM + rule-based fallback
 - assessment/generate-questions：LLM + skeleton fallback
@@ -56,6 +56,6 @@
 
 ## 下一步
 
-- 短期：profile/generate LLM 画像刷新 ← **已完成**
-- 短期：evaluation/generate LLM summary —— 补强 summary_text，其余字段继续规则生成；失败 fallback 当前规则版。
+- 短期：evaluation/generate LLM summary ← **已完成**
+- 中期：resources/generate 接课程知识 RAG —— 根据 course_id 从 course_knowledge 检索/读取课程资料
 - 长期：Qdrant server 模式 / shared client 改造

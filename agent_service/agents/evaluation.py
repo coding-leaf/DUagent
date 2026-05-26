@@ -1,5 +1,13 @@
+import json
+import re
 from collections import defaultdict
 
+from agent_service.core.ai import ChatMessage
+from agent_service.core.logging import get_logger
+from agent_service.prompts.evaluation import (
+    build_evaluation_system_prompt,
+    build_evaluation_user_message,
+)
 from agent_service.schemas.evaluation import EvaluationData, EvaluationGenerateRequest, TableColumn, TableData
 
 
@@ -99,3 +107,50 @@ def _mastery_level(score: float) -> str:
     if score >= 60:
         return "learning"
     return "weak"
+
+
+async def generate_evaluation_with_llm(
+    request: EvaluationGenerateRequest,
+    rule_result: EvaluationData,
+    chat_provider,
+) -> EvaluationData | None:
+    """尝试用 LLM 增强规则版评估结果，输入请求、规则结果和 chat provider，输出增强后的 EvaluationData 或 None（降级）。
+
+    以 rule_result 为基底，只允许 LLM 替换 summary_text。使用 model_copy 构造新对象，不原地修改 rule_result。
+    """
+    if chat_provider is None:
+        return None
+    try:
+        messages = [
+            ChatMessage(role="system", content=build_evaluation_system_prompt()),
+            ChatMessage(role="user", content=build_evaluation_user_message(request, rule_result)),
+        ]
+        raw = await chat_provider.complete(messages)
+        data = _parse_evaluation_json(raw)
+        return _enrich_evaluation_result(rule_result, data)
+    except Exception:
+        logger.warning("LLM evaluation enrichment failed, falling back to rule-based", exc_info=True)
+        return None
+
+
+def _parse_evaluation_json(raw: str) -> dict:
+    text = raw.strip()
+    match = _MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("LLM output is not a JSON object")
+    return data
+
+
+def _enrich_evaluation_result(rule_result: EvaluationData, llm_data: dict) -> EvaluationData:
+    enriched = rule_result.model_copy(deep=True)
+    summary = llm_data.get("summary_text")
+    if isinstance(summary, str) and summary.strip():
+        enriched.summary_text = summary.strip()
+    return enriched
+
+
+logger = get_logger(__name__)
+_MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)

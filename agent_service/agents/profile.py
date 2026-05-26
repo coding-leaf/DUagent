@@ -1,5 +1,13 @@
+import json
+import re
 from collections import defaultdict
 
+from agent_service.core.ai import ChatMessage
+from agent_service.core.logging import get_logger
+from agent_service.prompts.profile import (
+    build_profile_system_prompt,
+    build_profile_user_message,
+)
 from agent_service.schemas.profile import (
     CognitiveBlindspot,
     DisciplineBadge,
@@ -21,6 +29,65 @@ def generate_profile_data(request: ProfileGenerateRequest) -> ProfileData:
         drive_intent=_build_drive_intent(request),
         discipline_badge=_build_discipline_badge(request),
     )
+
+
+async def generate_profile_with_llm(
+    request: ProfileGenerateRequest,
+    rule_result: ProfileData,
+    chat_provider,
+) -> ProfileData | None:
+    """尝试用 LLM 增强规则版画像，输入请求、规则结果和 chat provider，输出增强后的 ProfileData 或 None（降级）。
+
+    以 rule_result 为基底，只允许 LLM 增强 guidance_level_suggestion.reason。
+    使用 model_copy 构造新对象，不原地修改 rule_result。
+    """
+    if chat_provider is None:
+        return None
+    try:
+        messages = [
+            ChatMessage(role="system", content=build_profile_system_prompt()),
+            ChatMessage(role="user", content=build_profile_user_message(request, rule_result)),
+        ]
+        raw = await chat_provider.complete(messages)
+        data = _parse_profile_json(raw)
+        return _enrich_profile_result(rule_result, data)
+    except Exception:
+        logger.warning("LLM profile enrichment failed, falling back to rule-based", exc_info=True)
+        return None
+
+
+def _parse_profile_json(raw: str) -> dict:
+    text = raw.strip()
+    match = _MARKDOWN_FENCE_PATTERN.search(text)
+    if match:
+        text = match.group(1).strip()
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("LLM output is not a JSON object")
+    return data
+
+
+def _enrich_profile_result(rule_result: ProfileData, llm_data: dict) -> ProfileData:
+    enriched = rule_result.model_copy(deep=True)
+
+    llm_reason = _extract_llm_reason(llm_data)
+    if llm_reason and enriched.guidance_level_suggestion:
+        enriched.guidance_level_suggestion = GuidanceLevelSuggestion(
+            recommended=enriched.guidance_level_suggestion.recommended,
+            reason=llm_reason,
+        )
+
+    return enriched
+
+
+def _extract_llm_reason(llm_data: dict) -> str | None:
+    guidance = llm_data.get("guidance_level_suggestion")
+    if not isinstance(guidance, dict):
+        return None
+    reason = guidance.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        return reason.strip()
+    return None
 
 
 def _build_modal_preference(request: ProfileGenerateRequest) -> ModalPreference:
@@ -141,3 +208,7 @@ def _blindspot_severity(score: float) -> str:
     if score < 70:
         return "medium"
     return "low"
+
+
+logger = get_logger(__name__)
+_MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)

@@ -207,8 +207,7 @@ def _parse_optional_agentscope_chat_response_text(response) -> str | None:
     if isinstance(content, str):
         return content
     if not isinstance(content, list):
-        raise ValueError("AgentScope chat response missing content list")
-
+        return _extract_structured_result_from_metadata(response)
     parts = []
     for block in content:
         if isinstance(block, str):
@@ -223,8 +222,25 @@ def _parse_optional_agentscope_chat_response_text(response) -> str | None:
         if isinstance(text, str):
             parts.append(text)
     if not parts:
-        return None
+        return _extract_structured_result_from_metadata(response)
     return "".join(parts)
+
+
+def _extract_structured_result_from_metadata(response) -> str | None:
+    import json
+
+    metadata = getattr(response, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    for key in ("model_text", "content", "text", "result"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    try:
+        return json.dumps(metadata, ensure_ascii=False)
+    except (TypeError, ValueError):
+        pass
+    return None
 
 
 def _to_agentscope_msgs(messages: Sequence[ChatMessage], msg_cls) -> list:

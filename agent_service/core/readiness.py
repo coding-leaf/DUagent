@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from agent_service.core.ai import ChatMessage, get_ai_providers
+from agent_service.core.ai import ChatMessage
 from agent_service.core.config import settings
 from agent_service.memory.qdrant_store import build_qdrant_store
 
@@ -32,15 +32,10 @@ async def build_readiness_report(
     reranker_provider=None,
     qdrant_probe: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
-    providers = get_ai_providers(
-        embedding_provider=embedding_provider,
-        reranker_provider=reranker_provider,
-        chat_provider=chat_provider,
-    )
     checks = {
-        "llm": await _check_llm(settings_obj, providers.chat, live),
-        "embedding": await _check_embedding(settings_obj, providers.embedding, live),
-        "reranker": await _check_reranker(settings_obj, providers.reranker, live),
+        "llm": await _check_llm(settings_obj, chat_provider, live),
+        "embedding": await _check_embedding(settings_obj, embedding_provider, live),
+        "reranker": await _check_reranker(settings_obj, reranker_provider, live),
         "qdrant": _check_qdrant(settings_obj, qdrant_probe),
     }
     status = "ready" if all(item["ok"] for item in checks.values()) else "degraded"

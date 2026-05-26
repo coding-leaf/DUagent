@@ -42,6 +42,8 @@
 - E2E smoke 验收工具已完成：`./.venv/bin/python -m agent_service.tools.smoke_all` 一次命令验证全部 9 接口最小可用。
 - Knowledge ingestion 闭环 smoke 已完成：ingest → retrieve → RAG context 端到端验证，幂等，fake embedding/Qdrant 隔离。
 - Qdrant collection 自动创建：`ensure_collection_exists()` 在 course_knowledge 和 user_memory 首次写入前确保 collection 存在，fresh Qdrant 不再报错。
+- Readiness 不再调用 `get_ai_providers()` 混用全局 settings，直接使用注入的 provider。
+- Structured output 结果可从 `ChatResponse.metadata` 提取，避免正文为空时路径失效。
 
 ## AgentScope 使用审查
 

@@ -39,6 +39,7 @@
 - embedding provider 已验证可返回 1024 维向量。
 - Provider readiness CLI 已完成：`./.venv/bin/python -m agent_service.tools.readiness_check` 默认检查配置与 provider 构建；`--live` 才发真实 LLM/Embedding/Reranker 探针。
 - tutoring/chat structured output 已接入：`generate_tutoring_model_response()` 优先用 AgentScope `structured_model` → 失败回落 `parse_tutoring_model_response()` → 再失败回落 rule-based；不改 SSE/API/schema。
+- E2E smoke 验收工具已完成：`./.venv/bin/python -m agent_service.tools.smoke_all` 一次命令验证全部 9 接口最小可用。
 
 ## AgentScope 使用审查
 
@@ -96,7 +97,8 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**226 passed**（2026-05-26 tutoring structured output 后验证）
+- `./.venv/bin/pytest -q`：**228 passed**（2026-05-26 E2E smoke 验收后验证）
+- E2E smoke_all：`./.venv/bin/python -m agent_service.tools.smoke_all` 覆盖全部 9 接口，9/9 PASS
 - Provider readiness CLI：5 个测试（默认不发请求、live 模式探针、live 失败降级、Qdrant 失败降级、CLI 导入）
 - evaluation/generate full enrichment：12 个测试（含 2 个新 full-table 用例，覆盖完整 EvaluationData + invalid/fabricated 行拒绝）
 - resources/generate RAG：22 个测试

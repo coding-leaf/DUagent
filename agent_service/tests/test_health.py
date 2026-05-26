@@ -42,6 +42,33 @@ def test_build_health_data_logs_probe_failure(caplog) -> None:
     assert "qdrant unavailable" in caplog.text
 
 
+def test_build_health_data_returns_empty_model_name_when_unconfigured(monkeypatch) -> None:
+    class FakeSettings:
+        LLM_PROVIDER = "none"
+        LLM_MODEL = None
+
+    monkeypatch.setattr("agent_service.agents.health.settings", FakeSettings())
+
+    data = build_health_data(qdrant_probe=lambda: True, monotonic_now=lambda: 100.0, started_at=100.0)
+
+    assert data["model_loaded"] is False
+    assert data["model_name"] == ""
+
+
+def test_health_data_matches_openapi() -> None:
+    from agent_service.schemas.common import HealthData
+
+    schema = HealthData.model_json_schema()
+    props = schema["properties"]
+
+    assert set(props.keys()) == {"status", "qdrant_connected", "model_loaded", "model_name", "uptime_seconds"}
+    assert props["status"]["type"] == "string"
+    assert props["qdrant_connected"]["type"] == "boolean"
+    assert props["model_loaded"]["type"] == "boolean"
+    assert props["model_name"]["type"] == "string"
+    assert props["uptime_seconds"]["type"] == "integer"
+
+
 def test_health_check_uses_json_wrapper() -> None:
     response = asyncio.run(health_check())
     payload = response.model_dump()

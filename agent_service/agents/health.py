@@ -30,7 +30,7 @@ def build_health_data(
         "status": "healthy" if qdrant_connected else "degraded",
         "qdrant_connected": qdrant_connected,
         "model_loaded": model_loaded,
-        "model_name": settings.LLM_MODEL if model_loaded else None,
+        "model_name": settings.LLM_MODEL if model_loaded else "",
         "uptime_seconds": max(0, int(monotonic_now() - started_at)),
     }
 

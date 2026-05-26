@@ -147,11 +147,74 @@ def _summarize_message(message: MemoryMessage) -> str:
 def _extract_facts(messages: list[MemoryMessage], existing_facts: set[str]) -> list[ExtractedFact]:
     facts = []
     for message in messages:
-        fact = _extract_blind_spot_fact(message)
-        if fact is None or fact.content in existing_facts:
-            continue
-        facts.append(fact)
+        for extractor in (_extract_blind_spot_fact, _extract_mastered_point_fact, _extract_cognitive_preference_fact):
+            fact = extractor(message)
+            if fact is not None and fact.content not in existing_facts:
+                existing_facts.add(fact.content)
+                facts.append(fact)
+                break
     return facts
+
+
+def _extract_mastered_point_fact(message: MemoryMessage) -> ExtractedFact | None:
+    if message.role != "user":
+        return None
+    content = message.content.strip()
+    for marker in ("已经掌握了", "学得不错", "都会做", "没什么问题", "很简单"):
+        if marker not in content:
+            continue
+        # try to extract knowledge point from text before the marker
+        before_marker = content.split(marker, 1)[0]
+        knowledge_point = _extract_knowledge_point(before_marker)
+        if not knowledge_point:
+            knowledge_point = _extract_knowledge_point(content)
+        if not knowledge_point:
+            return None
+        return ExtractedFact(
+            content=f"用户对{knowledge_point}掌握较好",
+            fact_type="mastered_point",
+            knowledge_point=knowledge_point,
+            confidence=0.75,
+        )
+    return None
+
+
+def _extract_cognitive_preference_fact(message: MemoryMessage) -> ExtractedFact | None:
+    if message.role != "user":
+        return None
+    content = message.content.strip()
+    preference_patterns = [
+        ("更喜欢看视频", "偏好视频学习"),
+        ("更喜欢看文档", "偏好文档阅读"),
+        ("更喜欢写代码", "偏好代码实践"),
+        ("习惯画图", "偏好图形化理解"),
+        ("一步一步", "偏好分步引导"),
+        ("直接给答案", "偏好直接解答"),
+        ("我学得比较慢", "学习节奏偏慢"),
+        ("我学得比较快", "学习节奏偏快"),
+    ]
+    for pattern, desc in preference_patterns:
+        if pattern in content:
+            return ExtractedFact(
+                content=f"用户{desc}",
+                fact_type="cognitive_preference",
+                knowledge_point=None,
+                confidence=0.7,
+            )
+    return None
+
+
+def _extract_knowledge_point(text: str) -> str | None:
+    import re as _re
+    # split at common phrase boundaries and take the first meaningful segment
+    parts = _re.split(r"[,，。这那在了的是]", text)
+    for part in parts:
+        part = part.strip()
+        # find a short, non-filler word (2-6 chars)
+        if _re.fullmatch(r"[一-鿿\w]{2,6}", part):
+            if part not in ("这个问题", "这个知识点", "比较简单", "没什么", "都可以"):
+                return part
+    return None
 
 
 def _extract_blind_spot_fact(message: MemoryMessage) -> ExtractedFact | None:

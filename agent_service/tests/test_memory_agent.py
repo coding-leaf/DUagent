@@ -183,6 +183,61 @@ def test_compress_and_persist_memory_degrades_when_store_init_fails(caplog, monk
     assert "Memory persistence failed" in caplog.text
 
 
+def test_compress_memory_extracts_mastered_point_fact() -> None:
+    memory = importlib.import_module("agent_service.agents.memory")
+
+    result = memory.compress_memory_data(
+        _build_request(
+            old_summary=None,
+            messages=[
+                MemoryMessage(role="user", content="函数这一章我已经掌握了，题目都会做", timestamp="2026-05-22T10:00:00Z"),
+            ],
+        )
+    )
+
+    mastered = [f for f in result.extracted_facts if f.fact_type == "mastered_point"]
+    assert len(mastered) == 1
+    assert mastered[0].knowledge_point == "函数"
+    assert mastered[0].confidence == 0.75
+
+
+def test_compress_memory_extracts_cognitive_preference_fact() -> None:
+    memory = importlib.import_module("agent_service.agents.memory")
+
+    result = memory.compress_memory_data(
+        _build_request(
+            old_summary=None,
+            messages=[
+                MemoryMessage(role="user", content="我更喜欢看视频学习，看文档容易走神", timestamp="2026-05-22T10:00:00Z"),
+            ],
+        )
+    )
+
+    cognitive = [f for f in result.extracted_facts if f.fact_type == "cognitive_preference"]
+    assert len(cognitive) == 1
+    assert "视频" in (cognitive[0].content or "")
+    assert cognitive[0].confidence == 0.7
+
+
+def test_compress_memory_extracts_all_three_fact_types() -> None:
+    memory = importlib.import_module("agent_service.agents.memory")
+
+    result = memory.compress_memory_data(
+        _build_request(
+            old_summary=None,
+            messages=[
+                MemoryMessage(role="user", content="我总是在导数定义上卡住", timestamp="2026-05-22T10:00:00Z"),
+                MemoryMessage(role="user", content="函数这一章学得不错，没什么问题", timestamp="2026-05-22T10:01:00Z"),
+                MemoryMessage(role="user", content="我更喜欢一步一步来，直接给答案我反而理解不了", timestamp="2026-05-22T10:02:00Z"),
+            ],
+        )
+    )
+
+    types = {f.fact_type for f in result.extracted_facts}
+    assert types == {"blind_spot", "mastered_point", "cognitive_preference"}
+    assert len(result.extracted_facts) == 3
+
+
 # ── LLM compress tests ──────────────────────────────────────────────
 
 

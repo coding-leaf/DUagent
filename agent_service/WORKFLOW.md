@@ -21,7 +21,7 @@
 | `POST /agent/v1/profile/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 guidance_level_suggestion.reason |
 | `POST /agent/v1/evaluation/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM enrichment → 规则版；LLM 只增强 summary_text；表格全保持规则版 |
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
-| `POST /agent/v1/assessment/generate-questions` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 骨架占位题 |
+| `POST /agent/v1/assessment/generate-questions` | LLM + RAG + fallback 已完成 | 降级链：LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
 | `POST /agent/v1/resources/generate` | LLM + RAG + fallback 已完成 | 202 + 后台任务；LLM 并行生成四类资源 + course_knowledge RAG 检索注入 prompt；skeleton fallback → webhook completed |
 | `POST /agent/v1/memory/compress` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 规则版；LLM 提取 3 种 fact 类型 + 生成摘要；Qdrant 写入 best-effort |
@@ -56,7 +56,7 @@
 
 ## 下一步
 
-- 短期：LLM 配置文档 + health 模型状态 + 无 provider 时日志降噪 ← **已完成**
-- 中期：assessment/generate-questions prompt 质量提升
+- 短期：assessment/generate-questions RAG + 质量约束 ← **已完成**
+- 中期：memory/compress 规则增强（mastered_point / cognitive_preference 规则提取）
 - 远期：Qdrant server 模式 / shared client 改造
 - 长期：Qdrant server 模式 / shared client 改造

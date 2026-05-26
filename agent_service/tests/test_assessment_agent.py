@@ -493,6 +493,117 @@ def test_evaluate_with_llm_handles_markdown_wrapped_json() -> None:
     assert "正确答案是B" in (result.per_question_results[0].explanation or "")
 
 
+# ── generate-questions RAG tests ───────────────────────────────────
+
+
+class TestQuestionRAG:
+    def _request(self, **kwargs) -> QuestionGenerateRequest:
+        defaults = dict(
+            user_id="u1", course_id="data-structures",
+            chapter="线性表", knowledge_point="顺序存储结构",
+            count=2, question_types=["single_choice"],
+        )
+        defaults.update(kwargs)
+        return QuestionGenerateRequest(**defaults)
+
+    def test_rag_context_injected_into_llm_user_message(self) -> None:
+        import json as _json
+        from unittest.mock import patch
+        from agent_service.agents.assessment import generate_questions_with_llm
+
+        class FakeChatProvider:
+            async def complete(self, messages):
+                user_msg = messages[1].content
+                assert "线性表是相同类型" in user_msg
+                return _json.dumps([
+                    {"type": "single_choice", "content": "线性表是什么？", "answer": "A",
+                     "explanation": "线性表定义为...", "knowledge_point": "线性表", "difficulty": "easy",
+                     "options": [{"key": "A", "text": "相同类型元素的有限序列"}, {"key": "B", "text": "不同类型"}]}
+                ])
+
+        context = "线性表是相同类型数据元素的有限序列。\n---\n顺序存储用一组连续地址存放元素。"
+        provider = FakeChatProvider()
+
+        result = asyncio.run(
+            generate_questions_with_llm(
+                self._request(), provider, course_knowledge_context=context
+            )
+        )
+        assert result is not None
+        assert len(result) == 1
+
+    def test_generate_questions_with_llm_accepts_none_context(self) -> None:
+        import json as _json
+        from agent_service.agents.assessment import generate_questions_with_llm
+
+        class FakeChatProvider:
+            async def complete(self, messages):
+                return _json.dumps([
+                    {"type": "short_answer", "content": "什么是导数？", "answer": "变化率",
+                     "explanation": "导数定义为...", "knowledge_point": "导数", "difficulty": "medium"}
+                ])
+
+        provider = FakeChatProvider()
+        result = asyncio.run(
+            generate_questions_with_llm(
+                self._request(), provider, course_knowledge_context=None
+            )
+        )
+        assert result is not None
+        assert result[0].type == "short_answer"
+
+    def test_retrieval_returns_empty_when_embedding_is_none(self) -> None:
+        from agent_service.agents.assessment import _build_question_generation_knowledge_context
+
+        context = asyncio.run(
+            _build_question_generation_knowledge_context(self._request(), None)
+        )
+        assert context == ""
+
+    def test_retrieval_returns_empty_on_qdrant_failure(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.assessment import _build_question_generation_knowledge_context
+
+        class FakeEmbedding:
+            async def embed_texts(self, texts):
+                return [[0.1, 0.2, 0.3]]
+
+        class FailingVectorStore:
+            async def search_course_knowledge(self, course_id, vector, limit=5):
+                raise RuntimeError("Qdrant unavailable")
+
+        with patch(
+            "agent_service.memory.vector_store.QdrantVectorStore",
+            return_value=FailingVectorStore(),
+        ):
+            context = asyncio.run(
+                _build_question_generation_knowledge_context(
+                    self._request(), FakeEmbedding()
+                )
+            )
+        assert context == ""
+
+    def test_api_falls_back_to_skeleton_when_llm_returns_none(self) -> None:
+        from unittest.mock import patch
+        from agent_service.api.v1.assessment import generate_questions
+
+        async def _fake_retrieval(*args, **kwargs):
+            return ""
+
+        async def _fake_llm(*args, **kwargs):
+            return None
+
+        with (
+            patch("agent_service.api.v1.assessment._build_question_generation_knowledge_context", _fake_retrieval),
+            patch("agent_service.api.v1.assessment.generate_questions_with_llm", _fake_llm),
+        ):
+            response = asyncio.run(generate_questions(self._request()))
+
+        assert response.code == 200
+        assert len(response.data.questions) == 2
+        assert "完成一道单选题" in response.data.questions[0].content
+
+
 def _build_request(
     questions: list[AssessmentQuestion],
     answers: list[AssessmentAnswer],

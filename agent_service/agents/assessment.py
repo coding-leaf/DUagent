@@ -324,17 +324,69 @@ logger = get_logger(__name__)
 _MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
 
 
+def _truncate_chunk(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "..."
+
+
+async def _build_question_generation_knowledge_context(
+    request: QuestionGenerateRequest,
+    embedding_provider,
+    limit: int = 5,
+) -> str:
+    """检索课程知识库中与出题请求相关的内容，输入请求和 embedding provider，输出拼接后的上下文字符串。
+
+    无 embedding provider 或检索失败时返回空字符串，不抛异常。
+    """
+    if embedding_provider is None:
+        return ""
+    if not request.course_id:
+        return ""
+    try:
+        from agent_service.memory.vector_store import QdrantVectorStore
+
+        query_text = " ".join(
+            part for part in [request.knowledge_point, request.chapter, request.course_id]
+            if part
+        )
+        vectors = await embedding_provider.embed_texts([query_text])
+        store = QdrantVectorStore()
+        results = await store.search_course_knowledge(
+            request.course_id, vectors[0], limit=limit
+        )
+        if not results:
+            return ""
+        chunks = [_truncate_chunk(r.text, 1000) for r in results if r.text]
+        if not chunks:
+            return ""
+        return "\n---\n".join(chunks)
+    except Exception:
+        logger.warning(
+            "Course knowledge retrieval failed for question generation: course_id=%s",
+            request.course_id,
+            exc_info=True,
+        )
+        return ""
+
+
 async def generate_questions_with_llm(
     request: QuestionGenerateRequest,
     chat_provider,
+    course_knowledge_context: str | None = None,
 ) -> list[GeneratedQuestion] | None:
-    """尝试用 LLM 生成题目，输入请求和 chat provider，输出 GeneratedQuestion 列表或 None（降级）。"""
+    """尝试用 LLM 生成题目，输入请求、chat provider 和可选的 RAG 上下文，输出 GeneratedQuestion 列表或 None（降级）。"""
     if chat_provider is None:
         return None
     try:
         messages = [
             ChatMessage(role="system", content=build_question_generation_system_prompt()),
-            ChatMessage(role="user", content=build_question_generation_user_message(request)),
+            ChatMessage(
+                role="user",
+                content=build_question_generation_user_message(
+                    request, course_knowledge_context=course_knowledge_context
+                ),
+            ),
         ]
         raw = await chat_provider.complete(messages)
         parsed = _parse_question_json(raw)

@@ -2,7 +2,6 @@ import asyncio
 from unittest.mock import patch
 
 from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
-from agent_service.core.ai import UnconfiguredChatProvider
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
 
@@ -81,7 +80,7 @@ def test_react_response_returns_parsed_model_on_valid_json() -> None:
 def test_react_response_returns_none_for_non_agentscope_provider() -> None:
     result = asyncio.run(
         generate_tutoring_react_response(
-            _make_request(), _make_context(), UnconfiguredChatProvider()
+            _make_request(), _make_context(), None
         )
     )
     assert result is None

@@ -31,14 +31,9 @@ def test_unconfigured_ai_providers_fail_explicitly(monkeypatch) -> None:
 
     providers = get_ai_providers()
 
-    with pytest.raises(NotImplementedError, match="Embedding provider is not configured"):
-        asyncio.run(providers.embedding.embed_texts(["一次函数"]))
-
-    with pytest.raises(NotImplementedError, match="Reranker provider is not configured"):
-        asyncio.run(providers.reranker.score("一次函数", ["一次函数图像性质"]))
-
-    with pytest.raises(NotImplementedError, match="Chat provider is not configured"):
-        asyncio.run(providers.chat.complete([ChatMessage(role="user", content="解释一次函数")]))
+    assert providers.embedding is None
+    assert providers.reranker is None
+    assert providers.chat is None
 
 
 def test_get_ai_providers_accepts_injected_providers() -> None:

@@ -3,13 +3,19 @@ import asyncio
 from agent_service.api.v1.health import build_health_data, health_check
 
 
-def test_build_health_data_reports_qdrant_and_uptime() -> None:
+def test_build_health_data_reports_qdrant_and_uptime(monkeypatch) -> None:
+    class FakeSettings:
+        LLM_PROVIDER = "none"
+        LLM_MODEL = None
+
+    monkeypatch.setattr("agent_service.api.v1.health.settings", FakeSettings())
+
     data = build_health_data(qdrant_probe=lambda: True, monotonic_now=lambda: 125.5, started_at=100.0)
 
     assert data["status"] == "healthy"
     assert data["qdrant_connected"] is True
     assert data["model_loaded"] is False
-    assert data["model_name"] == "none"
+    assert data["model_name"] is None
     assert data["uptime_seconds"] == 25
 
 

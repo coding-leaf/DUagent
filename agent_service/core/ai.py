@@ -33,24 +33,9 @@ class ChatProvider(Protocol):
 
 @dataclass(frozen=True)
 class AIProviders:
-    embedding: EmbeddingProvider
-    reranker: RerankerProvider
-    chat: ChatProvider
-
-
-class UnconfiguredEmbeddingProvider:
-    async def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
-        raise NotImplementedError("Embedding provider is not configured")
-
-
-class UnconfiguredRerankerProvider:
-    async def score(self, query: str, documents: Sequence[str]) -> list[float]:
-        raise NotImplementedError("Reranker provider is not configured")
-
-
-class UnconfiguredChatProvider:
-    async def complete(self, messages: Sequence[ChatMessage]) -> str:
-        raise NotImplementedError("Chat provider is not configured")
+    embedding: EmbeddingProvider | None
+    reranker: RerankerProvider | None
+    chat: ChatProvider | None
 
 
 class AgentScopeEmbeddingProvider:
@@ -140,7 +125,7 @@ def get_ai_providers(
     )
 
 
-def _build_embedding_provider_from_settings() -> EmbeddingProvider:
+def _build_embedding_provider_from_settings() -> EmbeddingProvider | None:
     if (
         getattr(settings, "EMBEDDING_PROVIDER", None) == "agentscope_openai"
         and getattr(settings, "EMBEDDING_BASE_URL", None)
@@ -157,10 +142,10 @@ def _build_embedding_provider_from_settings() -> EmbeddingProvider:
                 base_url=settings.EMBEDDING_BASE_URL,
             )
         )
-    return UnconfiguredEmbeddingProvider()
+    return None
 
 
-def _build_chat_provider_from_settings() -> ChatProvider:
+def _build_chat_provider_from_settings() -> ChatProvider | None:
     if (
         getattr(settings, "LLM_PROVIDER", None) == "agentscope_openai"
         and getattr(settings, "LLM_BASE_URL", None)
@@ -183,10 +168,10 @@ def _build_chat_provider_from_settings() -> ChatProvider:
             formatter=DeepSeekChatFormatter(),
             json_mode=json_mode_enabled,
         )
-    return UnconfiguredChatProvider()
+    return None
 
 
-def _build_reranker_provider_from_settings() -> RerankerProvider:
+def _build_reranker_provider_from_settings() -> RerankerProvider | None:
     if (
         getattr(settings, "RERANKER_PROVIDER", None) == "openai_compatible"
         and getattr(settings, "RERANKER_BASE_URL", None)
@@ -198,7 +183,7 @@ def _build_reranker_provider_from_settings() -> RerankerProvider:
             api_key=settings.RERANKER_API_KEY,
             model=settings.RERANKER_MODEL,
         )
-    return UnconfiguredRerankerProvider()
+    return None
 
 
 def _post_openai_compatible_json(url: str, headers: dict[str, str], payload: dict) -> dict:

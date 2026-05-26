@@ -28,11 +28,13 @@ def build_health_data(
         logger.warning("Health probe failed: %s", exc)
         qdrant_connected = False
 
+    model_loaded = settings.LLM_PROVIDER != "none" and bool(settings.LLM_MODEL)
+
     return {
         "status": "healthy" if qdrant_connected else "degraded",
         "qdrant_connected": qdrant_connected,
-        "model_loaded": False,
-        "model_name": "none",
+        "model_loaded": model_loaded,
+        "model_name": settings.LLM_MODEL if model_loaded else None,
         "uptime_seconds": max(0, int(monotonic_now() - started_at)),
     }
 

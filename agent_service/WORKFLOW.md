@@ -56,7 +56,7 @@
 
 ## 下一步
 
-- 短期：evaluation/generate LLM summary ← **已完成**
-- 短期：resources/generate 接课程知识 RAG ← **已完成**
-- 短期：LLM 配置文档 + health 模型状态 + 无 provider 时日志降噪
+- 短期：LLM 配置文档 + health 模型状态 + 无 provider 时日志降噪 ← **已完成**
+- 中期：assessment/generate-questions prompt 质量提升
+- 远期：Qdrant server 模式 / shared client 改造
 - 长期：Qdrant server 模式 / shared client 改造

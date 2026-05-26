@@ -102,12 +102,9 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**228 passed**（2026-05-26 E2E smoke 验收后验证）
-- E2E smoke_all：`./.venv/bin/python -m agent_service.tools.smoke_all` 覆盖全部 9 接口，9/9 PASS
-- Provider readiness CLI：5 个测试（默认不发请求、live 模式探针、live 失败降级、Qdrant 失败降级、CLI 导入）
-- evaluation/generate full enrichment：12 个测试（含 2 个新 full-table 用例，覆盖完整 EvaluationData + invalid/fabricated 行拒绝）
-- resources/generate RAG：22 个测试
-- OpenAPI 对齐：15 passed
+- `./.venv/bin/pytest -q`：**245 passed**
+- OpenAPI 对齐：24 个测试覆盖全部主要 request/result schema
+- LearningPath / KnowledgeGraph edge alias 支持 Python 内部 `from_` + OpenAPI `from` 输出
 
 ## 下一步
 

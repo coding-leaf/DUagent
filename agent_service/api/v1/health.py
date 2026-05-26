@@ -29,6 +29,24 @@ def build_health_data(
         qdrant_connected = False
 
     model_loaded = settings.LLM_PROVIDER != "none" and bool(settings.LLM_MODEL)
+    llm_configured = (
+        settings.LLM_PROVIDER != "none"
+        and bool(settings.LLM_BASE_URL)
+        and bool(settings.LLM_API_KEY)
+        and bool(settings.LLM_MODEL)
+    )
+    embedding_configured = (
+        getattr(settings, "EMBEDDING_PROVIDER", "none") != "none"
+        and bool(getattr(settings, "EMBEDDING_BASE_URL", None))
+        and bool(getattr(settings, "EMBEDDING_API_KEY", None))
+        and bool(getattr(settings, "EMBEDDING_MODEL", None))
+    )
+    reranker_configured = (
+        getattr(settings, "RERANKER_PROVIDER", "none") != "none"
+        and bool(getattr(settings, "RERANKER_BASE_URL", None))
+        and bool(getattr(settings, "RERANKER_API_KEY", None))
+        and bool(getattr(settings, "RERANKER_MODEL", None))
+    )
 
     return {
         "status": "healthy" if qdrant_connected else "degraded",
@@ -36,6 +54,10 @@ def build_health_data(
         "model_loaded": model_loaded,
         "model_name": settings.LLM_MODEL if model_loaded else None,
         "uptime_seconds": max(0, int(monotonic_now() - started_at)),
+        "llm_configured": llm_configured,
+        "embedding_configured": embedding_configured,
+        "reranker_configured": reranker_configured,
+        "qdrant_collection": settings.QDRANT_USER_MEMORY_COLLECTION,
     }
 
 

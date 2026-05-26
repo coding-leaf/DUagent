@@ -5,8 +5,19 @@ from agent_service.api.v1.health import build_health_data, health_check
 
 def test_build_health_data_reports_qdrant_and_uptime(monkeypatch) -> None:
     class FakeSettings:
-        LLM_PROVIDER = "none"
-        LLM_MODEL = None
+        LLM_PROVIDER = "agentscope_openai"
+        LLM_BASE_URL = "https://llm.example.com/v1"
+        LLM_API_KEY = "sk-test"
+        LLM_MODEL = "test-model"
+        EMBEDDING_PROVIDER = "agentscope_openai"
+        EMBEDDING_BASE_URL = "https://emb.example.com/v1"
+        EMBEDDING_API_KEY = "sk-test"
+        EMBEDDING_MODEL = "test-emb"
+        RERANKER_PROVIDER = "none"
+        RERANKER_BASE_URL = None
+        RERANKER_API_KEY = None
+        RERANKER_MODEL = None
+        QDRANT_USER_MEMORY_COLLECTION = "user_memory_v1_1024"
 
     monkeypatch.setattr("agent_service.api.v1.health.settings", FakeSettings())
 
@@ -14,9 +25,13 @@ def test_build_health_data_reports_qdrant_and_uptime(monkeypatch) -> None:
 
     assert data["status"] == "healthy"
     assert data["qdrant_connected"] is True
-    assert data["model_loaded"] is False
-    assert data["model_name"] is None
+    assert data["model_loaded"] is True
+    assert data["model_name"] == "test-model"
     assert data["uptime_seconds"] == 25
+    assert data["llm_configured"] is True
+    assert data["embedding_configured"] is True
+    assert data["reranker_configured"] is False
+    assert data["qdrant_collection"] == "user_memory_v1_1024"
 
 
 def test_build_health_data_marks_degraded_when_qdrant_probe_fails() -> None:

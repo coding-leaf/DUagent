@@ -19,6 +19,10 @@ class HealthData(BaseModel):
     model_loaded: bool = Field(..., description="大模型加载状态")
     model_name: str = Field(..., description="当前加载的模型名称")
     uptime_seconds: int = Field(..., ge=0, description="服务运行时长（秒）")
+    llm_configured: bool = Field(False, description="LLM provider 是否已配置")
+    embedding_configured: bool = Field(False, description="Embedding provider 是否已配置")
+    reranker_configured: bool = Field(False, description="Reranker provider 是否已配置")
+    qdrant_collection: str = Field("", description="当前 Qdrant collection 名称")
 
 
 class ResourceTaskResponse(BaseModel):

@@ -16,7 +16,7 @@
 
 | 接口 | 状态 | 备注 |
 |------|------|------|
-| `GET /agent/v1/health` | 已完成基础版 | Qdrant 探针 + uptime；模型状态后续统一定义 |
+| `GET /agent/v1/health` | 已完成 | Qdrant 探针 + uptime + llm_configured / embedding_configured / reranker_configured / qdrant_collection；纯读 settings 不发请求 |
 | `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
 | `POST /agent/v1/profile/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full ProfileData enrichment → 规则版；LLM 输出经 schema/枚举/范围/观测名称保护后合并 |
 | `POST /agent/v1/evaluation/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full EvaluationData enrichment → 规则版；表格和 summary 均经列/范围/观测名称保护后合并 |
@@ -46,7 +46,7 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**220 passed**（2026-05-26 evaluation/generate full LLM enrichment）
+- `./.venv/bin/pytest -q`：**220 passed**（2026-05-26 health 生产化细化后验证）
 - evaluation/generate full enrichment：12 个测试（含 2 个新 full-table 用例，覆盖完整 EvaluationData + invalid/fabricated 行拒绝）
 - resources/generate RAG：22 个测试
 - OpenAPI 对齐：15 passed

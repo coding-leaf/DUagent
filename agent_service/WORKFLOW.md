@@ -45,6 +45,7 @@
 - Readiness 不再调用 `get_ai_providers()` 混用全局 settings，直接使用注入的 provider。
 - Structured output 结果可从 `ChatResponse.metadata` 提取，避免正文为空时路径失效。
 - Agent observability INFO 日志：LLM enrichment/generation 成功、RAG 检索 chunk 数、ReAct/structured output 命中，共 12 条。
+- AgentScope Studio 接入已完成最小配置化：FastAPI startup 经 `main.py` 在 lifespan 内按 `AGENTSCOPE_STUDIO_URL` best-effort 调用 `agentscope.init(...)`；`uvicorn agent_service.main:app` 和 `python -m agent_service.main` 路径统一生效，不再硬编码到 `__main__`。
 - API 边界收束已完成：health 探针逻辑下沉到 `agents/health.py`；tutoring API 恢复薄路由且不暴露测试注入参数；assessment 出题不再从 API 层导入 agents 私有函数。
 - OpenAPI 对齐测试已扩展到主要 request/result schema，当前 25 个 alignment 测试覆盖 HealthData、assessment、learning-path、resources、memory、tutoring SSE 参数等。
 - 本地启动与运维文档已补充：`docs/Agent-Service_本地启动与运维.md` 记录 uvicorn 启动、health、readiness、smoke、知识入库和常见问题。
@@ -106,6 +107,7 @@
 ## 最近测试/验证
 
 - `./.venv/bin/pytest -q`：**246 passed**
+- `./.venv/bin/pytest tests/test_core_config.py -q`：**5 passed**
 - OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
 - `./.venv/bin/python -m agent_service.tools.smoke_all`：9/9 PASS；smoke 工具直接调用 API handlers，避免本地验收依赖外部 Qdrant/TestClient lifespan/webhook
 - 本地启动验证：`./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002` 可启动到 `Application startup complete`

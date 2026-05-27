@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "EduAgent Agent Service API"
     VERSION: str = "5.0"
     API_V1_STR: str = "/agent/v1"
+    AGENTSCOPE_STUDIO_URL: str | None = None
 
     # Qdrant 相关配置
     QDRANT_PATH: str = "./qdrant_data"

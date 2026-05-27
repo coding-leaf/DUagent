@@ -119,3 +119,16 @@
 - 短期：按 `docs/superpowers/plans/2026-05-26-backend-agent-integration.md` 从最新 `main` 的 backend 开始联调；推荐先做 Agent client + profile refresh 垂直链路。
 - 中期：tutoring/chat SSE proxy、resources/generate webhook 落库、quiz/generate 题库写入。
 - 远期：Qdrant server 模式 / shared client 改造
+
+## 文档补充记录
+
+- 新增根目录文档 `Agent-Service-接口JSON示例说明.md`
+- 文档内容覆盖全部 9 个 Agent Service 对外接口
+- 每个接口补充了可直接复制到 Apifox 的请求/响应 JSON 示例
+- tutoring/chat 额外补充 SSE 单事件 mock 示例
+- resources/generate 额外补充 202 响应、Webhook 成功回调、Webhook 失败回调示例
+
+## 最近测试/验证补充
+
+- 本次未修改业务代码，未新增或变更 OpenAPI 契约
+- 文档内容以 `../docs/20-agent-api/Agent-Service.openapi.json` 和 `../docs/20-agent-api/API_Agent内部接口规范.md` 对齐整理

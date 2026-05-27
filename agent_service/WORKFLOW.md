@@ -29,6 +29,7 @@
 ## 当前已确认能力
 
 - FastAPI API 骨架、Pydantic schemas、OpenAPI 对齐测试体系已建立。
+- 面向开发者自学的代码导读手册已补充：`docs/Agent-Service_代码导读与自学手册.md`，用于辅助阅读项目结构、调用链和常见修改路径。
 - 多个非 tutoring 接口已有规则版实现和测试覆盖。
 - AgentScope 依赖已进入项目，ReActAgent、Reader、Embedding、QdrantStore 可用。
 - 课程知识摄入 CLI 已完成幂等闭环：支持 PDF/MD/TXT，重复执行跳过已摄入源文件。

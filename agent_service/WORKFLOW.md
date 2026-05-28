@@ -75,29 +75,65 @@
 | Memory/session/state | 暂缓 | 当前长期记忆 schema 和 Qdrant 写入是产品边界，先不迁移到 AgentScope memory |
 | Observability/evaluation hooks | 生产化后推荐 | 适合后续追踪 ReAct tool call、LLM 输出、降级路径；不影响当前 OpenAPI |
 
-### 推荐使用 AgentScope 的链路优先级
+### 框架深入计划（竞赛评审可见度提升）
 
-1. `POST /agent/v1/tutoring/chat`
-   - 推荐方向：Structured output 或 Generic Knowledge 集成。
-   - 涉及文件：`agents/tutoring_react.py`、`agents/tutoring_react_flow.py`、`agents/tutoring_tools.py`、`prompts/tutoring.py`、`memory/tutoring_retrieval.py`。
-   - 原因：当前已经有 ReActAgent + toolkit，继续用 AgentScope 的收益最高；仍需保持 SSE 输出和 rule fallback。
+**背景**：当前只有 `tutoring/chat` 真正用到 AgentScope Agent 编排能力（ReActAgent + Toolkit + Memory），其他接口均为单次 LLM 调用包装。需将 AgentScope 编排能力扩展到更多模块以提升框架深度。
 
-2. `POST /agent/v1/resources/generate`
-   - 推荐方向：后续引入 AgentScope planning / workflow 编排四类资源生成。
-   - 涉及文件：`agents/resources.py`、`prompts/resources.py`、`tests/test_resources_agent.py`。
-   - 原因：资源生成是多步骤异步任务，适合 workflow；但 webhook worker 调试复杂，应排在 readiness 之后。
+**原则**：
+- 新增 AgentScope 链路必须保留三层降级：`ReActAgent → LLM enrichment → rule-based`
+- 不改 OpenAPI / schema / 接口契约
+- 不拆除现有 246 个测试已覆盖的逻辑
+- 优先做"高可见度、低风险"的模块
 
-3. `POST /agent/v1/assessment/generate-questions`
-   - 推荐方向：Structured output，不优先 ReActAgent。
-   - 涉及文件：`agents/assessment.py`、`prompts/assessment.py`、`tests/test_assessment_agent.py`。
-   - 原因：已有 RAG + LLM 主路径，主要痛点是结构化题目输出稳定性。
+#### P0：`assessment/generate-questions` 接入 ReActAgent
 
-### 不推荐优先使用 AgentScope 的链路
+出题有明确多步推理需求（生成→格式自检→调整），且已有 RAG 工具可复用。
 
-- `GET /agent/v1/health` / provider readiness：基础设施确定性检查，不需要 Agent。
-- `POST /agent/v1/assessment/evaluate`：判分必须由规则确定，LLM 只做诊断 enrichment。
-- `POST /agent/v1/profile/generate`、`POST /agent/v1/evaluation/generate`：当前 guarded schema enrichment 已清晰可控，除非先验证 structured output，否则不引入 ReActAgent。
-- `POST /agent/v1/memory/compress`：可后续评估 AgentScope memory，但当前 fact 类型和 Qdrant 写入属于产品记忆边界，暂不迁移。
+新建文件：
+- `agents/assessment_react.py` — `QuestionGeneratorReActAgent`，参照 `tutoring_react.py` 结构
+- `agents/assessment_tools.py` — toolkit：`retrieve_course_knowledge`（复用逻辑）+ `validate_question_format`（本地格式校验：type/options/answer 一致性、content 非占位符，无需外部依赖）
+
+修改文件：
+- `agents/assessment.py` — `generate_questions_with_llm()` 之前先尝试 `QuestionGeneratorReActAgent.generate()`
+- `prompts/assessment.py` — 新增 ReActAgent 专用 system prompt（强调自检和格式约束）
+
+降级链：
+```
+QuestionGeneratorReActAgent.generate()   ← AgentScope ReActAgent + toolkit
+  ↓ 失败/None
+generate_questions_with_llm()            ← 现有单次 LLM + RAG
+  ↓ 失败/None
+generate_questions_data()                ← 现有规则版骨架题
+```
+
+#### P1：tutoring/chat diagram 事件触发
+
+当前 `DiagramEvent` 是空壳，`generate_tutoring_sse_events()` 没有任何路径 yield diagram 事件。
+
+修改文件：
+- `agents/tutoring.py` — `_TutoringStructuredOutput` 增加 `diagram: str | None = None`；`generate_tutoring_sse_events()` 检查 model_response 是否含 diagram 字段，有则 yield `DiagramEvent`
+- `prompts/tutoring.py` — system prompt 增加策略：涉及数据结构操作流程时，在 JSON 输出中附带可选的 `diagram` 字段（Mermaid 语法）
+
+#### P2：prompt + 后处理修正（解决 docs/analysis_results.md 标注的实际痛点）
+
+- `prompts/assessment.py` — 出题 prompt 增加多样性指令 + knowledge_point 必须使用题目中原有名称的约束
+- `agents/assessment.py` — `_coerce_questions()` 增加 answer/type 一致性修正（multi_choice answer 如果是 str 自动转 list）；`_enrich_rule_result()` 增加 knowledge_point 白名单过滤
+- `prompts/memory.py` — 摘要生成指令增加维度约束（已掌握/仍困惑/提问风格/近期话题）和字数下限（不少于 100 字）
+- `agents/memory.py` — `_coerce_extracted_facts()` 对 LLM 返回的 confidence 用规则版固定值覆盖，不依赖 LLM 自评
+
+#### P3：AgentScope Studio 演示就绪
+
+`main.py` 已有 `agentscope.init(studio_url=...)` 最小配置。演示时确保 Studio 可见：
+- tutoring ReActAgent 推理过程
+- assessment ReActAgent（P0 完成后）的 tool call 链路
+
+#### 暂不升级的模块
+
+- `assessment/evaluate`：判分必须由规则确定，多轮推理无收益
+- `profile/generate`、`evaluation/generate`：统计数据转画像，规则版已足够
+- `learning-path/generate`：核心是拓扑排序，不是推理问题
+- `memory/compress`：Backend 已在请求体传 `existing_facts`，用 tool 查 Qdrant 和现有方案等价
+- `resources/generate`：异步 webhook，适合后续 workflow 升级，竞赛阶段不动
 
 ## 当前不继续推进的事项
 
@@ -116,9 +152,32 @@
 
 ## 下一步
 
-- 短期：按 `docs/superpowers/plans/2026-05-26-backend-agent-integration.md` 从最新 `main` 的 backend 开始联调；推荐先做 Agent client + profile refresh 垂直链路。
-- 中期：tutoring/chat SSE proxy、resources/generate webhook 落库、quiz/generate 题库写入。
-- 远期：Qdrant server 模式 / shared client 改造
+### 执行顺序（框架深入 + 痛点修复）
+
+1. **P2 prompt/后处理修正**（最快，预计 1 天）
+   - `prompts/assessment.py` 多样性指令 + knowledge_point 白名单约束
+   - `agents/assessment.py` `_coerce_questions()` answer/type 修正；`_enrich_rule_result()` 白名单过滤
+   - `prompts/memory.py` 摘要维度约束 + 字数下限
+   - `agents/memory.py` confidence 规则覆盖
+
+2. **P1 diagram 触发**（预计 1 天）
+   - `agents/tutoring.py` `_TutoringStructuredOutput` + `generate_tutoring_sse_events()`
+   - `prompts/tutoring.py` diagram 触发策略
+
+3. **P0 assessment ReActAgent**（预计 2-3 天）
+   - 新建 `agents/assessment_react.py` + `agents/assessment_tools.py`
+   - 修改 `agents/assessment.py` 接入三层降级链
+   - 运行 `tests/test_assessment_agent.py` 确认现有测试通过
+
+4. **Backend 联调**
+   - 按 `docs/superpowers/plans/2026-05-26-backend-agent-integration.md` 联调
+   - tutoring/chat SSE proxy、resources webhook 落库
+
+### 中远期
+
+- Backend 开放只读接口（知识点名称表 + 已有题目查询）后，`assessment_tools.py` 补充 `query_existing_questions` tool，支持出题去重和推荐真实练习题
+- resources/generate 升级为 AgentScope workflow 多智能体并行生成（四类资源）
+- Qdrant server 模式 / shared client 改造
 
 ## 文档补充记录
 

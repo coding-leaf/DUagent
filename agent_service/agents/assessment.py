@@ -1,6 +1,9 @@
 import json
 import re
 from collections import Counter
+from typing import Any
+
+from pydantic import BaseModel
 
 from agent_service.core.ai import ChatMessage
 from agent_service.core.logging import get_logger
@@ -76,11 +79,23 @@ async def evaluate_assessment_with_llm(
     """
     if chat_provider is None:
         return None
+    messages = [
+        ChatMessage(role="system", content=build_evaluate_system_prompt()),
+        ChatMessage(role="user", content=build_evaluate_user_message(request, rule_result)),
+    ]
+    # Phase 1B: 优先尝试 AgentScope structured_model
     try:
-        messages = [
-            ChatMessage(role="system", content=build_evaluate_system_prompt()),
-            ChatMessage(role="user", content=build_evaluate_user_message(request, rule_result)),
-        ]
+        raw = await chat_provider.complete(messages, structured_model=_EvalDiagnosisStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                result = _enrich_rule_result(rule_result, data)
+                logger.info("LLM structured_model succeeded: %s", "assessment/evaluate")
+                return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
         data = _parse_evaluate_json(raw)
         result = _enrich_rule_result(rule_result, data)
@@ -373,6 +388,48 @@ async def build_question_generation_knowledge_context(
         return ""
 
 
+class _QuestionItem(BaseModel):
+    """structured_model 用单题 schema，字段对齐 GeneratedQuestion。"""
+
+    type: str = ""
+    content: str = ""
+    options: list[dict[str, Any]] = []
+    answer: str = ""
+    explanation: str = ""
+    chapter: str | None = None
+    knowledge_point: str = ""
+    difficulty: str | None = None
+
+
+class _QuestionListStructuredOutput(BaseModel):
+    """AgentScope structured_model 用题目列表 schema。"""
+
+    questions: list[_QuestionItem] = []
+
+
+class _EvalPerQuestionItem(BaseModel):
+    """evaluate structured_model 用单题增强 schema。"""
+
+    question_id: str = ""
+    explanation: str = ""
+    related_knowledge_points: list[str] = []
+
+
+class _EvalDiagnosisItem(BaseModel):
+    """evaluate structured_model 用诊断 schema。"""
+
+    summary: str = ""
+    weak_points: list[dict[str, Any]] = []
+    suggestions: list[str] = []
+
+
+class _EvalDiagnosisStructuredOutput(BaseModel):
+    """AgentScope structured_model 用 evaluate 结果 schema。"""
+
+    per_question_results: list[_EvalPerQuestionItem] = []
+    diagnosis: _EvalDiagnosisItem = _EvalDiagnosisItem()
+
+
 async def generate_questions_with_llm(
     request: QuestionGenerateRequest,
     chat_provider,
@@ -381,16 +438,29 @@ async def generate_questions_with_llm(
     """尝试用 LLM 生成题目，输入请求、chat provider 和可选的 RAG 上下文，输出 GeneratedQuestion 列表或 None（降级）。"""
     if chat_provider is None:
         return None
-    try:
-        messages = [
-            ChatMessage(role="system", content=build_question_generation_system_prompt()),
-            ChatMessage(
-                role="user",
-                content=build_question_generation_user_message(
-                    request, course_knowledge_context=course_knowledge_context
-                ),
+    messages = [
+        ChatMessage(role="system", content=build_question_generation_system_prompt()),
+        ChatMessage(
+            role="user",
+            content=build_question_generation_user_message(
+                request, course_knowledge_context=course_knowledge_context
             ),
-        ]
+        ),
+    ]
+    # Phase 0: 优先尝试 AgentScope structured_model
+    try:
+        raw = await chat_provider.complete(messages, structured_model=_QuestionListStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            items = data.get("questions", [])
+            if isinstance(items, list) and len(items) > 0:
+                result = _coerce_questions(items)
+                logger.info("LLM structured_model succeeded: %s", "assessment/generate-questions")
+                return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
         parsed = _parse_question_json(raw)
         result = _coerce_questions(parsed)

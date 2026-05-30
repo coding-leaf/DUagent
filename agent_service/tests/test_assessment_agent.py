@@ -243,6 +243,118 @@ def test_generate_questions_with_llm_returns_none_when_provider_is_none() -> Non
     assert result is None
 
 
+# ── Phase 0: structured_model spike tests ─────────────────────────
+
+
+class FakeChatProviderV2:
+    """支持 structured_model 参数的 FakeChatProvider。
+
+    structured_output 若为 list 则自动包装为 {"questions": [...]}（适配 generate_questions）；
+    若为 dict 则直接序列化（适配 evaluate 等接口）。
+    """
+
+    def __init__(
+        self,
+        output: str | None = None,
+        should_raise: bool = False,
+        structured_output: list[dict] | dict | None = None,
+    ) -> None:
+        self.calls: list[dict] = []
+        self._output = output
+        self._should_raise = should_raise
+        self._structured_output = structured_output
+
+    async def complete(self, messages, **kwargs):
+        self.calls.append({"messages": messages, "kwargs": kwargs})
+        if self._should_raise:
+            raise RuntimeError("LLM unavailable")
+        if self._structured_output is not None and "structured_model" in kwargs:
+            import json as _json
+            if isinstance(self._structured_output, list):
+                return _json.dumps({"questions": self._structured_output})
+            return _json.dumps(self._structured_output)
+        return self._output
+
+
+def test_structured_model_is_attempted_before_json_fallback() -> None:
+    """structured_model 优先于 markdown fence JSON 解析被调用。"""
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProviderV2(
+        structured_output=[
+            {
+                "type": "single_choice",
+                "content": "测试题",
+                "options": [{"key": "A", "text": "选项A"}],
+                "answer": "A",
+                "explanation": "解析",
+                "knowledge_point": "测试知识点",
+                "difficulty": "easy",
+            }
+        ],
+    )
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="测试知识点", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].content == "测试题"
+    # 验证 structured_model 被传入了
+    assert len(provider.calls) == 1
+    assert "structured_model" in provider.calls[0]["kwargs"]
+
+
+def test_structured_model_failure_falls_back_to_json_parsing() -> None:
+    """structured_model 路径失败时回落到现有 markdown fence JSON 解析。"""
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    # 不提供 structured_output → structured_model 路径返回空或无效
+    # 但提供有效的 JSON 字符串作为原始输出 → fallback 应生效
+    provider = FakeChatProviderV2(
+        output=(
+            '[{"type":"single_choice","content":"fallback 题",'
+            '"options":[{"key":"A","text":"x"}],'
+            '"answer":"A","explanation":"fallback 解析",'
+            '"knowledge_point":"fallback","difficulty":"medium"}]'
+        ),
+    )
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="fallback", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].content == "fallback 题"
+
+
+def test_structured_model_raises_falls_back_to_json() -> None:
+    """structured_model 调用抛出异常时回落到 JSON 解析。"""
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProviderV2(should_raise=True)
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="x", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is None
+
+
 def test_generate_questions_with_llm_returns_none_when_llm_raises() -> None:
     from agent_service.agents.assessment import generate_questions_with_llm
 
@@ -491,6 +603,130 @@ def test_evaluate_with_llm_handles_markdown_wrapped_json() -> None:
     assert result is not None
     assert result.per_question_results[0].is_correct is False
     assert "正确答案是B" in (result.per_question_results[0].explanation or "")
+
+
+# ── Phase 1B: evaluate structured_model spike tests ────────────────
+
+
+def test_evaluate_structured_model_is_attempted_before_json_fallback() -> None:
+    """evaluate 路径优先使用 structured_model。"""
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    structured_data = {
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "structured 解析", "related_knowledge_points": ["加法"]},
+        ],
+        "diagnosis": {
+            "summary": "structured 诊断",
+            "weak_points": [{"name": "加法", "error_pattern": "基础概念混淆"}],
+            "suggestions": ["做练习题"],
+        },
+    }
+    provider = FakeChatProviderV2(structured_output=structured_data)
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert "structured 解析" in (result.per_question_results[0].explanation or "")
+    assert "structured 诊断" in (result.diagnosis.summary or "")
+    # 验证 structured_model 被传入
+    assert len(provider.calls) == 1
+    assert "structured_model" in provider.calls[0]["kwargs"]
+
+
+def test_evaluate_structured_model_failure_falls_back_to_json() -> None:
+    """evaluate structured_model 失败时回落到 markdown fence JSON 解析。"""
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    json_output = _json.dumps({
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "fallback 解析", "related_knowledge_points": ["加法"]},
+        ],
+        "diagnosis": {
+            "summary": "fallback 诊断",
+            "weak_points": [],
+            "suggestions": ["复习"],
+        },
+    })
+    # 不设 structured_output → structured_model 路径失败，回落 JSON
+    provider = FakeChatProviderV2(output=json_output)
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert "fallback 解析" in (result.per_question_results[0].explanation or "")
+
+
+def test_evaluate_structured_model_exception_falls_back_to_none() -> None:
+    """evaluate structured_model 抛异常时返回 None（无 JSON fallback 数据）。"""
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    provider = FakeChatProviderV2(should_raise=True)
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is None
 
 
 # ── generate-questions RAG tests ───────────────────────────────────

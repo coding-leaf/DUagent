@@ -1,11 +1,9 @@
 from fastapi import APIRouter
 
 from agent_service.agents.assessment import (
-    build_question_generation_knowledge_context,
     evaluate_assessment_data,
     evaluate_assessment_with_llm,
-    generate_questions_data,
-    generate_questions_with_llm,
+    generate_questions_with_agent,
 )
 from agent_service.core.ai import get_ai_providers
 from agent_service.schemas.assessment import (
@@ -35,16 +33,7 @@ async def evaluate_assessment(request: AssessmentEvaluateRequest) -> AssessmentE
     summary="生成题目",
 )
 async def generate_questions(request: QuestionGenerateRequest) -> QuestionGenerateResponse:
-    providers = get_ai_providers()
-    course_knowledge_context = await build_question_generation_knowledge_context(
-        request, getattr(providers, "embedding", None)
-    )
-    questions = await generate_questions_with_llm(
-        request, getattr(providers, "chat", None),
-        course_knowledge_context=course_knowledge_context,
-    )
-    if questions is None:
-        questions = generate_questions_data(request).questions
+    questions = await generate_questions_with_agent(request)
     return QuestionGenerateResponse(
         code=200, message="success", data=QuestionGenerateResult(questions=questions)
     )

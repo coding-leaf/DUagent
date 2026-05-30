@@ -350,6 +350,7 @@ def _truncate_chunk(text: str, max_chars: int) -> str:
 async def build_question_generation_knowledge_context(
     request: QuestionGenerateRequest,
     embedding_provider,
+    vector_store=None,
     limit: int = 5,
 ) -> str:
     """检索课程知识库中与出题请求相关的内容，输入请求和 embedding provider，输出拼接后的上下文字符串。
@@ -361,15 +362,16 @@ async def build_question_generation_knowledge_context(
     if not request.course_id:
         return ""
     try:
-        from agent_service.memory.vector_store import QdrantVectorStore
+        if vector_store is None:
+            from agent_service.memory.vector_store import QdrantVectorStore
+            vector_store = QdrantVectorStore()
 
         query_text = " ".join(
             part for part in [request.knowledge_point, request.chapter, request.course_id]
             if part
         )
         vectors = await embedding_provider.embed_texts([query_text])
-        store = QdrantVectorStore()
-        results = await store.search_course_knowledge(
+        results = await vector_store.search_course_knowledge(
             request.course_id, vectors[0], limit=limit
         )
         if not results:
@@ -455,31 +457,48 @@ async def generate_questions_with_llm(
             items = data.get("questions", [])
             if isinstance(items, list) and len(items) > 0:
                 result = _coerce_questions(items)
-                logger.info("LLM structured_model succeeded: %s", "assessment/generate-questions")
-                return result
+                if result:
+                    logger.info("LLM structured_model succeeded: %s", "assessment/generate-questions")
+                    return result
     except Exception:
         logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
     # Fallback: 原有 markdown fence JSON 解析
     try:
         raw = await chat_provider.complete(messages)
-        parsed = _parse_question_json(raw)
+        parsed = _parse_question_payload(raw)
         result = _coerce_questions(parsed)
-        logger.info("LLM generation succeeded: %s", "assessment/generate-questions")
-        return result
+        if result:
+            logger.info("LLM generation succeeded: %s", "assessment/generate-questions")
+            return result
+        logger.warning("LLM question generation resulted in empty list, falling back to skeleton")
+        return None
     except Exception:
         logger.warning("LLM question generation failed, falling back to skeleton", exc_info=True)
         return None
 
 
-def _parse_question_json(raw: str) -> list[dict]:
+def _parse_question_payload(raw: str) -> list[dict]:
     text = raw.strip()
     match = _MARKDOWN_FENCE_PATTERN.search(text)
     if match:
         text = match.group(1).strip()
-    data = json.loads(text)
-    if not isinstance(data, list):
-        raise ValueError("LLM output is not a JSON array")
-    return [item for item in data if isinstance(item, dict)]
+    try:
+        data = json.loads(text)
+    except Exception:
+        raise ValueError("LLM output is not valid JSON")
+
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    elif isinstance(data, dict):
+        questions = data.get("questions")
+        if isinstance(questions, list):
+            return [item for item in questions if isinstance(item, dict)]
+    raise ValueError("LLM output does not match expected JSON array or object with 'questions' array")
+
+
+def _parse_question_json(raw: str) -> list[dict]:
+    # 兼容遗留调用，内部转调统一下沉方法
+    return _parse_question_payload(raw)
 
 
 def _coerce_questions(items: list[dict]) -> list[GeneratedQuestion]:
@@ -511,3 +530,33 @@ def _coerce_options(raw_options) -> list:
         if isinstance(opt, dict):
             result.append({"key": str(opt.get("key", "")), "text": str(opt.get("text", ""))})
     return result
+
+
+async def generate_questions_with_agent(
+    request: QuestionGenerateRequest,
+    providers=None,
+    vector_store=None,
+) -> list[GeneratedQuestion]:
+    """生成题目编排层入口：封装 AI Providers 初始化、RAG 注入、ReAct Agent 调度及全面降级链。"""
+    if providers is None:
+        from agent_service.core.ai import get_ai_providers
+        providers = get_ai_providers()
+
+    embedding_provider = getattr(providers, "embedding", None)
+    chat_provider = getattr(providers, "chat", None)
+
+    course_knowledge_context = await build_question_generation_knowledge_context(
+        request, embedding_provider, vector_store=vector_store
+    )
+
+    # 预留 Step B: ReActAgent 调用 (此处暂时跳过，直接进入降级链)
+    
+    # LLM fallback
+    questions = await generate_questions_with_llm(
+        request, chat_provider, course_knowledge_context=course_knowledge_context
+    )
+    if questions:
+        return questions
+
+    # 规则骨架题 fallback
+    return generate_questions_data(request).questions

@@ -819,25 +819,56 @@ class TestQuestionRAG:
             )
         assert context == ""
 
-    def test_api_falls_back_to_skeleton_when_llm_returns_none(self) -> None:
+    def test_generate_questions_with_agent_falls_back_when_llm_returns_none(self) -> None:
         from unittest.mock import patch
-        from agent_service.api.v1.assessment import generate_questions
-
-        async def _fake_retrieval(*args, **kwargs):
-            return ""
+        from agent_service.agents.assessment import generate_questions_with_agent
 
         async def _fake_llm(*args, **kwargs):
             return None
 
-        with (
-            patch("agent_service.api.v1.assessment.build_question_generation_knowledge_context", _fake_retrieval),
-            patch("agent_service.api.v1.assessment.generate_questions_with_llm", _fake_llm),
-        ):
-            response = asyncio.run(generate_questions(self._request()))
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=None))
 
-        assert response.code == 200
-        assert len(response.data.questions) == 2
-        assert "完成一道单选题" in response.data.questions[0].content
+        assert len(questions) == 2
+        assert "完成一道单选题" in questions[0].content
+
+    def test_generate_questions_with_agent_returns_llm_result(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [GeneratedQuestion(type="single_choice", content="LLM题目", options=[], answer="A", knowledge_point="K", explanation="E")]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=None))
+
+        assert len(questions) == 1
+        assert questions[0].content == "LLM题目"
+
+
+def test_parse_question_payload_handles_array() -> None:
+    from agent_service.agents.assessment import _parse_question_payload
+    payload = '[{"content": "Q1"}]'
+    result = _parse_question_payload(payload)
+    assert len(result) == 1
+    assert result[0]["content"] == "Q1"
+
+
+def test_parse_question_payload_handles_object_with_questions() -> None:
+    from agent_service.agents.assessment import _parse_question_payload
+    payload = '{"questions": [{"content": "Q1"}]}'
+    result = _parse_question_payload(payload)
+    assert len(result) == 1
+    assert result[0]["content"] == "Q1"
+
+
+def test_parse_question_payload_handles_markdown() -> None:
+    from agent_service.agents.assessment import _parse_question_payload
+    payload = '```json\n{"questions": [{"content": "Q1"}]}\n```'
+    result = _parse_question_payload(payload)
+    assert len(result) == 1
+    assert result[0]["content"] == "Q1"
 
 
 def _build_request(

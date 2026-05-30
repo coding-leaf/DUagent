@@ -549,8 +549,30 @@ async def generate_questions_with_agent(
         request, embedding_provider, vector_store=vector_store
     )
 
-    # 预留 Step B: ReActAgent 调用 (此处暂时跳过，直接进入降级链)
-    
+    # Step B: 优先尝试 ReActAgent
+    if chat_provider and hasattr(chat_provider, "model") and hasattr(chat_provider, "formatter"):
+        from agent_service.agents.assessment_react import QuestionGeneratorReActAgent
+        from agent_service.agents.assessment_tools import build_assessment_toolkit
+
+        toolkit = build_assessment_toolkit(
+            course_id=request.course_id,
+            embedding_provider=embedding_provider,
+            vector_store=vector_store,
+        )
+        react_agent = QuestionGeneratorReActAgent(
+            chat_model=chat_provider.model,
+            formatter=chat_provider.formatter,
+            toolkit=toolkit,
+        )
+        parsed = await react_agent.generate(
+            request, course_knowledge_context=course_knowledge_context
+        )
+        if parsed:
+            questions = _coerce_questions(parsed)
+            if questions:
+                logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                return questions
+
     # LLM fallback
     questions = await generate_questions_with_llm(
         request, chat_provider, course_knowledge_context=course_knowledge_context

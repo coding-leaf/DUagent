@@ -847,6 +847,43 @@ class TestQuestionRAG:
         assert questions[0].content == "LLM题目"
 
 
+    def test_generate_questions_with_agent_returns_react_result(self) -> None:
+        from unittest.mock import patch, MagicMock
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return None  # should not be reached if react succeeds
+
+        class FakeModel:
+            pass
+
+        class FakeFormatter:
+            pass
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = FakeModel()
+                self.chat.formatter = FakeFormatter()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+            async def generate(self, request, course_knowledge_context=None):
+                return [{"type": "single_choice", "content": "ReAct题目", "options": [{"key": "A", "text": "X"}], "answer": "A", "knowledge_point": "K", "explanation": "E"}]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content == "ReAct题目"
+
+
 def test_parse_question_payload_handles_array() -> None:
     from agent_service.agents.assessment import _parse_question_payload
     payload = '[{"content": "Q1"}]'

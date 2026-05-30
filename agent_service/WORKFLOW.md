@@ -115,6 +115,7 @@
 - LearningPath / KnowledgeGraph edge alias 支持 Python 内部 `from_` + OpenAPI `from` 输出
 - **Phase 0 spike 完成**：`assessment/generate-questions` structured_model 兼容性验证通过，降级链：structured_model → markdown fence JSON → rule-based
 - **Phase 3 Step A 完成**：收束 `assessment/generate-questions` API 边界，将其依赖项获取、RAG 构建与 LLM 调用下沉至 `generate_questions_with_agent` 函数，规范了 LLM 解析的统一下沉与空列表 fallback。
+- **Phase 3 Step B 完成**：引入 `QuestionGeneratorReActAgent` 和配套工具（`retrieve_course_knowledge`、`validate_question_format`）。目前出题请求优先通过 ReAct 编排进行结构化推理、RAG和自检，如果失败则无缝回落到原有 LLM 或骨架路径。
 
 ## 下一步
 
@@ -122,7 +123,7 @@
 1. **[已完成]** Phase 1C — `profile/generate` + `evaluation/generate` structured_model 迁移
 2. **[已完成]** Phase 1D-1E — `learning-path/generate`、`memory/compress` structured_model 迁移
 3. **[已完成]** Phase 2 — tutoring diagram 事件触发
-4. **[进行中]** Phase 3 — `assessment/generate-questions` ReActAgent 迁移（已完成 Step A API边界收束，下一步开始 Step B 引入 ReActAgent）
+4. **[已完成]** Phase 3 — `assessment/generate-questions` ReActAgent 迁移
 5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）
 6. Phase 4 — prompt/后处理修正（零依赖，可穿插）
 

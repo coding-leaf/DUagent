@@ -107,9 +107,9 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**255 passed**（Phase 0 +3, Phase 1B +3）
+- `./.venv/bin/pytest -q`：**258 passed**（Phase 0/1 的全部 structured_model 迁移测试均已通过）
 - `./.venv/bin/pytest tests/test_core_config.py -q`：**5 passed**
-- OpenAPI 对齐：26 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
+- OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
 - `./.venv/bin/python -m agent_service.tools.smoke_all`：9/9 PASS；smoke 工具直接调用 API handlers，避免本地验收依赖外部 Qdrant/TestClient lifespan/webhook
 - 本地启动验证：`./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002` 可启动到 `Application startup complete`
 - LearningPath / KnowledgeGraph edge alias 支持 Python 内部 `from_` + OpenAPI `from` 输出
@@ -118,8 +118,8 @@
 ## 下一步
 
 执行顺序按 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md`：
-1. Phase 1C — `profile/generate` + `evaluation/generate` structured_model 迁移
-2. Phase 1D-1E — `learning-path/generate`、`memory/compress` structured_model 迁移
+1. **[已完成]** Phase 1C — `profile/generate` + `evaluation/generate` structured_model 迁移
+2. **[已完成]** Phase 1D-1E — `learning-path/generate`、`memory/compress` structured_model 迁移
 3. Phase 2 — tutoring diagram 事件触发
 4. Phase 3 — `assessment/generate-questions` ReActAgent（含 API 边界收束）
 5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）

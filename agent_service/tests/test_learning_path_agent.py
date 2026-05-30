@@ -61,13 +61,13 @@ def test_generate_learning_path_preserves_graph_edges() -> None:
 
 class FakeChatProvider:
     def __init__(self, output: str | None = None, should_raise: bool = False, fail_structured: bool = False) -> None:
-        self.calls: list[list] = []
+        self.calls: list[tuple[list, dict]] = []
         self._output = output
         self._should_raise = should_raise
         self._fail_structured = fail_structured
 
     async def complete(self, messages, **kwargs):
-        self.calls.append(messages)
+        self.calls.append((messages, kwargs))
         if self._should_raise:
             raise RuntimeError("LLM unavailable")
         if self._fail_structured and "structured_model" in kwargs:
@@ -89,6 +89,7 @@ def test_llm_path_structured_model_succeeds() -> None:
         generate_learning_path_with_llm(_build_request({}, {}), provider)
     )
     assert result is not None
+    assert "structured_model" in provider.calls[0][1]
     assert len(result.nodes) == 1
     assert result.nodes[0].id == "n1"
 
@@ -110,6 +111,9 @@ def test_llm_path_structured_model_fails_and_falls_back() -> None:
         generate_learning_path_with_llm(_build_request({}, {}), provider)
     )
     assert result is not None
+    assert len(provider.calls) == 2
+    assert "structured_model" in provider.calls[0][1]
+    assert "structured_model" not in provider.calls[1][1]
     assert len(result.nodes) == 1
     assert result.nodes[0].id == "n1"
 

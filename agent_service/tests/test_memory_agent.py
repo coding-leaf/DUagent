@@ -255,9 +255,13 @@ def test_compress_memory_with_llm_succeeds_with_all_fact_types() -> None:
     })
 
     class FakeChatProvider:
+        def __init__(self):
+            self.calls = []
         async def complete(self, messages, **kwargs):
+            self.calls.append((messages, kwargs))
             return response
 
+    provider = FakeChatProvider()
     result = asyncio.run(
         memory.compress_memory_with_llm(
             _build_request(
@@ -267,11 +271,12 @@ def test_compress_memory_with_llm_succeeds_with_all_fact_types() -> None:
                     MemoryMessage(role="user", content="能画个图给我看吗？", timestamp="2026-05-22T10:01:00Z"),
                 ],
             ),
-            chat_provider=FakeChatProvider(),
+            chat_provider=provider,
         )
     )
 
     assert result is not None
+    assert "structured_model" in provider.calls[0][1]
     assert result.new_summary is not None
     assert len(result.extracted_facts) == 3
     blind = [f for f in result.extracted_facts if f.fact_type == "blind_spot"]
@@ -300,11 +305,15 @@ def test_compress_memory_with_llm_structured_model_fails_and_falls_back() -> Non
     })
 
     class FakeChatProvider:
+        def __init__(self):
+            self.calls = []
         async def complete(self, messages, **kwargs):
+            self.calls.append((messages, kwargs))
             if "structured_model" in kwargs:
                 raise RuntimeError("structured_model failed")
             return f"```json\n{response}\n```"
 
+    provider = FakeChatProvider()
     result = asyncio.run(
         memory.compress_memory_with_llm(
             _build_request(
@@ -313,11 +322,14 @@ def test_compress_memory_with_llm_structured_model_fails_and_falls_back() -> Non
                     MemoryMessage(role="user", content="我更喜欢看视频学", timestamp="2026-05-22T10:00:00Z"),
                 ],
             ),
-            chat_provider=FakeChatProvider(),
+            chat_provider=provider,
         )
     )
 
     assert result is not None
+    assert len(provider.calls) == 2
+    assert "structured_model" in provider.calls[0][1]
+    assert "structured_model" not in provider.calls[1][1]
     assert result.new_summary == "用户偏好视频学习。"
 
 

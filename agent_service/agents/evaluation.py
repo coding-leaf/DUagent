@@ -1,6 +1,9 @@
 import json
 import re
 from collections import defaultdict
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 from agent_service.core.ai import ChatMessage
 from agent_service.core.logging import get_logger
@@ -109,6 +112,13 @@ def _mastery_level(score: float) -> str:
     return "weak"
 
 
+class _EvalStructuredOutput(BaseModel):
+    progress_table: dict[str, Any] = Field(default_factory=dict)
+    mastery_table: dict[str, Any] = Field(default_factory=dict)
+    resource_usage_table: dict[str, Any] = Field(default_factory=dict)
+    summary_text: str = ""
+
+
 async def generate_evaluation_with_llm(
     request: EvaluationGenerateRequest,
     rule_result: EvaluationData,
@@ -120,11 +130,23 @@ async def generate_evaluation_with_llm(
     """
     if chat_provider is None:
         return None
+    messages = [
+        ChatMessage(role="system", content=build_evaluation_system_prompt()),
+        ChatMessage(role="user", content=build_evaluation_user_message(request, rule_result)),
+    ]
+    # Phase 1C: 优先尝试 AgentScope structured_model
     try:
-        messages = [
-            ChatMessage(role="system", content=build_evaluation_system_prompt()),
-            ChatMessage(role="user", content=build_evaluation_user_message(request, rule_result)),
-        ]
+        raw = await chat_provider.complete(messages, structured_model=_EvalStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                result = _enrich_evaluation_result(request, rule_result, data)
+                logger.info("LLM structured_model succeeded: %s", "evaluation/generate")
+                return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
         data = _parse_evaluation_json(raw)
         result = _enrich_evaluation_result(request, rule_result, data)

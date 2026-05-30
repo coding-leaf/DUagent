@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent_service.core.ai import ChatProvider
 from agent_service.core.logging import get_logger
@@ -24,8 +24,9 @@ class _TutoringStructuredOutput(BaseModel):
     """
 
     model_text: str | None = None
-    knowledge_points: list[str] = []
+    knowledge_points: list[str] = Field(default_factory=list)
     suggestion: str | None = None
+    diagram: str | None = None
 
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
 logger = get_logger(__name__)
@@ -36,6 +37,7 @@ class TutoringModelResponse:
     model_text: str | None = None
     knowledge_point_names: list[str] = field(default_factory=list)
     suggestion_text: str | None = None
+    diagram: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,7 @@ class TutoringGenerationResult:
     suggestion_text: str
     suggested_exercises: list[SuggestedExercise]
     used_rule_fallback: bool
+    diagram: str | None = None
 
 
 def build_tutoring_generation_result(
@@ -70,6 +73,7 @@ def build_tutoring_generation_result(
         suggestion_text=suggestion,
         suggested_exercises=suggested_exercises,
         used_rule_fallback=response.model_text is None,
+        diagram=response.diagram,
     )
 
 
@@ -127,10 +131,13 @@ def _build_response_from_payload(model_text: str | None, payload: dict) -> Tutor
         else []
     )
     parsed_suggestion = suggestion_text.strip() if isinstance(suggestion_text, str) and suggestion_text.strip() else None
+    diagram_text = payload.get("diagram")
+    parsed_diagram = diagram_text.strip() if isinstance(diagram_text, str) and diagram_text.strip() else None
     return TutoringModelResponse(
         model_text=model_text,
         knowledge_point_names=parsed_names,
         suggestion_text=parsed_suggestion,
+        diagram=parsed_diagram,
     )
 
 
@@ -233,6 +240,7 @@ async def generate_tutoring_sse_events(request, providers=None):
     )
     from agent_service.memory.vector_store import QdrantVectorStore
     from agent_service.schemas.tutoring import (
+        DiagramEvent,
         DoneEvent,
         KnowledgePointsEvent,
         SuggestionEvent,
@@ -279,6 +287,9 @@ async def generate_tutoring_sse_events(request, providers=None):
     )
     if react_response and react_response.model_text:
         yield f"data: {json.dumps({'type': 'chunk', 'content': runtime_result.chunk_text}, ensure_ascii=False)}\n\n"
+
+    if runtime_result.diagram:
+        yield f"data: {json.dumps(DiagramEvent(data=runtime_result.diagram).model_dump(), ensure_ascii=False)}\n\n"
 
     for event in [
         KnowledgePointsEvent(knowledge_points=runtime_result.knowledge_points),

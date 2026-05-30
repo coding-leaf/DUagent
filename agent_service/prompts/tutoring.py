@@ -8,7 +8,8 @@ TUTOR_REACT_SYSTEM_PROMPT = (
     "请以 JSON 格式输出回复，JSON object 包含三个字段："
     "model_text（面向学生的自然语言讲解）、"
     "knowledge_points（1到3个字符串数组，本轮涉及的知识点）、"
-    "suggestion（字符串，下一步学习建议）。"
+    "suggestion（字符串，下一步学习建议）、"
+    "diagram（可选字符串，涉及数据结构操作流程或复杂逻辑流程时，只提供 Mermaid 语法代码）。"
     "只输出 JSON，不要加 markdown 代码块或其他说明文字。"
 )
 
@@ -24,7 +25,8 @@ def build_tutoring_messages(
         "请以 JSON 格式输出回复，JSON object 包含三个字段："
         "model_text（面向学生的自然语言讲解）、"
         "knowledge_points（1到3个字符串数组，本轮涉及的知识点）、"
-        "suggestion（字符串，下一步学习建议）。"
+        "suggestion（字符串，下一步学习建议）、"
+        "diagram（可选字符串，涉及数据结构操作流程或复杂逻辑流程时，只提供 Mermaid 语法代码）。"
         "只输出 JSON，不要加 markdown 代码块或其他说明文字。"
     )
     context_content = "\n".join(

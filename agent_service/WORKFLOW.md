@@ -107,7 +107,7 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**258 passed**（Phase 0/1 的全部 structured_model 迁移测试均已通过）
+- `./.venv/bin/pytest -q`：**265 passed**（Phase 0/1/2 测试通过，包含 diagram 顺序验证）
 - `./.venv/bin/pytest tests/test_core_config.py -q`：**5 passed**
 - OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
 - `./.venv/bin/python -m agent_service.tools.smoke_all`：9/9 PASS；smoke 工具直接调用 API handlers，避免本地验收依赖外部 Qdrant/TestClient lifespan/webhook
@@ -120,7 +120,7 @@
 执行顺序按 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md`：
 1. **[已完成]** Phase 1C — `profile/generate` + `evaluation/generate` structured_model 迁移
 2. **[已完成]** Phase 1D-1E — `learning-path/generate`、`memory/compress` structured_model 迁移
-3. Phase 2 — tutoring diagram 事件触发
+3. **[已完成]** Phase 2 — tutoring diagram 事件触发
 4. Phase 3 — `assessment/generate-questions` ReActAgent（含 API 边界收束）
 5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）
 6. Phase 4 — prompt/后处理修正（零依赖，可穿插）

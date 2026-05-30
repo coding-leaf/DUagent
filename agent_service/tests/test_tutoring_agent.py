@@ -21,6 +21,7 @@ def test_parse_tutoring_model_response_extracts_structured_payload() -> None:
     assert parsed.model_text == "链式法则用于复合函数求导，要先看外层函数。"
     assert parsed.knowledge_point_names == ["链式法则", "复合函数"]
     assert parsed.suggestion_text == "先确认外层，再检查内层导数。"
+    assert parsed.diagram is None
 
 
 def test_parse_tutoring_model_response_falls_back_on_invalid_json() -> None:
@@ -49,6 +50,7 @@ def test_parse_tutoring_model_response_handles_json_mode_output() -> None:
     assert parsed.model_text == "链式法则先看外层函数，再乘以内层导数。"
     assert parsed.knowledge_point_names == ["链式法则", "复合函数"]
     assert parsed.suggestion_text == "先确认外层函数，再检查内层自变量怎么变化。"
+    assert parsed.diagram is None
 
 
 def test_parse_tutoring_model_response_json_mode_falls_back_to_xml_regex() -> None:
@@ -276,3 +278,101 @@ def test_generate_tutoring_model_response_ignores_legacy_disabled_structured_out
     assert response.model_text == "链式法则先看外层函数。"
     assert response.knowledge_point_names == ["链式法则"]
     assert response.suggestion_text == "先确认外层函数。"
+
+
+def test_parse_tutoring_model_response_extracts_diagram_from_json_mode() -> None:
+    model_output = (
+        '{"model_text": "这是一个树。\\n",'
+        '"knowledge_points": ["二叉树"],'
+        '"suggestion": "先看图。",'
+        '"diagram": "graph TD; A-->B;"}'
+    )
+
+    parsed = parse_tutoring_model_response(model_output)
+
+    assert parsed.model_text == "这是一个树。"
+    assert parsed.diagram == "graph TD; A-->B;"
+
+
+def test_parse_tutoring_model_response_extracts_diagram_from_xml_mode() -> None:
+    model_output = (
+        "这是一个图。"
+        "\n<agent_result>{\"knowledge_points\":[\"图\"],"
+        "\"suggestion\":\"看图。\", \"diagram\":\"graph TD; A-->B;\"}</agent_result>"
+    )
+
+    parsed = parse_tutoring_model_response(model_output)
+
+    assert parsed.model_text == "这是一个图。"
+    assert parsed.diagram == "graph TD; A-->B;"
+
+
+def test_generate_tutoring_sse_events_maintains_old_order_without_diagram() -> None:
+    from agent_service.agents.tutoring import generate_tutoring_sse_events
+
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="讲讲导数",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeProviders:
+        class FakeChat:
+            async def complete(self, messages, **kwargs):
+                return '{"model_text":"导数好啊","knowledge_points":["导数"],"suggestion":"看看视频"}'
+        chat = FakeChat()
+        embedding = None
+        reranker = None
+
+    async def _collect():
+        events = []
+        async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+            events.append(evt)
+        return events
+
+    events = asyncio.run(_collect())
+    # fallback chunk, model chunk, knowledge_points, suggestion, done
+    types = []
+    for evt in events:
+        import json
+        payload = json.loads(evt.replace("data: ", "").strip())
+        types.append(payload["type"])
+    assert types == ["chunk", "chunk", "knowledge_points", "suggestion", "done"]
+
+
+def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
+    from agent_service.agents.tutoring import generate_tutoring_sse_events
+
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="讲讲树",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["二叉树"]),
+    )
+
+    class FakeProviders:
+        class FakeChat:
+            async def complete(self, messages, **kwargs):
+                return '{"model_text":"这是树","knowledge_points":["二叉树"],"suggestion":"看图","diagram":"graph TD; A-->B;"}'
+        chat = FakeChat()
+        embedding = None
+        reranker = None
+
+    async def _collect():
+        events = []
+        async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+            events.append(evt)
+        return events
+
+    events = asyncio.run(_collect())
+    # fallback chunk, model chunk, diagram, knowledge_points, suggestion, done
+    types = []
+    for evt in events:
+        import json
+        payload = json.loads(evt.replace("data: ", "").strip())
+        types.append(payload["type"])
+    assert types == ["chunk", "chunk", "diagram", "knowledge_points", "suggestion", "done"]
+    
+    diagram_event = json.loads(events[2].replace("data: ", "").strip())
+    assert diagram_event["data"] == "graph TD; A-->B;"

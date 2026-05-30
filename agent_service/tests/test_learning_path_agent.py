@@ -60,16 +60,58 @@ def test_generate_learning_path_preserves_graph_edges() -> None:
 
 
 class FakeChatProvider:
-    def __init__(self, output: str | None = None, should_raise: bool = False) -> None:
+    def __init__(self, output: str | None = None, should_raise: bool = False, fail_structured: bool = False) -> None:
         self.calls: list[list] = []
         self._output = output
         self._should_raise = should_raise
+        self._fail_structured = fail_structured
 
-    async def complete(self, messages):
+    async def complete(self, messages, **kwargs):
         self.calls.append(messages)
         if self._should_raise:
             raise RuntimeError("LLM unavailable")
+        if self._fail_structured and "structured_model" in kwargs:
+            raise RuntimeError("structured_model failed")
         return self._output
+
+
+def test_llm_path_structured_model_succeeds() -> None:
+    from agent_service.agents.learning_path import generate_learning_path_with_llm
+
+    provider = FakeChatProvider(
+        output=(
+            '{"nodes":['
+            '{"id":"n1","status":"completed","mastery":90,"order":1,"reason":"已掌握"}],'
+            '"current_position":{"node_id":"n1"}}'
+        )
+    )
+    result = asyncio.run(
+        generate_learning_path_with_llm(_build_request({}, {}), provider)
+    )
+    assert result is not None
+    assert len(result.nodes) == 1
+    assert result.nodes[0].id == "n1"
+
+
+def test_llm_path_structured_model_fails_and_falls_back() -> None:
+    from agent_service.agents.learning_path import generate_learning_path_with_llm
+
+    provider = FakeChatProvider(
+        output=(
+            '```json\n'
+            '{"nodes":['
+            '{"id":"n1","status":"completed","mastery":90,"order":1,"reason":"已掌握"}],'
+            '"current_position":{"node_id":"n1"}}'
+            '\n```'
+        ),
+        fail_structured=True
+    )
+    result = asyncio.run(
+        generate_learning_path_with_llm(_build_request({}, {}), provider)
+    )
+    assert result is not None
+    assert len(result.nodes) == 1
+    assert result.nodes[0].id == "n1"
 
 
 def test_llm_path_backfills_name_and_preserves_edges() -> None:

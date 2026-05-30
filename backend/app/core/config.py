@@ -13,8 +13,12 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = "123456"
     DB_NAME: str = "duagent"
 
+    DATABASE_URL: str = ""
+
     @property
-    def DATABASE_URL(self) -> str:
+    def resolved_database_url(self) -> str:
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
         return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset=utf8mb4"
 
     # JWT — v1 single token, 7-day expiry

@@ -194,6 +194,7 @@ CREATE TABLE conversations (
     scope           VARCHAR(20)   NOT NULL DEFAULT 'course' COMMENT '对话范围：course/global',
     course_id       VARCHAR(32)   DEFAULT NULL COMMENT '关联课程ID，全局对话为NULL',
     title           VARCHAR(200)  NOT NULL COMMENT '对话标题',
+    summary         TEXT          DEFAULT NULL COMMENT '记忆压缩后的全局对话摘要，供 Agent /tutoring/chat 的 conversation_summary 使用',
     create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
     update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
@@ -291,7 +292,7 @@ CREATE TABLE async_tasks (
     INDEX idx_is_deleted (is_deleted),
     CONSTRAINT fk_task_user FOREIGN KEY (user_id) REFERENCES users(id),
     CONSTRAINT fk_task_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='异步任务表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='异步任务表。资源生成链路：Backend创建task后调用Agent /resources/generate，传入task_id/user_id/course_id/webhook_url；Agent回调webhook时携带task_id和result.resources，Backend校验task_type后幂等写入resources表';
 
 
 -- ============================================================
@@ -373,12 +374,33 @@ CREATE TABLE learning_paths (
 
 
 -- ============================================================
--- 15. agent_logs — Agent运行日志表
+-- 15. course_knowledge_graphs — 课程静态知识图谱表
+-- ============================================================
+-- Backend 调用 Agent /learning-path/generate 时传入 knowledge_graph.nodes/edges。
+-- 来源：开发者预置 JSON 或从课程资源/向量库导出，每门课一条记录。
+CREATE TABLE course_knowledge_graphs (
+    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '图谱记录ID',
+    course_id       VARCHAR(32)   NOT NULL COMMENT '课程ID',
+    nodes           JSON          NOT NULL COMMENT '知识图谱节点 [{id, name, chapter}]',
+    edges           JSON          NOT NULL COMMENT '前置依赖边 [{from, to}]',
+    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
+    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
+    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
+    UNIQUE INDEX uk_course (course_id),
+    INDEX idx_is_deleted (is_deleted),
+    CONSTRAINT fk_ckg_course FOREIGN KEY (course_id) REFERENCES courses(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课程静态知识图谱表';
+
+
+-- ============================================================
+-- 16. agent_logs — Agent运行日志表
 -- ============================================================
 CREATE TABLE agent_logs (
     id              BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
     timestamp       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '时间戳',
-    agent_type      VARCHAR(20)   NOT NULL COMMENT 'Agent类型：tutoring/evaluation/profile/resource',
+    agent_type      VARCHAR(20)   NOT NULL COMMENT 'Agent类型：tutoring/evaluation/profile/assessment/learning_path/resource/memory/health',
     endpoint        VARCHAR(200)  NOT NULL DEFAULT '' COMMENT '调用的Agent接口路径',
     latency_ms      INT           NOT NULL DEFAULT 0 COMMENT '响应延迟（毫秒）',
     tokens_used     INT           NOT NULL DEFAULT 0 COMMENT 'Token消耗',
@@ -398,7 +420,7 @@ CREATE TABLE agent_logs (
 
 
 -- ============================================================
--- 16. operation_logs — 系统运行日志表
+-- 17. operation_logs — 系统运行日志表
 -- ============================================================
 CREATE TABLE operation_logs (
     id              BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',

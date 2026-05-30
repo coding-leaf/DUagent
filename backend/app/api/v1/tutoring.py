@@ -3,16 +3,87 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.api.deps import get_current_user, get_db
 from app.models.conversation import Conversation, Message
+from app.models.others import UserProfile
 from app.models.user import User
 from app.schemas.operations import TutoringChatRequest
+from app.db.session import async_session_factory
+from app.services.agent_client import AgentServiceError, agent_client
 
 router = APIRouter(prefix="/api/v1/tutoring", tags=["tutoring"])
+
+
+async def _assemble_tutoring_payload(
+    user_id: str, scope: str, course_id: str | None,
+    conversation_id: str, message: str, db: AsyncSession,
+) -> dict:
+    """组装调用 Agent /tutoring/chat 所需的 payload。"""
+    payload: dict = {
+        "user_id": user_id,
+        "scope": scope,
+        "message": message,
+        "conversation_id": conversation_id,
+    }
+    if course_id:
+        payload["course_id"] = course_id
+
+    # user_profile: 从 SQL 读取最近画像
+    if scope == "course" and course_id:
+        pf_result = await db.execute(
+            select(UserProfile)
+            .where(
+                UserProfile.user_id == user_id,
+                UserProfile.course_id == course_id,
+                UserProfile.is_deleted == False,
+            )
+        )
+        pf = pf_result.scalar_one_or_none()
+        if pf:
+            payload["user_profile"] = {
+                "guidance_level": pf.guidance_level_current,
+                "modal_preference": pf.modal_preference,
+                "knowledge_mastered": [
+                    kc["name"] for kc in (pf.knowledge_coordinates or [])
+                    if kc.get("status") == "mastered"
+                ],
+                "knowledge_weak": [
+                    kc["name"] for kc in (pf.knowledge_coordinates or [])
+                    if kc.get("status") != "mastered"
+                ],
+            }
+        else:
+            payload["user_profile"] = {"guidance_level": "L2"}
+    else:
+        payload["user_profile"] = {"guidance_level": "L2"}
+
+    # conversation_summary: 对话全局摘要
+    conv_r = await db.execute(
+        select(Conversation).where(Conversation.id == conversation_id)
+    )
+    conv = conv_r.scalar_one_or_none()
+    if conv and conv.summary:
+        payload["conversation_summary"] = conv.summary
+
+    # recent_messages: 最近 10 轮消息
+    msgs_r = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id, Message.is_deleted == False)
+        .order_by(Message.create_time.desc())
+        .limit(20)
+    )
+    recent = list(msgs_r.scalars().all())
+    recent.reverse()
+    payload["recent_messages"] = [
+        {"role": m.role, "content": m.content or "", "meta": m.meta_json or {}}
+        for m in recent
+    ]
+
+    return payload
 
 
 @router.post("/chat")
@@ -21,6 +92,7 @@ async def tutoring_chat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """智能辅导对话 SSE。代理 Agent /tutoring/chat 流，完成后保存 assistant 消息。"""
     # Validate scope
     if req.scope == "course" and not req.course_id:
         raise HTTPException(
@@ -28,6 +100,9 @@ async def tutoring_chat(
             detail={"code": 40001, "message": "scope=course 时必须提供 course_id", "data": None},
         )
 
+    effective_course_id: str | None = req.course_id if req.scope == "course" else None
+
+    # Create or validate conversation
     if req.conversation_id:
         result = await db.execute(
             select(Conversation).where(
@@ -47,7 +122,7 @@ async def tutoring_chat(
         conv = Conversation(
             user_id=current_user.id,
             scope=req.scope,
-            course_id=req.course_id if req.scope == "course" else None,
+            course_id=effective_course_id,
             title=title,
         )
         db.add(conv)
@@ -64,6 +139,7 @@ async def tutoring_chat(
     db.add(user_msg)
     await db.flush()
 
+    # Create placeholder for assistant message
     conversation_id = conv.id
     assistant_msg = Message(
         conversation_id=conv.id,
@@ -78,17 +154,82 @@ async def tutoring_chat(
     conv.update_time = datetime.now(timezone.utc)
     await db.flush()
 
-    async def event_generator():
-        response_text = f"你好！关于这个问题，我来为你解答..."
-        for i in range(0, len(response_text), 5):
-            chunk = response_text[i : i + 5]
-            yield {"event": "chunk", "data": json.dumps({"type": "chunk", "content": chunk})}
-            await asyncio.sleep(0.03)
+    # Commit pre-stream DB writes so session doesn't hold lock during SSE
+    await db.commit()
 
-        yield {
-            "event": "done",
-            "data": json.dumps({"type": "done", "conversation_id": conversation_id, "message_id": a_msg_id}),
-        }
+    # Assemble Agent payload (use new session for read-only payload assembly)
+    payload = await _assemble_tutoring_payload(
+        current_user.id, req.scope, effective_course_id,
+        conversation_id, req.message, db,
+    )
+
+    async def event_generator():
+        """代理 Agent SSE 流给前端，同时累积 assistant 回复内容。"""
+        accumulated_chunks: list[str] = []
+        diagrams: list = []
+        knowledge_points: list = []
+        done_sent = False
+
+        try:
+            async for raw_bytes in agent_client.stream_sse("/agent/v1/tutoring/chat", payload):
+                text = raw_bytes.decode("utf-8", errors="replace")
+                # SSE 协议: data: {...}\n\n
+                for line in text.split("\n"):
+                    stripped = line.strip()
+                    if not stripped or not stripped.startswith("data:"):
+                        continue
+                    data_str = stripped[5:].strip()
+                    if not data_str:
+                        continue
+
+                    # Forward to frontend
+                    yield {"event": "message", "data": data_str}
+
+                    # Parse for accumulation
+                    try:
+                        parsed = json.loads(data_str)
+                        t = parsed.get("type", "")
+                        if t == "chunk":
+                            accumulated_chunks.append(parsed.get("content", ""))
+                        elif t == "diagram":
+                            diagrams.append(parsed.get("data", parsed))
+                        elif t == "knowledge_points":
+                            knowledge_points = parsed.get("points", [])
+                        elif t == "done":
+                            done_sent = True
+                    except json.JSONDecodeError:
+                        pass
+
+        except AgentServiceError:
+            if not done_sent:
+                yield {
+                    "event": "done",
+                    "data": json.dumps({
+                        "type": "done",
+                        "conversation_id": conversation_id,
+                        "message_id": a_msg_id,
+                        "error": "Agent 服务暂时不可用",
+                    }),
+                }
+
+        # 流结束后更新 assistant 消息
+        full_content = "".join(accumulated_chunks)
+        async with async_session_factory() as update_db:
+            await update_db.execute(
+                sql_update(Message)
+                .where(Message.id == a_msg_id)
+                .values(
+                    content=full_content,
+                    diagrams=diagrams if diagrams else None,
+                    knowledge_points=knowledge_points if knowledge_points else None,
+                )
+            )
+            await update_db.execute(
+                sql_update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(update_time=datetime.now(timezone.utc))
+            )
+            await update_db.commit()
 
     return EventSourceResponse(event_generator())
 

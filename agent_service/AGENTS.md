@@ -2,7 +2,7 @@
 
 ## Scope
 
-- 负责 `agent_service` 内部的智能体服务与backend联动调试。
+- 负责 `agent_service` 内部的智能体服务。
 - 不负责主业务后端、前端、SQL 数据库业务系统。
 - Agent Service 不直接写 Backend 数据库，只接收 Backend 传入的结构化数据并返回结构化结果。
 
@@ -20,6 +20,8 @@
 
 `WORKFLOW.md` 是开发进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
 
+`docs/Agent架构演进与多智能体进程.md` 记录 Agent 架构演进讨论、multi-agent 候选项和阶段性取舍，不是接口契约来源，也不是具体实现计划。
+
 ## Architecture Boundaries
 
 当前分层职责固定为：
@@ -33,6 +35,14 @@
 - `core`：放配置和基础设施初始化。
 
 避免把业务逻辑写进 `api` 层。API 层应调用 `agents` 层完成业务处理。
+
+## Agent Architecture Direction
+
+- EduAgent 后续以多智能体架构优先，但不为所有接口强行套用 subagent / multi-agent。
+- 多智能体优先用于天然需要拆分、协作、检索、自检或并行的链路，例如 `resources/generate`、`tutoring/chat`、`assessment/generate-questions`。
+- `profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate` 等确定性或统计型接口，优先保持 structured output + 规则保护，不做无收益的多 Agent 化。
+- 涉及 Agent 编排升级时，优先参考 `docs/Agent架构演进与多智能体进程.md`，再写单独 design / implementation plan。
+- 多 Agent 实现不能改变 OpenAPI、schemas 或 Backend 调用契约；AgentScope 内部对象不得泄漏到 API 层。
 
 ## Code Change Rules
 
@@ -61,7 +71,7 @@
   4. 运行相关测试
   5. 更新 `WORKFLOW.md`
 - 除非用户明确要求，不要一次性实现多个接口的业务逻辑。
-- 渐进式开发，优先规则版可用实现，再逐步接入 AgentScope、LLM、Qdrant、工具调用。
+- 接入 AgentScope、LLM、Qdrant、工具等框架调用。
 - 非必要功能可最小实现,优先满足主要功能的实现而非注重细枝末节
 
 ## Documentation Boundary
@@ -82,8 +92,7 @@
   - 官方文档索引优先使用 `https://docs.agentscope.io/llms.txt`；本仓库导航使用 `docs/skills/agentscope-framework/SKILL.md`。
   - 若官方文档、当前安装版本和历史示例冲突，优先以官方当前文档和本地安装包 introspection 为准。
   - 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在 `WORKFLOW.md` 标注后续替换点。
-  -关于例如RAG,AgentMessage等与ai相关联的代码实现,可优先查询Agentscope框架是否有现成的提供方案供使用
-
+  - 涉及 RAG、Msg、ReActAgent、structured output、Memory、Tool 等 AI 相关实现时需优先参考agentscope框架
 
 ## Progress Tracking
 
@@ -157,9 +166,6 @@ uv run python -m agent_service.main
 ```
 
 不要在仓库根目录直接运行 `uv sync`。
-
-
-
 
 ## Completion Summary
 

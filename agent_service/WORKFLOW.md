@@ -12,6 +12,7 @@
 - 当前 Agent 主链路已覆盖 `tutoring/chat` 和 `assessment/generate-questions`；下一阶段架构主线是 `resources/generate` 的 AgentScope workflow / multi-agent 编排。
 - 非主线能力以简洁可用为准，避免为了本地 smoke 继续扩大 Qdrant、ID、并发 client 等实现细节。
 - AgentScope 接入应落在 `agents/`、`memory/`、`tools/`、`prompts/`、`core/` 边界内，不泄漏到 OpenAPI/schema。
+- 多智能体候选项和阶段取舍记录在 `docs/Agent架构演进与多智能体进程.md`；具体实现前仍需单独 design / plan。
 - `WORKFLOW.md` 不再记录长流水日志，只保留当前状态、最近验证和下一步。
 
 ## 接口进度
@@ -52,6 +53,7 @@
 - API 边界收束已完成：health 探针逻辑下沉到 `agents/health.py`；tutoring API 恢复薄路由且不暴露测试注入参数；assessment 出题不再从 API 层导入 agents 私有函数。
 - OpenAPI 对齐测试已扩展到主要 request/result schema，当前 26 个 alignment 测试覆盖 HealthData、assessment、learning-path、resources、memory、tutoring SSE 参数等。
 - 本地启动与运维文档已补充：`docs/Agent-Service_本地启动与运维.md` 记录 uvicorn 启动、health、readiness、smoke、知识入库和常见问题。
+- Agent 架构演进台账已补充：`docs/Agent架构演进与多智能体进程.md`，用于持续记录 resources workflow、tutoring 深化、assessment 质量 Agent、observability、AgentScope RAG/Memory 等候选方向。
 
 ## AgentScope 使用审查
 
@@ -133,6 +135,11 @@
 
 - Backend 开放只读接口后，补充出题去重和真实练习题推荐
 - resources/generate 升级为 AgentScope workflow 多智能体并行生成（当前主线）
+- tutoring 增加 StrategyAgent / ResponseCritic 等局部多 Agent 深化（resources workflow 稳定后评估）
+- assessment/generate-questions 增加 QuestionCriticAgent / DifficultyBalancer 等质量闭环（需要先确认题库/知识点边界）
+- observability / AgentScope Studio trace 作为多 Agent 链路展示与验收能力
+- AgentScope Knowledge / RAG 与当前手写 Qdrant 检索做对照实验
+- Memory 策略 Agent 暂缓，只在长期记忆质量成为主瓶颈时推进
 - Qdrant server 模式 / shared client 改造
 
 ## 文档补充记录
@@ -145,8 +152,9 @@
 - 删除 agent_service/docs 下已过时历史问题清单，避免后续 AI 将已修复问题重新当待办。
 - 更新 `docs/Agent-AI编排审计.md` 为当前 AI / AgentScope / RAG 编排快照。
 - 重写 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md`，将后续方向调整为多智能体优先、AgentScope 可落地能力优先，主线为 `resources/generate` workflow / multi-agent。
+- 新增 `docs/Agent架构演进与多智能体进程.md`，作为多智能体升级候选项、优先级和开放问题的持续讨论台账。
 
 ## 最近测试/验证补充
 
-- 本次仅修改文档和 `WORKFLOW.md`，未修改业务代码，未新增或变更 OpenAPI 契约
+- 最近仅修改文档、`AGENTS.md` 和 `WORKFLOW.md`，未修改业务代码，未新增或变更 OpenAPI 契约
 - 文档内容以 `../docs/20-agent-api/Agent-Service.openapi.json` 和 `../docs/20-agent-api/API_Agent内部接口规范.md` 对齐整理

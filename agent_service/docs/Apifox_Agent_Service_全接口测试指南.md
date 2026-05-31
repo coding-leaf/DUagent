@@ -74,6 +74,7 @@ GET http://127.0.0.1:8002/agent/v1/health
 
 - `model_loaded=false` 且 `model_name=""`：服务进程没有读到 `.env`。如果 `.env` 在 `agent_service/.env`，优先从 `agent_service/` 目录启动服务。
 - `status=degraded`：通常是 Qdrant 探针失败，不一定影响所有接口的规则版 fallback。
+- Qdrant local lock：如果日志出现 `Storage folder ./qdrant_data is already accessed by another instance`，停止其他正在运行的 Agent Service/smoke/ingest/readiness 进程后重试。该问题不是 Apifox 请求体错误。
 
 ## 3. Tutoring Chat
 

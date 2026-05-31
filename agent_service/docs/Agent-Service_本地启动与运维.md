@@ -215,6 +215,24 @@ knowledge_base/
 ./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8012
 ```
 
+### Qdrant local 文件锁
+
+当前 `QDRANT_PATH=./qdrant_data` 使用 Qdrant local 文件模式。该模式不支持多个 Python 进程同时访问同一个目录。
+
+如果看到：
+
+```text
+Storage folder ./qdrant_data is already accessed by another instance of Qdrant client
+```
+
+处理顺序：
+
+1. 停掉重复的 `uvicorn`、`smoke_all`、`readiness --live`、知识入库脚本。
+2. 确保只保留一个 Agent Service 进程访问 `./qdrant_data`。
+3. 再重新测试 Apifox。
+
+如果需要并发测试，后续应切换到 Qdrant server 模式，而不是继续使用 local 文件模式。
+
 ### Health degraded
 
 先检查 Qdrant local path 是否可写：

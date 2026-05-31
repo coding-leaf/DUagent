@@ -10,3 +10,9 @@ def test_smoke_all_main_returns_int() -> None:
     result = main()
     assert isinstance(result, int)
     assert result == 0
+
+
+def test_smoke_resources_workflow_imports_and_main_callable() -> None:
+    from agent_service.tools import smoke_resources_workflow
+
+    assert callable(smoke_resources_workflow.main)

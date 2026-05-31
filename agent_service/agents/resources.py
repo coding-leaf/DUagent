@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 import re
 from collections.abc import Awaitable, Callable
@@ -92,24 +93,34 @@ async def run_resource_generation_task(
     """
     try:
         providers = get_ai_providers()
-        course_knowledge_context = await _build_course_knowledge_context(
+        chat_provider = getattr(providers, "chat", None)
+        embedding_provider = getattr(providers, "embedding", None)
+        multi_agent_payload = await _try_multi_agent_workflow(
             request,
-            getattr(providers, "embedding", None),
+            chat_provider,
+            embedding_provider,
         )
-        llm_resources = await generate_resources_with_llm(
-            request,
-            getattr(providers, "chat", None),
-            course_knowledge_context=course_knowledge_context,
-        )
-        if llm_resources is not None:
-            payload = {
-                "task_id": request.task_id,
-                "task_type": TASK_TYPE,
-                "status": "completed",
-                "result": {"resources": llm_resources},
-            }
+        if multi_agent_payload is not None:
+            payload = multi_agent_payload
         else:
-            payload = result_builder(request)
+            course_knowledge_context = await _build_course_knowledge_context(
+                request,
+                embedding_provider,
+            )
+            llm_resources = await generate_resources_with_llm(
+                request,
+                chat_provider,
+                course_knowledge_context=course_knowledge_context,
+            )
+            if llm_resources is not None:
+                payload = {
+                    "task_id": request.task_id,
+                    "task_type": TASK_TYPE,
+                    "status": "completed",
+                    "result": {"resources": llm_resources},
+                }
+            else:
+                payload = result_builder(request)
     except Exception as exc:
         logger.warning(
             "Resource generation failed before webhook: task_id=%s error=%s",
@@ -132,6 +143,55 @@ async def run_resource_generation_task(
             exc,
         )
         return
+
+
+async def _try_multi_agent_workflow(
+    request: ResourceGenerateRequest,
+    chat_provider,
+    embedding_provider,
+) -> WebhookPayload | None:
+    """Try the multi-agent workflow and return None for the existing fallback chain."""
+    try:
+        if not _supports_multi_agent_chat_provider(chat_provider):
+            return None
+        from agent_service.agents.resources_workflow import (
+            run_multi_agent_resource_workflow,
+        )
+
+        result = await run_multi_agent_resource_workflow(
+            request,
+            chat_provider,
+            embedding_provider,
+        )
+        if result is None:
+            logger.warning(
+                "Multi-agent workflow returned None, falling back to LLM parallel path: task_id=%s",
+                request.task_id,
+            )
+        return result
+    except Exception:
+        logger.warning(
+            "Multi-agent workflow failed, falling back to LLM parallel path: task_id=%s",
+            request.task_id,
+            exc_info=True,
+        )
+        return None
+
+
+def _supports_multi_agent_chat_provider(chat_provider) -> bool:
+    """Multi-agent path expects the AgentScope-style extensible complete API."""
+    if chat_provider is None or not hasattr(chat_provider, "complete"):
+        return False
+    try:
+        signature = inspect.signature(chat_provider.complete)
+    except (TypeError, ValueError):
+        return False
+    parameters = signature.parameters.values()
+    return any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        or parameter.name == "structured_model"
+        for parameter in parameters
+    )
 
 
 def build_resource_generation_failed_payload(request: ResourceGenerateRequest, error_message: str) -> WebhookPayload:

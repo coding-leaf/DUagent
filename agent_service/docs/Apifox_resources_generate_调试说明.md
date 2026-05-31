@@ -74,6 +74,14 @@ POST /api/v1/webhooks/agent
 
 然后复制 Apifox 为该 Webhook 提供的接收/调试 URL。后续调用 `resources/generate` 时，把这个完整 URL 填入 `webhook_url`。
 
+当前 WSL 本地调试优先使用 Apifox 的云端 Mock 地址，避免 Apifox 桌面端本地 Mock 的 `127.0.0.1` 指向 Windows 而不是 WSL。
+
+当前可用云端 Mock 示例：
+
+```text
+https://m1.apifoxmock.com/m1/8182577-7941807-7764192/api/v1/webhooks/agent
+```
+
 注意：Apifox Webhook 是被 Agent Service 回调的接口，不是你手动发送资源生成请求的接口。
 
 调用方向是：
@@ -92,7 +100,7 @@ POST http://127.0.0.1:8002/agent/v1/resources/generate
 Content-Type: application/json
 ```
 
-`webhook_url` 填上一步复制到的 Apifox Webhook 接收/调试 URL，或正式 Backend 的 `/api/v1/webhooks/agent` 完整地址。
+`webhook_url` 填上一步复制到的 Apifox Webhook 接收/调试 URL，或正式 Backend 的 `/api/v1/webhooks/agent` 完整地址。当前建议使用 Apifox 云端 Mock URL。
 
 ### 请求体示例
 
@@ -101,7 +109,7 @@ Content-Type: application/json
   "task_id": "apifox-resources-001",
   "user_id": "apifox-user",
   "course_id": "smoke-course",
-  "webhook_url": "https://example.apifoxmock.com/api/v1/webhooks/agent",
+  "webhook_url": "https://m1.apifoxmock.com/m1/8182577-7941807-7764192/api/v1/webhooks/agent",
   "chapter": "函数",
   "knowledge_point": "一次函数",
   "resource_types": ["document", "mindmap", "reading", "code"]

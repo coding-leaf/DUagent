@@ -69,6 +69,27 @@ def build_question_generation_user_message(
     return "\n".join(parts)
 
 
+def build_question_critic_prompt(
+    request: QuestionGenerateRequest,
+    questions_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建出题质量 Critic 提示词，输入请求、题目 JSON 和课程上下文，输出 JSON 判定要求。"""
+    return (
+        "你是 EDUagent 的出题质量审查员。请只判断题目是否应被接受，不要改写题目。\n\n"
+        "审查标准：\n"
+        "- 题目必须贴合请求的知识点、章节、题型和难度\n"
+        "- 题干必须是完整学科问题，不能是占位模板或泛泛描述\n"
+        "- 选择题选项必须合理、有迷惑性，解析必须说明答案原因\n"
+        "- 如果提供课程参考资料，题目应优先基于资料中的概念或例题\n\n"
+        "请求：\n"
+        f"{build_question_generation_user_message(request, course_knowledge_context=course_knowledge_context)}\n\n"
+        "待审查题目 JSON：\n"
+        f"{questions_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )
+
+
 def _format_context(context: dict | None) -> str:
     if not context:
         return "无"

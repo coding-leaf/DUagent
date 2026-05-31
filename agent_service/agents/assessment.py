@@ -580,8 +580,17 @@ async def generate_questions_with_agent(
         if parsed:
             questions = _coerce_questions(parsed)
             if questions:
-                logger.info("ReActAgent generation succeeded: assessment/generate-questions")
-                return questions
+                from agent_service.agents.assessment_critic import QuestionCriticAgent
+
+                critic = QuestionCriticAgent(chat_provider=chat_provider)
+                if await critic.review(
+                    request,
+                    questions,
+                    course_knowledge_context=course_knowledge_context,
+                ):
+                    logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                    return questions
+                logger.warning("QuestionCritic rejected ReAct questions; falling back to LLM path")
 
     # LLM fallback
     questions = await generate_questions_with_llm(

@@ -880,7 +880,20 @@ class TestQuestionRAG:
             def __init__(self, *args, **kwargs):
                 pass
             async def generate(self, request, course_knowledge_context=None):
-                return [{"type": "single_choice", "content": "ReAct题目", "options": [{"key": "A", "text": "X"}], "answer": "A", "knowledge_point": "K", "explanation": "E"}]
+                return [{
+                    "type": "single_choice",
+                    "content": "顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                    "options": [
+                        {"key": "A", "text": "O(1)"},
+                        {"key": "B", "text": "O(n)"},
+                        {"key": "C", "text": "O(log n)"},
+                        {"key": "D", "text": "O(n log n)"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                    "difficulty": "medium",
+                }]
 
         with (
             patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
@@ -889,7 +902,155 @@ class TestQuestionRAG:
             questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
         assert len(questions) == 1
-        assert questions[0].content == "ReAct题目"
+        assert "访问第 i 个元素" in questions[0].content
+
+    def test_generate_questions_with_agent_falls_back_when_critic_rejects_bad_options(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="LLM fallback 题目",
+                    options=[],
+                    answer="A",
+                    knowledge_point="K",
+                    explanation="E",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "顺序表的随机访问时间复杂度是多少？",
+                    "options": [{"key": "A", "text": "O(1)"}],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "顺序表可按下标直接定位元素。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content == "LLM fallback 题目"
+
+    def test_question_critic_fail_open_when_llm_critic_raises_after_rule_pass(self) -> None:
+        from agent_service.agents.assessment_critic import QuestionCriticAgent
+        from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
+
+        class FailingChatProvider:
+            async def complete(self, messages):
+                raise RuntimeError("critic unavailable")
+
+        questions = [
+            GeneratedQuestion(
+                type="single_choice",
+                content="顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                options=[
+                    QuestionOption(key="A", text="O(1)"),
+                    QuestionOption(key="B", text="O(n)"),
+                    QuestionOption(key="C", text="O(log n)"),
+                    QuestionOption(key="D", text="O(n log n)"),
+                ],
+                answer="A",
+                explanation="顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                knowledge_point="顺序存储结构",
+                difficulty="medium",
+            )
+        ]
+
+        accepted = asyncio.run(
+            QuestionCriticAgent(chat_provider=FailingChatProvider()).review(
+                self._request(), questions, course_knowledge_context="顺序表支持随机访问。"
+            )
+        )
+
+        assert accepted is True
+
+    def test_question_critic_rejects_when_llm_critic_rejects_rule_passed_questions(self) -> None:
+        from agent_service.agents.assessment_critic import QuestionCriticAgent
+        from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
+
+        class RejectingChatProvider:
+            async def complete(self, messages):
+                return '{"accepted": false, "reasons": ["题目没有贴合课程资料"]}'
+
+        questions = [
+            GeneratedQuestion(
+                type="single_choice",
+                content="顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                options=[
+                    QuestionOption(key="A", text="O(1)"),
+                    QuestionOption(key="B", text="O(n)"),
+                    QuestionOption(key="C", text="O(log n)"),
+                    QuestionOption(key="D", text="O(n log n)"),
+                ],
+                answer="A",
+                explanation="顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                knowledge_point="顺序存储结构",
+                difficulty="medium",
+            )
+        ]
+
+        accepted = asyncio.run(
+            QuestionCriticAgent(chat_provider=RejectingChatProvider()).review(
+                self._request(), questions, course_knowledge_context="课程资料只讲链表。"
+            )
+        )
+
+        assert accepted is False
+
+    def test_question_critic_accepts_rule_passed_questions_when_llm_returns_invalid_json(self) -> None:
+        from agent_service.agents.assessment_critic import QuestionCriticAgent
+        from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
+
+        class BadJsonChatProvider:
+            async def complete(self, messages):
+                return "不是 JSON"
+
+        questions = [
+            GeneratedQuestion(
+                type="single_choice",
+                content="顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                options=[
+                    QuestionOption(key="A", text="O(1)"),
+                    QuestionOption(key="B", text="O(n)"),
+                    QuestionOption(key="C", text="O(log n)"),
+                    QuestionOption(key="D", text="O(n log n)"),
+                ],
+                answer="A",
+                explanation="顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                knowledge_point="顺序存储结构",
+                difficulty="medium",
+            )
+        ]
+
+        accepted = asyncio.run(
+            QuestionCriticAgent(chat_provider=BadJsonChatProvider()).review(
+                self._request(), questions, course_knowledge_context="顺序表支持随机访问。"
+            )
+        )
+
+        assert accepted is True
 
     def test_generate_questions_with_agent_falls_back_when_react_returns_invalid_question(self) -> None:
         from unittest.mock import MagicMock, patch

@@ -24,7 +24,7 @@
 | `POST /agent/v1/profile/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full ProfileData enrichment → 规则版；LLM 输出经 schema/枚举/范围/观测名称保护后合并 |
 | `POST /agent/v1/evaluation/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full EvaluationData enrichment → 规则版；表格和 summary 均经列/范围/观测名称保护后合并 |
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
-| `POST /agent/v1/assessment/generate-questions` | ReActAgent + RAG + fallback 已完成 | 降级链：ReActAgent + toolkit → structured_model/LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
+| `POST /agent/v1/assessment/generate-questions` | ReActAgent + RAG + QuestionCritic + fallback 已完成 | 降级链：ReActAgent + toolkit → QuestionCriticAgent 质量门禁 → structured_model/LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
 | `POST /agent/v1/resources/generate` | LLM + RAG + fallback 已完成 | 202 + 后台任务；LLM 并行生成四类资源 + course_knowledge RAG 检索注入 prompt；skeleton fallback → webhook completed |
 | `POST /agent/v1/memory/compress` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 规则版；规则版补齐 mastered_point / cognitive_preference / blind_spot 三种类型；LLM 提取 3 种 fact 类型 + 生成摘要；Qdrant 写入 best-effort |
@@ -123,6 +123,9 @@
 - **Phase 0 spike 完成**：`assessment/generate-questions` structured_model 兼容性验证通过，降级链：structured_model → markdown fence JSON → rule-based
 - **Phase 3 Step A 完成**：收束 `assessment/generate-questions` API 边界，将其依赖项获取、RAG 构建与 LLM 调用下沉至 `generate_questions_with_agent` 函数，规范了 LLM 解析的统一下沉与空列表 fallback。
 - **Phase 3 Step B 完成并修复**：引入 `QuestionGeneratorReActAgent` 和配套工具（`retrieve_course_knowledge`、`validate_question_format`）；已修复 ReAct 坏输出直接冒泡、测试误触发真实 provider 初始化、题型校验与 OpenAPI 不一致、默认 toolkit 无 vector_store 的问题。当前出题请求优先通过 ReAct 编排进行结构化推理、RAG 和自检，失败时回落到原有 LLM 或骨架路径。
+- `./.venv/bin/pytest tests/test_assessment_agent.py -q`：**41 passed**（新增 `QuestionCriticAgent` 混合质量门禁：规则先筛、LLM critic 拒绝则降级、LLM critic 异常/坏 JSON 时规则通过即放行）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（本轮未修改 OpenAPI / schemas / API 路由，契约不漂移）
+- `./.venv/bin/pytest tests/test_tutoring_tools.py tests/test_vector_store.py -q`：**16 passed**（相关工具和 vector store 回归无破坏）
 
 ## 下一步
 
@@ -138,7 +141,7 @@
 
 - `resources/generate`：继续作为 multi-agent 主线，保留 Planner → ResourceAgent 并行 → Aggregator；后续优先补 ResourceCriticAgent / 质量门禁、真实 LLM 质量验证、AgentScope Studio trace，不改变 202 + webhook 契约。
 - `tutoring/chat`：适合继续 Agent 化，优先引入 StrategyAgent 判断讲解策略（提示式引导 / 直接解释 / 追问澄清 / 例题讲解），再评估 ResponseCriticAgent；保持 ReActAgent → chat JSON → rule-based fallback。
-- `assessment/generate-questions`：适合继续 Agent 化，优先引入 QuestionCriticAgent 检查题目质量、知识点贴合度、选项和解析合理性；后续再评估 KnowledgePointGuard / DifficultyBalancer，保持 OpenAPI 题型契约不变。
+- `assessment/generate-questions`：QuestionCriticAgent 第一阶段已完成，混合规则 + LLM critic 检查题目质量、知识点贴合度、选项和解析合理性；后续再评估 KnowledgePointGuard / DifficultyBalancer，保持 OpenAPI 题型契约不变。
 - `profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress` 暂不作为主线 Agent 化目标；仅在出现明确收益时做局部 Agent/Verifier，不替换稳定规则保护。
 
 ### 当前上下文补充

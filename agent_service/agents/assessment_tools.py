@@ -19,9 +19,9 @@ def build_assessment_toolkit(
     async def retrieve_course_knowledge(query: str) -> ToolResponse:
         """检索课程知识库中与查询相关的内容。"""
         if not course_id:
-            return ToolResponse(content=[{"text": "当前无指定课程知识库。"}])
+            return _text_response("当前无指定课程知识库。")
         if embedding_provider is None or vector_store is None:
-            return ToolResponse(content=[{"text": "知识检索暂时不可用。"}])
+            return _text_response("知识检索暂时不可用。")
         try:
             vectors = await embedding_provider.embed_texts([query])
             results = await vector_store.search_course_knowledge(
@@ -29,16 +29,16 @@ def build_assessment_toolkit(
             )
             logger.info("RAG retrieved %d chunks for course_id=%s (assessment tools)", len(results) if results else 0, course_id)
             if not results:
-                return ToolResponse(content=[{"text": "未找到相关课程知识。"}])
+                return _text_response("未找到相关课程知识。")
             text = "\n---\n".join(_truncate_chunk(r.text, 1000) for r in results if r.text)
-            return ToolResponse(content=[{"text": text}])
+            return _text_response(text)
         except Exception as e:
             logger.warning("课程知识检索失败 (assessment tools)", exc_info=True)
-            return ToolResponse(content=[{"text": f"检索出错: {e}"}])
+            return _text_response(f"检索出错: {e}")
 
     def validate_question_format(questions_json_str: str) -> ToolResponse:
         """校验生成的题目 JSON 数组格式是否正确。"""
-        return ToolResponse(content=[{"text": _validate_question_format_content(questions_json_str)}])
+        return _text_response(_validate_question_format_content(questions_json_str))
 
     toolkit = Toolkit()
     toolkit.register_tool_function(
@@ -58,6 +58,10 @@ def _truncate_chunk(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "..."
+
+
+def _text_response(text: str) -> ToolResponse:
+    return ToolResponse(content=[{"type": "text", "text": text}])
 
 
 def _validate_question_format_content(questions_json_str: str) -> str:

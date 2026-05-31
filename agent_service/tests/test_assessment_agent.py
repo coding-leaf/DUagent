@@ -982,6 +982,39 @@ def test_assessment_question_format_validator_matches_openapi_question_types() -
     assert "不支持 'true_false'" in _validate_question_format_content(true_false_payload)
 
 
+def test_assessment_toolkit_retrieval_fallback_returns_text_block() -> None:
+    from agent_service.agents.assessment_tools import build_assessment_toolkit
+
+    toolkit = build_assessment_toolkit(
+        course_id="course-1",
+        embedding_provider=None,
+        vector_store=None,
+    )
+    result = asyncio.run(
+        _get_registered_tool(toolkit, "retrieve_course_knowledge")("线性表")
+    )
+
+    assert result.content == [{"type": "text", "text": "知识检索暂时不可用。"}]
+
+
+def test_assessment_toolkit_validator_returns_text_block() -> None:
+    from agent_service.agents.assessment_tools import build_assessment_toolkit
+
+    payload = (
+        '[{"type":"code","content":"写一个函数","options":[],"answer":"def f(): pass",'
+        '"knowledge_point":"函数","explanation":"代码题解析"}]'
+    )
+    toolkit = build_assessment_toolkit(
+        course_id="course-1",
+        embedding_provider=None,
+        vector_store=None,
+    )
+    result = _get_registered_tool(toolkit, "validate_question_format")(payload)
+
+    assert result.content[0]["type"] == "text"
+    assert "校验通过" in result.content[0]["text"]
+
+
 def _build_request(
     questions: list[AssessmentQuestion],
     answers: list[AssessmentAnswer],
@@ -993,3 +1026,9 @@ def _build_request(
         questions=questions,
         answers=answers,
     )
+
+
+def _get_registered_tool(toolkit, name: str):
+    if name in toolkit.tools:
+        return toolkit.tools[name].original_func
+    raise KeyError(f"tool {name} not found in toolkit")

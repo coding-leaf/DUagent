@@ -21,12 +21,8 @@ class QdrantVectorStore:
     """封装 Qdrant 检索，通过 AgentScope QdrantStore 异步访问用户记忆和课程知识。"""
 
     def __init__(self, user_memory_store=None, course_knowledge_store=None) -> None:
-        self._user_store = user_memory_store or build_qdrant_store(
-            settings.QDRANT_USER_MEMORY_COLLECTION,
-        )
-        self._course_store = course_knowledge_store or build_qdrant_store(
-            settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION,
-        )
+        self._user_store = user_memory_store
+        self._course_store = course_knowledge_store
 
     async def search_user_memory(
         self,
@@ -34,9 +30,10 @@ class QdrantVectorStore:
         vector: Sequence[float],
         limit: int = 3,
     ) -> list[VectorSearchResult]:
-        client = self._user_store.get_client()
+        store = self._get_user_store()
+        client = store.get_client()
         response = await client.query_points(
-            collection_name=self._user_store.collection_name,
+            collection_name=store.collection_name,
             query=list(vector),
             query_filter=_match_filter("user_id", user_id),
             limit=limit,
@@ -50,15 +47,26 @@ class QdrantVectorStore:
         vector: Sequence[float],
         limit: int = 3,
     ) -> list[VectorSearchResult]:
-        client = self._course_store.get_client()
+        store = self._get_course_store()
+        client = store.get_client()
         response = await client.query_points(
-            collection_name=self._course_store.collection_name,
+            collection_name=store.collection_name,
             query=list(vector),
             query_filter=_match_filter("course_id", course_id),
             limit=limit,
             with_payload=True,
         )
         return _map_query_response(response)
+
+    def _get_user_store(self):
+        if self._user_store is None:
+            self._user_store = build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
+        return self._user_store
+
+    def _get_course_store(self):
+        if self._course_store is None:
+            self._course_store = build_qdrant_store(settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION)
+        return self._course_store
 
 
 

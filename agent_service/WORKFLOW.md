@@ -111,6 +111,9 @@
 
 ## 最近测试/验证
 
+- `./.venv/bin/pytest tests/test_tutoring_tools.py tests/test_assessment_agent.py tests/test_vector_store.py -q`：**53 passed**（修复 AgentScope ToolResponse TextBlock 格式；验证 QdrantVectorStore 懒加载 user/course store）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（本轮未修改 OpenAPI / schemas / API 路由，契约不漂移）
+- `./.venv/bin/pytest tests/test_resources_agent.py tests/test_resources_workflow.py -q`：**85 passed**（共享 vector store 懒加载改动未破坏 resources 检索/工作流路径）
 - `./.venv/bin/pytest -q`：**272 passed**（Phase 0/1/2/3 测试通过，包含 diagram 顺序验证与 assessment ReAct 降级保护）
 - `./.venv/bin/pytest tests/test_core_config.py -q`：**5 passed**
 - OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
@@ -130,6 +133,12 @@
 4. 补充 observability：第一阶段结构化日志和 smoke 输出，第二阶段 AgentScope Studio trace 验证。
 5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）可并行，但不阻塞 multi-agent 设计。
 6. Phase 4 prompt/后处理修正作为质量增强穿插进行。
+
+### 当前上下文补充
+
+- Apifox 真实 AI 流程中发现的 AgentScope ToolResponse block 格式问题已修复：tutoring / assessment toolkit 均返回 `{"type": "text", "text": "..."}`。
+- `QdrantVectorStore()` 已改为按实际检索懒加载对应 collection store，减少 local 文件模式下同进程重复打开 `./qdrant_data` 的风险。
+- Qdrant local 多进程并发文件锁仍可能发生，长期稳定方案仍建议迁移 Qdrant server 模式。
 
 ### 中远期
 

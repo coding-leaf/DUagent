@@ -39,6 +39,52 @@ class FakeQdrantStore:
         return self._client
 
 
+def test_constructing_vector_store_does_not_build_default_qdrant_stores(monkeypatch) -> None:
+    calls = []
+
+    def fake_build_qdrant_store(collection_name):
+        calls.append(collection_name)
+        return FakeQdrantStore(collection_name)
+
+    monkeypatch.setattr(vector_store_module, "build_qdrant_store", fake_build_qdrant_store)
+
+    QdrantVectorStore()
+
+    assert calls == []
+
+
+def test_search_course_knowledge_lazily_builds_only_course_store(monkeypatch) -> None:
+    calls = []
+
+    def fake_build_qdrant_store(collection_name):
+        calls.append(collection_name)
+        return FakeQdrantStore(collection_name)
+
+    monkeypatch.setattr(vector_store_module, "build_qdrant_store", fake_build_qdrant_store)
+
+    store = QdrantVectorStore()
+    results = asyncio.run(store.search_course_knowledge(course_id="course-1", vector=[0.1], limit=1))
+
+    assert results
+    assert calls == [vector_store_module.settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION]
+
+
+def test_search_user_memory_lazily_builds_only_user_store(monkeypatch) -> None:
+    calls = []
+
+    def fake_build_qdrant_store(collection_name):
+        calls.append(collection_name)
+        return FakeQdrantStore(collection_name)
+
+    monkeypatch.setattr(vector_store_module, "build_qdrant_store", fake_build_qdrant_store)
+
+    store = QdrantVectorStore()
+    results = asyncio.run(store.search_user_memory(user_id="user-1", vector=[0.1], limit=1))
+
+    assert results
+    assert calls == [vector_store_module.settings.QDRANT_USER_MEMORY_COLLECTION]
+
+
 def test_search_user_memory_filters_by_user_id_and_maps_payload_text() -> None:
     user_store = FakeQdrantStore("user_memory_v1_1024")
     course_store = FakeQdrantStore("course_knowledge_v1_1024")

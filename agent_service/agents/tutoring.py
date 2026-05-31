@@ -145,6 +145,7 @@ async def generate_tutoring_model_response(
     request: TutoringChatRequest,
     retrieval_context: TutoringRetrievalContext,
     chat_provider: ChatProvider | None,
+    strategy=None,
 ) -> TutoringModelResponse | None:
     """调用 tutoring 模型编排，输入请求和检索上下文，输出可合并进 SSE 的内部模型结果。
 
@@ -152,7 +153,7 @@ async def generate_tutoring_model_response(
     """
     if chat_provider is None:
         return None
-    messages = build_tutoring_messages(request, retrieval_context)
+    messages = build_tutoring_messages(request, retrieval_context, strategy=strategy)
     try:
         raw = await _try_structured_output(messages, chat_provider)
         if raw is not None:
@@ -233,6 +234,7 @@ async def generate_tutoring_sse_events(request, providers=None):
     from collections.abc import AsyncIterator
 
     from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
+    from agent_service.agents.tutoring_strategy import select_tutoring_strategy
     from agent_service.core.ai import get_ai_providers
     from agent_service.memory.tutoring_retrieval import (
         build_tutoring_retrieval_context,
@@ -274,13 +276,15 @@ async def generate_tutoring_sse_events(request, providers=None):
         retrieval_context = build_tutoring_retrieval_context(request)
 
     chat = getattr(providers, "chat", None)
+    strategy = await select_tutoring_strategy(request, retrieval_context, chat)
     react_response = await generate_tutoring_react_response(
         request, retrieval_context, chat,
         embedding_provider=embedding,
         vector_store=vector_store,
+        strategy=strategy,
     )
     if react_response is None:
-        react_response = await generate_tutoring_model_response(request, retrieval_context, chat)
+        react_response = await generate_tutoring_model_response(request, retrieval_context, chat, strategy=strategy)
 
     runtime_result = build_tutoring_generation_result(
         request, retrieval_context=retrieval_context, model_response=react_response

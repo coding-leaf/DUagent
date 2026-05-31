@@ -18,7 +18,7 @@
 | 接口 | 状态 | 当前实现要点 |
 |------|------|--------------|
 | `GET /agent/v1/health` | 已完成 | health 探针逻辑在 `agents/health.py`，API 层薄路由 |
-| `POST /agent/v1/tutoring/chat` | ReActAgent 最小链路已完成 | ReActAgent + course/user memory toolkit；降级链：ReAct → chat JSON → rule-based |
+| `POST /agent/v1/tutoring/chat` | StrategyAgent 首阶段已完成 | StrategyAgent 先选提示式引导 / 直接解释 / 追问澄清 / 例题讲解；ReActAgent + course/user memory toolkit；降级链：Strategy 规则兜底 → ReAct → chat JSON → rule-based |
 | `POST /agent/v1/profile/generate` | 已完成 | LLM enrichment + schema/枚举/范围保护 + 规则 fallback |
 | `POST /agent/v1/evaluation/generate` | 已完成 | LLM enrichment + 表格/summary 保护 + 规则 fallback |
 | `POST /agent/v1/assessment/evaluate` | 已完成 | 判分由规则确定；LLM 只增强解析、诊断和建议 |
@@ -30,6 +30,7 @@
 ## AgentScope 使用状态
 
 - 已接入：ChatModel/Formatter、Embedding、ReActAgent、Toolkit/ToolResponse、InMemoryMemory、Reader/PDFReader、QdrantStore、fanout_pipeline。
+- tutoring 已接入内部 StrategyAgent，策略选择失败时回落规则策略，再继续原有 ReAct / chat JSON / rule-based 降级链。
 - tutoring toolkit 已返回 AgentScope 合法 TextBlock：`{"type": "text", "text": "..."}`。
 - assessment toolkit 已返回 AgentScope 合法 TextBlock，并新增 `QuestionCriticAgent` 混合质量门禁。
 - resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent。
@@ -48,12 +49,16 @@
 - `./.venv/bin/pytest tests/test_assessment_agent.py -q`：**41 passed**（QuestionCriticAgent）
 - `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
 - `./.venv/bin/pytest tests/test_tutoring_tools.py tests/test_vector_store.py -q`：**16 passed**
+- `./.venv/bin/pytest tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py -q`：**31 passed**（StrategyAgent + tutoring prompt 传递）
+- `./.venv/bin/pytest tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py -q`：**24 passed**
+- `./.venv/bin/pytest tests/test_tutoring_api.py -q`：**10 passed**（SSE / 降级链回归）
+- `./.venv/bin/pytest tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py tests/test_tutoring_api.py -q`：**41 passed**（最终 tutoring 回归）
 - `./.venv/bin/pytest tests/test_resources_agent.py tests/test_resources_workflow.py -q`：**85 passed**
 - 近期全量记录：`./.venv/bin/pytest -q` 曾为 **335 passed**；后续若改共享逻辑需重新跑相关范围或全量。
 
 ## 下一步建议
 
-1. `tutoring/chat`：实现 `StrategyAgent`，先判断讲解策略（提示式引导 / 直接解释 / 追问澄清 / 例题讲解），保持现有降级链。
+1. `tutoring/chat`：后续可补 ResponseCriticAgent / 答复质量门禁，但需继续保持 SSE 和 schemas 不变。
 2. `assessment/generate-questions`：后续评估 `KnowledgePointGuard` / `DifficultyBalancer`，不改变题型契约。
 3. `resources/generate`：补 `ResourceCriticAgent` / 质量门禁、真实 LLM 质量验证和 AgentScope Studio trace。
 4. 部署联调：优先引入 Qdrant server 模式，减少 Apifox / 多进程真实 AI 流程中的 local 文件锁问题。

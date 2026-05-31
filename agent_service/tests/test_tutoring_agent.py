@@ -5,6 +5,7 @@ from agent_service.agents.tutoring import (
     generate_tutoring_model_response,
     parse_tutoring_model_response,
 )
+from agent_service.agents.tutoring_strategy import TutoringStrategy
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
 
@@ -158,6 +159,50 @@ def test_generate_tutoring_model_response_uses_chat_provider_and_prompt_messages
     assert response.model_text == "链式法则先看外层函数。"
     assert response.knowledge_point_names == ["链式法则"]
     assert response.suggestion_text == "先确认外层函数。"
+
+
+def test_generate_tutoring_model_response_includes_strategy_context() -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="帮我讲一下链式法则",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+    context = TutoringRetrievalContext(
+        user_id="user-1",
+        course_id="course-1",
+        query_text="帮我讲一下链式法则",
+        include_course_knowledge=True,
+        knowledge_points=["导数"],
+        user_memory_facts=[],
+        course_knowledge_chunks=[],
+    )
+    strategy = TutoringStrategy(
+        strategy="guided_hint",
+        instruction="分步骤给提示，避免直接给最终答案。",
+        focus_points=["链式法则"],
+        source="rule",
+    )
+
+    class FakeChatProvider:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def complete(self, messages, structured_model=None):
+            self.calls.append(messages)
+            if structured_model is not None:
+                raise RuntimeError("structured output not supported")
+            return '{"model_text":"先判断外层函数。","knowledge_points":["链式法则"],"suggestion":"自己补内层导数。"}'
+
+    provider = FakeChatProvider()
+
+    response = asyncio.run(generate_tutoring_model_response(request, context, provider, strategy=strategy))
+
+    user_content = provider.calls[-1][-1].content
+    assert response.model_text == "先判断外层函数。"
+    assert "辅导策略：guided_hint" in user_content
+    assert "策略要求：分步骤给提示，避免直接给最终答案。" in user_content
+    assert "策略关注点：链式法则" in user_content
 
 
 def test_generate_tutoring_model_response_uses_structured_output() -> None:

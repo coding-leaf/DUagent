@@ -1,8 +1,14 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+_SERVICE_ROOT = Path(__file__).resolve().parents[1]
+_SERVICE_ENV_FILE = _SERVICE_ROOT / ".env"
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_SERVICE_ENV_FILE, extra="ignore")
 
     PROJECT_NAME: str = "EduAgent Agent Service API"
     VERSION: str = "5.0"

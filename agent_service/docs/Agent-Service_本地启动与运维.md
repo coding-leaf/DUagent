@@ -34,6 +34,14 @@ cp .env.example .env
 
 无 LLM / Embedding 配置时，接口会走规则版 fallback。
 
+Agent Service 默认读取 `agent_service/.env`，不依赖当前启动目录。若 health 返回 `model_loaded=false` 且 `model_name=""`，先运行：
+
+```bash
+./.venv/bin/python -c "from agent_service.core.config import settings; print(settings.LLM_PROVIDER, settings.LLM_MODEL)"
+```
+
+期望输出当前 LLM provider 和 model，例如 `agentscope_openai deepseek-v4-flash`。
+
 真实联调时至少建议配置：
 
 ```env

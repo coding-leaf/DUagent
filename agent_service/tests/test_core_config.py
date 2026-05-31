@@ -47,6 +47,14 @@ def test_settings_exposes_ai_provider_defaults() -> None:
     assert settings.LLM_JSON_MODE_ENABLED is None
 
 
+def test_settings_default_env_file_is_service_local() -> None:
+    from pathlib import Path
+
+    from agent_service.core.config import _SERVICE_ENV_FILE
+
+    assert _SERVICE_ENV_FILE == Path(__file__).resolve().parents[1] / ".env"
+
+
 def test_init_agentscope_studio_skips_when_url_missing(monkeypatch) -> None:
     from agent_service import main as main_module
 

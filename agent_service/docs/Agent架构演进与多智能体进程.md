@@ -30,14 +30,14 @@ EduAgent 后续以 **多智能体架构优先** 为方向，同时坚持 **Agent
 | `evaluation/generate` | structured output | 表格和 summary 生成，重点是白名单与范围保护 |
 | `assessment/evaluate` | 规则判分 + LLM 增强 | 判分必须规则确定，LLM 只做诊断解释 |
 | `learning-path/generate` | structured output + 白名单 | 核心是图谱节点约束和排序 |
-| `resources/generate` | LLM + RAG + 异步 webhook | 当前最适合升级为 workflow / multi-agent |
+| `resources/generate` | Multi-Agent Workflow 已完成 | Planner → AgentScope fanout pipeline → ResourceAgent 并行生成 → Aggregator；保留旧 LLM / skeleton fallback |
 | `memory/compress` | structured output + Qdrant 写入 | 暂不迁移 AgentScope Memory，先保留产品边界 |
 
 ## 3. 可升级架构候选
 
 ### 3.1 `resources/generate` Workflow / Multi-Agent
 
-推荐优先级：P0
+当前状态：P0 已完成第一阶段
 
 理由：
 
@@ -46,26 +46,38 @@ EduAgent 后续以 **多智能体架构优先** 为方向，同时坚持 **Agent
 - 对竞赛/展示有明显架构价值：Planner + 多资源 Agent + Aggregator。
 - 可保持现有 202 + webhook 契约不变。
 
-候选形态：
+已落地形态：
 
 ```text
 ResourceWorkflowOrchestrator
-  -> Planner
-  -> DocumentResourceAgent
-  -> MindmapResourceAgent
-  -> ReadingResourceAgent
-  -> CodeResourceAgent
+  -> LLM Planner / rule-based planner fallback
+  -> AgentScope fanout_pipeline
+     -> DocumentAgent
+     -> MindmapAgent
+     -> ReadingAgent
+     -> CodeAgent
   -> Aggregator
+  -> webhook payload
 ```
 
-第一阶段可先做本地 orchestrator 边界；第二阶段再根据 AgentScope 官方文档和本地 introspection 接入原生 workflow / planning API。
+第一阶段已完成：本地 workflow 边界已经建立，并通过 AgentScope `fanout_pipeline` 做并行 ResourceAgent 调度。它还不是完整 AgentScope Studio 可视化 workflow，也未接 PlanNotebook / 更复杂 planning API。
 
-已确认方向：
+已落地能力：
 
-- Planner 使用 LLM，但必须 structured output，并保留规则版 planner fallback。
+- Planner 使用 LLM，并保留规则版 planner fallback。
 - 单个 ResourceAgent 失败时做局部 fallback，不让一个资源失败拖垮整批资源。
 - `mindmap` 资源统一优先输出 Mermaid，Mermaid 无效时局部回退到 markdown 树或 skeleton mindmap。
-- Aggregator 负责合并成功资源和局部 fallback 资源，并保持 webhook payload 契约不变。
+- Aggregator 使用 `is_skeleton` 判断资源是否可合并，避免把 `fallback_mermaid` 误判为全员失败。
+- webhook payload 保持原有契约，不泄漏 `generated_by`、`fallback_reason`、`is_skeleton` 等内部字段。
+- 降级链为：multi-agent → 旧 LLM parallel 资源生成 → skeleton → failed webhook。
+- ResourceAgent JSON parser 已补强，可处理真实 LLM 输出中 `content` / `description` 字段的未转义换行。
+
+后续只做增强，不再把 resources 作为“待启动主线”：
+
+- 真实 Backend webhook 联调。
+- 更完整的 AgentScope Studio trace 展示。
+- 真实 LLM 输出质量评估和 prompt 迭代。
+- 可选评估 PlanNotebook / 更复杂 planning API，前提是收益明确。
 
 ### 3.2 Tutoring 多 Agent 深化
 
@@ -122,10 +134,16 @@ ResourceWorkflowOrchestrator
 
 价值：能证明多 Agent 不是“文档上存在”，而是可观测、可解释。
 
-已确认方向：
+当前进展：
 
-- 分阶段推进。
-- 第一阶段先做结构化日志和 smoke 输出，记录 Agent path、tool call、fallback、RAG chunk 数。
+- 已补结构化日志和 smoke 输出，resources smoke 可显示 multi-agent path / fallback 信息。
+- Apifox 全接口测试指南已补充 Studio 可见性矩阵：不是所有 AI 接口都会出现在 Studio Agent 流里。
+- Apifox 指南已补真实 AI 命中证据 checklist：health、日志、fallback、webhook body 需要一起看。
+- Studio trace 仍是后续能力：`tutoring/chat`、`assessment/generate-questions` 更容易看到 ReActAgent 流；`resources/generate` 当前主要依赖日志和 webhook 验证。
+
+后续方向：
+
+- 第一阶段继续强化结构化日志、smoke 输出、Apifox 验证路径。
 - 第二阶段再接 AgentScope Studio trace，用于展示 Planner、Worker、Critic、Aggregator 等链路。
 - Studio trace 既是开发验证能力，也可作为竞赛/展示验收能力。
 
@@ -170,6 +188,11 @@ ResourceWorkflowOrchestrator
 
 当前暂不迁移到 AgentScope Memory，原因是 Backend 结构化画像和 Qdrant 长期语义记忆是产品边界，贸然迁移会让状态来源变复杂。
 
+近期已修复：
+
+- 用户长期记忆写入 Qdrant 时，point id 已从普通 sha256 字符串改为稳定 UUIDv5，避免 Qdrant 报 `Point id ... is not a valid UUID`。
+- 该修复只影响 `memory/compress` 的 Qdrant 写入，不改变 API payload 或 Backend 契约。
+
 ## 4. 不建议升级的接口
 
 | 接口 | 原因 |
@@ -186,7 +209,7 @@ ResourceWorkflowOrchestrator
 
 | 候选方向 | 架构价值 | 展示价值 | 实现复杂度 | 契约风险 | AgentScope 适配度 | 当前优先级 |
 |---|---:|---:|---:|---:|---:|---|
-| resources workflow / multi-agent | 5 | 5 | 4 | 2 | 5 | P0 |
+| resources workflow / multi-agent | 5 | 5 | 4 | 2 | 5 | P0 已完成第一阶段 |
 | tutoring StrategyAgent / ResponseCritic | 4 | 4 | 4 | 3 | 4 | P1 |
 | assessment QuestionCriticAgent / Guard | 4 | 4 | 3 | 2 | 4 | P1/P2 |
 | observability / Studio trace | 4 | 5 | 3 | 1 | 5 | P1 |
@@ -194,20 +217,34 @@ ResourceWorkflowOrchestrator
 | MemoryWritePolicyAgent / memory fact 策略 | 3 | 3 | 4 | 3 | 3 | P2/P3 |
 | profile/evaluation 多 Agent | 1 | 2 | 3 | 3 | 2 | 不做 |
 
-## 6. 当前推荐路线
+## 6. 最近架构验证与调试修复
 
-### 第一优先级：resources/generate workflow
+本轮围绕“Apifox 能不能证明真实 AI 工作流命中”完成了几项基础修复：
 
-先写单独 design，再写 implementation plan。目标是建立：
+| 问题 | 处理结果 | 影响 |
+|---|---|---|
+| 从仓库根目录启动时 `.env` 读不到 | 配置加载固定为 service-local `agent_service/.env` | health 可正确显示当前 LLM provider / model |
+| Qdrant local 文件锁误判为接口问题 | 运维文档和 Apifox 指南补充 local lock 说明 | 明确这是本地多进程访问限制，不是请求体错误 |
+| ResourceAgent 解析真实 LLM JSON 时遇到未转义换行 | parser 增加 `content` / `description` 字段修复路径 | 减少真实模型输出导致的局部 fallback |
+| memory 写 Qdrant point id 非 UUID | user memory point id 改为稳定 UUIDv5 | 避免 memory persistence best-effort 写入失败 |
+| Studio 看不到所有接口 Agent 流 | Apifox 指南补 Studio 可见性矩阵 | 明确哪些接口是 ReActAgent，哪些只是 structured output |
 
-- LLM Planner + 规则版 planner fallback
-- 多 Resource Agent
-- Aggregator
-- 局部 fallback 链
-- Mermaid mindmap 优先输出
-- tests
+验证结果：
 
-第一阶段先不强依赖 AgentScope workflow API，先建立内部边界；第二阶段再 AgentScope 原生化。
+- `tests/test_core_config.py tests/test_resources_workflow.py`：69 passed。
+- `tests -k "memory"`：36 passed。
+- `tests/test_openapi_alignment.py`：25 passed。
+- 从仓库根目录导入 settings 可读取 `agentscope_openai deepseek-v4-flash`。
+
+## 7. 当前推荐路线
+
+### 第一优先级：真实联调和可观测验证
+
+resources workflow 第一阶段已完成。下一步重点不再是“再拆更多 Agent”，而是证明真实运行质量：
+
+- 用 Apifox / Backend webhook 验证 resources payload。
+- 检查 health、日志、webhook body，确认真实 LLM 路径命中。
+- 记录 fallback path 和 ResourceAgent 成功/失败比例。
 
 ### 第二优先级：observability / Studio trace
 
@@ -226,20 +263,19 @@ ResourceWorkflowOrchestrator
 - profile/evaluation/learning-path 多 Agent 化。
 - 改 OpenAPI 表达内部 Agent 结构。
 
-## 7. 待讨论问题
+## 8. 待讨论问题
 
-1. resources 已确认 LLM Planner；实现时需决定 planner structured output schema。
-2. ResourceAgent 第一阶段可为独立 LLM 调用或本地 workflow 节点；第二阶段再验证 AgentScope workflow API。
-3. mindmap 已确认优先 Mermaid；实现时需定义 Mermaid 校验和 fallback 条件。
-4. 单资源失败已确认局部 fallback；实现时需定义 webhook payload 中是否标注 fallback 来源。
-5. observability 已确认分阶段：先日志/smoke，再 Studio trace。
-6. tutoring 已确认 StrategyAgent 优先、ResponseCritic 第二、RetrievalAgent 暂缓；实现前需设计策略输出 schema。
-7. assessment 已确认 QuestionCriticAgent 优先、KnowledgePointGuard 第二、DifficultyBalancer 第三；实现前需定义质量评分和 repair/fallback 规则。
-8. AgentScope Knowledge 已确认做 A/B 对照实验，不直接替换当前手写 Qdrant retrieval。
-9. Memory 已确认 Backend 画像优先、同窗口 summary 保持上下文、AI 定期更新长期 fact、tutoring 使用 fact 参与策略决策。
-10. Backend 联调和 resources workflow 哪个先进入实现阶段仍需排期决定。
+1. resources workflow 是否继续接 PlanNotebook / 更复杂 AgentScope planning API，还是保持当前 fanout pipeline。
+2. resources 真实 LLM 输出质量如何验收：人工抽检、rubric、Question/Resource critic，还是离线 eval。
+3. resources Backend webhook 联调何时开始；Backend 尚未 ready 时继续用 Apifox Mock 验证。
+4. Studio trace 需要展示到什么粒度：Planner / Worker / Aggregator，还是只展示 ReActAgent 主链路。
+5. tutoring 已确认 StrategyAgent 优先、ResponseCritic 第二、RetrievalAgent 暂缓；实现前需设计策略输出 schema。
+6. assessment 已确认 QuestionCriticAgent 优先、KnowledgePointGuard 第二、DifficultyBalancer 第三；实现前需定义质量评分和 repair/fallback 规则。
+7. AgentScope Knowledge 已确认做 A/B 对照实验，不直接替换当前手写 Qdrant retrieval。
+8. Memory 已确认 Backend 画像优先、同窗口 summary 保持上下文、AI 定期更新长期 fact、tutoring 使用 fact 参与策略决策。
+9. 若后续需要并发本地测试，是否将 Qdrant local 模式切换为 Qdrant server 模式。
 
-## 8. 更新规则
+## 9. 更新规则
 
 - 本文用于讨论和决策，不能替代具体 implementation plan。
 - 当某个方向被批准进入实现时，必须新建单独 plan。

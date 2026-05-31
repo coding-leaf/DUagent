@@ -621,17 +621,39 @@ Content-Type: application/json
 - SSE 放后面，因为 Apifox 展示可能不稳定。
 - resources 最后测，因为它是异步，需要额外看 webhook 回调。
 
-## 12. 判断 AI 是否真实工作
+## 12. Studio 可见性矩阵
+
+| 接口 | 当前 AI 实现 | AgentScope Studio 预期 |
+|------|------|------|
+| `tutoring/chat` | `TutorReActAgent` + tools + memory | 应能看到 Agent 流 |
+| `assessment/generate-questions` | `QuestionGeneratorReActAgent` + `retrieve_course_knowledge` + `validate_question_format` | 应能看到 `QuestionGenerator` |
+| `resources/generate` | Planner + AgentScope `fanout_pipeline` + ResourceAgent adapter + Aggregator | 可能不像 ReAct 聊天流一样完整展示，主要看日志和 webhook |
+| `profile/generate` | 规则结果 + LLM structured output 增强 | 不会显示 Agent 流 |
+| `evaluation/generate` | 规则表格 + LLM structured output 增强 | 不会显示 Agent 流 |
+| `assessment/evaluate` | 规则判分 + LLM 解释增强 | 不会显示 Agent 流 |
+| `learning-path/generate` | LLM structured output + 规则 fallback | 不会显示 Agent 流 |
+| `memory/compress` | LLM 提取 + 规则 fallback + Qdrant best-effort 写入 | 不会显示 Agent 流 |
+
+## 13. 真实 AI 命中证据
 
 Apifox 只能证明接口协议和最终结果，不能直接证明内部 Agent 路径。
 
-需要结合 Agent Service 日志判断：
+仅 HTTP 200 / 202 不能证明真实 AI 路径命中。需要同时检查：
+
+- health: `model_loaded=true` 且 `model_name` 为当前模型。
+- 日志出现 `LLM ... succeeded` 或 `ReActAgent ... succeeded`。
+- 日志没有 `chat_provider=None`。
+- 日志没有关键路径 `falling back`。
+- resources webhook body 中 `result.resources[].content` 不是空内容或规则占位内容。
+
+可以重点观察以下日志：
 
 ```text
 LLM generation succeeded
 LLM Planner succeeded
 ResourceAgent succeeded
 Aggregator merged results
+ReActAgent succeeded
 ```
 
 如果看到：

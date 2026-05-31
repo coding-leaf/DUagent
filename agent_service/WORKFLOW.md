@@ -7,9 +7,11 @@
 
 ## 当前方向
 
-- 当前不继续打磨旧 `tutoring/chat` 主链路；后续 tutoring 计划切换到 AgentScope ReActAgent / ReAct 编排。
+- EduAgent 后续以多智能体架构优先，优先采用 AgentScope 能稳定落地的 ReActAgent、Toolkit、structured_model、workflow/planning、Studio/observability 能力。
+- 多智能体只用于天然需要拆分、协作、检索、自检或并行的链路；不把 deterministic/统计型接口强行改成 subagent。
+- 当前 Agent 主链路已覆盖 `tutoring/chat` 和 `assessment/generate-questions`；下一阶段架构主线是 `resources/generate` 的 AgentScope workflow / multi-agent 编排。
 - 非主线能力以简洁可用为准，避免为了本地 smoke 继续扩大 Qdrant、ID、并发 client 等实现细节。
-- AgentScope 仍是后续 AI 编排主框架，但接入应落在 `agents/`、`memory/`、`tools/` 边界内，不泄漏到 OpenAPI/schema。
+- AgentScope 接入应落在 `agents/`、`memory/`、`tools/`、`prompts/`、`core/` 边界内，不泄漏到 OpenAPI/schema。
 - `WORKFLOW.md` 不再记录长流水日志，只保留当前状态、最近验证和下一步。
 
 ## 接口进度
@@ -21,7 +23,7 @@
 | `POST /agent/v1/profile/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full ProfileData enrichment → 规则版；LLM 输出经 schema/枚举/范围/观测名称保护后合并 |
 | `POST /agent/v1/evaluation/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full EvaluationData enrichment → 规则版；表格和 summary 均经列/范围/观测名称保护后合并 |
 | `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
-| `POST /agent/v1/assessment/generate-questions` | LLM + RAG + fallback 已完成 | 降级链：LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
+| `POST /agent/v1/assessment/generate-questions` | ReActAgent + RAG + fallback 已完成 | 降级链：ReActAgent + toolkit → structured_model/LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
 | `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
 | `POST /agent/v1/resources/generate` | LLM + RAG + fallback 已完成 | 202 + 后台任务；LLM 并行生成四类资源 + course_knowledge RAG 检索注入 prompt；skeleton fallback → webhook completed |
 | `POST /agent/v1/memory/compress` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 规则版；规则版补齐 mastered_point / cognitive_preference / blind_spot 三种类型；LLM 提取 3 种 fact 类型 + 生成摘要；Qdrant 写入 best-effort |
@@ -71,7 +73,7 @@
 | Structured output | 推荐优先评估 | 可替代当前多处 `json.loads` / markdown fence / prompt-only JSON 解析，降低 LLM 输出脆弱性 |
 | Knowledge / Generic RAG | 推荐用于 tutoring/chat | 可把课程知识作为 ReActAgent knowledge 注入，和现有工具检索形成对照；先保持现有 Qdrant 检索 fallback |
 | Agentic RAG / retrieve_knowledge tool | 暂缓 | 依赖模型稳定 tool-use，当前已手写 retrieve_course_knowledge 工具，短期够用 |
-| Planning / multi-step workflow | 适合 resources/generate 后续升级 | resources/generate 是多资源并行/多步骤任务，适合后续 AgentScope workflow/planning；不要先用于简单 deterministic 接口 |
+| Planning / multi-step workflow | 下一阶段主线 | resources/generate 是多资源并行/多步骤任务，适合后续 AgentScope workflow/planning；不要用于简单 deterministic 接口 |
 | Memory/session/state | 暂缓 | 当前长期记忆 schema 和 Qdrant 写入是产品边界，先不迁移到 AgentScope memory |
 | Observability/evaluation hooks | 生产化后推荐 | 适合后续追踪 ReAct tool call、LLM 输出、降级路径；不影响当前 OpenAPI |
 
@@ -81,15 +83,15 @@
 
 ### Agent 架构/联动模式决策
 
-当前不为所有接口统一套用 subagent / multi-agent。Agent 编排按接口复杂度分层推进：
+当前不为所有接口统一套用 subagent / multi-agent。EduAgent 后续以多智能体架构优先，但 Agent 编排仍按接口复杂度分层推进：
 
 | 模式 | 适用接口 | 当前决策 |
 |------|----------|----------|
 | Structured output enrichment | `profile/generate`、`evaluation/generate`、`learning-path/generate`、`memory/compress`、`assessment/evaluate` | 优先使用 AgentScope `structured_model` 替代手工 JSON 解析；保留现有规则版和文本 JSON fallback，不引入多 Agent |
-| ReActAgent + Toolkit | `tutoring/chat`、后续 `assessment/generate-questions` | 只用于需要 RAG 检索、工具调用、格式自检、逐步修正的链路；当前 tutoring 已完成，assessment 出题是下一个适合升级点 |
-| Workflow / multi-agent | 后续 `resources/generate` | 资源生成天然拆分为 document / mindmap / reading / code，可后续设计 Planner + 多资源 Agent + Aggregator；近期不抢先改异步 webhook 主链路 |
+| ReActAgent + Toolkit | `tutoring/chat`、`assessment/generate-questions` | 用于需要 RAG 检索、工具调用、格式自检、逐步修正的链路；当前两条主链路已完成 |
+| Workflow / multi-agent | 后续 `resources/generate` | 资源生成天然拆分为 document / mindmap / reading / code，是下一阶段 AgentScope workflow / multi-agent 主目标 |
 
-短期执行原则：先完成 Phase 1 structured_model 覆盖，形成稳定的 AgentScope 原生结构化输出基线；再推进 `assessment/generate-questions` ReActAgent；最后单独设计 `resources/generate` workflow/multi-agent。避免为了展示多智能体而扩大 deterministic 接口复杂度。
+短期执行原则：已完成 structured_model 覆盖和 assessment ReActAgent 后，不再沿旧 Phase 0-3 继续推进；下一步先为 `resources/generate` 设计 workflow/multi-agent 边界，再小步实现。避免为了展示多智能体而扩大 deterministic 接口复杂度。
 
 #### 暂不升级的模块
 
@@ -97,7 +99,7 @@
 - `profile/generate`、`evaluation/generate`：统计数据转画像，规则版已足够
 - `learning-path/generate`：核心是拓扑排序，不是推理问题
 - `memory/compress`：Backend 已在请求体传 `existing_facts`，用 tool 查 Qdrant 和现有方案等价
-- `resources/generate`：异步 webhook，适合后续 workflow 升级，竞赛阶段不动
+- `resources/generate`：异步 webhook，适合后续 workflow 升级，现在作为下一阶段多智能体主线单独设计
 
 ## 当前不继续推进的事项
 
@@ -119,18 +121,18 @@
 
 ## 下一步
 
-执行顺序按 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md`：
-1. **[已完成]** Phase 1C — `profile/generate` + `evaluation/generate` structured_model 迁移
-2. **[已完成]** Phase 1D-1E — `learning-path/generate`、`memory/compress` structured_model 迁移
-3. **[已完成]** Phase 2 — tutoring diagram 事件触发
-4. **[已完成]** Phase 3 — `assessment/generate-questions` ReActAgent 迁移
-5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）
-6. Phase 4 — prompt/后处理修正（零依赖，可穿插）
+执行顺序按 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md` 的新版多智能体主线：
+1. 为 `resources/generate` 写单独设计文档：AgentScope workflow / multi-agent，明确 Planner、Resource Agents、Aggregator、fallback 和测试边界。
+2. 写实现 plan，先做本地 workflow orchestrator 边界，再根据 AgentScope 官方文档和本地 introspection 接入原生 workflow/planning API。
+3. 实现 `resources/generate` multi-agent 第一阶段，保持 202 + webhook 协议和 OpenAPI 不变。
+4. 补充 observability / Studio trace 验证。
+5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）可并行，但不阻塞 multi-agent 设计。
+6. Phase 4 prompt/后处理修正作为质量增强穿插进行。
 
 ### 中远期
 
 - Backend 开放只读接口后，补充出题去重和真实练习题推荐
-- resources/generate 升级为 AgentScope workflow 多智能体并行生成
+- resources/generate 升级为 AgentScope workflow 多智能体并行生成（当前主线）
 - Qdrant server 模式 / shared client 改造
 
 ## 文档补充记录
@@ -140,8 +142,11 @@
 - 每个接口补充了可直接复制到 Apifox 的请求/响应 JSON 示例
 - tutoring/chat 额外补充 SSE 单事件 mock 示例
 - resources/generate 额外补充 202 响应、Webhook 成功回调、Webhook 失败回调示例
+- 删除 agent_service/docs 下已过时历史问题清单，避免后续 AI 将已修复问题重新当待办。
+- 更新 `docs/Agent-AI编排审计.md` 为当前 AI / AgentScope / RAG 编排快照。
+- 重写 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md`，将后续方向调整为多智能体优先、AgentScope 可落地能力优先，主线为 `resources/generate` workflow / multi-agent。
 
 ## 最近测试/验证补充
 
-- 本次未修改业务代码，未新增或变更 OpenAPI 契约
+- 本次仅修改文档和 `WORKFLOW.md`，未修改业务代码，未新增或变更 OpenAPI 契约
 - 文档内容以 `../docs/20-agent-api/Agent-Service.openapi.json` 和 `../docs/20-agent-api/API_Agent内部接口规范.md` 对齐整理

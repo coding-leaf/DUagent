@@ -53,7 +53,7 @@
 - API 边界收束已完成：health 探针逻辑下沉到 `agents/health.py`；tutoring API 恢复薄路由且不暴露测试注入参数；assessment 出题不再从 API 层导入 agents 私有函数。
 - OpenAPI 对齐测试已扩展到主要 request/result schema，当前 26 个 alignment 测试覆盖 HealthData、assessment、learning-path、resources、memory、tutoring SSE 参数等。
 - 本地启动与运维文档已补充：`docs/Agent-Service_本地启动与运维.md` 记录 uvicorn 启动、health、readiness、smoke、知识入库和常见问题。
-- Agent 架构演进台账已补充：`docs/Agent架构演进与多智能体进程.md`，用于持续记录 resources workflow、tutoring 深化、assessment 质量 Agent、observability、AgentScope RAG/Memory 等候选方向。
+- Agent 架构演进台账已补充：`docs/Agent架构演进与多智能体进程.md`，用于持续记录 resources workflow、tutoring 深化、assessment 质量 Agent、observability、AgentScope RAG/Memory 等候选方向和已确认取舍。
 
 ## AgentScope 使用审查
 
@@ -124,22 +124,22 @@
 ## 下一步
 
 执行顺序按 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md` 的新版多智能体主线：
-1. 为 `resources/generate` 写单独设计文档：AgentScope workflow / multi-agent，明确 Planner、Resource Agents、Aggregator、fallback 和测试边界。
+1. 为 `resources/generate` 写单独设计文档：AgentScope workflow / multi-agent，采用 LLM Planner、Resource Agents、Aggregator、单资源局部 fallback、mindmap 优先 Mermaid，并明确测试边界。
 2. 写实现 plan，先做本地 workflow orchestrator 边界，再根据 AgentScope 官方文档和本地 introspection 接入原生 workflow/planning API。
 3. 实现 `resources/generate` multi-agent 第一阶段，保持 202 + webhook 协议和 OpenAPI 不变。
-4. 补充 observability / Studio trace 验证。
+4. 补充 observability：第一阶段结构化日志和 smoke 输出，第二阶段 AgentScope Studio trace 验证。
 5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）可并行，但不阻塞 multi-agent 设计。
 6. Phase 4 prompt/后处理修正作为质量增强穿插进行。
 
 ### 中远期
 
 - Backend 开放只读接口后，补充出题去重和真实练习题推荐
-- resources/generate 升级为 AgentScope workflow 多智能体并行生成（当前主线）
-- tutoring 增加 StrategyAgent / ResponseCritic 等局部多 Agent 深化（resources workflow 稳定后评估）
-- assessment/generate-questions 增加 QuestionCriticAgent / DifficultyBalancer 等质量闭环（需要先确认题库/知识点边界）
-- observability / AgentScope Studio trace 作为多 Agent 链路展示与验收能力
-- AgentScope Knowledge / RAG 与当前手写 Qdrant 检索做对照实验
-- Memory 策略 Agent 暂缓，只在长期记忆质量成为主瓶颈时推进
+- resources/generate 升级为 AgentScope workflow 多智能体并行生成（当前主线）：LLM Planner、局部 fallback、mindmap 优先 Mermaid
+- tutoring 增加 StrategyAgent / ResponseCritic 等局部多 Agent 深化（resources workflow 稳定后评估）：StrategyAgent 优先，ResponseCritic 第二，RetrievalAgent 暂缓
+- assessment/generate-questions 增加 QuestionCriticAgent / KnowledgePointGuard / DifficultyBalancer 质量闭环：QuestionCriticAgent 优先，KnowledgePointGuard 第二，DifficultyBalancer 第三
+- observability / AgentScope Studio trace 作为多 Agent 链路展示与验收能力：先结构化日志和 smoke 输出，再 Studio trace
+- AgentScope Knowledge / RAG 与当前手写 Qdrant 检索做 A/B 对照实验，不直接替换稳定路径
+- Memory 策略 Agent 暂不做全量 AgentScope Memory 迁移；确认 Backend 画像优先、同窗口 summary 保持上下文、AI 定期更新长期 fact、tutoring 使用 fact 参与策略决策
 - Qdrant server 模式 / shared client 改造
 
 ## 文档补充记录
@@ -153,6 +153,7 @@
 - 更新 `docs/Agent-AI编排审计.md` 为当前 AI / AgentScope / RAG 编排快照。
 - 重写 `docs/superpowers/plans/2026-05-28-agentscope-framework-upgrade-plan.md`，将后续方向调整为多智能体优先、AgentScope 可落地能力优先，主线为 `resources/generate` workflow / multi-agent。
 - 新增 `docs/Agent架构演进与多智能体进程.md`，作为多智能体升级候选项、优先级和开放问题的持续讨论台账。
+- 更新 `docs/Agent架构演进与多智能体进程.md` 中的已确认取舍：resources 使用 LLM Planner、局部 fallback、mindmap Mermaid；tutoring/assessment/observability/RAG/Memory 的优先顺序和边界已记录。
 
 ## 最近测试/验证补充
 

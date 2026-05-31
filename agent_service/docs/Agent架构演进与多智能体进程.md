@@ -60,6 +60,13 @@ ResourceWorkflowOrchestrator
 
 第一阶段可先做本地 orchestrator 边界；第二阶段再根据 AgentScope 官方文档和本地 introspection 接入原生 workflow / planning API。
 
+已确认方向：
+
+- Planner 使用 LLM，但必须 structured output，并保留规则版 planner fallback。
+- 单个 ResourceAgent 失败时做局部 fallback，不让一个资源失败拖垮整批资源。
+- `mindmap` 资源统一优先输出 Mermaid，Mermaid 无效时局部回退到 markdown 树或 skeleton mindmap。
+- Aggregator 负责合并成功资源和局部 fallback 资源，并保持 webhook payload 契约不变。
+
 ### 3.2 Tutoring 多 Agent 深化
 
 推荐优先级：P1
@@ -71,6 +78,12 @@ ResourceWorkflowOrchestrator
 | `StrategyAgent` | 判断是否需要图解、追问、练习建议 | 提升教学策略感 | 需要控制不要输出不稳定 |
 | `RetrievalAgent` | 统一课程知识和用户记忆检索策略 | 让 RAG 更可解释 | 可能和现有 toolkit 重复 |
 | `ResponseCritic` | 检查是否超出课程范围、是否过早给答案 | 提升教学质量 | 会增加延迟 |
+
+已确认方向：
+
+1. `StrategyAgent` 优先：先判断教学策略，包括是否图解、是否追问、是否推荐练习、讲解深度。
+2. `ResponseCritic` 第二：检查回答是否越界、是否过早给答案、是否没有贴合用户画像。
+3. `RetrievalAgent` 暂缓：当前已有 RAG 和 toolkit，等检索质量成为主要瓶颈时再做。
 
 建议：等 resources workflow 稳定后，再考虑 tutoring 的策略/审稿 Agent。不要在当前已可用主链路上做大改。
 
@@ -88,6 +101,12 @@ ResourceWorkflowOrchestrator
 
 注意：如果 Backend 暂时没有真实题库索引，就不要做“真实题目去重/推荐”的复杂承诺。
 
+已确认方向：
+
+1. `QuestionCriticAgent` 优先：生成后审查题目质量，检查重复、模板化、选项质量和解析质量。
+2. `KnowledgePointGuard` 第二：强制 knowledge_point 来自请求或课程知识白名单，避免 LLM 发明新名称。
+3. `DifficultyBalancer` 第三：在题目质量稳定后，再控制题组难度分布。
+
 ### 3.4 Observability / Studio Trace
 
 推荐优先级：P1
@@ -103,6 +122,13 @@ ResourceWorkflowOrchestrator
 
 价值：能证明多 Agent 不是“文档上存在”，而是可观测、可解释。
 
+已确认方向：
+
+- 分阶段推进。
+- 第一阶段先做结构化日志和 smoke 输出，记录 Agent path、tool call、fallback、RAG chunk 数。
+- 第二阶段再接 AgentScope Studio trace，用于展示 Planner、Worker、Critic、Aggregator 等链路。
+- Studio trace 既是开发验证能力，也可作为竞赛/展示验收能力。
+
 ### 3.5 Knowledge / AgentScope RAG
 
 推荐优先级：P2
@@ -115,6 +141,13 @@ ResourceWorkflowOrchestrator
 
 风险：如果 AgentScope Knowledge API 与当前版本不完全匹配，不应强行迁移。
 
+已确认方向：
+
+- 不直接迁移全部 RAG。
+- 做 A/B 对照实验，保留当前手写 Qdrant retrieval 作为默认稳定路径。
+- 优先选择 `resources/generate` workflow 或 tutoring 的局部 retrieval 工具做试验。
+- 对比检索命中质量、metadata 过滤能力、代码复杂度、Studio trace 适配度。
+
 ### 3.6 Memory 策略 Agent
 
 推荐优先级：P2/P3
@@ -124,6 +157,16 @@ ResourceWorkflowOrchestrator
 - 从 conversation 中提取更稳定的长期事实。
 - 判断哪些 fact 应写入 Qdrant、哪些只留在短期摘要。
 - 处理旧事实与 Backend 当前画像冲突。
+
+已确认方向：
+
+- 同一个对话窗口内，主要依赖 `conversation_summary` + recent messages 保持上下文一致。
+- 长期 fact 由 AI 定期更新，不每轮实时写入；触发点可为会话结束、达到 N 轮对话或 Backend 定时触发 `memory/compress`。
+- fact 记录用户稳定特征，例如学习风格、常见困惑、偏好解释方式、已掌握/薄弱知识点、提问习惯。
+- Backend 结构化画像优先；Qdrant / fact 是辅助语义信息。
+- 当 fact 与 Backend 当前画像冲突时，tutoring 以 Backend 画像为准，fact 只能作为补充或弱信号。
+- tutoring 可以使用 memory fact 参与教学策略决策，例如更倾向 diagram、对比解释、代码示例或降低抽象程度。
+- 未来如实现 Memory Agent，先做低频 `MemoryWritePolicyAgent`，只判断“写不写、以什么 fact_type 写”，不接管全部 memory。
 
 当前暂不迁移到 AgentScope Memory，原因是 Backend 结构化画像和 Qdrant 长期语义记忆是产品边界，贸然迁移会让状态来源变复杂。
 
@@ -144,11 +187,11 @@ ResourceWorkflowOrchestrator
 | 候选方向 | 架构价值 | 展示价值 | 实现复杂度 | 契约风险 | AgentScope 适配度 | 当前优先级 |
 |---|---:|---:|---:|---:|---:|---|
 | resources workflow / multi-agent | 5 | 5 | 4 | 2 | 5 | P0 |
-| tutoring 策略/审稿 Agent | 4 | 4 | 4 | 3 | 4 | P1 |
-| assessment 出题质量 Agent | 4 | 4 | 3 | 2 | 4 | P1/P2 |
+| tutoring StrategyAgent / ResponseCritic | 4 | 4 | 4 | 3 | 4 | P1 |
+| assessment QuestionCriticAgent / Guard | 4 | 4 | 3 | 2 | 4 | P1/P2 |
 | observability / Studio trace | 4 | 5 | 3 | 1 | 5 | P1 |
-| AgentScope Knowledge / RAG | 3 | 3 | 4 | 2 | 3 | P2 |
-| Memory 策略 Agent | 3 | 3 | 4 | 3 | 3 | P2/P3 |
+| AgentScope Knowledge / RAG A/B | 3 | 3 | 4 | 2 | 3 | P2 |
+| MemoryWritePolicyAgent / memory fact 策略 | 3 | 3 | 4 | 3 | 3 | P2/P3 |
 | profile/evaluation 多 Agent | 1 | 2 | 3 | 3 | 2 | 不做 |
 
 ## 6. 当前推荐路线
@@ -157,17 +200,18 @@ ResourceWorkflowOrchestrator
 
 先写单独 design，再写 implementation plan。目标是建立：
 
-- Planner
+- LLM Planner + 规则版 planner fallback
 - 多 Resource Agent
 - Aggregator
-- fallback 链
+- 局部 fallback 链
+- Mermaid mindmap 优先输出
 - tests
 
 第一阶段先不强依赖 AgentScope workflow API，先建立内部边界；第二阶段再 AgentScope 原生化。
 
 ### 第二优先级：observability / Studio trace
 
-多 Agent 链路没有可观测性会很难证明价值。resources workflow 第一阶段完成后，应立即补日志和 trace 验证。
+多 Agent 链路没有可观测性会很难证明价值。resources workflow 第一阶段完成后，应立即补结构化日志和 smoke 输出；第二阶段接 AgentScope Studio trace。
 
 ### 第三优先级：tutoring / assessment 局部深化
 
@@ -184,16 +228,16 @@ ResourceWorkflowOrchestrator
 
 ## 7. 待讨论问题
 
-1. `resources/generate` 的 Planner 是否需要 LLM，还是先用规则拆分资源任务？
-2. 每个 ResourceAgent 是独立 LLM 调用，还是 AgentScope workflow 节点？
-3. Mindmap 资源是否统一输出 Mermaid，还是保持 markdown 树形结构？
-4. 单个资源 Agent 失败时，是局部 fallback，还是整体 fallback？
-5. Studio trace 是作为开发验证能力，还是作为展示能力写进验收标准？
-6. tutoring 是否需要 `StrategyAgent`，还是继续让 ReActAgent 自己判断 diagram / suggestion？
-7. assessment 是否需要独立 `QuestionCriticAgent`，还是继续依赖 toolkit 的格式校验？
-8. AgentScope Knowledge 是否能替代当前手写 Qdrant retrieval，还是只做对照实验？
-9. 多 Agent 产生的中间结果是否需要进入日志、metadata 或只在内部使用？
-10. Backend 联调和 resources workflow 哪个先进入实现阶段？
+1. resources 已确认 LLM Planner；实现时需决定 planner structured output schema。
+2. ResourceAgent 第一阶段可为独立 LLM 调用或本地 workflow 节点；第二阶段再验证 AgentScope workflow API。
+3. mindmap 已确认优先 Mermaid；实现时需定义 Mermaid 校验和 fallback 条件。
+4. 单资源失败已确认局部 fallback；实现时需定义 webhook payload 中是否标注 fallback 来源。
+5. observability 已确认分阶段：先日志/smoke，再 Studio trace。
+6. tutoring 已确认 StrategyAgent 优先、ResponseCritic 第二、RetrievalAgent 暂缓；实现前需设计策略输出 schema。
+7. assessment 已确认 QuestionCriticAgent 优先、KnowledgePointGuard 第二、DifficultyBalancer 第三；实现前需定义质量评分和 repair/fallback 规则。
+8. AgentScope Knowledge 已确认做 A/B 对照实验，不直接替换当前手写 Qdrant retrieval。
+9. Memory 已确认 Backend 画像优先、同窗口 summary 保持上下文、AI 定期更新长期 fact、tutoring 使用 fact 参与策略决策。
+10. Backend 联调和 resources workflow 哪个先进入实现阶段仍需排期决定。
 
 ## 8. 更新规则
 

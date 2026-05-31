@@ -1,190 +1,91 @@
 # Apifox Agent Service 全接口测试指南
 
-本文用于指导在 Apifox 中测试 Agent Service 的全部对外接口。
+目标：用 Apifox 覆盖测试 Agent Service 当前全部对外接口。
 
-接口契约来源：
-
-- `../docs/20-agent-api/Agent-Service.openapi.json`
-- `../docs/20-agent-api/API_Agent内部接口规范.md`
-
-完整 JSON 示例来源：
-
-- `docs/Agent-Service-接口JSON示例说明.md`
-
-## 1. 测试前准备
-
-### 启动 Agent Service
-
-在仓库根目录执行：
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent
-./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002
-```
-
-如需保存日志：
-
-```bash
-./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002 2>&1 | tee /tmp/eduagent.log
-```
-
-另开终端查看日志：
-
-```bash
-tail -f /tmp/eduagent.log
-```
-
-### Apifox 环境变量
-
-建议在 Apifox 环境中配置：
-
-| 变量名 | 值 |
-|------|------|
-| `agent_base_url` | `http://127.0.0.1:8002` |
-| `apifox_webhook_url` | `https://m1.apifoxmock.com/m1/8182577-7941807-7764192/api/v1/webhooks/agent` |
-
-后续接口地址统一写成：
+基础地址：
 
 ```text
-{{agent_base_url}}/agent/v1/...
+http://127.0.0.1:8002
 ```
 
-## 2. 三类接口怎么验收
-
-### 同步 JSON 接口
-
-这类接口发送后直接在 Apifox 响应 Body 里看结果。
-
-成功响应通常是：
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {}
-}
-```
-
-同步 JSON 接口包括：
-
-- `GET /agent/v1/health`
-- `POST /agent/v1/profile/generate`
-- `POST /agent/v1/evaluation/generate`
-- `POST /agent/v1/assessment/evaluate`
-- `POST /agent/v1/assessment/generate-questions`
-- `POST /agent/v1/learning-path/generate`
-- `POST /agent/v1/memory/compress`
-
-### SSE 接口
-
-`POST /agent/v1/tutoring/chat` 是 SSE 流式接口。
-
-Apifox 中需要看事件流，实际格式类似：
-
-```text
-data: {"type":"chunk","content":"..."}
-data: {"type":"done","message_id":"..."}
-```
-
-如果 Apifox 不方便看流式结果，优先看 Agent Service 日志确认是否命中 ReAct / fallback。
-
-### 异步 webhook 接口
-
-`POST /agent/v1/resources/generate` 是异步接口。
-
-它的 `202 accepted` 只表示任务被接收，不包含最终生成资源。
-
-真正资源结果在 Apifox Mock/Webhook 的请求记录里：
-
-```text
-Mock/Webhook 调用记录 -> Request Body -> result.resources
-```
-
-资源正文在：
-
-```text
-result.resources[].content
-```
-
-## 3. Apifox Webhook / Mock 设置
-
-在 Apifox 中新建 Webhook：
-
-```http
-POST /api/v1/webhooks/agent
-```
-
-当前 WSL 本地调试建议使用云端 Mock URL：
+当前 resources webhook 云端 Mock：
 
 ```text
 https://m1.apifoxmock.com/m1/8182577-7941807-7764192/api/v1/webhooks/agent
 ```
 
-不要优先使用 Apifox 本地 Mock 的 `http://127.0.0.1:4523/...`，因为 Apifox 桌面端可能运行在 Windows，而 Agent Service 运行在 WSL，两边的 `127.0.0.1` 不是同一个网络命名空间。
+结果查看规则：
 
-Webhook 成功回调 body 示例：
+| 接口类型 | 怎么判断结果 |
+|------|------|
+| 同步 JSON | 直接看本次响应 Body |
+| SSE | 看响应事件流，至少应有 `chunk` 和 `done` |
+| 异步 webhook | 先看 `202 accepted`，再去 Apifox Mock 请求记录看回调 Body |
 
-```json
-{
-  "task_id": "apifox-resources-001",
-  "task_type": "resource_generation",
-  "status": "completed",
-  "result": {
-    "resources": [
-      {
-        "title": "一次函数学习资料",
-        "type": "document",
-        "description": "一次函数的概念、图像和应用",
-        "content": "这里是生成内容",
-        "chapter": "函数",
-        "knowledge_point": "一次函数",
-        "tags": ["函数", "一次函数", "document"]
-      }
-    ]
-  }
-}
-```
+## 1. 全接口清单
 
-## 4. 全接口测试清单
-
-| 序号 | 接口 | 类型 | 结果在哪里看 |
+| 序号 | 接口 | 类型 | 成功状态 |
 |------|------|------|------|
-| 1 | `GET /agent/v1/health` | 同步 JSON | 响应 Body |
-| 2 | `POST /agent/v1/tutoring/chat` | SSE | Apifox 事件流 / 服务端日志 |
-| 3 | `POST /agent/v1/profile/generate` | 同步 JSON | 响应 Body |
-| 4 | `POST /agent/v1/evaluation/generate` | 同步 JSON | 响应 Body |
-| 5 | `POST /agent/v1/assessment/evaluate` | 同步 JSON | 响应 Body |
-| 6 | `POST /agent/v1/assessment/generate-questions` | 同步 JSON | 响应 Body |
-| 7 | `POST /agent/v1/learning-path/generate` | 同步 JSON | 响应 Body |
-| 8 | `POST /agent/v1/resources/generate` | 异步 webhook | 先看 202，再看 Apifox Mock 请求记录 |
-| 9 | `POST /agent/v1/memory/compress` | 同步 JSON | 响应 Body |
+| 1 | `GET /agent/v1/health` | 同步 JSON | HTTP 200 |
+| 2 | `POST /agent/v1/tutoring/chat` | SSE | HTTP 200 + SSE 事件 |
+| 3 | `POST /agent/v1/profile/generate` | 同步 JSON | HTTP 200 |
+| 4 | `POST /agent/v1/evaluation/generate` | 同步 JSON | HTTP 200 |
+| 5 | `POST /agent/v1/assessment/evaluate` | 同步 JSON | HTTP 200 |
+| 6 | `POST /agent/v1/assessment/generate-questions` | 同步 JSON | HTTP 200 |
+| 7 | `POST /agent/v1/learning-path/generate` | 同步 JSON | HTTP 200 |
+| 8 | `POST /agent/v1/resources/generate` | 异步 webhook | HTTP 202 + webhook 回调 |
+| 9 | `POST /agent/v1/memory/compress` | 同步 JSON | HTTP 200 |
 
-## 5. 接口逐个测试
+## 2. Health
 
-### 5.1 Health
+### 请求
 
 ```http
-GET {{agent_base_url}}/agent/v1/health
+GET http://127.0.0.1:8002/agent/v1/health
 ```
 
 无 Body。
 
-验收：
+### 成功判定
 
-- HTTP 200
-- `code=200`
-- `data.status` 是 `healthy` / `degraded` / `unhealthy`
-- `data.qdrant_connected`、`data.model_loaded`、`data.model_name`、`data.uptime_seconds` 字段存在
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "status": "healthy",
+    "qdrant_connected": true,
+    "model_loaded": true,
+    "model_name": "deepseek-v4-flash",
+    "uptime_seconds": 100
+  }
+}
+```
 
-### 5.2 Tutoring Chat
+必须检查：
+
+- `data.status` 存在，取值通常是 `healthy` / `degraded` / `unhealthy`
+- `data.qdrant_connected` 是 boolean
+- `data.model_loaded` 是 boolean
+- `data.model_name` 是 string
+- `data.uptime_seconds` 是 integer
+
+常见失败：
+
+- `model_loaded=false` 且 `model_name=""`：服务进程没有读到 `.env`。如果 `.env` 在 `agent_service/.env`，优先从 `agent_service/` 目录启动服务。
+- `status=degraded`：通常是 Qdrant 探针失败，不一定影响所有接口的规则版 fallback。
+
+## 3. Tutoring Chat
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/tutoring/chat
+POST http://127.0.0.1:8002/agent/v1/tutoring/chat
 Content-Type: application/json
 Accept: text/event-stream
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
@@ -206,25 +107,48 @@ Accept: text/event-stream
     "knowledge_weak": ["栈", "队列"]
   },
   "conversation_summary": "用户已经理解顺序表和链表。",
-  "recent_messages": []
+  "recent_messages": [
+    {
+      "role": "user",
+      "content": "链表我大概懂了",
+      "meta": {
+        "message_id": "msg_u_001"
+      }
+    }
+  ]
 }
 ```
 
-验收：
+### 成功判定
+
+响应是 SSE，期望看到类似事件：
+
+```text
+data: {"type":"chunk","content":"..."}
+data: {"type":"done","message_id":"..."}
+```
+
+必须检查：
 
 - HTTP 200
-- 响应是 SSE 流
-- 至少能看到 `chunk` 和最终 `done` 事件
-- 如果没有真实 LLM，也可能走规则版 fallback，但仍应返回可读文本
+- 至少出现文本内容事件
+- 最终有 `done` 事件
 
-### 5.3 Profile Generate
+常见失败：
+
+- `course_id` 缺失且 `scope=course`：会 422。
+- Apifox 不显示流式事件：看服务端日志，或切到支持 SSE 的调试方式。
+
+## 4. Profile Generate
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/profile/generate
+POST http://127.0.0.1:8002/agent/v1/profile/generate
 Content-Type: application/json
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
@@ -264,24 +188,32 @@ Content-Type: application/json
 }
 ```
 
-验收：
+### 成功判定
+
+必须检查：
 
 - HTTP 200
-- `data.guidance_level_suggestion` 存在
+- `code=200`
 - `data.modal_preference` 存在
-- `data.knowledge_coordinates` 是数组
-- `data.cognitive_blindspots` 是数组
+- `data.guidance_level_suggestion` 存在
+- `data.knowledge_coordinates` 是 array
+- `data.cognitive_blindspots` 是 array
 
-完整请求示例见 `docs/Agent-Service-接口JSON示例说明.md` 的“生成/刷新用户画像”章节。
+常见失败：
 
-### 5.4 Evaluation Generate
+- `created_at` 不是 ISO 时间字符串：会 422。
+- `score` 不是数字：会 422。
+
+## 5. Evaluation Generate
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/evaluation/generate
+POST http://127.0.0.1:8002/agent/v1/evaluation/generate
 Content-Type: application/json
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
@@ -318,7 +250,9 @@ Content-Type: application/json
 }
 ```
 
-验收：
+### 成功判定
+
+必须检查：
 
 - HTTP 200
 - `data.progress_table` 存在
@@ -326,22 +260,27 @@ Content-Type: application/json
 - `data.resource_usage_table` 存在
 - `data.summary_text` 存在
 
-完整请求示例见 `docs/Agent-Service-接口JSON示例说明.md` 的“生成学习效果评估”章节。
+常见失败：
 
-### 5.5 Assessment Evaluate
+- `completion_rate` / `score` 超出 0-100：会 422。
+- `learning_progress.chapter_progress` 缺失：会 422。
+
+## 6. Assessment Evaluate
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/assessment/evaluate
+POST http://127.0.0.1:8002/agent/v1/assessment/evaluate
 Content-Type: application/json
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
-  "quiz_id": "quiz_apifox_001",
   "user_id": "user_001",
   "course_id": "course_ds_c",
+  "quiz_id": "quiz_apifox_001",
   "questions": [
     {
       "id": "q1",
@@ -373,23 +312,31 @@ Content-Type: application/json
 }
 ```
 
-验收：
+### 成功判定
+
+必须检查：
 
 - HTTP 200
-- `data.per_question_results` 是数组
+- `data.per_question_results` 是 array
+- `data.per_question_results[0].is_correct=true`
 - `data.diagnosis` 存在
-- `data.diagnosis.suggestions` 是数组
+- `data.diagnosis.suggestions` 是 array
 
-如果看到 `quiz_id/questions/answers Field required`，说明你当前调的是本接口，但 Body 填成了别的接口的格式。
+常见失败：
 
-### 5.6 Assessment Generate Questions
+- 缺 `quiz_id` / `questions` / `answers`：说明 Body 不是本接口格式。
+- `type` 必须是 `single_choice` / `multi_choice` / `code` / `short_answer`。
+
+## 7. Assessment Generate Questions
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/assessment/generate-questions
+POST http://127.0.0.1:8002/agent/v1/assessment/generate-questions
 Content-Type: application/json
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
@@ -398,9 +345,9 @@ Content-Type: application/json
   "knowledge_base_id": "kb_course_ds_c",
   "chapter": "栈与队列",
   "knowledge_point": "队列",
-  "difficulty": "medium",
-  "count": 3,
   "question_types": ["single_choice"],
+  "count": 3,
+  "difficulty": "medium",
   "personalized": true,
   "personalization_context": {
     "evaluation": null,
@@ -409,21 +356,32 @@ Content-Type: application/json
 }
 ```
 
-验收：
+### 成功判定
+
+必须检查：
 
 - HTTP 200
-- `data.questions` 是数组
-- 题目数量尽量接近 `count`
-- 每题有 `type`、`content`、`answer`、`knowledge_point`
+- `data.questions` 是 array
+- 每题有 `type`
+- 每题有 `content`
+- 每题有 `answer`
+- 每题有 `knowledge_point`
 
-### 5.7 Learning Path Generate
+常见失败：
+
+- `difficulty` 必须是 `easy` / `medium` / `hard`。
+- `question_types` 内元素必须是 `single_choice` / `multi_choice` / `code` / `short_answer`。
+
+## 8. Learning Path Generate
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/learning-path/generate
+POST http://127.0.0.1:8002/agent/v1/learning-path/generate
 Content-Type: application/json
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
@@ -471,63 +429,92 @@ Content-Type: application/json
     "edges": [
       {
         "from": "kp_stack",
-        "to": "kp_queue",
-        "relation": "prerequisite"
+        "to": "kp_queue"
       }
     ]
   }
 }
 ```
 
-验收：
+### 成功判定
+
+必须检查：
 
 - HTTP 200
-- `data.nodes` 是路径节点列表
-- `data.edges` 是路径边列表
-- 节点 ID 应来自请求中的 `knowledge_graph.nodes`
-- 不应出现请求里没有的知识点 ID
+- `data.nodes` 是 array
+- `data.edges` 是 array
+- `data.current_position` 存在或为 null
+- 返回节点 ID 不应超出请求里的 `knowledge_graph.nodes[].id`
 
-完整字段以 OpenAPI 和 `docs/Agent-Service-接口JSON示例说明.md` 为准。
+常见失败：
 
-### 5.8 Resources Generate
+- `knowledge_graph.nodes` 缺失：会 422。
+- `edges` 中 `from` / `to` 指向不存在节点：接口可能 fallback，但结果质量会差。
+
+## 9. Resources Generate
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/resources/generate
+POST http://127.0.0.1:8002/agent/v1/resources/generate
 Content-Type: application/json
 ```
 
-Body：
+### Body
 
 ```json
 {
   "task_id": "apifox-resources-001",
   "user_id": "apifox-user",
   "course_id": "smoke-course",
-  "webhook_url": "{{apifox_webhook_url}}",
+  "webhook_url": "https://m1.apifoxmock.com/m1/8182577-7941807-7764192/api/v1/webhooks/agent",
   "chapter": "函数",
   "knowledge_point": "一次函数",
   "resource_types": ["document", "mindmap", "reading", "code"]
 }
 ```
 
-第一步验收：
+### 第一步成功判定：任务接收
+
+本接口立即返回：
+
+```json
+{
+  "code": 202,
+  "message": "accepted",
+  "data": {
+    "task_id": "apifox-resources-001",
+    "estimated_duration": 120
+  }
+}
+```
+
+必须检查：
 
 - HTTP 202
 - `code=202`
 - `data.task_id` 与请求一致
 - `data.estimated_duration` 存在
 
-第二步看生成资源：
+注意：这里看不到生成资源。`202` 只代表任务已接收。
 
-1. 打开 Apifox 的 `POST /api/v1/webhooks/agent` Webhook。
-2. 进入 Mock 页面。
-3. 查看云端 Mock 的调用记录。
-4. 点开 Agent Service 发来的 POST 请求。
-5. 看 Request Body。
-6. 资源在 `result.resources`。
-7. 正文在 `result.resources[].content`。
+### 第二步成功判定：查看生成资源
 
-成功回调应类似：
+去 Apifox 的 webhook / Mock 请求记录里看 Agent Service 发来的 POST。
+
+资源位置：
+
+```text
+Request Body.result.resources
+```
+
+资源正文位置：
+
+```text
+Request Body.result.resources[].content
+```
+
+成功回调示例：
 
 ```json
 {
@@ -550,26 +537,33 @@ Body：
 }
 ```
 
-如果只看到 `202`，但 Mock 没有记录：
+必须检查：
 
-- 检查 `webhook_url` 是否为 `https://m1.apifoxmock.com/...`
-- 看 Agent Service 终端是否有 `Resource generation webhook failed`
-- 不要使用 WSL 不可达的 `http://127.0.0.1:4523/...`
+- webhook body 里 `task_id` 与请求一致
+- `task_type=resource_generation`
+- `status=completed`
+- `result.resources` 是 array
+- 期望包含 `document` / `mindmap` / `reading` / `code`
+- 每个资源都有 `title` / `type` / `description` / `content` / `chapter` / `knowledge_point` / `tags`
+- 不应出现内部字段 `generated_by` / `fallback_reason` / `is_skeleton`
 
-如果 Mock 有记录但内容像占位：
+常见失败：
 
-- 说明接口链路通了
-- 但真实 LLM 可能未配置或失败，系统走了 skeleton fallback
-- 继续查看 Agent Service 日志里的 `fallback` / `LLM` / `ResourceAgent` 信息
+- 只有 `202`，没有 Mock 记录：看 Agent Service 日志是否有 `Resource generation webhook failed`。
+- `Connection refused`：`webhook_url` 不可达，不要用 WSL 不可达的 `http://127.0.0.1:4523/...`。
+- `model_loaded=false`：服务没有读到 `.env`，资源可能直接 fallback 到占位内容。
+- Mock 有记录但内容很空：链路通了，但真实 LLM 可能没工作，查看日志里的 `fallback`、`LLM`、`ResourceAgent`。
 
-### 5.9 Memory Compress
+## 10. Memory Compress
+
+### 请求
 
 ```http
-POST {{agent_base_url}}/agent/v1/memory/compress
+POST http://127.0.0.1:8002/agent/v1/memory/compress
 Content-Type: application/json
 ```
 
-最小 Body：
+### Body
 
 ```json
 {
@@ -592,75 +586,59 @@ Content-Type: application/json
 }
 ```
 
-验收：
+### 成功判定
+
+必须检查：
 
 - HTTP 200
 - `data.new_summary` 存在
-- `data.extracted_facts` 是数组
+- `data.extracted_facts` 是 array
+- 每个 fact 的 `fact_type` 如存在，应是 `blind_spot` / `mastered_point` / `cognitive_preference`
 
-## 6. 常见问题
+常见失败：
 
-### 只看到 202，看不到资源
+- `role` 必须是 `user` / `assistant`。
+- `timestamp` 必须是 ISO 时间字符串。
 
-这是正常的第一阶段结果。`resources/generate` 是异步接口，资源不在 202 响应里。
+## 11. 最小回归顺序
 
-继续去 Apifox Mock 请求记录看：
+建议按这个顺序测：
 
-```text
-Request Body -> result.resources
-```
+1. `GET /agent/v1/health`
+2. `POST /agent/v1/profile/generate`
+3. `POST /agent/v1/evaluation/generate`
+4. `POST /agent/v1/assessment/evaluate`
+5. `POST /agent/v1/assessment/generate-questions`
+6. `POST /agent/v1/learning-path/generate`
+7. `POST /agent/v1/memory/compress`
+8. `POST /agent/v1/tutoring/chat`
+9. `POST /agent/v1/resources/generate`
 
-### 422 提示缺字段
+原因：
 
-一般是接口选错或 Body 用错。
+- 先测同步 JSON，最快定位 schema / Body 问题。
+- SSE 放后面，因为 Apifox 展示可能不稳定。
+- resources 最后测，因为它是异步，需要额外看 webhook 回调。
 
-例子：
+## 12. 判断 AI 是否真实工作
 
-- `quiz_id/questions/answers Field required`：你调的是 `assessment/evaluate`，但填了 resources 的 Body。
-- `task_id/user_id/course_id/webhook_url Field required`：你调的是 `resources/generate`，但 Body 缺异步任务字段。
+Apifox 只能证明接口协议和最终结果，不能直接证明内部 Agent 路径。
 
-### Webhook connection refused
-
-说明 `webhook_url` 指向的接收服务不可达。
-
-在 WSL 下不要优先用：
-
-```text
-http://127.0.0.1:4523/...
-```
-
-优先用 Apifox 云端 Mock：
-
-```text
-https://m1.apifoxmock.com/m1/8182577-7941807-7764192/api/v1/webhooks/agent
-```
-
-### 如何判断真实 AI 工作流是否运行
-
-Apifox 只能看到最终协议结果。内部是否命中多 Agent / LLM，需要看 Agent Service 日志。
-
-resources 成功命中时可能看到：
+需要结合 Agent Service 日志判断：
 
 ```text
-Multi-agent workflow started
+LLM generation succeeded
 LLM Planner succeeded
 ResourceAgent succeeded
 Aggregator merged results
 ```
 
-如果没有真实 LLM 配置，可能看到 fallback 日志，最终仍可能返回 completed。
+如果看到：
 
-### 本地快速总体验证
-
-不依赖 Apifox 时，可运行：
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent/agent_service
-./.venv/bin/python -m agent_service.tools.smoke_all
+```text
+falling back
+chat_provider=None
+LLM resource generation failed
 ```
 
-resources 单独验证：
-
-```bash
-./.venv/bin/python -m agent_service.tools.smoke_resources_workflow
-```
+说明接口可能仍返回成功，但结果来自 fallback，不代表真实 LLM 质量已验证。

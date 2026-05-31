@@ -134,6 +134,13 @@
 5. Backend 联调（`docs/superpowers/plans/2026-05-26-backend-agent-integration.md`）可并行，但不阻塞 multi-agent 设计。
 6. Phase 4 prompt/后处理修正作为质量增强穿插进行。
 
+### 后续 Agent 化目标
+
+- `resources/generate`：继续作为 multi-agent 主线，保留 Planner → ResourceAgent 并行 → Aggregator；后续优先补 ResourceCriticAgent / 质量门禁、真实 LLM 质量验证、AgentScope Studio trace，不改变 202 + webhook 契约。
+- `tutoring/chat`：适合继续 Agent 化，优先引入 StrategyAgent 判断讲解策略（提示式引导 / 直接解释 / 追问澄清 / 例题讲解），再评估 ResponseCriticAgent；保持 ReActAgent → chat JSON → rule-based fallback。
+- `assessment/generate-questions`：适合继续 Agent 化，优先引入 QuestionCriticAgent 检查题目质量、知识点贴合度、选项和解析合理性；后续再评估 KnowledgePointGuard / DifficultyBalancer，保持 OpenAPI 题型契约不变。
+- `profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress` 暂不作为主线 Agent 化目标；仅在出现明确收益时做局部 Agent/Verifier，不替换稳定规则保护。
+
 ### 当前上下文补充
 
 - Apifox 真实 AI 流程中发现的 AgentScope ToolResponse block 格式问题已修复：tutoring / assessment toolkit 均返回 `{"type": "text", "text": "..."}`。

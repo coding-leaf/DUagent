@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 
 from agent_service.memory.user_memory_store import QdrantUserMemoryStore
 from agent_service.schemas.memory import ExtractedFact
@@ -86,3 +87,12 @@ def test_upsert_facts_generates_stable_point_ids() -> None:
     first_id = store.calls[0]["points"][0].id
     second_id = store.calls[1]["points"][0].id
     assert first_id == second_id
+
+
+def test_memory_point_id_is_valid_uuid() -> None:
+    from agent_service.memory.user_memory_store import build_memory_point_id
+
+    point_id = build_memory_point_id("user_001", "conv_001", "blind_spot", "栈和队列")
+
+    uuid.UUID(point_id)
+    assert point_id == build_memory_point_id("user_001", "conv_001", "blind_spot", "栈和队列")

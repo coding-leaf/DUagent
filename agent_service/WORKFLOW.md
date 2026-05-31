@@ -107,7 +107,7 @@
 
 ## 最近测试/验证
 
-- `./.venv/bin/pytest -q`：**265 passed**（Phase 0/1/2 测试通过，包含 diagram 顺序验证）
+- `./.venv/bin/pytest -q`：**272 passed**（Phase 0/1/2/3 测试通过，包含 diagram 顺序验证与 assessment ReAct 降级保护）
 - `./.venv/bin/pytest tests/test_core_config.py -q`：**5 passed**
 - OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
 - `./.venv/bin/python -m agent_service.tools.smoke_all`：9/9 PASS；smoke 工具直接调用 API handlers，避免本地验收依赖外部 Qdrant/TestClient lifespan/webhook
@@ -115,7 +115,7 @@
 - LearningPath / KnowledgeGraph edge alias 支持 Python 内部 `from_` + OpenAPI `from` 输出
 - **Phase 0 spike 完成**：`assessment/generate-questions` structured_model 兼容性验证通过，降级链：structured_model → markdown fence JSON → rule-based
 - **Phase 3 Step A 完成**：收束 `assessment/generate-questions` API 边界，将其依赖项获取、RAG 构建与 LLM 调用下沉至 `generate_questions_with_agent` 函数，规范了 LLM 解析的统一下沉与空列表 fallback。
-- **Phase 3 Step B 完成**：引入 `QuestionGeneratorReActAgent` 和配套工具（`retrieve_course_knowledge`、`validate_question_format`）。目前出题请求优先通过 ReAct 编排进行结构化推理、RAG和自检，如果失败则无缝回落到原有 LLM 或骨架路径。
+- **Phase 3 Step B 完成并修复**：引入 `QuestionGeneratorReActAgent` 和配套工具（`retrieve_course_knowledge`、`validate_question_format`）；已修复 ReAct 坏输出直接冒泡、测试误触发真实 provider 初始化、题型校验与 OpenAPI 不一致、默认 toolkit 无 vector_store 的问题。当前出题请求优先通过 ReAct 编排进行结构化推理、RAG 和自检，失败时回落到原有 LLM 或骨架路径。
 
 ## 下一步
 

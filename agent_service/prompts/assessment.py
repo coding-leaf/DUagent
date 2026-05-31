@@ -42,7 +42,7 @@ def build_question_react_system_prompt() -> str:
         "4. 只有在格式校验通过后，才将最终的题目数据输出。\n\n"
         "题目格式要求：\n"
         "- 输出必须是严格的 JSON 数组格式（不要用 markdown fence 包裹，也不要加任何其他文字）。\n"
-        "- 题型 type 必须为：single_choice / multi_choice / code / short_answer / true_false\n"
+        "- 题型 type 必须为：single_choice / multi_choice / code / short_answer\n"
         "- content 必须是完整的题目描述\n"
         "- options 必须是数组，如果是选择题则为 [{\"key\": \"A\", \"text\": \"...\"}, ...]，非选择题为空数组 []\n"
         "- answer 必须与题型一致：单选为 \"A\"，多选为 [\"A\", \"B\"]\n"

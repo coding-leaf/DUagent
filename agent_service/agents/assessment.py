@@ -507,18 +507,21 @@ def _coerce_questions(items: list[dict]) -> list[GeneratedQuestion]:
         content = item.get("content")
         if not isinstance(content, str) or not content.strip():
             continue
-        questions.append(
-            GeneratedQuestion(
-                type=item.get("type", "single_choice"),
-                content=content.strip(),
-                options=_coerce_options(item.get("options")),
-                answer=item.get("answer", ""),
-                explanation=str(item.get("explanation", "")),
-                chapter=item.get("chapter"),
-                knowledge_point=str(item.get("knowledge_point", "")),
-                difficulty=item.get("difficulty"),
+        try:
+            questions.append(
+                GeneratedQuestion(
+                    type=item.get("type", "single_choice"),
+                    content=content.strip(),
+                    options=_coerce_options(item.get("options")),
+                    answer=item.get("answer", ""),
+                    explanation=str(item.get("explanation", "")),
+                    chapter=item.get("chapter"),
+                    knowledge_point=str(item.get("knowledge_point", "")),
+                    difficulty=item.get("difficulty"),
+                )
             )
-        )
+        except Exception:
+            logger.debug("Discarded invalid generated question: %s", item, exc_info=True)
     return questions
 
 
@@ -544,9 +547,16 @@ async def generate_questions_with_agent(
 
     embedding_provider = getattr(providers, "embedding", None)
     chat_provider = getattr(providers, "chat", None)
+    effective_vector_store = vector_store
+    if effective_vector_store is None and embedding_provider is not None and request.course_id:
+        try:
+            from agent_service.memory.vector_store import QdrantVectorStore
+            effective_vector_store = QdrantVectorStore()
+        except Exception:
+            logger.warning("Failed to create QdrantVectorStore for assessment generation", exc_info=True)
 
     course_knowledge_context = await build_question_generation_knowledge_context(
-        request, embedding_provider, vector_store=vector_store
+        request, embedding_provider, vector_store=effective_vector_store
     )
 
     # Step B: 优先尝试 ReActAgent
@@ -557,7 +567,7 @@ async def generate_questions_with_agent(
         toolkit = build_assessment_toolkit(
             course_id=request.course_id,
             embedding_provider=embedding_provider,
-            vector_store=vector_store,
+            vector_store=effective_vector_store,
         )
         react_agent = QuestionGeneratorReActAgent(
             chat_model=chat_provider.model,

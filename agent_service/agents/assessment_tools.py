@@ -5,6 +5,7 @@ from agentscope.tool import Toolkit, ToolResponse
 from agent_service.core.logging import get_logger
 
 logger = get_logger(__name__)
+_SUPPORTED_QUESTION_TYPES = {"single_choice", "multi_choice", "code", "short_answer"}
 
 
 def build_assessment_toolkit(
@@ -37,29 +38,7 @@ def build_assessment_toolkit(
 
     def validate_question_format(questions_json_str: str) -> ToolResponse:
         """校验生成的题目 JSON 数组格式是否正确。"""
-        try:
-            data = json.loads(questions_json_str)
-            if not isinstance(data, list):
-                return ToolResponse(content=[{"text": "错误：根节点必须是 JSON 数组。"}])
-            
-            errors = []
-            for i, q in enumerate(data):
-                if not isinstance(q, dict):
-                    errors.append(f"第 {i+1} 题必须是 JSON 对象。")
-                    continue
-                qtype = q.get("type")
-                if qtype not in ["single_choice", "multi_choice", "short_answer", "true_false"]:
-                    errors.append(f"第 {i+1} 题 type 错误，不支持 '{qtype}'。")
-                if qtype in ["single_choice", "multi_choice"]:
-                    options = q.get("options", [])
-                    if not isinstance(options, list) or len(options) == 0:
-                        errors.append(f"第 {i+1} 题必须包含选项 options 数组。")
-                
-            if errors:
-                return ToolResponse(content=[{"text": "校验失败:\n" + "\n".join(errors)}])
-            return ToolResponse(content=[{"text": "校验通过，格式合法。"}])
-        except Exception as e:
-            return ToolResponse(content=[{"text": f"JSON 解析失败: {e}"}])
+        return ToolResponse(content=[{"text": _validate_question_format_content(questions_json_str)}])
 
     toolkit = Toolkit()
     toolkit.register_tool_function(
@@ -79,3 +58,33 @@ def _truncate_chunk(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "..."
+
+
+def _validate_question_format_content(questions_json_str: str) -> str:
+    try:
+        data = json.loads(questions_json_str)
+    except Exception as e:
+        return f"JSON 解析失败: {e}"
+    if not isinstance(data, list):
+        return "错误：根节点必须是 JSON 数组。"
+
+    errors = []
+    for index, question in enumerate(data):
+        number = index + 1
+        if not isinstance(question, dict):
+            errors.append(f"第 {number} 题必须是 JSON 对象。")
+            continue
+        qtype = question.get("type")
+        if qtype not in _SUPPORTED_QUESTION_TYPES:
+            errors.append(f"第 {number} 题 type 错误，不支持 '{qtype}'。")
+            continue
+        options = question.get("options", [])
+        if qtype in {"single_choice", "multi_choice"}:
+            if not isinstance(options, list) or len(options) == 0:
+                errors.append(f"第 {number} 题必须包含选项 options 数组。")
+        elif options not in ([], None):
+            errors.append(f"第 {number} 题非选择题 options 必须为空数组。")
+
+    if errors:
+        return "校验失败:\n" + "\n".join(errors)
+    return "校验通过，格式合法。"

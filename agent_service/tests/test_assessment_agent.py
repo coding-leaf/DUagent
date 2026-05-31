@@ -823,11 +823,15 @@ class TestQuestionRAG:
         from unittest.mock import patch
         from agent_service.agents.assessment import generate_questions_with_agent
 
+        class FakeProviders:
+            chat = None
+            embedding = None
+
         async def _fake_llm(*args, **kwargs):
             return None
 
         with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
-            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=None))
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
         assert len(questions) == 2
         assert "完成一道单选题" in questions[0].content
@@ -837,11 +841,15 @@ class TestQuestionRAG:
         from agent_service.agents.assessment import generate_questions_with_agent
         from agent_service.schemas.assessment import GeneratedQuestion
 
+        class FakeProviders:
+            chat = None
+            embedding = None
+
         async def _fake_llm(*args, **kwargs):
             return [GeneratedQuestion(type="single_choice", content="LLM题目", options=[], answer="A", knowledge_point="K", explanation="E")]
 
         with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
-            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=None))
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
         assert len(questions) == 1
         assert questions[0].content == "LLM题目"
@@ -883,6 +891,56 @@ class TestQuestionRAG:
         assert len(questions) == 1
         assert questions[0].content == "ReAct题目"
 
+    def test_generate_questions_with_agent_falls_back_when_react_returns_invalid_question(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="LLM fallback 题目",
+                    options=[],
+                    answer="A",
+                    knowledge_point="K",
+                    explanation="E",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [
+                    {
+                        "type": "true_false",
+                        "content": "契约外题型",
+                        "options": [],
+                        "answer": "true",
+                        "knowledge_point": "K",
+                        "explanation": "E",
+                    }
+                ]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content == "LLM fallback 题目"
+
 
 def test_parse_question_payload_handles_array() -> None:
     from agent_service.agents.assessment import _parse_question_payload
@@ -906,6 +964,22 @@ def test_parse_question_payload_handles_markdown() -> None:
     result = _parse_question_payload(payload)
     assert len(result) == 1
     assert result[0]["content"] == "Q1"
+
+
+def test_assessment_question_format_validator_matches_openapi_question_types() -> None:
+    from agent_service.agents.assessment_tools import _validate_question_format_content
+
+    code_payload = (
+        '[{"type":"code","content":"写一个函数","options":[],"answer":"def f(): pass",'
+        '"knowledge_point":"函数","explanation":"代码题解析"}]'
+    )
+    true_false_payload = (
+        '[{"type":"true_false","content":"判断题","options":[],"answer":"true",'
+        '"knowledge_point":"判断","explanation":"判断题解析"}]'
+    )
+
+    assert "校验通过" in _validate_question_format_content(code_payload)
+    assert "不支持 'true_false'" in _validate_question_format_content(true_false_payload)
 
 
 def _build_request(

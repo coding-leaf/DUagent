@@ -20,6 +20,46 @@
 3. 如果接口从 `占位/规则完成` 提升到 `半完成` 或 `真实完成`，必须直接修改总览表，不允许只写在“最近验证”。
 4. 如果接口行为回退、发现假实现、联调不闭环，也必须回写状态，不允许只保留乐观描述。
 
+## Backend 工作流程
+
+后续在 `backend/` 内继续修接口，默认按下面流程执行：
+
+1. 先做上下文检查：
+   - `pwd`
+   - `git status --short`
+   - `curl -s http://127.0.0.1:8002/agent/v1/health`
+   - 必要时重读 `AGENTS.md`、相关 OpenAPI 和本文件
+2. 先审契约，再动代码：
+   - 先核对 `docs/10-client-api` 与 `docs/20-agent-api`
+   - 明确本次是否涉及 Client API / Agent API 契约变化
+   - 若存在参数、字段、枚举、同步/异步语义变化，先停下说明，不直接落代码
+3. 每次只推进一个接口或一个明确子能力：
+   - 先找真实问题
+   - 先收口最危险的 bug，再谈状态提升
+   - 默认不一次性铺开多条链路
+4. 修改前先写 4 件事并等待确认：
+   - 问题分析
+   - 计划修改的文件
+   - 修改方案
+   - 可能影响的功能
+5. 修改时遵循最小闭环原则：
+   - 优先 minimal diff
+   - 先补异常路径和状态闭环
+   - 只要引入锁、事务或异步任务，必须同时检查成功路径、失败路径、幂等和提交时序
+6. 刷新类接口统一按稳定化模板审查：
+   - task 创建后是否会因后续异常丢失
+   - 锁是否在 `commit()` 之后才释放
+   - 锁超时 / Agent 失败 / DB 异常是否都会落 `task failed`
+   - GET 读取是否使用 `.order_by(...).first()` 避免多行 500
+7. 改完立即同步本文件：
+   - 更新总览状态
+   - 更新“最近状态变更”
+   - 若还有残留问题，写进“已知问题”，不要只写乐观结论
+8. 最后做最小验证并提交：
+   - 至少跑语法检查、导入检查或相关接口测试
+   - 只提交本轮相关文件
+   - 最终回复必须说明：当前完成、修改文件、测试结果、契约是否漂移、下一步建议
+
 ## 当前接口实现情况总览
 
 更新日期：`2026-06-01`
@@ -96,6 +136,8 @@ _（当前无占位接口）_
 - `2026-06-02` `evaluation + learning-path 刷新链路稳定化（复制 profile 模板）`
   - `POST /api/v1/evaluation/refresh`：MySQL `GET_LOCK` 序列化写入；task 创建后显式 `commit()`；try 覆盖 Agent 调用 + DB 写入完整路径；成功路径 `commit → release lock`；AgentServiceError、锁超时和通用 Exception 分支都会先 `rollback()` 再落 `task failed`，不再残留 `processing`
   - `POST /api/v1/learning-path/refresh`：同 evaluation 模式；额外修复 GET `/learning-path` 的 `scalar_one_or_none()` → `.order_by(desc).first()`（修复多次 refresh 后 GET 500 崩溃）；`_assemble_learning_path_payload` 中 UserProfile / CourseKnowledgeGraph 读取同改 `.first()`；`get_node_resources` 中 CourseKnowledgeGraph 同改 `.first()`；锁超时同样会落 `task failed`
+- `2026-06-02` `补充 backend 实际工作流程`
+  - 新增“Backend 工作流程”章节，固定约束：先审契约、一次只推进一个接口、修改前先给 4 项分析、优先收口异常路径和任务状态闭环、改完立即同步 `WORKFLOW.md`
 
 ## 文件用途
 
@@ -161,4 +203,3 @@ cd agent_service && ./.venv/bin/pytest -q
 _（联调进行中，逐接口填充）_
 
 ## 下一步建议
-

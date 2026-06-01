@@ -8,10 +8,20 @@
 ## 当前方向
 
 - Agent Service 负责智能体编排、RAG、工具调用和结构化结果生成，不直接写 Backend SQL 数据库。
-- 后续以适合的 Agent/Workflow 编排替代低价值手写编排，但不为所有接口强行套用 multi-agent。
-- Agent 化优先用于天然需要拆分、协作、检索、自检或并行的链路：`resources/generate`、`tutoring/chat`、`assessment/generate-questions`。
+- Agent 全链路架构升级主干已完成：适合 Agent/Workflow 的重点链路已具备 Agent 编排、质量门禁和 fallback。
+- 后续进入工程化收尾：真实 LLM/RAG 联调验证、统一 trace/log、AgentScope Studio trace 评估、Qdrant server 化和全量回归。
+- 不再为了“升级架构”继续大改已完成接口；新增改动必须服务于联调质量、可观测性、部署稳定性或明确缺陷修复。
 - deterministic / 统计型接口继续以 structured output + 规则保护为主：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
 - AgentScope 接入必须落在 `agents/`、`memory/`、`tools/`、`prompts/`、`core/` 边界内，不泄漏到 API/schema/Backend 契约。
+
+## 全链路升级状态
+
+- 已完成主干升级的 Agent 化链路：
+  - `tutoring/chat`：StrategyAgent → ReAct/chat → ResponseCritic → rule-based fallback。
+  - `assessment/generate-questions`：ReActAgent + RAG toolkit → QuestionCritic → KnowledgePointGuard → DifficultyBalancer → LLM/skeleton fallback。
+  - `resources/generate`：Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator → fallback。
+- 已保持 deterministic / 统计型接口稳定：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
+- 未完成的是生产化收尾，不是架构主干：真实模型效果验证、统一观测、Studio trace、Qdrant server 部署和最新全量测试。
 
 ## 接口进度
 
@@ -68,7 +78,8 @@
 
 ## 下一步建议
 
-1. `assessment/generate-questions`：后续做真实 LLM/RAG 质量验证和 AgentScope Studio trace，不改变题型契约。
-2. `resources/generate`：后续做真实 LLM/RAG 质量验证和 AgentScope Studio trace。
-3. `tutoring/chat`：后续可做真实 LLM prompt 质量验证和 AgentScope Studio trace，不改变 SSE 和 schemas。
-4. 部署联调：优先引入 Qdrant server 模式，减少 Apifox / 多进程真实 AI 流程中的 local 文件锁问题。
+1. 统一 trace/log：记录 assessment/resources/tutoring 中各 gate 拒绝原因、fallback 路径和最终输出来源，不改变 API/schema/webhook。
+2. 真实 LLM/RAG 联调：验证 assessment 出题质量、resources 生成质量和 tutoring prompt 效果。
+3. AgentScope Studio trace：先查官方文档或本地安装包 introspection，再决定是否接入；不凭空编造 Studio API。
+4. Qdrant server 化：减少 Apifox / 多进程真实 AI 流程中的 local 文件锁问题。
+5. 最新全量回归：在收尾改动后重新运行 `./.venv/bin/pytest -q`。

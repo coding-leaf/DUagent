@@ -54,7 +54,6 @@
 - `POST /api/v1/learning-path/refresh`
 - `GET /api/v1/quiz/questions`
 - `POST /api/v1/quiz/generate`
-- `POST /api/v1/quiz/submit`
 - `GET /api/v1/quiz/history`
 - `GET /api/v1/resources`
 - `POST /api/v1/resources/generate`
@@ -63,11 +62,13 @@
 - `GET /api/v1/teaching/classes/{class_id}/students/{student_id}`
 - `GET /api/v1/teaching/classes/{class_id}/students/{student_id}/learning`
 - `POST /api/v1/webhooks/agent`
+- `GET /api/v1/learning-path/nodes/{node_id}/resources`
+- `POST /api/v1/quiz/submit`
+- `GET /api/v1/quiz/result`
 
 ### 占位/规则完成
 
-- `GET /api/v1/learning-path/nodes/{node_id}/resources`
-- `GET /api/v1/quiz/result`
+_（当前无占位接口）_
 
 ### 文档声明不做
 
@@ -79,6 +80,19 @@
 - `2026-06-01` `接口盘点初始化`
   - 新增接口实现情况总览
   - 明确后续每次改接口时必须同步更新最近状态
+- `2026-06-01` `修复 webhook task.status 闭环 + 实现两个占位接口`
+  - `POST /api/v1/webhooks/agent`：补充 task.status 设置（completed/failed），幂等保护生效，接口保持「半完成」
+  - `GET /api/v1/learning-path/nodes/{node_id}/resources`：新增 `course_id` 查询参数，从 `LearningPath` + `Resource` + `QuizQuestion` 表真实查询，状态提升至「半完成」。同步更新 `docs/10-client-api/Client-API.openapi.json` 补充 `course_id` 参数；已添加课程权限校验（学生需已加入课程）
+  - `GET /api/v1/quiz/result`：替换硬编码诊断为基于 `QuizAnswer` JOIN `QuizQuestion` 的数据驱动聚合计算，状态提升至「半完成」。无答题记录时 `diagnosis` 返回 `null`（符合 API 前端接口规范）
+- `2026-06-01` `webhook error_code 落库 + 鉴权`
+  - `POST /api/v1/webhooks/agent`：failed 分支补充 `task.error_code` 落库；Agent Service `build_resource_generation_failed_payload` 同步发送 `error_code: "agent_error"`
+  - 新增 `X-Webhook-Secret` 鉴权（两端都配同一个 secret 时生效；仅一端配置时，Agent 配 Backend 未配→header 被忽略，Backend 配 Agent 未配→401；两端都不配→跳过鉴权）
+- `2026-06-02` `实现 quiz/submit 后台异步 LLM 诊断（修正）`
+  - `POST /api/v1/quiz/submit`：评分完成后通过 `asyncio.create_task` 后台异步调用 `agent_client.post_json("/agent/v1/assessment/evaluate")`，LLM 诊断存入 `QuizSession.diagnosis_json`。后台任务使用独立 DB session，不创建 AsyncTask（避免新增未声明 task_type），失败时记录结构化日志。接口保持「半完成」— 诊断链路已打通但依赖后台异步完成
+  - `GET /api/v1/quiz/result`：诊断保持纯课程级数据驱动聚合（summary/weak_points/suggestions 全部基于 QuizAnswer JOIN QuizQuestion 计算），不混合 diagnosis_json。接口保持「半完成」— 数据驱动诊断可用，LLM 诊断数据存于 diagnosis_json 供未来 per-session 端点使用
+- `2026-06-02` `profile 刷新链路稳定化`
+  - `POST /api/v1/profile/refresh`：MySQL `GET_LOCK`/`RELEASE_LOCK` 序列化同用户+课程并发写入；软删旧行 → 插新行；显式 `commit()` 后再释放锁，避免锁释放早于事务提交导致重复活跃行；异常兜底覆盖完整路径（payload 组装 + Agent 调用 + DB 读写 + task 更新），AgentServiceError、锁超时与通用 Exception 分支都会落 `task failed`；GET `/profile` 改为 `.order_by(desc).first()`。接口保持「半完成」— 同步调用 Agent 模式未改为真异步
+  - `POST /api/v1/profile/initialize`：同锁策略 + 显式 `commit()` 后释放锁；重复提交 = 覆盖；锁超时返回 `503`
 
 ## 文件用途
 
@@ -106,10 +120,9 @@
 
 ## 已知问题
 
-1. **Webhook 未设 task.status**（`webhooks.py:53-75`）：completed/failed 回调设了 `result`、`progress`、`completed_at`，但未设 `task.status = "completed"`。前端轮询永远看到 "processing"，幂等保护失效。
-2. **Webhook 无鉴权**：端点无 token 校验，文档注明"部署时通过内网限制访问"，v1 可接受。
-3. **`GET /learning-path/nodes/{id}/resources`** 是硬编码 stub，返回空数组。
-4. **`POST /quiz/submit` 诊断** 是硬编码文本，不调 LLM。
+1. **Webhook 鉴权需要两端同步配置**（`webhooks.py` + Agent Service `resources.py`）：Backend 已实现 `X-Webhook-Secret` 校验，Agent Service 的 `_post_json_payload` 已同步发送该 header。两端需配置一致的 `WEBHOOK_SECRET` 环境变量，未配时鉴权自动跳过（向后兼容）。
+2. **`GET /learning-path/nodes/{id}/resources` chapter_materials 依赖 KG 预置数据**：`chapter_materials` 从 `CourseKnowledgeGraph.nodes` JSON 中提取 `chapter` 字段并匹配 `Resource.chapter`。若 KG 未预置完整数据，该字段将返回空数组（不影响其他字段）。
+3. **`POST /quiz/submit` 诊断链路已后台异步化，GET /quiz/result 保持纯课程级**：后台 `_run_diagnosis_background` 通过 `asyncio.create_task` 调用 Agent `/assessment/evaluate`，使用 UPDATE 写入 `QuizSession.diagnosis_json`（无 DB 读依赖，消除竞态）。`GET /quiz/result` 的 summary/weak_points/suggestions 全部基于课程级聚合计算，不混合 `diagnosis_json`（该字段保留供未来 per-session 诊断端点使用）。
 
 ## 联调命令
 
@@ -146,10 +159,7 @@ _（联调进行中，逐接口填充）_
 
 ## 下一步建议
 
-1. 修 Webhook task.status bug
-2. Phase 1 联调：profile/refresh（JSON 同步，最简单，先打通）
-3. Phase 2 联调：tutoring/chat（SSE 代理）
-4. Phase 3 联调：resources/generate（异步 + Webhook 落库）
-5. Phase 4 联调：quiz/generate（题目生成 + 落库）
-6. Phase 5-6 联调：evaluation/refresh + learning-path/refresh
-7. 补 stub：learning-path node resources、quiz submit 诊断
+1. 启动 MySQL 后补跑 `python test_api.py` 和 `python test_agent_integration.py` 确认真实 DB 环境无回归
+2. 对 `POST /api/v1/quiz/submit` 的 code / short_answer 题型接入 Agent 深度评估（当前规则比对为大小写不敏感字符串匹配）
+3. 视需要补 webhook 鉴权的自动化测试（Backend 配 secret + Agent 未配 → 401 场景）
+4. 将 `POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 等接口从「半完成」继续向「真实完成」推进

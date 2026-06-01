@@ -1222,6 +1222,126 @@ class TestQuestionRAG:
         assert len(questions) == 1
         assert questions[0].content.startswith("顺序存储结构支持")
 
+    def test_generate_questions_with_agent_falls_back_to_llm_when_react_misses_difficulty(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构中，按下标访问元素的时间复杂度通常是多少？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构可直接根据下标计算地址，因此访问时间复杂度为 O(1)。",
+                    difficulty="easy",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "综合证明顺序表插入、删除和扩容策略在均摊复杂度下的性能边界。",
+                    "options": [
+                        {"key": "A", "text": "需要均摊分析"},
+                        {"key": "B", "text": "只需记忆定义"},
+                        {"key": "C", "text": "只比较数组长度"},
+                        {"key": "D", "text": "无需分析复杂度"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "需要结合均摊分析、扩容策略和复杂度证明进行综合推导。",
+                    "difficulty": "easy",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(
+                generate_questions_with_agent(self._request(difficulty="easy"), providers=FakeProviders())
+            )
+
+        assert len(questions) == 1
+        assert questions[0].content.startswith("顺序存储结构中")
+
+    def test_generate_questions_with_agent_falls_back_to_skeleton_when_llm_misses_difficulty(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="什么是顺序存储结构？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构是用连续存储空间保存元素。",
+                    difficulty="hard",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(
+                generate_questions_with_agent(self._request(difficulty="hard"), providers=FakeProviders())
+            )
+
+        assert len(questions) == 2
+        assert questions[0].knowledge_point == "顺序存储结构"
+        assert "完成一道单选题" in questions[0].content
+
+    def test_generate_questions_with_agent_returns_llm_result_when_difficulty_matches(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="给定顺序表频繁插入、删除和随机访问的混合场景，综合分析扩容策略的影响。",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="需要比较随机访问、移动元素成本、扩容时机和空间冗余，综合推理复杂度。",
+                    difficulty="hard",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(
+                generate_questions_with_agent(self._request(difficulty="hard"), providers=FakeProviders())
+            )
+
+        assert len(questions) == 1
+        assert questions[0].content.startswith("给定顺序表")
+
 
 def test_parse_question_payload_handles_array() -> None:
     from agent_service.agents.assessment import _parse_question_payload

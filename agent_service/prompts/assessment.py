@@ -114,6 +114,29 @@ def build_knowledge_point_guard_prompt(
     )
 
 
+def build_difficulty_balancer_prompt(
+    request: QuestionGenerateRequest,
+    questions_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建难度贴合度审查提示词，输入请求和候选题 JSON，输出是否接受的 JSON 判定。"""
+    context = course_knowledge_context or "无"
+    return (
+        "你是 EDUagent 的题目难度审查员。请只判断候选题难度是否贴合请求，不要改写题目。\n\n"
+        "难度标准：\n"
+        "- easy：基础概念、定义识别、直接套用，不能要求综合证明或复杂推导\n"
+        "- medium：常规应用和分析，避免过浅的定义复述，也避免明显 hard 级综合推理\n"
+        "- hard：综合应用、跨概念推理、复杂场景分析，不能只是短定义或模板题\n\n"
+        "请求：\n"
+        f"{build_question_generation_user_message(request, course_knowledge_context=None)}\n\n"
+        "课程参考资料：\n"
+        f"{context}\n\n"
+        "候选题 JSON：\n"
+        f"{questions_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )
+
+
 def _format_context(context: dict | None) -> str:
     if not context:
         return "无"

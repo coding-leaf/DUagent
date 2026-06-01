@@ -581,6 +581,7 @@ async def generate_questions_with_agent(
             questions = _coerce_questions(parsed)
             if questions:
                 from agent_service.agents.assessment_critic import QuestionCriticAgent
+                from agent_service.agents.assessment_difficulty_balancer import DifficultyBalancer
                 from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
 
                 critic = QuestionCriticAgent(chat_provider=chat_provider)
@@ -596,12 +597,24 @@ async def generate_questions_with_agent(
                         course_knowledge_context=course_knowledge_context,
                     )
                     if guard_result.accepted:
-                        logger.info("ReActAgent generation succeeded: assessment/generate-questions")
-                        return questions
-                    logger.warning(
-                        "KnowledgePointGuard rejected ReAct questions; falling back to LLM path: %s",
-                        guard_result.reasons,
-                    )
+                        balancer = DifficultyBalancer(chat_provider=chat_provider)
+                        balance_result = await balancer.review(
+                            request,
+                            questions,
+                            course_knowledge_context=course_knowledge_context,
+                        )
+                        if balance_result.accepted:
+                            logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                            return questions
+                        logger.warning(
+                            "DifficultyBalancer rejected ReAct questions; falling back to LLM path: %s",
+                            balance_result.reasons,
+                        )
+                    else:
+                        logger.warning(
+                            "KnowledgePointGuard rejected ReAct questions; falling back to LLM path: %s",
+                            guard_result.reasons,
+                        )
                 else:
                     logger.warning("QuestionCritic rejected ReAct questions; falling back to LLM path")
 
@@ -610,6 +623,7 @@ async def generate_questions_with_agent(
         request, chat_provider, course_knowledge_context=course_knowledge_context
     )
     if questions:
+        from agent_service.agents.assessment_difficulty_balancer import DifficultyBalancer
         from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
 
         guard = KnowledgePointGuard(chat_provider=chat_provider)
@@ -619,11 +633,23 @@ async def generate_questions_with_agent(
             course_knowledge_context=course_knowledge_context,
         )
         if guard_result.accepted:
-            return questions
-        logger.warning(
-            "KnowledgePointGuard rejected LLM questions; falling back to skeleton: %s",
-            guard_result.reasons,
-        )
+            balancer = DifficultyBalancer(chat_provider=chat_provider)
+            balance_result = await balancer.review(
+                request,
+                questions,
+                course_knowledge_context=course_knowledge_context,
+            )
+            if balance_result.accepted:
+                return questions
+            logger.warning(
+                "DifficultyBalancer rejected LLM questions; falling back to skeleton: %s",
+                balance_result.reasons,
+            )
+        else:
+            logger.warning(
+                "KnowledgePointGuard rejected LLM questions; falling back to skeleton: %s",
+                guard_result.reasons,
+            )
 
     # 规则骨架题 fallback
     return generate_questions_data(request).questions

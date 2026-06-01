@@ -202,6 +202,26 @@ async def _run_single_agent_with_fallback(
             chat_provider,
         )
         if result is not None and isinstance(result.content, str) and result.content.strip():
+            from agent_service.agents.resources_critic import ResourceCriticAgent
+
+            critic = ResourceCriticAgent()
+            critic_result = await critic.review(
+                request,
+                result,
+                course_knowledge_context=course_knowledge_context,
+            )
+            if not critic_result.accepted:
+                logger.warning(
+                    "ResourceCritic rejected resource: type=%s task_id=%s reasons=%s",
+                    agent.resource_type,
+                    request.task_id,
+                    critic_result.reasons,
+                )
+                return _build_skeleton_result(
+                    request,
+                    agent.resource_type,
+                    fallback_reason="critic_rejected",
+                )
             logger.info(
                 "ResourceAgent succeeded: type=%s task_id=%s",
                 agent.resource_type,

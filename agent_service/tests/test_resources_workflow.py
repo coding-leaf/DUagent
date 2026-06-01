@@ -1263,6 +1263,130 @@ class TestPhase5_Workflow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].type, "document")
 
+    async def test_single_agent_with_critic_accepts_valid_resource(self) -> None:
+        from agent_service.agents.resources_workflow import _run_single_agent_with_fallback
+
+        class ValidAgent:
+            resource_type = "document"
+
+            async def generate(self, request, task_spec, course_knowledge_context, chat_provider):
+                return ResourceResult(
+                    title="一次函数讲解",
+                    type="document",
+                    description="面向一次函数的知识讲解。",
+                    content="## 一次函数\n一次函数 y=kx+b 的图像是一条直线，k 表示斜率。",
+                    chapter="函数",
+                    knowledge_point="一次函数",
+                    tags=["函数", "一次函数", "document"],
+                    generated_by="llm",
+                    fallback_reason=None,
+                    is_skeleton=False,
+                )
+
+        result = await _run_single_agent_with_fallback(
+            ValidAgent(),
+            self._request(resource_types=["document"]),
+            ResourceTaskSpec("document", ["一次函数"], "结构", "markdown"),
+            "",
+            chat_provider=None,
+        )
+
+        self.assertFalse(result.is_skeleton)
+        self.assertEqual(result.generated_by, "llm")
+
+    async def test_single_agent_with_critic_rejects_bad_resource_to_skeleton(self) -> None:
+        from agent_service.agents.resources_workflow import _run_single_agent_with_fallback
+
+        class BadAgent:
+            resource_type = "document"
+
+            async def generate(self, request, task_spec, course_knowledge_context, chat_provider):
+                return ResourceResult(
+                    title="天气资料",
+                    type="document",
+                    description="气象科普",
+                    content="## 天气\n气压、湿度和风向会影响天气变化。",
+                    chapter="函数",
+                    knowledge_point="一次函数",
+                    tags=["天气", "气象", "document"],
+                    generated_by="llm",
+                    fallback_reason=None,
+                    is_skeleton=False,
+                )
+
+        result = await _run_single_agent_with_fallback(
+            BadAgent(),
+            self._request(resource_types=["document"]),
+            ResourceTaskSpec("document", ["一次函数"], "结构", "markdown"),
+            "",
+            chat_provider=None,
+        )
+
+        self.assertTrue(result.is_skeleton)
+        self.assertEqual(result.generated_by, "fallback")
+        self.assertEqual(result.fallback_reason, "critic_rejected")
+
+    async def test_workflow_all_critic_rejected_returns_none(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.resources_workflow import run_multi_agent_resource_workflow
+
+        class BadDocumentAgent:
+            resource_type = "document"
+
+            async def generate(self, request, task_spec, course_knowledge_context, chat_provider):
+                return ResourceResult(
+                    title="天气资料",
+                    type="document",
+                    description="气象科普",
+                    content="## 天气\n气压、湿度和风向会影响天气变化。",
+                    chapter="函数",
+                    knowledge_point="一次函数",
+                    tags=["天气", "气象", "document"],
+                    generated_by="llm",
+                    fallback_reason=None,
+                    is_skeleton=False,
+                )
+
+        with patch("agent_service.agents.resources_workflow.DocumentAgent", BadDocumentAgent):
+            payload = await run_multi_agent_resource_workflow(
+                self._request(resource_types=["document"]),
+                FakeChatProvider(outputs=[_plan_output(["document"])]),
+                embedding_provider=None,
+            )
+
+        self.assertIsNone(payload)
+
+    async def test_single_agent_with_critic_accepts_fallback_mermaid_tree(self) -> None:
+        from agent_service.agents.resources_workflow import _run_single_agent_with_fallback
+
+        class MarkdownTreeMindmapAgent:
+            resource_type = "mindmap"
+
+            async def generate(self, request, task_spec, course_knowledge_context, chat_provider):
+                return ResourceResult(
+                    title="一次函数树",
+                    type="mindmap",
+                    description="一次函数 markdown 树",
+                    content="- 一次函数\n  - 定义\n  - 性质",
+                    chapter="函数",
+                    knowledge_point="一次函数",
+                    tags=["函数", "一次函数", "mindmap"],
+                    generated_by="fallback_mermaid",
+                    fallback_reason="mermaid_invalid",
+                    is_skeleton=False,
+                )
+
+        result = await _run_single_agent_with_fallback(
+            MarkdownTreeMindmapAgent(),
+            self._request(resource_types=["mindmap"]),
+            ResourceTaskSpec("mindmap", ["一次函数"], "结构", "markdown tree"),
+            "",
+            chat_provider=None,
+        )
+
+        self.assertFalse(result.is_skeleton)
+        self.assertEqual(result.generated_by, "fallback_mermaid")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phase 6: Observability — Structured Logging
@@ -1296,7 +1420,11 @@ class TestPhase6_Observability(unittest.IsolatedAsyncioTestCase):
                        "focus_points": ["定义"], "suggested_structure": "S",
                        "output_format_hint": "markdown"}],
         })
-        doc_output = json.dumps({"title": "T", "description": "D", "content": "C"})
+        doc_output = json.dumps({
+            "title": "一次函数讲解",
+            "description": "面向一次函数的知识讲解。",
+            "content": "## 一次函数\n一次函数 y=kx+b 的图像是一条直线。",
+        })
         fake = FakeChatProvider(outputs=[plan_output, doc_output])
 
         with self.assertLogs("agent_service.agents.resources_workflow", level="INFO") as logs:

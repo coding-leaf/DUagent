@@ -94,3 +94,31 @@ def build_mindmap_markdown_tree_user_message(
             f"\n课程参考资料（请基于以下内容生成 markdown 树）：\n{course_knowledge_context}"
         )
     return "\n".join(parts)
+
+
+def build_resource_critic_prompt(
+    request: ResourceGenerateRequest,
+    resource_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建资源质量审查提示词，输入请求和单个资源 JSON，输出是否接受的 JSON 判定。"""
+    context = course_knowledge_context or "无"
+    return (
+        "你是 EDUagent 的资源质量审查员。请只判断资源是否可用于回调，不要改写资源。\n\n"
+        "审查标准：\n"
+        "- 资源必须贴合请求的章节和知识点\n"
+        "- title、description、content 必须非空且互相一致\n"
+        "- document/reading/code 应是可读的 markdown 教学内容\n"
+        "- mindmap 应是 Mermaid mindmap，或可用的 markdown 嵌套列表树\n"
+        "- skeleton 占位内容、明显跑题内容、格式完全错误的内容应拒绝\n\n"
+        "请求：\n"
+        f"课程ID：{request.course_id}\n"
+        f"章节：{request.chapter or '课程整体'}\n"
+        f"知识点：{request.knowledge_point or '综合'}\n"
+        f"资源类型：{', '.join(request.resource_types) if request.resource_types else 'document, mindmap, reading, code'}\n\n"
+        "课程参考资料：\n"
+        f"{context}\n\n"
+        "待审查资源 JSON：\n"
+        f"{resource_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )

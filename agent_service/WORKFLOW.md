@@ -24,7 +24,7 @@
 | `POST /agent/v1/assessment/evaluate` | 已完成 | 判分由规则确定；LLM 只增强解析、诊断和建议 |
 | `POST /agent/v1/assessment/generate-questions` | QuestionCritic + KnowledgePointGuard + DifficultyBalancer 已完成 | ReAct + RAG toolkit → QuestionCriticAgent → KnowledgePointGuard → DifficultyBalancer → LLM fallback → KnowledgePointGuard → DifficultyBalancer → 骨架题 |
 | `POST /agent/v1/learning-path/generate` | 已完成 | LLM 只在节点白名单内补全；失败回落规则路径 |
-| `POST /agent/v1/resources/generate` | Multi-Agent Workflow 已完成 | Planner → AgentScope fanout ResourceAgents → Aggregator；单资源局部 fallback |
+| `POST /agent/v1/resources/generate` | Multi-Agent Workflow + ResourceCritic 已完成 | Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator；单资源局部 fallback |
 | `POST /agent/v1/memory/compress` | 已完成 | LLM fact extraction + 规则 fallback；Qdrant 写入 best-effort |
 
 ## AgentScope 使用状态
@@ -33,7 +33,7 @@
 - tutoring 已接入内部 StrategyAgent 和 ResponseCriticAgent，策略选择/质量判断失败时回落规则策略或继续降级，不改变 SSE / schemas。
 - tutoring toolkit 已返回 AgentScope 合法 TextBlock：`{"type": "text", "text": "..."}`。
 - assessment toolkit 已返回 AgentScope 合法 TextBlock，并新增 `QuestionCriticAgent` 混合质量门禁、`KnowledgePointGuard` 知识点贴合度门禁和 `DifficultyBalancer` 难度贴合度门禁。
-- resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent。
+- resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent，并新增 `ResourceCriticAgent` 单资源质量门禁。
 - 当前 Qdrant local 模式已做懒加载以减少同进程重复 client，但多进程文件锁仍可能发生；长期建议迁移 Qdrant server。
 
 ## 当前注意事项
@@ -46,6 +46,9 @@
 
 ## 最近验证
 
+- `./.venv/bin/pytest tests/test_resources_critic.py tests/test_resources_workflow.py -q`：**77 passed**（ResourceCriticAgent + resources workflow 回归）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
 - `./.venv/bin/pytest tests/test_assessment_difficulty_balancer.py tests/test_assessment_agent.py -q`：**55 passed**（DifficultyBalancer + assessment 出题降级链）
 - `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
 - `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
@@ -66,6 +69,6 @@
 ## 下一步建议
 
 1. `assessment/generate-questions`：后续做真实 LLM/RAG 质量验证和 AgentScope Studio trace，不改变题型契约。
-2. `resources/generate`：补 `ResourceCriticAgent` / 质量门禁、真实 LLM 质量验证和 AgentScope Studio trace。
+2. `resources/generate`：后续做真实 LLM/RAG 质量验证和 AgentScope Studio trace。
 3. `tutoring/chat`：后续可做真实 LLM prompt 质量验证和 AgentScope Studio trace，不改变 SSE 和 schemas。
 4. 部署联调：优先引入 Qdrant server 模式，减少 Apifox / 多进程真实 AI 流程中的 local 文件锁问题。

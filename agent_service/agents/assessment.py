@@ -580,75 +580,45 @@ async def generate_questions_with_agent(
         if parsed:
             questions = _coerce_questions(parsed)
             if questions:
-                from agent_service.agents.assessment_critic import QuestionCriticAgent
-                from agent_service.agents.assessment_difficulty_balancer import DifficultyBalancer
-                from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
+                from agent_service.agents.assessment_quality import review_generated_questions
 
-                critic = QuestionCriticAgent(chat_provider=chat_provider)
-                if await critic.review(
+                quality_result = await review_generated_questions(
                     request,
                     questions,
+                    chat_provider=chat_provider,
                     course_knowledge_context=course_knowledge_context,
-                ):
-                    guard = KnowledgePointGuard(chat_provider=chat_provider)
-                    guard_result = await guard.review(
-                        request,
-                        questions,
-                        course_knowledge_context=course_knowledge_context,
-                    )
-                    if guard_result.accepted:
-                        balancer = DifficultyBalancer(chat_provider=chat_provider)
-                        balance_result = await balancer.review(
-                            request,
-                            questions,
-                            course_knowledge_context=course_knowledge_context,
-                        )
-                        if balance_result.accepted:
-                            logger.info("ReActAgent generation succeeded: assessment/generate-questions")
-                            return questions
-                        logger.warning(
-                            "DifficultyBalancer rejected ReAct questions; falling back to LLM path: %s",
-                            balance_result.reasons,
-                        )
-                    else:
-                        logger.warning(
-                            "KnowledgePointGuard rejected ReAct questions; falling back to LLM path: %s",
-                            guard_result.reasons,
-                        )
+                )
+                if quality_result.accepted:
+                    logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                    return questions
                 else:
-                    logger.warning("QuestionCritic rejected ReAct questions; falling back to LLM path")
+                    logger.warning(
+                        "Assessment quality gate rejected ReAct questions; falling back to LLM path: gate=%s reasons=%s",
+                        quality_result.gate,
+                        quality_result.reasons,
+                    )
 
     # LLM fallback
     questions = await generate_questions_with_llm(
         request, chat_provider, course_knowledge_context=course_knowledge_context
     )
     if questions:
-        from agent_service.agents.assessment_difficulty_balancer import DifficultyBalancer
-        from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
+        from agent_service.agents.assessment_quality import review_generated_questions
 
-        guard = KnowledgePointGuard(chat_provider=chat_provider)
-        guard_result = await guard.review(
+        quality_result = await review_generated_questions(
             request,
             questions,
+            chat_provider=chat_provider,
             course_knowledge_context=course_knowledge_context,
+            include_basic_quality=False,
         )
-        if guard_result.accepted:
-            balancer = DifficultyBalancer(chat_provider=chat_provider)
-            balance_result = await balancer.review(
-                request,
-                questions,
-                course_knowledge_context=course_knowledge_context,
-            )
-            if balance_result.accepted:
-                return questions
-            logger.warning(
-                "DifficultyBalancer rejected LLM questions; falling back to skeleton: %s",
-                balance_result.reasons,
-            )
+        if quality_result.accepted:
+            return questions
         else:
             logger.warning(
-                "KnowledgePointGuard rejected LLM questions; falling back to skeleton: %s",
-                guard_result.reasons,
+                "Assessment quality gate rejected LLM questions; falling back to skeleton: gate=%s reasons=%s",
+                quality_result.gate,
+                quality_result.reasons,
             )
 
     # 规则骨架题 fallback

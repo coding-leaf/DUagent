@@ -962,13 +962,13 @@ class TestQuestionRAG:
         assert len(questions) == 1
         assert questions[0].content == "顺序存储结构 LLM fallback 题目"
 
-    def test_question_critic_fail_open_when_llm_critic_raises_after_rule_pass(self) -> None:
-        from agent_service.agents.assessment_critic import QuestionCriticAgent
+    def test_assessment_quality_fail_open_when_llm_review_raises_after_rule_pass(self) -> None:
+        from agent_service.agents.assessment_quality import review_generated_questions
         from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
 
         class FailingChatProvider:
             async def complete(self, messages):
-                raise RuntimeError("critic unavailable")
+                raise RuntimeError("quality review unavailable")
 
         questions = [
             GeneratedQuestion(
@@ -987,16 +987,19 @@ class TestQuestionRAG:
             )
         ]
 
-        accepted = asyncio.run(
-            QuestionCriticAgent(chat_provider=FailingChatProvider()).review(
-                self._request(), questions, course_knowledge_context="顺序表支持随机访问。"
+        result = asyncio.run(
+            review_generated_questions(
+                self._request(),
+                questions,
+                chat_provider=FailingChatProvider(),
+                course_knowledge_context="顺序表支持随机访问。",
             )
         )
 
-        assert accepted is True
+        assert result.accepted is True
 
-    def test_question_critic_rejects_when_llm_critic_rejects_rule_passed_questions(self) -> None:
-        from agent_service.agents.assessment_critic import QuestionCriticAgent
+    def test_assessment_quality_rejects_when_llm_rejects_rule_passed_questions(self) -> None:
+        from agent_service.agents.assessment_quality import review_generated_questions
         from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
 
         class RejectingChatProvider:
@@ -1020,16 +1023,19 @@ class TestQuestionRAG:
             )
         ]
 
-        accepted = asyncio.run(
-            QuestionCriticAgent(chat_provider=RejectingChatProvider()).review(
-                self._request(), questions, course_knowledge_context="课程资料只讲链表。"
+        result = asyncio.run(
+            review_generated_questions(
+                self._request(),
+                questions,
+                chat_provider=RejectingChatProvider(),
+                course_knowledge_context="课程资料只讲链表。",
             )
         )
 
-        assert accepted is False
+        assert result.accepted is False
 
-    def test_question_critic_accepts_rule_passed_questions_when_llm_returns_invalid_json(self) -> None:
-        from agent_service.agents.assessment_critic import QuestionCriticAgent
+    def test_assessment_quality_accepts_rule_passed_questions_when_llm_returns_invalid_json(self) -> None:
+        from agent_service.agents.assessment_quality import review_generated_questions
         from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
 
         class BadJsonChatProvider:
@@ -1053,13 +1059,16 @@ class TestQuestionRAG:
             )
         ]
 
-        accepted = asyncio.run(
-            QuestionCriticAgent(chat_provider=BadJsonChatProvider()).review(
-                self._request(), questions, course_knowledge_context="顺序表支持随机访问。"
+        result = asyncio.run(
+            review_generated_questions(
+                self._request(),
+                questions,
+                chat_provider=BadJsonChatProvider(),
+                course_knowledge_context="顺序表支持随机访问。",
             )
         )
 
-        assert accepted is True
+        assert result.accepted is True
 
     def test_generate_questions_with_agent_falls_back_when_react_returns_invalid_question(self) -> None:
         from unittest.mock import MagicMock, patch

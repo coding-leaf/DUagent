@@ -1,6 +1,6 @@
 import asyncio
 
-from agent_service.agents.assessment_difficulty_balancer import DifficultyBalancer
+from agent_service.agents.assessment_quality import review_generated_questions
 from agent_service.schemas.assessment import GeneratedQuestion, QuestionGenerateRequest, QuestionOption
 
 
@@ -36,7 +36,7 @@ def test_balancer_accepts_easy_foundation_question() -> None:
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is True
     assert result.source == "rule"
@@ -52,9 +52,10 @@ def test_balancer_rejects_easy_question_with_complex_reasoning() -> None:
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is False
+    assert result.gate == "difficulty"
     assert "question_1_too_hard_for_easy" in result.reasons
 
 
@@ -68,7 +69,7 @@ def test_balancer_accepts_hard_comprehensive_question() -> None:
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is True
 
@@ -83,9 +84,10 @@ def test_balancer_rejects_hard_question_that_only_recalls_definition() -> None:
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is False
+    assert result.gate == "difficulty"
     assert "question_1_too_shallow_for_hard" in result.reasons
 
 
@@ -99,7 +101,7 @@ def test_balancer_accepts_when_request_has_no_difficulty() -> None:
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is True
 
@@ -107,20 +109,25 @@ def test_balancer_accepts_when_request_has_no_difficulty() -> None:
 def test_balancer_llm_reject_overrides_rule_acceptance() -> None:
     class RejectingChatProvider:
         async def complete(self, messages):
+            if "题目难度审查员" not in messages[0].content:
+                return '{"accepted": true, "reasons": []}'
             return '{"accepted": false, "reasons": ["难度过浅"]}'
 
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", difficulty="medium", count=1)
     questions = [
         _question(
-            content="顺序存储结构中，按下标访问元素的时间复杂度通常是多少？",
-            explanation="顺序存储结构可直接根据下标计算地址，因此访问时间复杂度为 O(1)。",
+            content="顺序存储结构在数组中保存元素，结合下标访问和插入移动成本判断适用场景。",
+            explanation="这类题需要比较访问效率、插入移动成本和存储连续性，难度保持在中等水平。",
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer(chat_provider=RejectingChatProvider()).review(request, questions))
+    result = asyncio.run(
+        review_generated_questions(request, questions, chat_provider=RejectingChatProvider())
+    )
 
     assert result.accepted is False
     assert result.source == "llm"
+    assert result.gate == "difficulty"
     assert result.reasons == ["难度过浅"]
 
 
@@ -132,12 +139,14 @@ def test_balancer_invalid_llm_json_falls_back_to_rule_result() -> None:
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", difficulty="medium", count=1)
     questions = [
         _question(
-            content="顺序存储结构中，按下标访问元素的时间复杂度通常是多少？",
-            explanation="顺序存储结构可直接根据下标计算地址，因此访问时间复杂度为 O(1)。",
+            content="顺序存储结构在数组中保存元素，结合下标访问和插入移动成本判断适用场景。",
+            explanation="这类题需要比较访问效率、插入移动成本和存储连续性，难度保持在中等水平。",
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer(chat_provider=BadJsonChatProvider()).review(request, questions))
+    result = asyncio.run(
+        review_generated_questions(request, questions, chat_provider=BadJsonChatProvider())
+    )
 
     assert result.accepted is True
     assert result.source == "rule"
@@ -151,12 +160,14 @@ def test_balancer_llm_exception_falls_back_to_rule_result() -> None:
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", difficulty="medium", count=1)
     questions = [
         _question(
-            content="顺序存储结构中，按下标访问元素的时间复杂度通常是多少？",
-            explanation="顺序存储结构可直接根据下标计算地址，因此访问时间复杂度为 O(1)。",
+            content="顺序存储结构在数组中保存元素，结合下标访问和插入移动成本判断适用场景。",
+            explanation="这类题需要比较访问效率、插入移动成本和存储连续性，难度保持在中等水平。",
         )
     ]
 
-    result = asyncio.run(DifficultyBalancer(chat_provider=FailingChatProvider()).review(request, questions))
+    result = asyncio.run(
+        review_generated_questions(request, questions, chat_provider=FailingChatProvider())
+    )
 
     assert result.accepted is True
     assert result.source == "rule"

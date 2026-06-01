@@ -18,7 +18,7 @@
 
 - 已完成主干升级的 Agent 化链路：
   - `tutoring/chat`：StrategyAgent → ReAct/chat → ResponseCritic → rule-based fallback。
-  - `assessment/generate-questions`：ReActAgent + RAG toolkit → QuestionCritic → KnowledgePointGuard → DifficultyBalancer → LLM/skeleton fallback。
+  - `assessment/generate-questions`：ReActAgent + RAG toolkit → AssessmentQualityGate → LLM/skeleton fallback。
   - `resources/generate`：Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator → fallback。
 - 已保持 deterministic / 统计型接口稳定：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
 - 未完成的是生产化收尾，不是架构主干：真实模型效果验证、统一观测、Studio trace、Qdrant server 部署和最新全量测试。
@@ -32,7 +32,7 @@
 | `POST /agent/v1/profile/generate` | 已完成 | LLM enrichment + schema/枚举/范围保护 + 规则 fallback |
 | `POST /agent/v1/evaluation/generate` | 已完成 | LLM enrichment + 表格/summary 保护 + 规则 fallback |
 | `POST /agent/v1/assessment/evaluate` | 已完成 | 判分由规则确定；LLM 只增强解析、诊断和建议 |
-| `POST /agent/v1/assessment/generate-questions` | QuestionCritic + KnowledgePointGuard + DifficultyBalancer 已完成 | ReAct + RAG toolkit → QuestionCriticAgent → KnowledgePointGuard → DifficultyBalancer → LLM fallback → KnowledgePointGuard → DifficultyBalancer → 骨架题 |
+| `POST /agent/v1/assessment/generate-questions` | AssessmentQualityGate 已合并 | ReAct + RAG toolkit → 统一质量门禁（基础质量 / 知识点 / 难度）→ LLM fallback → 质量门禁（知识点 / 难度）→ 骨架题 |
 | `POST /agent/v1/learning-path/generate` | 已完成 | LLM 只在节点白名单内补全；失败回落规则路径 |
 | `POST /agent/v1/resources/generate` | Multi-Agent Workflow + ResourceCritic 已完成 | Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator；单资源局部 fallback |
 | `POST /agent/v1/memory/compress` | 已完成 | LLM fact extraction + 规则 fallback；Qdrant 写入 best-effort |
@@ -42,7 +42,7 @@
 - 已接入：ChatModel/Formatter、Embedding、ReActAgent、Toolkit/ToolResponse、InMemoryMemory、Reader/PDFReader、QdrantStore、fanout_pipeline。
 - tutoring 已接入内部 StrategyAgent 和 ResponseCriticAgent，策略选择/质量判断失败时回落规则策略或继续降级，不改变 SSE / schemas。
 - tutoring toolkit 已返回 AgentScope 合法 TextBlock：`{"type": "text", "text": "..."}`。
-- assessment toolkit 已返回 AgentScope 合法 TextBlock，并新增 `QuestionCriticAgent` 混合质量门禁、`KnowledgePointGuard` 知识点贴合度门禁和 `DifficultyBalancer` 难度贴合度门禁。
+- assessment toolkit 已返回 AgentScope 合法 TextBlock；assessment 出题质量门禁已合并到 `agents/assessment_quality.py`，统一处理基础质量、知识点贴合度和难度贴合度。
 - resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent，并新增 `ResourceCriticAgent` 单资源质量门禁。
 - 当前 Qdrant local 模式已做懒加载以减少同进程重复 client，但多进程文件锁仍可能发生；长期建议迁移 Qdrant server。
 
@@ -56,6 +56,11 @@
 
 ## 最近验证
 
+- `./.venv/bin/pytest -q`：**408 passed**（AssessmentQualityGate 合并后全量回归）
+- `./.venv/bin/pytest tests/test_resources_workflow.py tests/test_tutoring_agent.py tests/test_tutoring_response_critic.py -q`：**91 passed**（resources/tutoring 相关回归）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
+- `./.venv/bin/pytest tests/test_assessment_quality.py tests/test_assessment_knowledge_guard.py tests/test_assessment_difficulty_balancer.py tests/test_assessment_agent.py -q`：**69 passed**（AssessmentQualityGate 合并与 assessment 出题降级链）
 - `./.venv/bin/pytest tests/test_resources_critic.py tests/test_resources_workflow.py -q`：**77 passed**（ResourceCriticAgent + resources workflow 回归）
 - `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
 - `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）

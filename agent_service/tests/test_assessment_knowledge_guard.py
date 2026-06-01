@@ -1,6 +1,6 @@
 import asyncio
 
-from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
+from agent_service.agents.assessment_quality import review_generated_questions
 from agent_service.schemas.assessment import GeneratedQuestion, QuestionGenerateRequest, QuestionOption
 
 
@@ -30,7 +30,7 @@ def test_guard_accepts_questions_matching_explicit_knowledge_point() -> None:
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", knowledge_point="导数", count=1)
     questions = [_question(content="导数表示函数在某点的瞬时变化率，下列说法正确的是？", knowledge_point="导数")]
 
-    result = asyncio.run(KnowledgePointGuard().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is True
     assert result.source == "rule"
@@ -46,9 +46,10 @@ def test_guard_rejects_questions_unrelated_to_explicit_knowledge_point() -> None
         )
     ]
 
-    result = asyncio.run(KnowledgePointGuard().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is False
+    assert result.gate == "knowledge_point"
     assert "question_1_target_mismatch" in result.reasons
 
 
@@ -67,7 +68,7 @@ def test_guard_uses_wrong_points_when_request_has_no_knowledge_point() -> None:
         )
     ]
 
-    result = asyncio.run(KnowledgePointGuard().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is True
 
@@ -82,7 +83,7 @@ def test_guard_accepts_comprehensive_questions_when_no_target_exists() -> None:
         )
     ]
 
-    result = asyncio.run(KnowledgePointGuard().review(request, questions))
+    result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is True
 
@@ -90,15 +91,20 @@ def test_guard_accepts_comprehensive_questions_when_no_target_exists() -> None:
 def test_guard_llm_reject_overrides_rule_acceptance() -> None:
     class RejectingChatProvider:
         async def complete(self, messages):
+            if "知识点贴合度" not in messages[0].content:
+                return '{"accepted": true, "reasons": []}'
             return '{"accepted": false, "reasons": ["没有基于课程上下文"]}'
 
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", knowledge_point="导数", count=1)
     questions = [_question(content="导数表示函数在某点的瞬时变化率，下列说法正确的是？", knowledge_point="导数")]
 
-    result = asyncio.run(KnowledgePointGuard(chat_provider=RejectingChatProvider()).review(request, questions))
+    result = asyncio.run(
+        review_generated_questions(request, questions, chat_provider=RejectingChatProvider())
+    )
 
     assert result.accepted is False
     assert result.source == "llm"
+    assert result.gate == "knowledge_point"
     assert result.reasons == ["没有基于课程上下文"]
 
 
@@ -110,7 +116,9 @@ def test_guard_invalid_llm_json_falls_back_to_rule_result() -> None:
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", knowledge_point="导数", count=1)
     questions = [_question(content="导数表示函数在某点的瞬时变化率，下列说法正确的是？", knowledge_point="导数")]
 
-    result = asyncio.run(KnowledgePointGuard(chat_provider=BadJsonChatProvider()).review(request, questions))
+    result = asyncio.run(
+        review_generated_questions(request, questions, chat_provider=BadJsonChatProvider())
+    )
 
     assert result.accepted is True
     assert result.source == "rule"
@@ -124,7 +132,9 @@ def test_guard_llm_exception_falls_back_to_rule_result() -> None:
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", knowledge_point="导数", count=1)
     questions = [_question(content="导数表示函数在某点的瞬时变化率，下列说法正确的是？", knowledge_point="导数")]
 
-    result = asyncio.run(KnowledgePointGuard(chat_provider=FailingChatProvider()).review(request, questions))
+    result = asyncio.run(
+        review_generated_questions(request, questions, chat_provider=FailingChatProvider())
+    )
 
     assert result.accepted is True
     assert result.source == "rule"

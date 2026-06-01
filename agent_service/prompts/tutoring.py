@@ -81,6 +81,37 @@ def build_strategy_selection_messages(
     ]
 
 
+def build_response_critic_messages(
+    request: TutoringChatRequest,
+    retrieval_context: TutoringRetrievalContext,
+    model_response,
+    strategy,
+) -> list[ChatMessage]:
+    """构建回复质量门禁消息，输入请求/上下文/候选回复/策略，输出只允许 JSON object 的 ChatMessage 列表。"""
+    system_content = (
+        "你是 EDUagent 的 tutoring ResponseCriticAgent，只负责判断候选回答是否可采纳。"
+        "判断标准：回答不能为空，必须回应当前问题，必须贴合辅导策略和检索上下文。"
+        "只输出 JSON object，不要输出 markdown 或额外说明。"
+        '格式必须是 {"accepted": true, "reason": "..."}。'
+    )
+    user_content = "\n".join(
+        [
+            f"当前问题：{request.message}",
+            f"引导粒度：{request.user_profile.guidance_level}",
+            build_strategy_context_text(strategy),
+            f"长期记忆：{_join_or_none(retrieval_context.user_memory_facts)}",
+            f"课程知识：{_join_or_none(retrieval_context.course_knowledge_chunks)}",
+            f"候选回答：{getattr(model_response, 'model_text', None) or '无'}",
+            "候选知识点：" + (", ".join(getattr(model_response, "knowledge_point_names", []) or []) or "无"),
+            f"候选建议：{getattr(model_response, 'suggestion_text', None) or '无'}",
+        ]
+    )
+    return [
+        ChatMessage(role="system", content=system_content),
+        ChatMessage(role="user", content=user_content),
+    ]
+
+
 def build_strategy_context_text(strategy) -> str:
     """构建下游 tutoring 生成用策略文本，输入内部策略对象，输出紧凑中文上下文。"""
     focus_points = getattr(strategy, "focus_points", None) or []

@@ -233,6 +233,7 @@ async def generate_tutoring_sse_events(request, providers=None):
     import json
     from collections.abc import AsyncIterator
 
+    from agent_service.agents.tutoring_response_critic import evaluate_tutoring_response
     from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
     from agent_service.agents.tutoring_strategy import select_tutoring_strategy
     from agent_service.core.ai import get_ai_providers
@@ -283,8 +284,18 @@ async def generate_tutoring_sse_events(request, providers=None):
         vector_store=vector_store,
         strategy=strategy,
     )
+    if react_response is not None:
+        critic_result = await evaluate_tutoring_response(request, retrieval_context, react_response, strategy, chat)
+        if not critic_result.accepted:
+            logger.info("Tutoring ReAct response rejected by critic: reason=%s", critic_result.reason)
+            react_response = None
     if react_response is None:
         react_response = await generate_tutoring_model_response(request, retrieval_context, chat, strategy=strategy)
+        if react_response is not None:
+            critic_result = await evaluate_tutoring_response(request, retrieval_context, react_response, strategy, chat)
+            if not critic_result.accepted:
+                logger.info("Tutoring chat response rejected by critic: reason=%s", critic_result.reason)
+                react_response = None
 
     runtime_result = build_tutoring_generation_result(
         request, retrieval_context=retrieval_context, model_response=react_response

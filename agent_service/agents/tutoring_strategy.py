@@ -73,8 +73,6 @@ def _rule_strategy_name(request: TutoringChatRequest) -> str:
 
 def _is_ambiguous_short_message(message: str) -> bool:
     normalized = message.strip()
-    if len(normalized) <= 3:
-        return True
     ambiguous_terms = {"这个", "不会", "不懂", "怎么做", "讲讲", "解释下"}
     return normalized in ambiguous_terms
 

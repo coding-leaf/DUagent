@@ -1,9 +1,12 @@
 import asyncio
+import json
+from unittest.mock import patch
 
 from agent_service.agents.tutoring import (
     build_tutoring_generation_result,
     generate_tutoring_model_response,
     parse_tutoring_model_response,
+    TutoringModelResponse,
 )
 from agent_service.agents.tutoring_strategy import TutoringStrategy
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
@@ -421,3 +424,46 @@ def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
     
     diagram_event = json.loads(events[2].replace("data: ", "").strip())
     assert diagram_event["data"] == "graph TD; A-->B;"
+
+
+def test_generate_tutoring_sse_events_rejects_bad_react_response_and_uses_chat_fallback() -> None:
+    from agent_service.agents.tutoring import generate_tutoring_sse_events
+
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="讲讲导数",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeProviders:
+        class FakeChat:
+            async def complete(self, messages, **kwargs):
+                return '{"model_text":"导数表示函数变化率。","knowledge_points":["导数"],"suggestion":"先做变化率练习。"}'
+        chat = FakeChat()
+        embedding = None
+        reranker = None
+
+    async def _bad_react_response(*args, **kwargs):
+        return TutoringModelResponse(
+            model_text="今天天气不错，适合散步。",
+            knowledge_point_names=["天气"],
+            suggestion_text="出去走走。",
+        )
+
+    async def _collect():
+        events = []
+        with patch("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", _bad_react_response):
+            async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+                events.append(evt)
+        return events
+
+    events = asyncio.run(_collect())
+    chunks = [
+        json.loads(evt.replace("data: ", "").strip())["content"]
+        for evt in events
+        if json.loads(evt.replace("data: ", "").strip())["type"] == "chunk"
+    ]
+
+    assert "今天天气不错" not in "\n".join(chunks)
+    assert chunks[-1] == "导数表示函数变化率。"

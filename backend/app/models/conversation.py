@@ -20,6 +20,7 @@ class Conversation(Base):
     scope: Mapped[str] = mapped_column(String(20), default="course")
     course_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("courses.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(200), default="")
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
     update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

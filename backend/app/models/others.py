@@ -109,6 +109,21 @@ class LearningPath(Base):
     generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class CourseKnowledgeGraph(Base):
+    """课程静态知识图谱 — Backend 调用 Agent /learning-path/generate 时传入 knowledge_graph.nodes/edges。"""
+    __tablename__ = "course_knowledge_graphs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
+    course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
+    nodes: Mapped[dict] = mapped_column(JSON, nullable=False)
+    edges: Mapped[dict] = mapped_column(JSON, nullable=False)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class AgentLog(Base):
     __tablename__ = "agent_logs"
 

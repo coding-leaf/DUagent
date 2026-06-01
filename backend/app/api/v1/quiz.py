@@ -73,12 +73,86 @@ async def get_questions(
     }
 
 
+async def _assemble_quiz_generate_payload(
+    user_id: str, course_id: str, req: QuizGenerateRequest, db: AsyncSession,
+) -> dict:
+    """组装调用 Agent /assessment/generate-questions 所需的 payload。"""
+    from app.models.others import Evaluation, LearningPath, UserProfile
+    from app.models.quiz import QuizQuestion
+
+    payload: dict = {
+        "user_id": user_id,
+        "course_id": course_id,
+    }
+    if req.chapter:
+        payload["chapter"] = req.chapter
+    if req.knowledge_point:
+        payload["knowledge_point"] = req.knowledge_point
+    if req.question_types:
+        payload["question_types"] = req.question_types
+    if req.count:
+        payload["count"] = req.count
+    if req.difficulty:
+        payload["difficulty"] = req.difficulty
+    payload["personalized"] = req.personalized
+
+    # personalization_context: 评估、画像、错题、当前路径节点
+    if req.personalized:
+        ctx: dict = {}
+
+        ev_result = await db.execute(
+            select(Evaluation)
+            .where(Evaluation.user_id == user_id, Evaluation.course_id == course_id, Evaluation.is_deleted == False)
+            .order_by(Evaluation.generated_at.desc())
+        )
+        ev = ev_result.scalars().first()
+        if ev:
+            ctx["evaluation"] = {"summary": ev.summary_text}
+
+        pf_result = await db.execute(
+            select(UserProfile)
+            .where(UserProfile.user_id == user_id, UserProfile.course_id == course_id, UserProfile.is_deleted == False)
+        )
+        pf = pf_result.scalar_one_or_none()
+        if pf:
+            ctx["profile"] = {
+                "guidance_level": pf.guidance_level_current,
+                "blindspots": pf.cognitive_blindspots,
+            }
+
+        # 最近错题知识点
+        wrong_r = await db.execute(
+            select(QuizQuestion.knowledge_point)
+            .where(QuizQuestion.course_id == course_id, QuizQuestion.is_deleted == False)
+            .limit(10)
+        )
+        wrong_points = list(set(row[0] for row in wrong_r if row[0]))
+        if wrong_points:
+            ctx["wrong_points"] = [{"name": wp} for wp in wrong_points]
+
+        lp_result = await db.execute(
+            select(LearningPath)
+            .where(LearningPath.user_id == user_id, LearningPath.course_id == course_id, LearningPath.is_deleted == False)
+        )
+        lp = lp_result.scalar_one_or_none()
+        if lp and lp.current_node_name:
+            ctx["current_path_node"] = {"name": lp.current_node_name}
+
+        if ctx:
+            payload["personalization_context"] = ctx
+
+    return payload
+
+
 @router.post("/generate")
 async def generate_questions(
     req: QuizGenerateRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """生成个性化题目。调用 Agent /assessment/generate-questions，校验后写入 quiz_questions。"""
+    from app.services.agent_client import AgentServiceError, agent_client
+
     task = AsyncTask(
         task_type="quiz_generation",
         status="processing",
@@ -89,25 +163,44 @@ async def generate_questions(
     await db.flush()
     await db.refresh(task)
 
-    # Simulate generation
-    new_q = QuizQuestion(
-        course_id=req.course_id,
-        chapter=req.chapter or "",
-        knowledge_point=req.knowledge_point or "",
-        type=(req.question_types or ["single_choice"])[0],
-        source="personalized",
-        personalized=True,
-        owner_user_id=current_user.id,
-        difficulty=req.difficulty or "medium",
-        content="个性化生成的示例题目（v1模拟）",
-        options=[{"key": "A", "text": "选项A"}, {"key": "B", "text": "选项B"}],
-        correct_answer="A",
-    )
-    db.add(new_q)
-    await db.flush()
+    try:
+        payload = await _assemble_quiz_generate_payload(current_user.id, req.course_id, req, db)
+        data = await agent_client.post_json("/agent/v1/assessment/generate-questions", payload)
+    except AgentServiceError as e:
+        task.status = "failed"
+        task.error_code = str(e.agent_code or "agent_error")
+        task.error_message = e.message
+        task.completed_at = datetime.now(timezone.utc)
+        await db.flush()
+        return JSONResponse(
+            status_code=202,
+            content={"code": 202, "message": "accepted", "data": {"task_id": task.id}},
+        )
+
+    # 校验 Agent 返回并写入 quiz_questions
+    questions = data.get("questions", [])
+    question_ids: list[str] = []
+    for q in questions:
+        new_q = QuizQuestion(
+            course_id=req.course_id,
+            chapter=q.get("chapter", req.chapter or ""),
+            knowledge_point=q.get("knowledge_point", req.knowledge_point or ""),
+            type=q.get("type", "single_choice"),
+            source="personalized",
+            personalized=True,
+            owner_user_id=current_user.id,
+            difficulty=q.get("difficulty", req.difficulty or "medium"),
+            content=q.get("content", ""),
+            options=q.get("options", []),
+            correct_answer=str(q.get("answer", "")),
+            explanation=q.get("explanation", ""),
+        )
+        db.add(new_q)
+        await db.flush()
+        question_ids.append(new_q.id)
 
     task.status = "completed"
-    task.result = {"question_ids": [new_q.id]}
+    task.result = {"question_ids": question_ids}
     task.completed_at = datetime.now(timezone.utc)
     await db.flush()
 

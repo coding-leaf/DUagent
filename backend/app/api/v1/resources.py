@@ -1,14 +1,16 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.core.config import settings
 from app.models.others import AsyncTask, Resource
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
+from app.services.agent_client import AgentServiceError, agent_client
 
 router = APIRouter(prefix="/api/v1/resources", tags=["resources"])
 
@@ -59,12 +61,21 @@ async def list_resources(
     }
 
 
+def _webhook_url(request: Request) -> str:
+    """构造 Backend webhook 回调地址。"""
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/api/v1/webhooks/agent"
+
+
 @router.post("/generate")
 async def generate_resources(
     req: ResourceGenerateRequest,
+    request: Request,
     current_user: User = Depends(require_role("teacher")),
     db: AsyncSession = Depends(get_db),
 ):
+    """触发资源生成。创建任务后调用 Agent /resources/generate，Agent 完成后通过 Webhook 回调落库。"""
+    # 创建任务
     task = AsyncTask(
         task_type="resource_generation",
         status="processing",
@@ -75,22 +86,34 @@ async def generate_resources(
     await db.flush()
     await db.refresh(task)
 
-    new_resources = [
-        Resource(
-            course_id=req.course_id,
-            title="自动生成的课程讲义",
-            type="document",
-            description="AI 生成的讲义文档",
-            tags=["AI生成"], chapter=req.chapter or "", knowledge_point=req.knowledge_point or "",
-            url=f"/files/{req.course_id}/notes.pdf",
-        )
-    ]
-    for r in new_resources:
-        db.add(r)
+    # 组装 Agent payload — task_id 由 Backend 生成并原样传入
+    payload: dict = {
+        "task_id": task.id,
+        "user_id": current_user.id,
+        "course_id": req.course_id,
+        "webhook_url": _webhook_url(request),
+    }
+    if req.chapter:
+        payload["chapter"] = req.chapter
+    if req.knowledge_point:
+        payload["knowledge_point"] = req.knowledge_point
+    if req.resource_types:
+        payload["resource_types"] = req.resource_types
 
-    task.status = "completed"
-    task.result = {"resource_ids": [r.id for r in new_resources]}
-    task.completed_at = datetime.now(timezone.utc)
+    try:
+        # 调用 Agent（异步，立即返回 202）
+        await agent_client.post_json("/agent/v1/resources/generate", payload)
+    except AgentServiceError as e:
+        task.status = "failed"
+        task.error_code = str(e.agent_code or "agent_error")
+        task.error_message = e.message
+        task.completed_at = datetime.now(timezone.utc)
+        await db.flush()
+        return JSONResponse(
+            status_code=202,
+            content={"code": 202, "message": "accepted", "data": {"task_id": task.id}},
+        )
+
     await db.flush()
 
     return JSONResponse(

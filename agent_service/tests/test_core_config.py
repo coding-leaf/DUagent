@@ -26,7 +26,9 @@ def test_settings_exposes_ai_provider_defaults() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.AGENTSCOPE_STUDIO_URL is None
+    assert settings.QDRANT_URL is None
     assert settings.QDRANT_PATH == "./qdrant_data"
+    assert settings.QDRANT_API_KEY is None
     assert settings.QDRANT_USER_MEMORY_COLLECTION == "user_memory_v1_1024"
     assert settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION == "course_knowledge_v1_1024"
     assert settings.AI_PROVIDER == "none"

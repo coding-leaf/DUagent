@@ -112,6 +112,14 @@ def _check_qdrant(settings_obj, qdrant_probe: Callable[[], bool] | None) -> dict
 
 
 def _probe_qdrant() -> bool:
-    store = build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
-    store.get_client()
+    from qdrant_client import QdrantClient
+
+    if settings.QDRANT_URL:
+        client_kwargs = {"url": settings.QDRANT_URL}
+        if settings.QDRANT_API_KEY:
+            client_kwargs["api_key"] = settings.QDRANT_API_KEY
+        client = QdrantClient(**client_kwargs)
+    else:
+        client = QdrantClient(path=settings.QDRANT_PATH)
+    client.get_collections()
     return True

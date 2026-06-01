@@ -9,7 +9,7 @@
 
 - Agent Service 负责智能体编排、RAG、工具调用和结构化结果生成，不直接写 Backend SQL 数据库。
 - Agent 全链路架构升级主干已完成：适合 Agent/Workflow 的重点链路已具备 Agent 编排、质量门禁和 fallback。
-- 后续进入工程化收尾：真实 LLM/RAG 联调验证、统一 trace/log、AgentScope Studio trace 评估、Qdrant server 化和全量回归。
+- 后续进入工程化收尾：真实 LLM/RAG 联调验证、统一 trace/log、AgentScope Studio trace 评估和比赛 demo 验收。
 - 不再为了“升级架构”继续大改已完成接口；新增改动必须服务于联调质量、可观测性、部署稳定性或明确缺陷修复。
 - deterministic / 统计型接口继续以 structured output + 规则保护为主：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
 - AgentScope 接入必须落在 `agents/`、`memory/`、`tools/`、`prompts/`、`core/` 边界内，不泄漏到 API/schema/Backend 契约。
@@ -21,7 +21,7 @@
   - `assessment/generate-questions`：ReActAgent + RAG toolkit → AssessmentQualityGate → LLM/skeleton fallback。
   - `resources/generate`：Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator → fallback。
 - 已保持 deterministic / 统计型接口稳定：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
-- 未完成的是生产化收尾，不是架构主干：真实模型效果验证、统一观测、Studio trace、Qdrant server 部署和最新全量测试。
+- 未完成的是生产化收尾，不是架构主干：真实模型效果验证、统一观测、Studio trace 和 demo 链路验收。
 
 ## 接口进度
 
@@ -44,7 +44,7 @@
 - tutoring toolkit 已返回 AgentScope 合法 TextBlock：`{"type": "text", "text": "..."}`。
 - assessment toolkit 已返回 AgentScope 合法 TextBlock；assessment 出题质量门禁已合并到 `agents/assessment_quality.py`，统一处理基础质量、知识点贴合度和难度贴合度。
 - resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent，并新增 `ResourceCriticAgent` 单资源质量门禁。
-- 当前 Qdrant local 模式已做懒加载以减少同进程重复 client，但多进程文件锁仍可能发生；长期建议迁移 Qdrant server。
+- Qdrant 已支持 `QDRANT_URL` server 模式，未配置时回落 `QDRANT_PATH` local 模式；readiness 探针会真实请求 Qdrant collections。
 
 ## 当前注意事项
 
@@ -56,6 +56,12 @@
 
 ## 最近验证
 
+- `./.venv/bin/pytest -q`：**413 passed**（Qdrant server URL 模式接入后全量回归）
+- `./.venv/bin/pytest tests/test_qdrant_store.py tests/test_core_config.py tests/test_vector_store.py tests/test_readiness.py -q`：**21 passed**（Qdrant server/local 配置与 readiness 探针）
+- `./.venv/bin/python ... build_qdrant_store(...).get_client().get_collections()`：**通过**（提权访问本机 `http://127.0.0.1:6333`，collections 当前为空）
+- `./.venv/bin/python ... build_readiness_report(live=False)`：**Qdrant check ok=True**（整体 status degraded 来自其他配置/服务检查，不影响 Qdrant 子项）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
 - `./.venv/bin/pytest -q`：**408 passed**（AssessmentQualityGate 合并后全量回归）
 - `./.venv/bin/pytest tests/test_resources_workflow.py tests/test_tutoring_agent.py tests/test_tutoring_response_critic.py -q`：**91 passed**（resources/tutoring 相关回归）
 - `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
@@ -86,5 +92,5 @@
 1. 统一 trace/log：记录 assessment/resources/tutoring 中各 gate 拒绝原因、fallback 路径和最终输出来源，不改变 API/schema/webhook。
 2. 真实 LLM/RAG 联调：验证 assessment 出题质量、resources 生成质量和 tutoring prompt 效果。
 3. AgentScope Studio trace：先查官方文档或本地安装包 introspection，再决定是否接入；不凭空编造 Studio API。
-4. Qdrant server 化：减少 Apifox / 多进程真实 AI 流程中的 local 文件锁问题。
-5. 最新全量回归：在收尾改动后重新运行 `./.venv/bin/pytest -q`。
+4. 导入课程知识到 Qdrant server，确认 `course_knowledge_v1_1024` collection 非空且能按 `course_id` 检索。
+5. 启动 Agent Service 后跑 tutoring / assessment / resources 三条真实 demo 链路。

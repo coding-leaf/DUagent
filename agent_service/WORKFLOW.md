@@ -56,6 +56,10 @@
 
 ## 最近验证
 
+- `./.venv/bin/python -m agent_service.tools.readiness_check`：**ready**（LLM / embedding / reranker provider_built=true，Qdrant ok=true）
+- `curl http://127.0.0.1:8002/agent/v1/health`：**200**（`qdrant_connected=true`，`model_loaded=true`）
+- `./.venv/bin/pytest -q`：**416 passed**（readiness provider 构建修复后全量回归）
+- `./.venv/bin/pytest tests/test_course_knowledge_store.py tests/test_knowledge_ingestion_smoke.py tests/test_readiness.py tests/test_qdrant_store.py -q`：**21 passed**（Qdrant ingestion/readiness 相关回归）
 - `./.venv/bin/python -m agent_service.tools.ingest_knowledge knowledge_base/data_structures`：**通过**（Qdrant server 写入 `course_id=data_structures`，760 chunks）
 - `QdrantClient(...).count(course_knowledge_v1_1024)`：**760**（server collection 已创建且非空）
 - `QdrantVectorStore().search_course_knowledge("data_structures", embedding("顺序表的随机访问"), limit=3)`：**3 hits**（真实 RAG 检索可用）

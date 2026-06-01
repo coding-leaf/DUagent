@@ -558,6 +558,7 @@ async def generate_questions_with_agent(
     course_knowledge_context = await build_question_generation_knowledge_context(
         request, embedding_provider, vector_store=effective_vector_store
     )
+    retrieval_hit_count = _context_chunk_count(course_knowledge_context)
 
     # Step B: 优先尝试 ReActAgent
     if chat_provider and hasattr(chat_provider, "model") and hasattr(chat_provider, "formatter"):
@@ -590,6 +591,12 @@ async def generate_questions_with_agent(
                 )
                 if quality_result.accepted:
                     logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                    logger.info(
+                        "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=react quality_gate=accepted fallback_path=none output_source=react",
+                        request.user_id,
+                        request.course_id,
+                        retrieval_hit_count,
+                    )
                     return questions
                 else:
                     logger.warning(
@@ -613,6 +620,12 @@ async def generate_questions_with_agent(
             include_basic_quality=False,
         )
         if quality_result.accepted:
+            logger.info(
+                "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=llm quality_gate=accepted fallback_path=llm output_source=llm",
+                request.user_id,
+                request.course_id,
+                retrieval_hit_count,
+            )
             return questions
         else:
             logger.warning(
@@ -622,4 +635,16 @@ async def generate_questions_with_agent(
             )
 
     # 规则骨架题 fallback
+    logger.info(
+        "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=rule quality_gate=not_applicable fallback_path=skeleton output_source=skeleton",
+        request.user_id,
+        request.course_id,
+        retrieval_hit_count,
+    )
     return generate_questions_data(request).questions
+
+
+def _context_chunk_count(context: str | None) -> int:
+    if not context:
+        return 0
+    return len([chunk for chunk in context.split("\n---\n") if chunk.strip()])

@@ -278,6 +278,10 @@ async def generate_tutoring_sse_events(request, providers=None):
 
     chat = getattr(providers, "chat", None)
     strategy = await select_tutoring_strategy(request, retrieval_context, chat)
+    agent_path = "rule"
+    fallback_path = "rule"
+    output_source = "rule"
+    quality_gate = "not_applicable"
     react_response = await generate_tutoring_react_response(
         request, retrieval_context, chat,
         embedding_provider=embedding,
@@ -287,18 +291,40 @@ async def generate_tutoring_sse_events(request, providers=None):
     if react_response is not None:
         critic_result = await evaluate_tutoring_response(request, retrieval_context, react_response, strategy, chat)
         if not critic_result.accepted:
+            quality_gate = "rejected"
             logger.info("Tutoring ReAct response rejected by critic: reason=%s", critic_result.reason)
             react_response = None
+        else:
+            agent_path = "react"
+            fallback_path = "none"
+            output_source = "react"
+            quality_gate = "accepted"
     if react_response is None:
         react_response = await generate_tutoring_model_response(request, retrieval_context, chat, strategy=strategy)
         if react_response is not None:
             critic_result = await evaluate_tutoring_response(request, retrieval_context, react_response, strategy, chat)
             if not critic_result.accepted:
+                quality_gate = "rejected"
                 logger.info("Tutoring chat response rejected by critic: reason=%s", critic_result.reason)
                 react_response = None
+            else:
+                agent_path = "chat"
+                fallback_path = "none"
+                output_source = "chat"
+                quality_gate = "accepted"
 
     runtime_result = build_tutoring_generation_result(
         request, retrieval_context=retrieval_context, model_response=react_response
+    )
+    logger.info(
+        "agent_trace interface=tutoring/chat user_id=%s course_id=%s retrieval_hit_count=%d agent_path=%s quality_gate=%s fallback_path=%s output_source=%s",
+        request.user_id,
+        request.course_id,
+        len(retrieval_context.user_memory_facts) + len(retrieval_context.course_knowledge_chunks),
+        agent_path,
+        quality_gate,
+        fallback_path,
+        output_source,
     )
     if react_response and react_response.model_text:
         yield f"data: {json.dumps({'type': 'chunk', 'content': runtime_result.chunk_text}, ensure_ascii=False)}\n\n"

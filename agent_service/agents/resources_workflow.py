@@ -63,6 +63,7 @@ async def run_multi_agent_resource_workflow(
         request,
         embedding_provider,
     )
+    retrieval_hit_count = _context_chunk_count(course_knowledge_context)
     plan = await _run_planner_with_fallback(
         request,
         chat_provider,
@@ -74,7 +75,19 @@ async def run_multi_agent_resource_workflow(
         course_knowledge_context,
         chat_provider,
     )
-    return aggregate_resource_results(request, plan, results)
+    payload = aggregate_resource_results(request, plan, results)
+    fallback_path = "none" if payload is not None else "skeleton"
+    output_source = "multi_agent" if payload is not None else "fallback"
+    logger.info(
+        "agent_trace interface=resources/generate task_id=%s course_id=%s retrieval_hit_count=%d agent_path=multi_agent quality_gate=resource_critic fallback_path=%s output_source=%s resource_count=%d",
+        request.task_id,
+        request.course_id,
+        retrieval_hit_count,
+        fallback_path,
+        output_source,
+        len(results),
+    )
+    return payload
 
 
 async def _run_planner_with_fallback(
@@ -254,6 +267,12 @@ def _get_agent_for_type(resource_type: str) -> ResourceAgent:
         return agents[resource_type]
     except KeyError as exc:
         raise ValueError(f"Unsupported resource type: {resource_type}") from exc
+
+
+def _context_chunk_count(context: str | None) -> int:
+    if not context:
+        return 0
+    return len([chunk for chunk in context.split("\n---\n") if chunk.strip()])
 
 
 class _PipelineResourceAgent(AgentBase):

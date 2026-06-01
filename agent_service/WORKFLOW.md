@@ -56,6 +56,9 @@
 
 ## 最近验证
 
+- `./.venv/bin/pytest -q`：**418 passed**（统一 agent_trace 日志后全量回归）
+- `./.venv/bin/pytest tests/test_tutoring_agent.py tests/test_assessment_agent.py tests/test_resources_workflow.py -q`：**133 passed**（tutoring / assessment / resources trace 与主链路回归）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py tests/test_schema_contracts.py -q`：**49 passed**（OpenAPI + schema/import contract）
 - `./.venv/bin/python -m agent_service.tools.smoke_resources_workflow --live`：**PASS**（resources live multi-agent workflow，4 类资源齐全，path=multi_agent）
 - `curl -X POST /agent/v1/assessment/generate-questions`：**200**（`course_id=data_structures`，生成顺序存储结构单选题）
 - `curl -N -X POST /agent/v1/tutoring/chat`：**SSE 通过**（chunk / knowledge_points / suggestion / done，知识点来自 `data_structures`）
@@ -105,5 +108,5 @@
 1. 统一 trace/log：记录 assessment/resources/tutoring 中各 gate 拒绝原因、fallback 路径和最终输出来源，不改变 API/schema/webhook。
 2. 真实 LLM/RAG 联调：验证 assessment 出题质量、resources 生成质量和 tutoring prompt 效果。
 3. AgentScope Studio trace：先查官方文档或本地安装包 introspection，再决定是否接入；不凭空编造 Studio API。
-4. 补统一 trace/log：记录 retrieval hit count、agent path、quality gate、fallback path、output source，服务比赛展示。
-5. 如需展示 AgentScope Studio，先启动 Studio 或临时清空 `AGENTSCOPE_STUDIO_URL` 避免启动日志里出现连接失败堆栈。
+4. 如需展示 AgentScope Studio，先启动 Studio 或临时清空 `AGENTSCOPE_STUDIO_URL` 避免启动日志里出现连接失败堆栈。
+5. 整理比赛 demo 顺序：health/readiness → Qdrant count/search → resources workflow → assessment 出题 → tutoring SSE，并展示 `agent_trace` 日志。

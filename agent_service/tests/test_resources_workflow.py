@@ -1434,6 +1434,10 @@ class TestPhase6_Observability(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(payload)
         combined = "\n".join(logs.output)
         self.assertIn("workflow", combined.lower())
+        self.assertIn("agent_trace interface=resources/generate", combined)
+        self.assertIn("agent_path=multi_agent", combined)
+        self.assertIn("fallback_path=none", combined)
+        self.assertIn("output_source=multi_agent", combined)
 
     # ── T6.2 ──────────────────────────────────────────────────────
     async def test_planner_failure_logs_warning(self) -> None:

@@ -389,6 +389,41 @@ def test_generate_tutoring_sse_events_maintains_old_order_without_diagram() -> N
     assert types == ["chunk", "chunk", "knowledge_points", "suggestion", "done"]
 
 
+def test_generate_tutoring_sse_events_logs_agent_trace(caplog) -> None:
+    from agent_service.agents.tutoring import generate_tutoring_sse_events
+
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="讲讲导数",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeProviders:
+        class FakeChat:
+            async def complete(self, messages, **kwargs):
+                return '{"model_text":"导数表示函数变化率。","knowledge_points":["导数"],"suggestion":"先做变化率练习。"}'
+
+        chat = FakeChat()
+        embedding = None
+        reranker = None
+
+    async def _collect():
+        events = []
+        async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+            events.append(evt)
+        return events
+
+    with caplog.at_level("INFO", logger="agent_service.agents.tutoring"):
+        events = asyncio.run(_collect())
+
+    assert events
+    assert "agent_trace interface=tutoring/chat" in caplog.text
+    assert "agent_path=chat" in caplog.text
+    assert "fallback_path=none" in caplog.text
+    assert "output_source=chat" in caplog.text
+
+
 def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
     from agent_service.agents.tutoring import generate_tutoring_sse_events
 

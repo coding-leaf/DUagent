@@ -913,6 +913,55 @@ class TestQuestionRAG:
         assert len(questions) == 1
         assert "访问第 i 个元素" in questions[0].content
 
+    def test_generate_questions_with_agent_logs_agent_trace_for_react_path(self, caplog) -> None:
+        from unittest.mock import MagicMock, patch
+        from agent_service.agents.assessment import generate_questions_with_agent
+
+        async def _fake_llm(*args, **kwargs):
+            return None
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                    "options": [
+                        {"key": "A", "text": "O(1)"},
+                        {"key": "B", "text": "O(n)"},
+                        {"key": "C", "text": "O(log n)"},
+                        {"key": "D", "text": "O(n log n)"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+            caplog.at_level("INFO", logger="agent_service.agents.assessment"),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        combined = caplog.text
+        assert "agent_trace interface=assessment/generate-questions" in combined
+        assert "agent_path=react" in combined
+        assert "quality_gate=accepted" in combined
+        assert "fallback_path=none" in combined
+        assert "output_source=react" in combined
+
     def test_generate_questions_with_agent_falls_back_when_critic_rejects_bad_options(self) -> None:
         from unittest.mock import MagicMock, patch
 

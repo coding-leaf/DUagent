@@ -56,6 +56,12 @@
 
 ## 最近验证
 
+- `./.venv/bin/python -m agent_service.tools.ingest_knowledge knowledge_base/data_structures`：**通过**（Qdrant server 写入 `course_id=data_structures`，760 chunks）
+- `QdrantClient(...).count(course_knowledge_v1_1024)`：**760**（server collection 已创建且非空）
+- `QdrantVectorStore().search_course_knowledge("data_structures", embedding("顺序表的随机访问"), limit=3)`：**3 hits**（真实 RAG 检索可用）
+- `./.venv/bin/pytest -q`：**415 passed**（Qdrant server 首导入修复后全量回归）
+- `./.venv/bin/pytest tests/test_course_knowledge_store.py tests/test_knowledge_ingestion_smoke.py tests/test_qdrant_store.py tests/test_readiness.py -q`：**20 passed**（fresh collection、UUID point id、embedding batch、Qdrant server/local）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py tests/test_schema_contracts.py -q`：**49 passed**（OpenAPI + schema/import contract）
 - `./.venv/bin/pytest -q`：**413 passed**（Qdrant server URL 模式接入后全量回归）
 - `./.venv/bin/pytest tests/test_qdrant_store.py tests/test_core_config.py tests/test_vector_store.py tests/test_readiness.py -q`：**21 passed**（Qdrant server/local 配置与 readiness 探针）
 - `./.venv/bin/python ... build_qdrant_store(...).get_client().get_collections()`：**通过**（提权访问本机 `http://127.0.0.1:6333`，collections 当前为空）
@@ -92,5 +98,5 @@
 1. 统一 trace/log：记录 assessment/resources/tutoring 中各 gate 拒绝原因、fallback 路径和最终输出来源，不改变 API/schema/webhook。
 2. 真实 LLM/RAG 联调：验证 assessment 出题质量、resources 生成质量和 tutoring prompt 效果。
 3. AgentScope Studio trace：先查官方文档或本地安装包 introspection，再决定是否接入；不凭空编造 Studio API。
-4. 导入课程知识到 Qdrant server，确认 `course_knowledge_v1_1024` collection 非空且能按 `course_id` 检索。
-5. 启动 Agent Service 后跑 tutoring / assessment / resources 三条真实 demo 链路。
+4. 启动 Agent Service 后跑 tutoring / assessment / resources 三条真实 demo 链路，确认不是全 fallback。
+5. 补统一 trace/log：记录 retrieval hit count、agent path、quality gate、fallback path、output source，服务比赛展示。

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client.models import PointStruct
 
@@ -51,15 +51,20 @@ class QdrantCourseKnowledgeStore:
         source_files: set[str] = set()
         offset = None
         while True:
-            points, offset = await client.scroll(
-                collection_name=self._store.collection_name,
-                scroll_filter=Filter(
-                    must=[FieldCondition(key="course_id", match=MatchValue(value=course_id))]
-                ),
-                with_payload=["source_file"],
-                limit=256,
-                offset=offset,
-            )
+            try:
+                points, offset = await client.scroll(
+                    collection_name=self._store.collection_name,
+                    scroll_filter=Filter(
+                        must=[FieldCondition(key="course_id", match=MatchValue(value=course_id))]
+                    ),
+                    with_payload=["source_file"],
+                    limit=256,
+                    offset=offset,
+                )
+            except Exception as exc:
+                if _is_missing_collection_error(exc):
+                    return set()
+                raise
             for point in points:
                 payload = point.payload or {}
                 source_file = payload.get("source_file")
@@ -74,12 +79,17 @@ def _build_qdrant_store():
     return build_qdrant_store(settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION)
 
 
+def _is_missing_collection_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "collection" in text and ("doesn't exist" in text or "not found" in text)
+
+
 def _chunk_point_id(chunk: CourseKnowledgeChunk) -> str:
     raw = (
         f"{chunk.course_id}::{chunk.source_file}::{chunk.doc_id}::"
         f"{chunk.chunk_id}::{chunk.content}"
-    ).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
+    )
+    return str(uuid5(NAMESPACE_URL, raw))
 
 
 def _chunk_payload(chunk: CourseKnowledgeChunk) -> dict[str, object]:

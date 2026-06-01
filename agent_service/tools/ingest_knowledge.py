@@ -21,6 +21,7 @@ class KnowledgeIngestionResult:
 
 
 ChunkLoader = Callable[..., Awaitable[list[CourseKnowledgeChunk]]]
+_EMBEDDING_BATCH_SIZE = 64
 
 
 async def ingest_course_knowledge(
@@ -44,9 +45,27 @@ async def ingest_course_knowledge(
         return KnowledgeIngestionResult(course_id=course_id, chunk_count=0)
 
     provider = embedding_provider or get_ai_providers().embedding
-    vectors = await provider.embed_texts([chunk.content for chunk in chunks])
+    vectors = await _embed_texts_in_batches(
+        provider,
+        [chunk.content for chunk in chunks],
+        batch_size=_EMBEDDING_BATCH_SIZE,
+    )
     await target_store.upsert_chunks(chunks=chunks, vectors=vectors)
     return KnowledgeIngestionResult(course_id=course_id, chunk_count=len(chunks))
+
+
+async def _embed_texts_in_batches(
+    provider: EmbeddingProvider,
+    texts: list[str],
+    *,
+    batch_size: int,
+) -> list[list[float]]:
+    """向量化文本列表，输入切片文本，输出与输入顺序一致的 embedding 向量。"""
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start : start + batch_size]
+        vectors.extend(await provider.embed_texts(batch))
+    return vectors
 
 
 def main() -> None:

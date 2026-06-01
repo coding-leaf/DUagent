@@ -1,25 +1,30 @@
 import asyncio
+from uuid import UUID
+
 from agent_service.memory.course_knowledge_ingestion import CourseKnowledgeChunk
 from agent_service.memory.course_knowledge_store import QdrantCourseKnowledgeStore
 
 
 class FakeAsyncQdrantClient:
-    def __init__(self, scroll_points=None) -> None:
+    def __init__(self, scroll_points=None, scroll_error: Exception | None = None) -> None:
         self.calls = []
         self._scroll_points = scroll_points or []
+        self._scroll_error = scroll_error
 
     async def upsert(self, **kwargs):
         self.calls.append(kwargs)
 
     async def scroll(self, **kwargs):
         self.calls.append(kwargs)
+        if self._scroll_error is not None:
+            raise self._scroll_error
         return self._scroll_points, None
 
 
 class FakeQdrantStore:
-    def __init__(self, scroll_points=None) -> None:
+    def __init__(self, scroll_points=None, scroll_error: Exception | None = None) -> None:
         self.collection_name = "course_knowledge_v1_1024"
-        self._client = FakeAsyncQdrantClient(scroll_points=scroll_points)
+        self._client = FakeAsyncQdrantClient(scroll_points=scroll_points, scroll_error=scroll_error)
         self.calls = self._client.calls
 
     def get_client(self):
@@ -80,6 +85,7 @@ def test_upsert_chunks_generates_stable_point_ids() -> None:
     first_id = store.calls[0]["points"][0].id
     second_id = store.calls[1]["points"][0].id
     assert first_id == second_id
+    assert isinstance(UUID(first_id), UUID)
 
 
 def test_upsert_chunks_empty_points_no_call() -> None:
@@ -124,3 +130,14 @@ def test_list_ingested_source_files_ignores_missing_source_file_payload() -> Non
     ingested = asyncio.run(course_store.list_ingested_source_files("course-1"))
 
     assert ingested == {"chapter_01.md"}
+
+
+def test_list_ingested_source_files_returns_empty_when_collection_missing() -> None:
+    store = FakeQdrantStore(
+        scroll_error=RuntimeError("Not found: Collection `course_knowledge_v1_1024` doesn't exist!")
+    )
+    course_store = QdrantCourseKnowledgeStore(store=store)
+
+    ingested = asyncio.run(course_store.list_ingested_source_files("course-1"))
+
+    assert ingested == set()

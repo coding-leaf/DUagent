@@ -62,7 +62,7 @@
 
 ## 当前接口实现情况总览
 
-更新日期：`2026-06-01`
+更新日期：`2026-06-02`
 
 ### 真实完成
 
@@ -82,16 +82,16 @@
 - `GET /api/v1/tasks/{task_id}`
 - `GET /api/v1/tutoring/conversations`
 - `GET /api/v1/tutoring/conversations/{conversation_id}`
+- `POST /api/v1/profile/refresh`
+- `POST /api/v1/evaluation/refresh`
+- `POST /api/v1/learning-path/refresh`
 
 ### 半完成
 
 - `GET /api/v1/evaluation`
-- `POST /api/v1/evaluation/refresh`
 - `POST /api/v1/profile/initialize`
 - `GET /api/v1/profile`
-- `POST /api/v1/profile/refresh`
 - `GET /api/v1/learning-path`
-- `POST /api/v1/learning-path/refresh`
 - `GET /api/v1/quiz/questions`
 - `POST /api/v1/quiz/generate`
 - `GET /api/v1/quiz/history`
@@ -131,8 +131,13 @@ _（当前无占位接口）_
   - `POST /api/v1/quiz/submit`：评分完成后通过 `asyncio.create_task` 后台异步调用 `agent_client.post_json("/agent/v1/assessment/evaluate")`，LLM 诊断存入 `QuizSession.diagnosis_json`。后台任务使用独立 DB session，不创建 AsyncTask（避免新增未声明 task_type），失败时记录结构化日志。接口保持「半完成」— 诊断链路已打通但依赖后台异步完成
   - `GET /api/v1/quiz/result`：诊断保持纯课程级数据驱动聚合（summary/weak_points/suggestions 全部基于 QuizAnswer JOIN QuizQuestion 计算），不混合 diagnosis_json。接口保持「半完成」— 数据驱动诊断可用，LLM 诊断数据存于 diagnosis_json 供未来 per-session 端点使用
 - `2026-06-02` `profile 刷新链路稳定化`
-  - `POST /api/v1/profile/refresh`：MySQL `GET_LOCK`/`RELEASE_LOCK` 序列化同用户+课程并发写入；软删旧行 → 插新行；显式 `commit()` 后再释放锁，避免锁释放早于事务提交导致重复活跃行；异常兜底覆盖完整路径（payload 组装 + Agent 调用 + DB 读写 + task 更新），AgentServiceError、锁超时与通用 Exception 分支都会落 `task failed`；GET `/profile` 改为 `.order_by(desc).first()`。接口保持「半完成」— 同步调用 Agent 模式未改为真异步
+  - `POST /api/v1/profile/refresh`：MySQL `GET_LOCK`/`RELEASE_LOCK` 序列化同用户+课程并发写入；软删旧行 → 插新行；显式 `commit()` 后再释放锁；异常兜底覆盖完整路径；GET `/profile` 改为 `.order_by(desc).first()`
   - `POST /api/v1/profile/initialize`：同锁策略 + 显式 `commit()` 后释放锁；重复提交 = 覆盖；锁超时返回 `503`
+- `2026-06-02` `profile/refresh 真异步化`
+  - `POST /api/v1/profile/refresh`：请求内只做权限校验 + payload 组装 + task 创建/提交 + 返回 202；后台 `_run_profile_refresh_background` 通过 `asyncio.create_task` 执行 Agent 调用 → 锁 → 写库 → task 完成/失败，使用独立 DB session + `UPDATE AsyncTask` 写任务终态。接口从「半完成」提升至「真实完成」— Agent 调用不阻塞请求响应，task 状态真实反映后台进度
+- `2026-06-02` `evaluation + learning-path 真异步化（复制 profile 模板）`
+  - `POST /api/v1/evaluation/refresh`：同 profile 模式 — 请求内只做权限校验 + payload 组装 + task 创建/提交 + 返回 202；后台 `_run_evaluation_refresh_background` 执行 Agent 调用 + 锁 + 写库 + task 完成/失败。接口从「半完成」提升至「真实完成」
+  - `POST /api/v1/learning-path/refresh`：同 evaluation 模式。接口从「半完成」提升至「真实完成」
 - `2026-06-02` `evaluation + learning-path 刷新链路稳定化（复制 profile 模板）`
   - `POST /api/v1/evaluation/refresh`：MySQL `GET_LOCK` 序列化写入；task 创建后显式 `commit()`；try 覆盖 Agent 调用 + DB 写入完整路径；成功路径 `commit → release lock`；AgentServiceError、锁超时和通用 Exception 分支都会先 `rollback()` 再落 `task failed`，不再残留 `processing`
   - `POST /api/v1/learning-path/refresh`：同 evaluation 模式；额外修复 GET `/learning-path` 的 `scalar_one_or_none()` → `.order_by(desc).first()`（修复多次 refresh 后 GET 500 崩溃）；`_assemble_learning_path_payload` 中 UserProfile / CourseKnowledgeGraph 读取同改 `.first()`；`get_node_resources` 中 CourseKnowledgeGraph 同改 `.first()`；锁超时同样会落 `task failed`
@@ -143,6 +148,50 @@ _（当前无占位接口）_
 
 本文件记录 Backend 联调的开发进度和跨窗口恢复上下文。
 接口契约以 `../docs/20-agent-api/Agent-Service.openapi.json` 和 `../docs/20-agent-api/API_Agent内部接口规范.md` 为准，本文件不是接口契约来源。
+
+## 当前项目结构
+
+### Backend 负责范围
+
+- `app/api/v1`
+  - 前端 API 路由
+  - 鉴权、权限校验、HTTP 状态码、统一返回包装
+  - AsyncTask 协议适配
+  - Webhook 接收
+- `app/services/agent_client.py`
+  - Backend -> Agent Service 的统一 HTTP client
+- `app/models`
+  - SQLAlchemy ORM，保存用户、课程、题目、任务、画像、评估、学习路径、资源、对话等业务数据
+- `app/db`
+  - 数据库连接、session、启动初始化
+- `app/schemas`
+  - 前端请求/响应实体、Webhook 请求实体
+- `WORKFLOW.md`
+  - 当前联调状态、已改/未改能力、最近验证和下一步任务
+
+### Agent Service 负责范围
+
+- 只通过 `/agent/v1/*` HTTP 接口被 Backend 调用
+- 负责 LLM、AgentScope 编排、RAG、结构化 AI 结果生成、SSE 内容生成
+- 不直接写 Backend SQL
+
+## 当前联调结论
+
+- Backend -> Agent Service 主干已打通，且不是仅“能调接口”，而是已有任务状态闭环和 SQL 落库闭环。
+- 目前最稳定的联调能力是 3 条 refresh 链路：
+  - `POST /api/v1/profile/refresh`
+  - `POST /api/v1/evaluation/refresh`
+  - `POST /api/v1/learning-path/refresh`
+- 三条链路当前都满足：
+  - 请求内快速返回 `202 + task_id`
+  - 立即轮询 `GET /api/v1/tasks/{task_id}` 可见 `processing`
+  - 后台协程独立调用 Agent Service
+  - 成功时 `AsyncTask -> completed`
+  - 失败时 `AsyncTask -> failed`
+  - `error_code` / `error_message` 正确落库
+  - 成功时对应业务表写入新记录
+- 资源生成链路已接近完整闭环，但仍需补更扎实的集成测试。
+- quiz 链路已从明显占位提升到半完成，但仍不建议继续扩功能，应先保持当前语义稳定。
 
 ## 当前方向
 
@@ -155,19 +204,102 @@ _（当前无占位接口）_
 
 | Backend 接口 | Agent 路径 | 类型 | 状态 | 备注 |
 |-------------|-----------|------|------|------|
-| `POST /api/v1/profile/refresh` | `/agent/v1/profile/generate` | JSON 同步 | ✅ | 参考实现，payload 从 SQL 聚合 |
+| `POST /api/v1/profile/refresh` | `/agent/v1/profile/generate` | 真异步 | ✅ | 202 + task_id；后台 asyncio.create_task 执行 Agent 调用 + 写库 |
 | `POST /api/v1/tutoring/chat` | `/agent/v1/tutoring/chat` | SSE 代理 | ✅ | SSE 流透传，累积 chunk 后保存 |
 | `POST /api/v1/resources/generate` | `/agent/v1/resources/generate` | 异步+Webhook | ✅ | task_id + webhook_url 传入 |
 | `POST /api/v1/quiz/generate` | `/agent/v1/assessment/generate-questions` | 异步 | ✅ | 生成后写 quiz_questions |
-| `POST /api/v1/evaluation/refresh` | `/agent/v1/evaluation/generate` | JSON 同步 | ✅ | 聚合学习进度/练习结果 |
-| `POST /api/v1/learning-path/refresh` | `/agent/v1/learning-path/generate` | JSON 同步 | ✅ | 传入 evaluation + knowledge_graph |
+| `POST /api/v1/evaluation/refresh` | `/agent/v1/evaluation/generate` | 真异步 | ✅ | 202 + task_id；后台 asyncio.create_task 执行 Agent 调用 + 写库 |
+| `POST /api/v1/learning-path/refresh` | `/agent/v1/learning-path/generate` | 真异步 | ✅ | 202 + task_id；后台 asyncio.create_task 执行 Agent 调用 + 写库 |
 | `POST /api/v1/webhooks/agent` | — | Webhook | ⚠️ | 见已知问题 |
+
+## 已改内容
+
+### 已完成并验证通过
+
+- `POST /api/v1/profile/refresh`
+  - 从请求内同步调用 Agent 改为后台异步执行
+  - 请求内只做 payload 组装、创建任务、返回 `202 + task_id`
+  - 后台独立 session 调 Agent、加锁、软删旧行、插新行、更新 task
+- `POST /api/v1/evaluation/refresh`
+  - 复制 profile 真异步模板
+  - 成功/失败路径都落稳定 task 终态
+- `POST /api/v1/learning-path/refresh`
+  - 复制 profile 真异步模板
+  - 额外修复历史多行读取导致的 GET 500 风险
+- `POST /api/v1/webhooks/agent`
+  - task.status completed/failed 闭环
+  - failed 分支 `error_code` 落库
+  - `X-Webhook-Secret` 鉴权
+- `GET /api/v1/learning-path/nodes/{node_id}/resources`
+  - 从占位实现改为真实 DB 查询
+  - 新增 `course_id` 查询参数并已同步前端契约
+  - 补课程权限校验
+- `GET /api/v1/quiz/result`
+  - 替换硬编码诊断为课程级数据驱动聚合
+  - 无数据时 `diagnosis: null`
+- `POST /api/v1/quiz/submit`
+  - 后台异步保存 Agent 诊断到 `QuizSession.diagnosis_json`
+  - 不新增未声明 `task_type`
+
+### 已完成的验证
+
+- `test_refresh_async.py`
+  - 当前 `24/24` 通过
+  - 覆盖三条 refresh 链路：
+    - `202 + task_id`
+    - immediate poll 仍为 `processing`
+    - 最终 `completed`
+    - SQL 写入成功
+    - Agent error -> `failed + error_code`
+
+## 暂不修改 / 不必要修改
+
+- 暂不为 `profile/evaluation/learning-path` 引入 Celery、RQ、消息队列或持久化 worker
+  - 当前阶段以前端可见异步语义和任务状态闭环为完成标准
+- 暂不再投入 SQLite 兼容测试
+  - 当前真实运行环境是 MySQL
+  - 联调测试以 MySQL 为准
+- 暂不大规模抽象三条 refresh 的公共 service 层
+  - 当前虽有重复模式，但仍以 minimal diff 为主
+- 暂不扩展 quiz 的 per-session 新接口
+  - 先保持当前课程级结果语义稳定
+
+## 等待修改 / 待办项
+
+### 优先级高
+
+- `POST /api/v1/resources/generate` + `POST /api/v1/webhooks/agent`
+  - 补更完整的集成测试
+  - 重点验证 webhook 幂等、失败语义、鉴权配置行为
+- 锁相关集成测试
+  - 为 refresh 链路补 `lock_timeout / 锁竞争` 的 MySQL 集成测试
+  - 当前主链路已测，锁相关仍未形成稳定自动化验证
+
+### 优先级中
+
+- `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`
+  - 继续保持课程级语义单一
+  - 不再混合 latest session 诊断和课程级聚合结果
+- `POST /api/v1/profile/initialize`
+  - 当前可用，但仍属于半完成
+  - 若后续继续稳定化，可补更多重复提交和异常路径测试
+
+### 等待更后续再考虑
+
+- 异步任务持久化恢复能力
+  - 当前使用 `asyncio.create_task`
+  - 进程重启后后台任务不会自动续跑
+  - 这属于后续生产级可靠性增强，不是当前联调主阻塞
+- 锁等待秒数配置化
+  - 对锁超时测试和运维有帮助
+  - 但不是当前第一优先级
 
 ## 已知问题
 
 1. **Webhook 鉴权需要两端同步配置**（`webhooks.py` + Agent Service `resources.py`）：Backend 已实现 `X-Webhook-Secret` 校验，Agent Service 的 `_post_json_payload` 已同步发送该 header。两端需配置一致的 `WEBHOOK_SECRET` 环境变量，未配时鉴权自动跳过（向后兼容）。
 2. **`GET /learning-path/nodes/{id}/resources` chapter_materials 依赖 KG 预置数据**：`chapter_materials` 从 `CourseKnowledgeGraph.nodes` JSON 中提取 `chapter` 字段并匹配 `Resource.chapter`。若 KG 未预置完整数据，该字段将返回空数组（不影响其他字段）。
 3. **`POST /quiz/submit` 诊断链路已后台异步化，GET /quiz/result 保持纯课程级**：后台 `_run_diagnosis_background` 通过 `asyncio.create_task` 调用 Agent `/assessment/evaluate`，使用 UPDATE 写入 `QuizSession.diagnosis_json`（无 DB 读依赖，消除竞态）。`GET /quiz/result` 的 summary/weak_points/suggestions 全部基于课程级聚合计算，不混合 `diagnosis_json`（该字段保留供未来 per-session 诊断端点使用）。
+4. **当前「真实完成」的异步链路以前端可见语义和任务状态闭环为准**：`asyncio.create_task` 后台协程满足 202 + task_id 轮询的契约，但进程重启后未完成的后台任务不会自动续跑（无持久化队列/外部 worker）。这不影响单次请求-轮询链路正确性，但长期来看若需生产级可靠性，可考虑引入独立 worker 或持久化任务队列。
 
 ## 联调命令
 
@@ -197,9 +329,26 @@ cd agent_service && ./.venv/bin/pytest -q
 |------|------|---------|
 | `test_agent_integration.py` | Agent 联调集成测试 | 6 个 Agent 接口 + Webhook + 权限 + 降级 |
 | `test_api.py` | 全量冒烟测试 | 所有端点的基础可用性 |
+| `test_refresh_async.py` | refresh 真异步链路集成测试 | profile / evaluation / learning-path 的 202、processing、completed、DB 写入、Agent error |
 
 ## 最近验证
 
-_（联调进行中，逐接口填充）_
+- `2026-06-02`
+  - `python test_refresh_async.py`
+  - 结果：`24/24` 通过
+  - 覆盖：
+    - `POST /api/v1/profile/refresh`
+    - `POST /api/v1/evaluation/refresh`
+    - `POST /api/v1/learning-path/refresh`
+  - 断言：
+    - `202 + task_id`
+    - immediate poll = `processing`
+    - 最终 `completed`
+    - SQL 写入成功
+    - Agent error -> `failed + error_code`
 
 ## 下一步建议
+
+1. 先补 `resources/generate + webhooks/agent` 的 MySQL 集成测试，优先验证回调幂等和失败语义。
+2. 单独设计 refresh 链路的 `lock_timeout / 锁竞争` 自动化测试，不和主链路测试混在一起。
+3. 维持 quiz 当前课程级语义，不再扩接口，优先做稳定性验证而不是加新功能。

@@ -581,6 +581,7 @@ async def generate_questions_with_agent(
             questions = _coerce_questions(parsed)
             if questions:
                 from agent_service.agents.assessment_critic import QuestionCriticAgent
+                from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
 
                 critic = QuestionCriticAgent(chat_provider=chat_provider)
                 if await critic.review(
@@ -588,16 +589,41 @@ async def generate_questions_with_agent(
                     questions,
                     course_knowledge_context=course_knowledge_context,
                 ):
-                    logger.info("ReActAgent generation succeeded: assessment/generate-questions")
-                    return questions
-                logger.warning("QuestionCritic rejected ReAct questions; falling back to LLM path")
+                    guard = KnowledgePointGuard(chat_provider=chat_provider)
+                    guard_result = await guard.review(
+                        request,
+                        questions,
+                        course_knowledge_context=course_knowledge_context,
+                    )
+                    if guard_result.accepted:
+                        logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                        return questions
+                    logger.warning(
+                        "KnowledgePointGuard rejected ReAct questions; falling back to LLM path: %s",
+                        guard_result.reasons,
+                    )
+                else:
+                    logger.warning("QuestionCritic rejected ReAct questions; falling back to LLM path")
 
     # LLM fallback
     questions = await generate_questions_with_llm(
         request, chat_provider, course_knowledge_context=course_knowledge_context
     )
     if questions:
-        return questions
+        from agent_service.agents.assessment_knowledge_guard import KnowledgePointGuard
+
+        guard = KnowledgePointGuard(chat_provider=chat_provider)
+        guard_result = await guard.review(
+            request,
+            questions,
+            course_knowledge_context=course_knowledge_context,
+        )
+        if guard_result.accepted:
+            return questions
+        logger.warning(
+            "KnowledgePointGuard rejected LLM questions; falling back to skeleton: %s",
+            guard_result.reasons,
+        )
 
     # 规则骨架题 fallback
     return generate_questions_data(request).questions

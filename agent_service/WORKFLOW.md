@@ -22,7 +22,7 @@
 | `POST /agent/v1/profile/generate` | 已完成 | LLM enrichment + schema/枚举/范围保护 + 规则 fallback |
 | `POST /agent/v1/evaluation/generate` | 已完成 | LLM enrichment + 表格/summary 保护 + 规则 fallback |
 | `POST /agent/v1/assessment/evaluate` | 已完成 | 判分由规则确定；LLM 只增强解析、诊断和建议 |
-| `POST /agent/v1/assessment/generate-questions` | ReActAgent + QuestionCritic 已完成 | ReAct + RAG toolkit → QuestionCriticAgent → LLM fallback → 骨架题 |
+| `POST /agent/v1/assessment/generate-questions` | QuestionCritic + KnowledgePointGuard 已完成 | ReAct + RAG toolkit → QuestionCriticAgent → KnowledgePointGuard → LLM fallback → KnowledgePointGuard → 骨架题 |
 | `POST /agent/v1/learning-path/generate` | 已完成 | LLM 只在节点白名单内补全；失败回落规则路径 |
 | `POST /agent/v1/resources/generate` | Multi-Agent Workflow 已完成 | Planner → AgentScope fanout ResourceAgents → Aggregator；单资源局部 fallback |
 | `POST /agent/v1/memory/compress` | 已完成 | LLM fact extraction + 规则 fallback；Qdrant 写入 best-effort |
@@ -32,7 +32,7 @@
 - 已接入：ChatModel/Formatter、Embedding、ReActAgent、Toolkit/ToolResponse、InMemoryMemory、Reader/PDFReader、QdrantStore、fanout_pipeline。
 - tutoring 已接入内部 StrategyAgent 和 ResponseCriticAgent，策略选择/质量判断失败时回落规则策略或继续降级，不改变 SSE / schemas。
 - tutoring toolkit 已返回 AgentScope 合法 TextBlock：`{"type": "text", "text": "..."}`。
-- assessment toolkit 已返回 AgentScope 合法 TextBlock，并新增 `QuestionCriticAgent` 混合质量门禁。
+- assessment toolkit 已返回 AgentScope 合法 TextBlock，并新增 `QuestionCriticAgent` 混合质量门禁和 `KnowledgePointGuard` 知识点贴合度门禁。
 - resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent。
 - 当前 Qdrant local 模式已做懒加载以减少同进程重复 client，但多进程文件锁仍可能发生；长期建议迁移 Qdrant server。
 
@@ -46,6 +46,9 @@
 
 ## 最近验证
 
+- `./.venv/bin/pytest tests/test_assessment_knowledge_guard.py tests/test_assessment_agent.py -q`：**51 passed**（KnowledgePointGuard + assessment 出题降级链）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
 - `./.venv/bin/pytest tests/test_assessment_agent.py -q`：**41 passed**（QuestionCriticAgent）
 - `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
 - `./.venv/bin/pytest tests/test_tutoring_tools.py tests/test_vector_store.py -q`：**16 passed**
@@ -59,7 +62,7 @@
 
 ## 下一步建议
 
-1. `assessment/generate-questions`：后续评估 `KnowledgePointGuard` / `DifficultyBalancer`，不改变题型契约。
+1. `assessment/generate-questions`：后续评估 `DifficultyBalancer` 和真实 LLM/RAG 质量验证，不改变题型契约。
 2. `resources/generate`：补 `ResourceCriticAgent` / 质量门禁、真实 LLM 质量验证和 AgentScope Studio trace。
 3. `tutoring/chat`：后续可做真实 LLM prompt 质量验证和 AgentScope Studio trace，不改变 SSE 和 schemas。
 4. 部署联调：优先引入 Qdrant server 模式，减少 Apifox / 多进程真实 AI 流程中的 local 文件锁问题。

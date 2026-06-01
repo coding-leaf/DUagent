@@ -90,6 +90,30 @@ def build_question_critic_prompt(
     )
 
 
+def build_knowledge_point_guard_prompt(
+    request: QuestionGenerateRequest,
+    questions_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建知识点贴合度审查提示词，输入请求和候选题 JSON，输出是否接受的 JSON 判定。"""
+    context = course_knowledge_context or "无"
+    return (
+        "你是 EDUagent 的知识点贴合度审查员。请只判断候选题是否应被接受，不要改写题目。\n\n"
+        "审查目标：\n"
+        "- 题目必须贴合请求中的 knowledge_point；若请求未给出 knowledge_point，则优先贴合个性化上下文 wrong_points\n"
+        "- 题目的 knowledge_point、content、explanation 应能体现目标知识点或同源概念\n"
+        "- 如果提供课程参考资料，题目应能对应资料中的概念、例题或知识点\n"
+        "- 没有明确目标知识点时，不要因为综合出题而拒绝\n\n"
+        "请求：\n"
+        f"{build_question_generation_user_message(request, course_knowledge_context=None)}\n\n"
+        "课程参考资料：\n"
+        f"{context}\n\n"
+        "候选题 JSON：\n"
+        f"{questions_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )
+
+
 def _format_context(context: dict | None) -> str:
     if not context:
         return "无"

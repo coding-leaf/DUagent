@@ -846,13 +846,22 @@ class TestQuestionRAG:
             embedding = None
 
         async def _fake_llm(*args, **kwargs):
-            return [GeneratedQuestion(type="single_choice", content="LLM题目", options=[], answer="A", knowledge_point="K", explanation="E")]
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构 LLM 题目",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="本题围绕顺序存储结构进行考查。",
+                )
+            ]
 
         with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
             questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
         assert len(questions) == 1
-        assert questions[0].content == "LLM题目"
+        assert questions[0].content == "顺序存储结构 LLM 题目"
 
 
     def test_generate_questions_with_agent_returns_react_result(self) -> None:
@@ -914,11 +923,11 @@ class TestQuestionRAG:
             return [
                 GeneratedQuestion(
                     type="single_choice",
-                    content="LLM fallback 题目",
+                    content="顺序存储结构 LLM fallback 题目",
                     options=[],
                     answer="A",
-                    knowledge_point="K",
-                    explanation="E",
+                    knowledge_point="顺序存储结构",
+                    explanation="本题围绕顺序存储结构进行考查。",
                 )
             ]
 
@@ -951,7 +960,7 @@ class TestQuestionRAG:
             questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
         assert len(questions) == 1
-        assert questions[0].content == "LLM fallback 题目"
+        assert questions[0].content == "顺序存储结构 LLM fallback 题目"
 
     def test_question_critic_fail_open_when_llm_critic_raises_after_rule_pass(self) -> None:
         from agent_service.agents.assessment_critic import QuestionCriticAgent
@@ -1062,11 +1071,11 @@ class TestQuestionRAG:
             return [
                 GeneratedQuestion(
                     type="single_choice",
-                    content="LLM fallback 题目",
+                    content="顺序存储结构 LLM fallback 题目",
                     options=[],
                     answer="A",
-                    knowledge_point="K",
-                    explanation="E",
+                    knowledge_point="顺序存储结构",
+                    explanation="本题围绕顺序存储结构进行考查。",
                 )
             ]
 
@@ -1100,7 +1109,118 @@ class TestQuestionRAG:
             questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
         assert len(questions) == 1
-        assert questions[0].content == "LLM fallback 题目"
+        assert questions[0].content == "顺序存储结构 LLM fallback 题目"
+
+    def test_generate_questions_with_agent_falls_back_to_llm_when_react_misses_knowledge_point(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构要求元素在内存中连续存放，下列说法正确的是？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构通过连续地址保存线性表元素。",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "天气预报主要受哪些因素影响？",
+                    "options": [
+                        {"key": "A", "text": "气压"},
+                        {"key": "B", "text": "湿度"},
+                        {"key": "C", "text": "风向"},
+                        {"key": "D", "text": "地形"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "天气",
+                    "explanation": "天气变化通常与气压、湿度和风向有关。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].knowledge_point == "顺序存储结构"
+
+    def test_generate_questions_with_agent_falls_back_to_skeleton_when_llm_misses_knowledge_point(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="天气预报主要受哪些因素影响？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="天气",
+                    explanation="天气变化通常与气压、湿度和风向有关。",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 2
+        assert questions[0].knowledge_point == "顺序存储结构"
+        assert "完成一道单选题" in questions[0].content
+
+    def test_generate_questions_with_agent_returns_llm_result_when_knowledge_point_matches(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构支持按下标随机访问，下列说法正确的是？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构可根据首地址和元素下标直接计算元素位置。",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content.startswith("顺序存储结构支持")
 
 
 def test_parse_question_payload_handles_array() -> None:

@@ -93,6 +93,9 @@ _（当前无占位接口）_
 - `2026-06-02` `profile 刷新链路稳定化`
   - `POST /api/v1/profile/refresh`：MySQL `GET_LOCK`/`RELEASE_LOCK` 序列化同用户+课程并发写入；软删旧行 → 插新行；显式 `commit()` 后再释放锁，避免锁释放早于事务提交导致重复活跃行；异常兜底覆盖完整路径（payload 组装 + Agent 调用 + DB 读写 + task 更新），AgentServiceError、锁超时与通用 Exception 分支都会落 `task failed`；GET `/profile` 改为 `.order_by(desc).first()`。接口保持「半完成」— 同步调用 Agent 模式未改为真异步
   - `POST /api/v1/profile/initialize`：同锁策略 + 显式 `commit()` 后释放锁；重复提交 = 覆盖；锁超时返回 `503`
+- `2026-06-02` `evaluation + learning-path 刷新链路稳定化（复制 profile 模板）`
+  - `POST /api/v1/evaluation/refresh`：MySQL `GET_LOCK` 序列化写入；task 创建后显式 `commit()`；try 覆盖 Agent 调用 + DB 写入完整路径；成功路径 `commit → release lock`；AgentServiceError、锁超时和通用 Exception 分支都会先 `rollback()` 再落 `task failed`，不再残留 `processing`
+  - `POST /api/v1/learning-path/refresh`：同 evaluation 模式；额外修复 GET `/learning-path` 的 `scalar_one_or_none()` → `.order_by(desc).first()`（修复多次 refresh 后 GET 500 崩溃）；`_assemble_learning_path_payload` 中 UserProfile / CourseKnowledgeGraph 读取同改 `.first()`；`get_node_resources` 中 CourseKnowledgeGraph 同改 `.first()`；锁超时同样会落 `task failed`
 
 ## 文件用途
 
@@ -159,7 +162,3 @@ _（联调进行中，逐接口填充）_
 
 ## 下一步建议
 
-1. 启动 MySQL 后补跑 `python test_api.py` 和 `python test_agent_integration.py` 确认真实 DB 环境无回归
-2. 对 `POST /api/v1/quiz/submit` 的 code / short_answer 题型接入 Agent 深度评估（当前规则比对为大小写不敏感字符串匹配）
-3. 视需要补 webhook 鉴权的自动化测试（Backend 配 secret + Agent 未配 → 401 场景）
-4. 将 `POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 等接口从「半完成」继续向「真实完成」推进

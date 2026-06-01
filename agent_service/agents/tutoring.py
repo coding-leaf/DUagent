@@ -173,6 +173,7 @@ async def _try_structured_output(messages, chat_provider) -> str | None:
         if raw and raw.strip():
             return raw.strip()
     except Exception:
+        logger.debug("Tutoring structured output failed", exc_info=True)
         pass
     return None
 

@@ -1,4 +1,8 @@
+import logging
+
 from agent_service.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def build_qdrant_store(collection_name: str):
@@ -30,8 +34,12 @@ async def ensure_collection_exists(store) -> None:
         names = {c.name for c in collections.collections}
         if store.collection_name in names:
             return
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to check Qdrant collection '%s': %s",
+            store.collection_name,
+            exc,
+        )
     try:
         await client.create_collection(
             collection_name=store.collection_name,
@@ -40,5 +48,9 @@ async def ensure_collection_exists(store) -> None:
                 distance=Distance.COSINE,
             ),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to create Qdrant collection '%s': %s",
+            store.collection_name,
+            exc,
+        )

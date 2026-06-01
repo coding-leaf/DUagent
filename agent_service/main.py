@@ -8,6 +8,12 @@ from agent_service.api.v1.router import api_router
 from agent_service.core.config import settings
 from agent_service.memory.qdrant_store import build_qdrant_store
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+
 logger = logging.getLogger(__name__)
 
 def _init_agentscope_studio_if_configured() -> None:

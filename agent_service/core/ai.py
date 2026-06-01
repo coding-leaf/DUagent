@@ -51,10 +51,11 @@ class AgentScopeEmbeddingProvider:
 
 
 class AgentScopeChatProvider:
-    def __init__(self, model, formatter, json_mode: bool = False) -> None:
+    def __init__(self, model, formatter, json_mode: bool = False, timeout: float = 120) -> None:
         self.model = model
         self.formatter = formatter
         self.json_mode = json_mode
+        self.timeout = timeout
 
     async def complete(self, messages: Sequence[ChatMessage], structured_model=None) -> str:
         from agentscope.message import Msg
@@ -64,7 +65,10 @@ class AgentScopeChatProvider:
             kwargs["structured_model"] = structured_model
         elif self.json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        response = await self.model(await self._format_messages(messages, Msg), **kwargs)
+        response = await asyncio.wait_for(
+            self.model(await self._format_messages(messages, Msg), **kwargs),
+            timeout=self.timeout,
+        )
         return _parse_agentscope_chat_response_text(response)
 
     async def _format_messages(self, messages: Sequence[ChatMessage], msg_cls) -> list:

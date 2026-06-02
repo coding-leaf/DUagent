@@ -1,16 +1,21 @@
+import asyncio
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.db.session import async_session_factory
 from app.models.others import AsyncTask
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.schemas.operations import QuizGenerateRequest, QuizSubmitRequest
+from app.services.agent_client import AgentServiceError, agent_client
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])
 
 
@@ -210,6 +215,84 @@ async def generate_questions(
     )
 
 
+async def _run_diagnosis_background(
+    quiz_id: str,
+    user_id: str,
+    course_id: str,
+    agent_questions: list[dict],
+    agent_answers: list[dict],
+) -> None:
+    """后台异步调用 Agent /assessment/evaluate 并将 LLM 诊断写入 QuizSession.diagnosis_json。
+
+    设计约束：
+    - 只接收原始标量 + 预组装的 payload（不接收请求级 ORM 实例或 db session）。
+    - Agent 调用不依赖 DB session（消除竞态：请求事务未提交时后台任务读不到数据）。
+    - 写入使用 UPDATE 直接设置 diagnosis_json，内部自行创建独立 DB session。
+    - 失败时记录结构化日志，不抛异常。
+    """
+    # 1. 调用 Agent（无 DB 依赖）
+    try:
+        data = await agent_client.post_json("/agent/v1/assessment/evaluate", {
+            "user_id": user_id,
+            "course_id": course_id,
+            "quiz_id": quiz_id,
+            "questions": agent_questions,
+            "answers": agent_answers,
+        })
+    except AgentServiceError as e:
+        logger.error(
+            "Diagnosis background: AgentServiceError quiz_id=%s course_id=%s user_id=%s "
+            "status=%s agent_code=%s message=%s",
+            quiz_id, course_id, user_id,
+            e.status_code, e.agent_code, e.message,
+        )
+        return
+    except Exception as e:
+        logger.error(
+            "Diagnosis background: unexpected error quiz_id=%s course_id=%s user_id=%s "
+            "type=%s message=%s",
+            quiz_id, course_id, user_id,
+            type(e).__name__, str(e),
+        )
+        return
+
+    diagnosis = data.get("diagnosis") if isinstance(data, dict) else None
+    if not diagnosis or not isinstance(diagnosis, dict):
+        logger.warning(
+            "Diagnosis background: Agent returned no diagnosis quiz_id=%s course_id=%s user_id=%s "
+            "response_keys=%s",
+            quiz_id, course_id, user_id,
+            list(data.keys()) if isinstance(data, dict) else type(data).__name__,
+        )
+        return
+
+    # 2. 写入 DB（独立 session，UPDATE 直接设 diagnosis_json）
+    async with async_session_factory() as db:
+        try:
+            result = await db.execute(
+                update(QuizSession)
+                .where(QuizSession.id == quiz_id)
+                .values(diagnosis_json=diagnosis)
+            )
+            await db.commit()
+            if result.rowcount:
+                logger.info(
+                    "Diagnosis background: stored diagnosis_json quiz_id=%s course_id=%s user_id=%s",
+                    quiz_id, course_id, user_id,
+                )
+            else:
+                logger.warning(
+                    "Diagnosis background: UPDATE affected 0 rows quiz_id=%s (row may not be committed yet)",
+                    quiz_id,
+                )
+        except Exception as e:
+            await db.rollback()
+            logger.error(
+                "Diagnosis background: DB write failed quiz_id=%s type=%s message=%s",
+                quiz_id, type(e).__name__, str(e),
+            )
+
+
 @router.post("/submit")
 async def submit_answers(
     req: QuizSubmitRequest,
@@ -230,14 +313,21 @@ async def submit_answers(
     total = len(req.answers)
     per_question_results = []
 
+    # 批量预取所有题目，同时用于评分和后台 Agent 诊断 payload 组装
+    q_ids = [a.get("question_id", "") for a in req.answers]
+    q_batch = await db.execute(
+        select(QuizQuestion).where(QuizQuestion.id.in_(q_ids), QuizQuestion.is_deleted == False)
+    )
+    questions_by_id = {q.id: q for q in q_batch.scalars().all()}
+
+    agent_questions = []
+    agent_answers = []
+
     for ans in req.answers:
         q_id = ans.get("question_id", "")
         user_answer = ans.get("answer", "")
 
-        q_result = await db.execute(
-            select(QuizQuestion).where(QuizQuestion.id == q_id, QuizQuestion.is_deleted == False)
-        )
-        question = q_result.scalar_one_or_none()
+        question = questions_by_id.get(q_id)
 
         is_correct = False
         correct_answer = ""
@@ -255,22 +345,41 @@ async def submit_answers(
                 is_correct = user_sorted == correct_sorted
             else:
                 is_correct = str(user_answer).strip().upper() == str(correct_answer).strip().upper()
+
+            # 预组装 Agent 诊断 payload（消除竞态：后台任务不依赖 DB 读取）
+            correct_for_agent = correct_answer
+            if isinstance(correct_for_agent, str) and correct_for_agent.strip().startswith("["):
+                try:
+                    correct_for_agent = eval(correct_for_agent)
+                except Exception:
+                    pass
+            agent_questions.append({
+                "id": question.id,
+                "type": question.type,
+                "content": question.content,
+                "options": question.options if question.options is not None else [],
+                "correct_answer": correct_for_agent,
+                "knowledge_point": question.knowledge_point,
+            })
+            agent_answers.append({"question_id": q_id, "answer": user_answer})
         else:
-            is_correct = True
-            correct_answer = str(user_answer)
+            # 不存在的 question_id：不计入正确，不创建 QuizAnswer（避免 FK 违规）
+            is_correct = False
+            correct_answer = ""
 
         if is_correct:
             correct_count += 1
 
-        answer_record = QuizAnswer(
-            quiz_id=req.quiz_id,
-            question_id=q_id,
-            user_answer=str(user_answer),
-            is_correct=is_correct,
-            correct_answer=correct_answer,
-            explanation=explanation,
-        )
-        db.add(answer_record)
+        if question:
+            answer_record = QuizAnswer(
+                quiz_id=req.quiz_id,
+                question_id=q_id,
+                user_answer=str(user_answer),
+                is_correct=is_correct,
+                correct_answer=correct_answer,
+                explanation=explanation,
+            )
+            db.add(answer_record)
 
         per_question_results.append({
             "question_id": q_id,
@@ -286,19 +395,15 @@ async def submit_answers(
     quiz.time_spent = req.time_spent
     await db.flush()
 
-    # Create async task for LLM diagnosis
-    task = AsyncTask(
-        task_type="quiz_generation",
-        status="processing",
+    # 后台异步调用 Agent /assessment/evaluate 生成 LLM 诊断
+    # 传入预组装的 payload（消除竞态：后台任务不读 DB，只做 Agent 调用 + UPDATE）
+    asyncio.create_task(_run_diagnosis_background(
+        quiz_id=req.quiz_id,
         user_id=current_user.id,
         course_id=quiz.course_id,
-    )
-    db.add(task)
-    await db.flush()
-    task.status = "completed"
-    task.result = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    task.completed_at = datetime.now(timezone.utc)
-    await db.flush()
+        agent_questions=agent_questions,
+        agent_answers=agent_answers,
+    ))
 
     return {
         "code": 200,
@@ -336,10 +441,10 @@ async def get_result(
             QuizSession.user_id == current_user.id,
             QuizSession.course_id == course_id,
             QuizSession.is_deleted == False,
-        )
+        ).order_by(QuizSession.create_time.asc())
     )
     all_quizzes = all_qr.scalars().all()
-    total_attempts = max(len(all_quizzes), 1)
+    total_attempts = len(all_quizzes)
     avg_score = sum(q.score for q in all_quizzes) / total_attempts if all_quizzes else 0
     avg_time = sum(q.time_spent for q in all_quizzes) / total_attempts if all_quizzes else 0
 
@@ -347,6 +452,69 @@ async def get_result(
         {"date": q.create_time.strftime("%Y-%m-%d") if q.create_time else "", "score": q.score}
         for q in all_quizzes[-10:]
     ]
+
+    # --- 数据驱动诊断：基于 QuizAnswer JOIN QuizQuestion 按 knowledge_point 聚合 ---
+    kp_stats: dict[str, dict] = {}
+    if all_quizzes:
+        qa_result = await db.execute(
+            select(QuizAnswer, QuizQuestion.knowledge_point)
+            .join(QuizQuestion, QuizAnswer.question_id == QuizQuestion.id)
+            .where(
+                QuizAnswer.quiz_id.in_([q.id for q in all_quizzes]),
+                QuizAnswer.is_deleted == False,
+            )
+        )
+        for answer, knowledge_point in qa_result.all():
+            kp = knowledge_point or "未分类"
+            if kp not in kp_stats:
+                kp_stats[kp] = {"total": 0, "incorrect": 0}
+            kp_stats[kp]["total"] += 1
+            if not answer.is_correct:
+                kp_stats[kp]["incorrect"] += 1
+
+    weak_points = []
+    for kp, stats in kp_stats.items():
+        if stats["total"] > 0:
+            error_rate = round(stats["incorrect"] / stats["total"], 2)
+            weak_points.append({"name": kp, "error_rate": error_rate})
+    weak_points.sort(key=lambda x: x["error_rate"], reverse=True)
+    weak_points = weak_points[:5]
+
+    if not all_quizzes:
+        summary = "暂无练习数据，完成练习后可查看诊断结果。"
+    elif avg_score >= 90:
+        summary = f"整体表现优秀，平均正确率 {avg_score:.1f}%。"
+    elif avg_score >= 70:
+        summary = f"整体表现良好，平均正确率 {avg_score:.1f}%。建议关注薄弱知识点。"
+    elif avg_score >= 50:
+        summary = f"平均正确率 {avg_score:.1f}%，还有提升空间，建议加强薄弱知识点练习。"
+    else:
+        summary = f"平均正确率 {avg_score:.1f}%，基础薄弱，建议从基础知识开始系统复习。"
+
+    suggestions = []
+    if weak_points:
+        top_weak_names = [wp["name"] for wp in weak_points[:3]]
+        suggestions.append(f"重点复习：{'、'.join(top_weak_names)}")
+        suggestions.append("建议针对错题对应的知识点多做专项练习")
+        if avg_score < 70:
+            suggestions.append("回顾相关章节的基础概念和例题")
+    elif all_quizzes:
+        suggestions.append("继续保持当前学习节奏")
+        suggestions.append("尝试挑战更高难度的练习")
+    else:
+        suggestions.append("进行一次练习以生成个性化诊断")
+
+    # 诊断：纯课程级聚合，summary / weak_points / suggestions 全部基于该课程全部答题记录
+    # 注：latest.diagnosis_json（后台 _run_diagnosis_background 写入）不混入此接口，
+    #     未来单独做 per-session 诊断端点时再使用
+    diagnosis_data = None
+    if all_quizzes:
+        diagnosis_data = {
+            "summary": summary,
+            "weak_points": weak_points,
+            "suggestions": suggestions,
+        }
+    # --- 诊断计算结束 ---
 
     latest_data = None
     if latest:
@@ -369,11 +537,7 @@ async def get_result(
                 "avg_time_spent": int(avg_time),
                 "score_trend": score_trend,
             },
-            "diagnosis": {
-                "summary": "根据练习情况，你的整体表现良好。",
-                "weak_points": [{"name": "进阶概念", "error_rate": 0.6}],
-                "suggestions": ["多练习进阶应用题", "回顾基础定义"],
-            },
+            "diagnosis": diagnosis_data,
         },
     }
 

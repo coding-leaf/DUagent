@@ -117,6 +117,19 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-02` `quiz 收口：bug 修复 + 集成测试加强`
+  - Bug 修复（`app/api/v1/quiz.py`，3 处）：
+    - `total_attempts`：修复无答题记录时虚报 1（改为 `len(all_quizzes)`）
+    - `score_trend`：`all_qr` 查询补 `.order_by(QuizSession.create_time.asc())`，消除排序不确定性
+    - 非法 `question_id`：改为 `is_correct=False` + 不创建 QuizAnswer 记录 + 不进入 Agent 诊断 payload（消除 FK 违规 + 保守评分语义 + Agent payload 对齐）
+  - 集成测试加强（`test_quiz_async.py`）：
+    - 新增/增强测试场景：QuizAnswer 落库验证、多选题评分、非法 question_id 容错、空答案、无效 quiz_id → 404、统计计算精度、score_trend 排序、diagnosis 字段形状检查
+    - 增强后台任务触发验证、Agent payload questions/answers 对齐验证、diagnosis 字段无额外键验证
+    - diagnosis 仍保持当前数据驱动实现；LLM vs 数据驱动、何时返回 null 的前端契约语义继续作为待确认项，不以本轮测试判定为已收口
+  - quiz submit/result 继续保持「半完成」
+- `2026-06-02` `补充联调启动建议（Docker + 本地服务）`
+  - 更新根目录 `联调测试指导.md`：明确本地联调依赖的推荐启动顺序为 `docker run MySQL` → `docker run Qdrant` → 本地启动 `Agent Service` → 本地启动 `Backend`
+  - 补充现成命令：`docker run` / `docker start` / MySQL 连通性检查 / Qdrant health 检查，避免后端因 `localhost:3306` 不可达直接启动失败
 - `2026-06-01` `接口盘点初始化`
   - 新增接口实现情况总览
   - 明确后续每次改接口时必须同步更新最近状态
@@ -273,15 +286,24 @@ _（当前无占位接口）_
 
 ### 优先级高
 
+- refresh 真异步任务持久化/恢复
+  - `POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 当前在返回 `202` 后使用进程内 `asyncio.create_task`
+  - worker reload / 进程重启 / crash 后，已接受任务可能永久停留在 `AsyncTask.status = processing`
+  - 需要补持久化执行机制，或至少补启动恢复 / stuck task 回收策略
 - `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`
   - 继续保持课程级语义单一
-  - 补更扎实的 MySQL 集成测试，验证后台诊断写入与前端读取行为一致
+  - ✅ MySQL 集成测试已补齐（71/71 通过）
+  - 待确认：diagnosis 契约语义（LLM vs 数据驱动、何时 null），需与前端/Agent 侧对齐后单独收口
 - `POST /api/v1/webhooks/agent`
   - failed 回调当前已验证 `error_code present`
   - 若继续收口，可补精确 `error_code` 值校验与更多异常负例
 
 ### 优先级中
 
+- RAG 检索 embeddings 400 排查与修复
+  - `retrieve_course_knowledge` / `retrieve_user_memory` 当前会在 embeddings 阶段返回 `400 Bad Request`
+  - 导致课程知识库检索和用户记忆检索一起降级为“暂时不可用”，Agent 实际退化为无检索直答
+  - 需要排查 embedding model / 请求体 / 权限配置，并补失败响应日志
 - `POST /api/v1/profile/initialize`
   - 当前可用，但仍属于半完成
   - 若后续继续稳定化，可补更多重复提交和异常路径测试
@@ -304,7 +326,8 @@ _（当前无占位接口）_
 1. **Webhook 鉴权需要两端同步配置**（`webhooks.py` + Agent Service `resources.py`）：Backend 已实现 `X-Webhook-Secret` 校验，Agent Service 的 `_post_json_payload` 已同步发送该 header。两端需配置一致的 `WEBHOOK_SECRET` 环境变量，未配时鉴权自动跳过（向后兼容）。
 2. **`GET /learning-path/nodes/{id}/resources` chapter_materials 依赖 KG 预置数据**：`chapter_materials` 从 `CourseKnowledgeGraph.nodes` JSON 中提取 `chapter` 字段并匹配 `Resource.chapter`。若 KG 未预置完整数据，该字段将返回空数组（不影响其他字段）。
 3. **`POST /quiz/submit` 诊断链路已后台异步化，GET /quiz/result 保持纯课程级**：后台 `_run_diagnosis_background` 通过 `asyncio.create_task` 调用 Agent `/assessment/evaluate`，使用 UPDATE 写入 `QuizSession.diagnosis_json`（无 DB 读依赖，消除竞态）。`GET /quiz/result` 的 summary/weak_points/suggestions 全部基于课程级聚合计算，不混合 `diagnosis_json`（该字段保留供未来 per-session 诊断端点使用）。
-4. **当前「真实完成」的异步链路以前端可见语义和任务状态闭环为准**：`asyncio.create_task` 后台协程满足 202 + task_id 轮询的契约，但进程重启后未完成的后台任务不会自动续跑（无持久化队列/外部 worker）。这不影响单次请求-轮询链路正确性，但长期来看若需生产级可靠性，可考虑引入独立 worker 或持久化任务队列。
+4. **refresh 真异步任务当前不具备持久性**：`POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 在返回 `202` 后使用进程内 `asyncio.create_task` 执行 Agent 调用和写库。若 worker reload、服务重启或进程 crash，后台协程会丢失，已创建的 `AsyncTask` 可能永久停留在 `processing`。当前联调测试覆盖了正常成功/失败与锁语义，但尚未解决任务持久化/恢复问题。
+5. **RAG 检索当前可能整体失效**：日志显示 `retrieve_course_knowledge` 和 `retrieve_user_memory` 在调用 embeddings 接口时返回 `HTTP 400 Bad Request`，随后工具层统一降级为“课程知识检索暂时不可用 / 用户记忆检索暂时不可用”。这意味着问题发生在查询向量生成阶段，而非 Qdrant 查询阶段；当前 Tutor 可继续回答，但实际退化为无课程知识、无用户记忆的直答模式。
 
 ## 联调命令
 
@@ -337,9 +360,22 @@ cd agent_service && ./.venv/bin/pytest -q
 | `test_refresh_async.py` | refresh 真异步链路集成测试 | profile / evaluation / learning-path 的 202、processing、completed、DB 写入、Agent error |
 | `test_resources_async.py` | resources 异步链路集成测试 | generate 202 + task_type、webhook completed/failed、幂等、鉴权、task_type mismatch |
 | `test_lock_async.py` | refresh 锁相关集成测试 | 三条 refresh 的 lock_timeout + profile/refresh 锁竞争一致性 |
+| `test_quiz_async.py` | quiz 链路集成测试 | submit 评分 + 落库、多选题评分、非法 question_id 容错、Agent payload 对齐、空答案、404、后台诊断写入/失败、result 聚合 + 统计 + trend 排序 + diagnosis 字段形状检查 |
 
 ## 最近验证
 
+- `2026-06-02`
+  - `python test_quiz_async.py`
+  - 结果：`71/71` 通过
+  - 覆盖：
+    - `POST /api/v1/quiz/submit`
+    - `GET /api/v1/quiz/result`
+  - 断言：
+    - submit 评分 + QuizAnswer 落库 + 多选题评分（完整/排序无关/不完整/全错）
+    - 非法 question_id → `is_correct=False` + 无 FK 违规 + 仍计入 total_count + 不进入 Agent 诊断 payload
+    - 空答案 → 200 score=0、无效 quiz_id → 404
+    - 后台 Agent 诊断写入 + Agent 失败容错 + 后台任务触发验证
+    - result 统计计算（total_attempts/avg_score/avg_time）+ score_trend 排序 + diagnosis 字段形状检查（无额外键；语义仍待确认）
 - `2026-06-02`
   - `python test_refresh_async.py`
   - 结果：`24/24` 通过

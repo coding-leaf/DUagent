@@ -754,7 +754,8 @@
         "summary": "路径节点资源推送",
         "description": "根据当前路径节点关联的知识点查询资源和练习。若资源不足，返回空数组，不视为错误。",
         "parameters": [
-          { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } }
+          { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "course_id", "in": "query", "required": true, "schema": { "type": "string" }, "description": "课程ID，用于限定资源查询范围" }
         ],
         "responses": {
           "200": {

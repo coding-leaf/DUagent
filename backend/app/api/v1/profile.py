@@ -1,12 +1,14 @@
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.db.session import async_session_factory
 from app.models.course import CourseEnrollment
 from app.models.others import AsyncTask, Evaluation, UserProfile, Resource
 from app.models.quiz import QuizSession
@@ -209,13 +211,131 @@ async def _assemble_profile_payload(user_id: str, course_id: str, db: AsyncSessi
     return payload
 
 
+async def _run_profile_refresh_background(
+    task_id: str,
+    user_id: str,
+    course_id: str,
+    payload: dict,
+) -> None:
+    """后台异步执行 Agent /profile/generate 并写入 UserProfile。
+
+    设计约束：
+    - 只接收原始标量 + 预组装 payload，不接收请求级 ORM 实例或 db session。
+    - 内部自行创建独立 DB session，Agent 调用、锁、写库、task 更新全部在后台完成。
+    - 失败时记录结构化日志 + 落 task failed，不抛异常。
+    """
+    async with async_session_factory() as db:
+        try:
+            data = await agent_client.post_json("/agent/v1/profile/generate", payload)
+
+            lock_name = f"profile_{user_id}_{course_id}"
+            lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
+            if not lock_result.scalar():
+                raise RuntimeError(f"GET_LOCK timeout: {lock_name}")
+
+            try:
+                now = datetime.now(timezone.utc)
+                old_result = await db.execute(
+                    select(UserProfile).where(
+                        UserProfile.user_id == user_id,
+                        UserProfile.course_id == course_id,
+                        UserProfile.is_deleted == False,
+                    )
+                )
+                for old in old_result.scalars().all():
+                    old.is_deleted = True
+
+                pf = UserProfile(
+                    user_id=user_id,
+                    course_id=course_id,
+                    generated_at=now,
+                )
+                db.add(pf)
+                await db.flush()
+
+                pf.modal_preference = data.get("modal_preference", {})
+                gs = data.get("guidance_level_suggestion") or {}
+                pf.guidance_level_current = gs.get("recommended", "L2")
+                pf.guidance_level_updated_at = now
+                pf.knowledge_coordinates = data.get("knowledge_coordinates", [])
+                pf.cognitive_blindspots = data.get("cognitive_blindspots", [])
+                pf.drive_intent = data.get("drive_intent", {})
+                pf.discipline_badge = data.get("discipline_badge", {})
+
+                await db.execute(
+                    update(AsyncTask)
+                    .where(AsyncTask.id == task_id)
+                    .values(
+                        status="completed",
+                        result={"updated_at": now.isoformat()},
+                        completed_at=now,
+                    )
+                )
+                await db.commit()
+                logger.info(
+                    "Profile refresh background: completed task_id=%s user_id=%s course_id=%s",
+                    task_id, user_id, course_id,
+                )
+            finally:
+                try:
+                    await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+                except Exception:
+                    logger.warning(
+                        "Profile refresh background: RELEASE_LOCK failed lock_name=%s", lock_name,
+                    )
+        except AgentServiceError as e:
+            await db.rollback()
+            await db.execute(
+                update(AsyncTask)
+                .where(AsyncTask.id == task_id)
+                .values(
+                    status="failed",
+                    error_code=str(e.agent_code or "agent_error"),
+                    error_message=e.message,
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+            logger.error(
+                "Profile refresh background: AgentServiceError task_id=%s user_id=%s course_id=%s "
+                "status=%s agent_code=%s message=%s",
+                task_id, user_id, course_id, e.status_code, e.agent_code, e.message,
+            )
+        except Exception as e:
+            await db.rollback()
+            error_msg = str(e)[:500]
+            # 保留锁竞争语义（同步版稳定化阶段已定义的 error_code）
+            is_lock_timeout = "GET_LOCK timeout" in str(e)
+            error_code = "lock_timeout" if is_lock_timeout else "internal_error"
+            await db.execute(
+                update(AsyncTask)
+                .where(AsyncTask.id == task_id)
+                .values(
+                    status="failed",
+                    error_code=error_code,
+                    error_message=error_msg,
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+            logger.error(
+                "Profile refresh background: unexpected error task_id=%s user_id=%s course_id=%s "
+                "type=%s message=%s",
+                task_id, user_id, course_id, type(e).__name__, error_msg,
+            )
+
+
 @router.post("/refresh")
 async def refresh_profile(
     course_id: str = Query(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """请求刷新用户画像。调用 Agent /profile/generate，成功后 upsert UserProfile。"""
+    """请求刷新用户画像（真异步）。
+
+    请求内：权限校验 → payload 组装 → 创建 AsyncTask → commit → 返回 202。
+    后台 _run_profile_refresh_background：Agent 调用 → 锁 → 写库 → task 完成/失败。
+    """
     # 权限校验
     if current_user.role == "student":
         check = await db.execute(
@@ -231,7 +351,10 @@ async def refresh_profile(
                 detail={"code": 40300, "message": "未加入该课程", "data": None},
             )
 
-    # 创建任务
+    # 组装 payload（需要 DB，在请求内完成）
+    payload = await _assemble_profile_payload(current_user.id, course_id, db)
+
+    # 创建任务并立即提交
     task = AsyncTask(
         task_type="profile_refresh",
         status="processing",
@@ -243,80 +366,13 @@ async def refresh_profile(
     await db.refresh(task)
     await db.commit()
 
-    try:
-        # 组装请求 payload
-        payload = await _assemble_profile_payload(current_user.id, course_id, db)
-        # 调用 Agent Service
-        data = await agent_client.post_json("/agent/v1/profile/generate", payload)
-
-        # 并发幂等：GET_LOCK 序列化同用户+课程的写入
-        lock_name = await _acquire_profile_lock(db, current_user.id, course_id)
-
-        try:
-            now = datetime.now(timezone.utc)
-            old_result = await db.execute(
-                select(UserProfile).where(
-                    UserProfile.user_id == current_user.id,
-                    UserProfile.course_id == course_id,
-                    UserProfile.is_deleted == False,
-                )
-            )
-            for old in old_result.scalars().all():
-                old.is_deleted = True
-
-            pf = UserProfile(
-                user_id=current_user.id,
-                course_id=course_id,
-                generated_at=now,
-            )
-            db.add(pf)
-            await db.flush()
-
-            pf.modal_preference = data.get("modal_preference", {})
-            gs = data.get("guidance_level_suggestion") or {}
-            pf.guidance_level_current = gs.get("recommended", "L2")
-            pf.guidance_level_updated_at = now
-            pf.knowledge_coordinates = data.get("knowledge_coordinates", [])
-            pf.cognitive_blindspots = data.get("cognitive_blindspots", [])
-            pf.drive_intent = data.get("drive_intent", {})
-            pf.discipline_badge = data.get("discipline_badge", {})
-
-            # 任务完成态与画像写入在同一临界区内
-            task.status = "completed"
-            task.result = {"updated_at": now.isoformat()}
-            task.completed_at = now
-            await db.flush()
-            await db.commit()
-        finally:
-            await _release_profile_lock(db, lock_name)
-    except AgentServiceError as e:
-        await db.rollback()
-        task.status = "failed"
-        task.error_code = str(e.agent_code or "agent_error")
-        task.error_message = e.message
-        task.completed_at = datetime.now(timezone.utc)
-        await db.flush()
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        task.status = "failed"
-        task.error_code = "lock_timeout"
-        task.error_message = "服务繁忙，请稍后重试"
-        task.completed_at = datetime.now(timezone.utc)
-        await db.flush()
-        await db.commit()
-    except Exception as e:
-        await db.rollback()
-        logger.error(
-            "Profile refresh: unexpected error user_id=%s course_id=%s type=%s message=%s",
-            current_user.id, course_id, type(e).__name__, str(e),
-        )
-        task.status = "failed"
-        task.error_code = "internal_error"
-        task.error_message = str(e)[:500]
-        task.completed_at = datetime.now(timezone.utc)
-        await db.flush()
-        await db.commit()
+    # 后台异步执行 Agent 调用 + 写库（不复用请求级 db/ORM）
+    asyncio.create_task(_run_profile_refresh_background(
+        task_id=task.id,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+    ))
 
     return JSONResponse(
         status_code=202,

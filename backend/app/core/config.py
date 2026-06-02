@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Captcha
     CAPTCHA_EXPIRE_SECONDS: int = 300
 
+    # Webhook auth — shared secret between Backend and Agent Service
+    WEBHOOK_SECRET: str = ""
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 

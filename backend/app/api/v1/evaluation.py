@@ -1,12 +1,14 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.db.session import async_session_factory
 from app.models.course import CourseEnrollment
 from app.models.others import AsyncTask, Evaluation, Resource
 from app.models.quiz import QuizSession
@@ -131,13 +133,123 @@ async def _assemble_evaluation_payload(
     return payload
 
 
+async def _run_evaluation_refresh_background(
+    task_id: str,
+    user_id: str,
+    course_id: str,
+    payload: dict,
+) -> None:
+    """后台异步执行 Agent /evaluation/generate 并写入 Evaluation。
+
+    设计约束：
+    - 只接收原始标量 + 预组装 payload，不接收请求级 ORM 实例或 db session。
+    - 内部自行创建独立 DB session，Agent 调用、锁、写库、task 更新全部在后台完成。
+    - 失败时记录结构化日志 + 落 task failed，不抛异常。
+    """
+    async with async_session_factory() as db:
+        try:
+            data = await agent_client.post_json("/agent/v1/evaluation/generate", payload)
+
+            lock_name = f"evaluation_{user_id}_{course_id}"
+            lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
+            if not lock_result.scalar():
+                raise RuntimeError(f"GET_LOCK timeout: {lock_name}")
+
+            try:
+                now = datetime.now(timezone.utc)
+                old_result = await db.execute(
+                    select(Evaluation).where(
+                        Evaluation.user_id == user_id,
+                        Evaluation.course_id == course_id,
+                        Evaluation.is_deleted == False,
+                    )
+                )
+                for old in old_result.scalars().all():
+                    old.is_deleted = True
+
+                ev = Evaluation(
+                    user_id=user_id,
+                    course_id=course_id,
+                    progress_table=data.get("progress_table", _empty_table),
+                    mastery_table=data.get("mastery_table", _empty_table),
+                    resource_usage_table=data.get("resource_usage_table", _empty_table),
+                    summary_text=data.get("summary_text", ""),
+                    generated_at=now,
+                )
+                db.add(ev)
+
+                await db.execute(
+                    update(AsyncTask)
+                    .where(AsyncTask.id == task_id)
+                    .values(
+                        status="completed",
+                        result={"updated_at": now.isoformat()},
+                        completed_at=now,
+                    )
+                )
+                await db.commit()
+                logger.info(
+                    "Evaluation refresh background: completed task_id=%s user_id=%s course_id=%s",
+                    task_id, user_id, course_id,
+                )
+            finally:
+                try:
+                    await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+                except Exception:
+                    logger.warning(
+                        "Evaluation refresh background: RELEASE_LOCK failed lock_name=%s", lock_name,
+                    )
+        except AgentServiceError as e:
+            await db.rollback()
+            await db.execute(
+                update(AsyncTask)
+                .where(AsyncTask.id == task_id)
+                .values(
+                    status="failed",
+                    error_code=str(e.agent_code or "agent_error"),
+                    error_message=e.message,
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+            logger.error(
+                "Evaluation refresh background: AgentServiceError task_id=%s user_id=%s course_id=%s "
+                "status=%s agent_code=%s message=%s",
+                task_id, user_id, course_id, e.status_code, e.agent_code, e.message,
+            )
+        except Exception as e:
+            await db.rollback()
+            error_msg = str(e)[:500]
+            is_lock_timeout = "GET_LOCK timeout" in str(e)
+            await db.execute(
+                update(AsyncTask)
+                .where(AsyncTask.id == task_id)
+                .values(
+                    status="failed",
+                    error_code="lock_timeout" if is_lock_timeout else "internal_error",
+                    error_message=error_msg,
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+            logger.error(
+                "Evaluation refresh background: unexpected error task_id=%s user_id=%s course_id=%s "
+                "type=%s message=%s",
+                task_id, user_id, course_id, type(e).__name__, error_msg,
+            )
+
+
 @router.post("/refresh")
 async def refresh_evaluation(
     course_id: str = Query(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """请求刷新学习效果评估。调用 Agent /evaluation/generate，成功后写入 Evaluation。"""
+    """请求刷新学习效果评估（真异步）。
+
+    请求内：权限校验 → payload 组装 → 创建 AsyncTask → commit → 返回 202。
+    后台 _run_evaluation_refresh_background：Agent 调用 → 锁 → 写库 → task 完成/失败。
+    """
     if current_user.role == "student":
         check = await db.execute(
             select(CourseEnrollment).where(
@@ -152,6 +264,10 @@ async def refresh_evaluation(
                 detail={"code": 40300, "message": "未加入该课程", "data": None},
             )
 
+    # 组装 payload（需要 DB，在请求内完成）
+    payload = await _assemble_evaluation_payload(current_user.id, course_id, db)
+
+    # 创建任务并立即提交
     task = AsyncTask(
         task_type="evaluation_refresh",
         status="processing",
@@ -163,71 +279,13 @@ async def refresh_evaluation(
     await db.refresh(task)
     await db.commit()
 
-    try:
-        payload = await _assemble_evaluation_payload(current_user.id, course_id, db)
-        data = await agent_client.post_json("/agent/v1/evaluation/generate", payload)
-
-        lock_name = await _acquire_evaluation_lock(db, current_user.id, course_id)
-        try:
-            now = datetime.now(timezone.utc)
-            old_result = await db.execute(
-                select(Evaluation).where(
-                    Evaluation.user_id == current_user.id,
-                    Evaluation.course_id == course_id,
-                    Evaluation.is_deleted == False,
-                )
-            )
-            for old in old_result.scalars().all():
-                old.is_deleted = True
-
-            ev = Evaluation(
-                user_id=current_user.id,
-                course_id=course_id,
-                progress_table=data.get("progress_table", _empty_table),
-                mastery_table=data.get("mastery_table", _empty_table),
-                resource_usage_table=data.get("resource_usage_table", _empty_table),
-                summary_text=data.get("summary_text", ""),
-                generated_at=now,
-            )
-            db.add(ev)
-
-            task.status = "completed"
-            task.result = {"updated_at": now.isoformat()}
-            task.completed_at = now
-            await db.flush()
-            await db.commit()
-        finally:
-            await _release_evaluation_lock(db, lock_name)
-    except AgentServiceError as e:
-        await db.rollback()
-        task.status = "failed"
-        task.error_code = str(e.agent_code or "agent_error")
-        task.error_message = e.message
-        task.completed_at = datetime.now(timezone.utc)
-        await db.flush()
-        await db.commit()
-    except HTTPException as e:
-        await db.rollback()
-        if task.status == "processing":
-            task.status = "failed"
-            task.error_code = "lock_timeout"
-            task.error_message = "服务繁忙，请稍后重试"
-            task.completed_at = datetime.now(timezone.utc)
-            await db.flush()
-            await db.commit()
-        raise e
-    except Exception as e:
-        await db.rollback()
-        logger.error(
-            "Evaluation refresh: unexpected error user_id=%s course_id=%s type=%s message=%s",
-            current_user.id, course_id, type(e).__name__, str(e),
-        )
-        task.status = "failed"
-        task.error_code = "internal_error"
-        task.error_message = str(e)[:500]
-        task.completed_at = datetime.now(timezone.utc)
-        await db.flush()
-        await db.commit()
+    # 后台异步执行 Agent 调用 + 写库
+    asyncio.create_task(_run_evaluation_refresh_background(
+        task_id=task.id,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+    ))
 
     return JSONResponse(
         status_code=202,

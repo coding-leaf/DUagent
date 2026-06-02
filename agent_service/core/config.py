@@ -40,5 +40,8 @@ class Settings(BaseSettings):
     LLM_STRUCTURED_OUTPUT_ENABLED: bool = False
     LLM_JSON_MODE_ENABLED: bool | None = None
 
+    # Webhook auth — shared secret with Backend
+    WEBHOOK_SECRET: str = ""
+
 
 settings = Settings()

@@ -7,6 +7,7 @@ from typing import Any
 from urllib import request as urllib_request
 
 from agent_service.core.ai import ChatMessage, get_ai_providers
+from agent_service.core.config import settings
 from agent_service.core.logging import get_logger
 from agent_service.prompts.resources import (
     build_resource_system_prompt,
@@ -194,12 +195,17 @@ def _supports_multi_agent_chat_provider(chat_provider) -> bool:
     )
 
 
-def build_resource_generation_failed_payload(request: ResourceGenerateRequest, error_message: str) -> WebhookPayload:
+def build_resource_generation_failed_payload(
+    request: ResourceGenerateRequest,
+    error_message: str,
+    error_code: str = "agent_error",
+) -> WebhookPayload:
     """Build a failed webhook payload using the documented task status fields."""
     return {
         "task_id": request.task_id,
         "task_type": TASK_TYPE,
         "status": "failed",
+        "error_code": error_code,
         "error_message": error_message,
     }
 
@@ -384,10 +390,13 @@ def _str_or(value, default: str) -> str:
 
 def _post_json_payload(webhook_url: str, payload: WebhookPayload) -> None:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if settings.WEBHOOK_SECRET:
+        headers["X-Webhook-Secret"] = settings.WEBHOOK_SECRET
     request = urllib_request.Request(
         webhook_url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib_request.urlopen(request, timeout=10) as response:

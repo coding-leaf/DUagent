@@ -142,7 +142,12 @@ _（当前无占位接口）_
   - `POST /api/v1/evaluation/refresh`：MySQL `GET_LOCK` 序列化写入；task 创建后显式 `commit()`；try 覆盖 Agent 调用 + DB 写入完整路径；成功路径 `commit → release lock`；AgentServiceError、锁超时和通用 Exception 分支都会先 `rollback()` 再落 `task failed`，不再残留 `processing`
   - `POST /api/v1/learning-path/refresh`：同 evaluation 模式；额外修复 GET `/learning-path` 的 `scalar_one_or_none()` → `.order_by(desc).first()`（修复多次 refresh 后 GET 500 崩溃）；`_assemble_learning_path_payload` 中 UserProfile / CourseKnowledgeGraph 读取同改 `.first()`；`get_node_resources` 中 CourseKnowledgeGraph 同改 `.first()`；锁超时同样会落 `task failed`
 - `2026-06-02` `补充 backend 实际工作流程`
-  - 新增“Backend 工作流程”章节，固定约束：先审契约、一次只推进一个接口、修改前先给 4 项分析、优先收口异常路径和任务状态闭环、改完立即同步 `WORKFLOW.md`
+  - 新增"Backend 工作流程"章节，固定约束：先审契约、一次只推进一个接口、修改前先给 4 项分析、优先收口异常路径和任务状态闭环、改完立即同步 `WORKFLOW.md`
+- `2026-06-02` `resources/generate + webhooks/agent 集成测试`
+  - 新增 `test_resources_async.py`（7 条用例）：generate 202 + task_type、webhook completed 落库、failed 落 error_code、幂等（不重复插 resources）、X-Webhook-Secret 鉴权通过+拒绝、task_type mismatch 400。全部使用 MySQL + AsyncMock
+- `2026-06-02` `refresh 锁相关集成测试补齐`
+  - 新增 `test_lock_async.py`：真实 MySQL `GET_LOCK` 超时路径集成测试，覆盖 `POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 三条链路。验证锁被占用时仍返回 `202 + task_id`，后台 task 最终 `failed`，且 `error_code = "lock_timeout"`
+  - 补充 `profile/refresh` 锁竞争测试：并发两个 refresh 请求，两个 task 都进入终态，最终仅保留一条 `is_deleted = false` 的活跃记录，验证锁 + 软删 + 插入 + commit 后释放锁的写入一致性
 
 ## 文件用途
 
@@ -268,21 +273,21 @@ _（当前无占位接口）_
 
 ### 优先级高
 
-- `POST /api/v1/resources/generate` + `POST /api/v1/webhooks/agent`
-  - 补更完整的集成测试
-  - 重点验证 webhook 幂等、失败语义、鉴权配置行为
-- 锁相关集成测试
-  - 为 refresh 链路补 `lock_timeout / 锁竞争` 的 MySQL 集成测试
-  - 当前主链路已测，锁相关仍未形成稳定自动化验证
+- `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`
+  - 继续保持课程级语义单一
+  - 补更扎实的 MySQL 集成测试，验证后台诊断写入与前端读取行为一致
+- `POST /api/v1/webhooks/agent`
+  - failed 回调当前已验证 `error_code present`
+  - 若继续收口，可补精确 `error_code` 值校验与更多异常负例
 
 ### 优先级中
 
-- `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`
-  - 继续保持课程级语义单一
-  - 不再混合 latest session 诊断和课程级聚合结果
 - `POST /api/v1/profile/initialize`
   - 当前可用，但仍属于半完成
   - 若后续继续稳定化，可补更多重复提交和异常路径测试
+- `POST /api/v1/resources/generate` + `POST /api/v1/webhooks/agent`
+  - 当前主链路和鉴权/幂等已覆盖
+  - 若后续继续加强，可补更高并发 webhook 场景验证
 
 ### 等待更后续再考虑
 
@@ -330,6 +335,8 @@ cd agent_service && ./.venv/bin/pytest -q
 | `test_agent_integration.py` | Agent 联调集成测试 | 6 个 Agent 接口 + Webhook + 权限 + 降级 |
 | `test_api.py` | 全量冒烟测试 | 所有端点的基础可用性 |
 | `test_refresh_async.py` | refresh 真异步链路集成测试 | profile / evaluation / learning-path 的 202、processing、completed、DB 写入、Agent error |
+| `test_resources_async.py` | resources 异步链路集成测试 | generate 202 + task_type、webhook completed/failed、幂等、鉴权、task_type mismatch |
+| `test_lock_async.py` | refresh 锁相关集成测试 | 三条 refresh 的 lock_timeout + profile/refresh 锁竞争一致性 |
 
 ## 最近验证
 
@@ -346,9 +353,32 @@ cd agent_service && ./.venv/bin/pytest -q
     - 最终 `completed`
     - SQL 写入成功
     - Agent error -> `failed + error_code`
+- `2026-06-02`
+  - `python test_resources_async.py`
+  - 结果：`15/15` 通过
+  - 覆盖：
+    - `POST /api/v1/resources/generate`
+    - `POST /api/v1/webhooks/agent`
+  - 断言：
+    - `202 + task_id + task_type=resource_generation`
+    - webhook completed -> `200` + task `completed` + resources 写入
+    - webhook failed -> `200` + task `failed` + `error_code present`
+    - 重复 completed 回调不重复写入 resources
+    - `X-Webhook-Secret` 正确时业务正常处理，错误时 `401`
+    - `task_type mismatch -> 400`
+- `2026-06-02`
+  - `python test_lock_async.py`
+  - 结果：`16/16` 通过
+  - 覆盖：
+    - `POST /api/v1/profile/refresh`
+    - `POST /api/v1/evaluation/refresh`
+    - `POST /api/v1/learning-path/refresh`
+  - 断言：
+    - 真实 MySQL `GET_LOCK` 超时路径 -> `task failed + error_code=lock_timeout`
+    - `profile/refresh` 并发两个请求 -> 两个 task 都终态，且只保留一条 `is_deleted = false` 活跃记录
 
 ## 下一步建议
 
-1. 先补 `resources/generate + webhooks/agent` 的 MySQL 集成测试，优先验证回调幂等和失败语义。
-2. 单独设计 refresh 链路的 `lock_timeout / 锁竞争` 自动化测试，不和主链路测试混在一起。
-3. 维持 quiz 当前课程级语义，不再扩接口，优先做稳定性验证而不是加新功能。
+1. 先集中收口 `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`，补 MySQL 集成测试，验证课程级语义、后台诊断写入和前端读取行为一致。
+2. 若继续加强 resources/webhook 链路，优先补 `failed` 分支精确 `error_code` 校验和更高并发 webhook 场景测试。
+3. 暂不继续扩展新的 Agent 能力或持久化队列，先把现有已接通链路的测试和语义完全收口。

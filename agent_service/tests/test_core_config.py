@@ -37,6 +37,7 @@ def test_settings_exposes_ai_provider_defaults() -> None:
     assert settings.EMBEDDING_BASE_URL is None
     assert settings.EMBEDDING_API_KEY is None
     assert settings.EMBEDDING_DIMENSION == 1024
+    assert settings.EMBEDDING_REQUEST_DIMENSIONS_ENABLED is False
     assert settings.RERANKER_PROVIDER == "none"
     assert settings.RERANKER_MODEL is None
     assert settings.RERANKER_BASE_URL is None

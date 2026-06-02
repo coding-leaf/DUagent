@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     EMBEDDING_BASE_URL: str | None = None
     EMBEDDING_API_KEY: str | None = None
     EMBEDDING_DIMENSION: int = 1024
+    EMBEDDING_REQUEST_DIMENSIONS_ENABLED: bool = False
     RERANKER_PROVIDER: str = "none"
     RERANKER_MODEL: str | None = None
     RERANKER_BASE_URL: str | None = None

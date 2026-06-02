@@ -140,11 +140,16 @@ def _build_embedding_provider_from_settings() -> EmbeddingProvider | None:
     ):
         from agentscope.embedding import OpenAITextEmbedding
 
+        request_dimensions = (
+            getattr(settings, "EMBEDDING_DIMENSION", 1024)
+            if getattr(settings, "EMBEDDING_REQUEST_DIMENSIONS_ENABLED", False)
+            else None
+        )
         return AgentScopeEmbeddingProvider(
             OpenAITextEmbedding(
                 api_key=settings.EMBEDDING_API_KEY,
                 model_name=settings.EMBEDDING_MODEL,
-                dimensions=getattr(settings, "EMBEDDING_DIMENSION", 1024),
+                dimensions=request_dimensions,
                 base_url=settings.EMBEDDING_BASE_URL,
             )
         )

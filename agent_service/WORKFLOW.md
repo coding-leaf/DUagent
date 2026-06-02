@@ -56,6 +56,7 @@
 
 ## 最近验证
 
+- `./.venv/bin/pytest tests/test_ai_providers.py tests/test_core_config.py -q`：**19 passed**（SiliconFlow embedding 请求维度开关；默认不向 embeddings API 发送有效 dimensions，保留 `EMBEDDING_DIMENSION` 给 Qdrant collection）
 - `./.venv/bin/pytest -q`：**418 passed**（统一 agent_trace 日志后全量回归）
 - `./.venv/bin/pytest tests/test_tutoring_agent.py tests/test_assessment_agent.py tests/test_resources_workflow.py -q`：**133 passed**（tutoring / assessment / resources trace 与主链路回归）
 - `./.venv/bin/pytest tests/test_openapi_alignment.py tests/test_schema_contracts.py -q`：**49 passed**（OpenAPI + schema/import contract）

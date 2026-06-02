@@ -6,6 +6,7 @@ from agent_service.agents.tutoring_tools import build_tutoring_toolkit
 from agent_service.core.ai import ChatProvider, EmbeddingProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
+from agent_service.prompts.tutoring import build_strategy_context_text
 from agent_service.schemas.tutoring import TutoringChatRequest
 
 logger = get_logger(__name__)
@@ -17,6 +18,7 @@ async def generate_tutoring_react_response(
     chat_provider: ChatProvider,
     embedding_provider: EmbeddingProvider | None = None,
     vector_store=None,
+    strategy=None,
 ) -> TutoringModelResponse | None:
     """用 ReActAgent 生成辅导回答，输入请求、检索上下文、chat/embedding provider、vector store，输出模型响应或 None（降级）。
 
@@ -26,7 +28,7 @@ async def generate_tutoring_react_response(
     if not (hasattr(chat_provider, "model") and hasattr(chat_provider, "formatter")):
         return None
     try:
-        user_message = _build_react_user_message(request, retrieval_context)
+        user_message = _build_react_user_message(request, retrieval_context, strategy=strategy)
         toolkit = None
         if embedding_provider is not None and vector_store is not None:
             toolkit = build_tutoring_toolkit(
@@ -53,6 +55,7 @@ async def generate_tutoring_react_response(
 def _build_react_user_message(
     request: TutoringChatRequest,
     retrieval_context: TutoringRetrievalContext,
+    strategy=None,
 ) -> str:
     profile = request.user_profile
     context_lines = [
@@ -65,6 +68,8 @@ def _build_react_user_message(
         f"长期记忆：{_join_items(retrieval_context.user_memory_facts)}",
         f"课程知识：{_join_items(retrieval_context.course_knowledge_chunks)}",
     ]
+    if strategy is not None:
+        context_lines.append(build_strategy_context_text(strategy))
     parts = ["\n".join(context_lines)]
     for msg in request.recent_messages:
         parts.append(f"[{msg.role}] {msg.content}")

@@ -255,9 +255,13 @@ def test_compress_memory_with_llm_succeeds_with_all_fact_types() -> None:
     })
 
     class FakeChatProvider:
-        async def complete(self, messages):
+        def __init__(self):
+            self.calls = []
+        async def complete(self, messages, **kwargs):
+            self.calls.append((messages, kwargs))
             return response
 
+    provider = FakeChatProvider()
     result = asyncio.run(
         memory.compress_memory_with_llm(
             _build_request(
@@ -267,11 +271,12 @@ def test_compress_memory_with_llm_succeeds_with_all_fact_types() -> None:
                     MemoryMessage(role="user", content="能画个图给我看吗？", timestamp="2026-05-22T10:01:00Z"),
                 ],
             ),
-            chat_provider=FakeChatProvider(),
+            chat_provider=provider,
         )
     )
 
     assert result is not None
+    assert "structured_model" in provider.calls[0][1]
     assert result.new_summary is not None
     assert len(result.extracted_facts) == 3
     blind = [f for f in result.extracted_facts if f.fact_type == "blind_spot"]
@@ -286,6 +291,46 @@ def test_compress_memory_with_llm_succeeds_with_all_fact_types() -> None:
     assert len(cognitive) == 1
     assert cognitive[0].knowledge_point is None
     assert cognitive[0].confidence == 0.7
+
+
+def test_compress_memory_with_llm_structured_model_fails_and_falls_back() -> None:
+    import json as _json
+    memory = importlib.import_module("agent_service.agents.memory")
+
+    response = _json.dumps({
+        "new_summary": "用户偏好视频学习。",
+        "extracted_facts": [
+            {"content": "用户偏好视频学习", "fact_type": "cognitive_preference", "knowledge_point": None, "confidence": 0.8},
+        ],
+    })
+
+    class FakeChatProvider:
+        def __init__(self):
+            self.calls = []
+        async def complete(self, messages, **kwargs):
+            self.calls.append((messages, kwargs))
+            if "structured_model" in kwargs:
+                raise RuntimeError("structured_model failed")
+            return f"```json\n{response}\n```"
+
+    provider = FakeChatProvider()
+    result = asyncio.run(
+        memory.compress_memory_with_llm(
+            _build_request(
+                old_summary=None,
+                messages=[
+                    MemoryMessage(role="user", content="我更喜欢看视频学", timestamp="2026-05-22T10:00:00Z"),
+                ],
+            ),
+            chat_provider=provider,
+        )
+    )
+
+    assert result is not None
+    assert len(provider.calls) == 2
+    assert "structured_model" in provider.calls[0][1]
+    assert "structured_model" not in provider.calls[1][1]
+    assert result.new_summary == "用户偏好视频学习。"
 
 
 def test_compress_memory_with_llm_returns_none_when_chat_provider_is_none() -> None:
@@ -310,7 +355,7 @@ def test_compress_memory_with_llm_returns_none_on_invalid_json() -> None:
     memory = importlib.import_module("agent_service.agents.memory")
 
     class FakeChatProvider:
-        async def complete(self, messages):
+        async def complete(self, messages, **kwargs):
             return "not valid json at all"
 
     result = asyncio.run(
@@ -332,7 +377,7 @@ def test_compress_memory_with_llm_returns_none_on_exception(caplog) -> None:
     memory = importlib.import_module("agent_service.agents.memory")
 
     class FailingChatProvider:
-        async def complete(self, messages):
+        async def complete(self, messages, **kwargs):
             raise RuntimeError("LLM unavailable")
 
     with caplog.at_level("WARNING", logger="agent_service.agents.memory"):
@@ -409,7 +454,9 @@ def test_compress_memory_with_llm_handles_markdown_wrapped_json() -> None:
     wrapped = f"```json\n{payload}\n```"
 
     class FakeChatProvider:
-        async def complete(self, messages):
+        async def complete(self, messages, **kwargs):
+            if "structured_model" in kwargs:
+                raise RuntimeError("structured_model failed")
             return wrapped
 
     result = asyncio.run(

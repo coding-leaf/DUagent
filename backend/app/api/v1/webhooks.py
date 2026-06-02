@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, verify_webhook_secret
 from app.models.others import AsyncTask, Resource
 from app.schemas.webhook import AgentWebhookRequest
 
@@ -16,8 +16,9 @@ router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 async def agent_webhook(
     req: AgentWebhookRequest,
     db: AsyncSession = Depends(get_db),
+    _webhook_auth: None = Depends(verify_webhook_secret),
 ):
-    """Agent 异步任务回调入口。v1 无额外鉴权，部署时通过内网限制访问。
+    """Agent 异步任务回调入口。通过 X-Webhook-Secret header 鉴权。
 
     处理规则：
     - 校验 task_id 存在且 task_type 一致。
@@ -67,10 +68,13 @@ async def agent_webhook(
                 )
                 db.add(resource)
 
+        task.status = "completed"
         task.result = req.result
         task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
     elif req.status == "failed":
+        task.status = "failed"
+        task.error_code = req.error_code or ""
         task.error_message = req.error_message or ""
         task.completed_at = datetime.now(timezone.utc)
     await db.flush()

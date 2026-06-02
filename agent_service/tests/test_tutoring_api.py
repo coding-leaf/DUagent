@@ -322,6 +322,53 @@ def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> Non
     assert events[3]["suggestion"] == "先确认外层函数，再检查内层导数。"
 
 
+def test_tutoring_chat_streams_diagram_event_when_present(monkeypatch) -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="讲讲树",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["二叉树"]),
+    )
+
+    class FakeProviders:
+        def __init__(self) -> None:
+            self.embedding = object()
+            self.chat = self
+
+        async def complete(self, messages):
+            return (
+                '{"model_text":"这是树", "knowledge_points":["二叉树"], "suggestion":"看图", "diagram":"graph TD; A-->B;"}'
+            )
+
+    async def fake_build_context(request_arg, embedding_provider, vector_store=None, limit=3):
+        return TutoringRetrievalContext(
+            user_id="user-1",
+            course_id="course-1",
+            query_text="讲讲树",
+            include_course_knowledge=True,
+            knowledge_points=["二叉树"],
+            user_memory_facts=[],
+            course_knowledge_chunks=[],
+        )
+
+    monkeypatch.setattr(
+        "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
+        fake_build_context,
+    )
+    _patch_providers(monkeypatch, FakeProviders())
+
+    response = asyncio.run(tutoring_api.tutoring_chat(request))
+    body = asyncio.run(_consume_response_body(response.body_iterator))
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+
+    assert [event["type"] for event in events] == ["chunk", "chunk", "diagram", "knowledge_points", "suggestion", "done"]
+    assert events[2]["data"] == "graph TD; A-->B;"
+
+
 def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
     request = TutoringChatRequest(
         user_id="user-1",

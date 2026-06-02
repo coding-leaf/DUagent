@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from agent_service.core.ai import ChatMessage
+from agent_service.core.ai import ChatMessage, get_ai_providers
 from agent_service.core.config import settings
 from agent_service.memory.qdrant_store import build_qdrant_store
 
@@ -31,7 +31,17 @@ async def build_readiness_report(
     embedding_provider=None,
     reranker_provider=None,
     qdrant_probe: Callable[[], bool] | None = None,
+    provider_factory=None,
 ) -> dict[str, Any]:
+    if chat_provider is None or embedding_provider is None or reranker_provider is None:
+        factory = provider_factory
+        if factory is None and settings_obj is settings:
+            factory = get_ai_providers
+        if factory is not None:
+            providers = factory()
+            chat_provider = chat_provider or providers.chat
+            embedding_provider = embedding_provider or providers.embedding
+            reranker_provider = reranker_provider or providers.reranker
     checks = {
         "llm": await _check_llm(settings_obj, chat_provider, live),
         "embedding": await _check_embedding(settings_obj, embedding_provider, live),
@@ -112,6 +122,14 @@ def _check_qdrant(settings_obj, qdrant_probe: Callable[[], bool] | None) -> dict
 
 
 def _probe_qdrant() -> bool:
-    store = build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
-    store.get_client()
+    from qdrant_client import QdrantClient
+
+    if settings.QDRANT_URL:
+        client_kwargs = {"url": settings.QDRANT_URL}
+        if settings.QDRANT_API_KEY:
+            client_kwargs["api_key"] = settings.QDRANT_API_KEY
+        client = QdrantClient(**client_kwargs)
+    else:
+        client = QdrantClient(path=settings.QDRANT_PATH)
+    client.get_collections()
     return True

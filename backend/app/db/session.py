@@ -3,7 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.db.base import Base
 
-engine = create_async_engine(settings.resolved_database_url, echo=settings.DEBUG, pool_size=10, max_overflow=20)
+_engine_kwargs: dict = {"echo": settings.DEBUG}
+if "mysql" in settings.resolved_database_url:
+    _engine_kwargs.update(pool_size=10, max_overflow=20)
+engine = create_async_engine(settings.resolved_database_url, **_engine_kwargs)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

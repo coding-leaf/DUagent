@@ -1,6 +1,9 @@
 import json
 import re
 from collections import defaultdict
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 from agent_service.core.ai import ChatMessage
 from agent_service.core.logging import get_logger
@@ -31,6 +34,15 @@ def generate_profile_data(request: ProfileGenerateRequest) -> ProfileData:
     )
 
 
+class _ProfileStructuredOutput(BaseModel):
+    modal_preference: dict[str, Any] = Field(default_factory=dict)
+    guidance_level_suggestion: dict[str, Any] = Field(default_factory=dict)
+    knowledge_coordinates: list[dict[str, Any]] = Field(default_factory=list)
+    cognitive_blindspots: list[dict[str, Any]] = Field(default_factory=list)
+    drive_intent: dict[str, Any] = Field(default_factory=dict)
+    discipline_badge: dict[str, Any] = Field(default_factory=dict)
+
+
 async def generate_profile_with_llm(
     request: ProfileGenerateRequest,
     rule_result: ProfileData,
@@ -43,11 +55,23 @@ async def generate_profile_with_llm(
     """
     if chat_provider is None:
         return None
+    messages = [
+        ChatMessage(role="system", content=build_profile_system_prompt()),
+        ChatMessage(role="user", content=build_profile_user_message(request, rule_result)),
+    ]
+    # Phase 1C: 优先尝试 AgentScope structured_model
     try:
-        messages = [
-            ChatMessage(role="system", content=build_profile_system_prompt()),
-            ChatMessage(role="user", content=build_profile_user_message(request, rule_result)),
-        ]
+        raw = await chat_provider.complete(messages, structured_model=_ProfileStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                result = _enrich_profile_result(request, rule_result, data)
+                logger.info("LLM structured_model succeeded: %s", "profile/generate")
+                return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
         data = _parse_profile_json(raw)
         result = _enrich_profile_result(request, rule_result, data)

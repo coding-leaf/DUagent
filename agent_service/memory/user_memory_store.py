@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import hashlib
+import uuid
 from collections.abc import Sequence
 from datetime import datetime, UTC
 
@@ -9,6 +9,9 @@ from qdrant_client.models import PointStruct
 from agent_service.core.config import settings
 from agent_service.memory.qdrant_store import build_qdrant_store
 from agent_service.schemas.memory import ExtractedFact
+
+
+_MEMORY_POINT_NAMESPACE = uuid.UUID("b9cf7a5f-0f29-4bd1-9232-6d7ef79bb6c1")
 
 
 class QdrantUserMemoryStore:
@@ -27,7 +30,12 @@ class QdrantUserMemoryStore:
     ) -> None:
         points = [
             PointStruct(
-                id=_fact_point_id(user_id=user_id, conversation_id=conversation_id, fact_text=fact.content or ""),
+                id=build_memory_point_id(
+                    user_id,
+                    conversation_id,
+                    fact.fact_type or "",
+                    fact.content or "",
+                ),
                 vector=list(vector),
                 payload=_fact_payload(
                     user_id=user_id,
@@ -54,9 +62,10 @@ def _build_qdrant_store():
     return build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
 
 
-def _fact_point_id(*, user_id: str, conversation_id: str, fact_text: str) -> str:
-    raw = f"{user_id}::{conversation_id}::{fact_text}".encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
+def build_memory_point_id(user_id: str, conversation_id: str, fact_type: str, content: str) -> str:
+    """Return a stable UUID point id for a user memory fact."""
+    raw = f"{user_id}|{conversation_id}|{fact_type}|{content}"
+    return str(uuid.uuid5(_MEMORY_POINT_NAMESPACE, raw))
 
 
 def _fact_payload(*, user_id: str, conversation_id: str, fact: ExtractedFact) -> dict[str, object]:

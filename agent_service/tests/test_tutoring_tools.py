@@ -37,6 +37,15 @@ def _result(text: str) -> VectorSearchResult:
     return VectorSearchResult(text=text, score=0.9, payload={"content": text})
 
 
+def _assert_text_block(result, expected_text: str | None = None) -> None:
+    assert result.content
+    block = result.content[0]
+    assert block["type"] == "text"
+    assert "text" in block
+    if expected_text is not None:
+        assert block["text"] == expected_text
+
+
 # ── Tests ──────────────────────────────────────────────────────────
 
 
@@ -52,7 +61,7 @@ def test_global_scope_returns_no_knowledge_message() -> None:
     tool_func = _get_registered_tool(toolkit, "retrieve_course_knowledge")
     result = asyncio.run(tool_func("线性表是什么？"))
 
-    assert result.content == [{"text": "当前对话无指定课程知识库。"}]
+    _assert_text_block(result, "当前对话无指定课程知识库。")
     assert provider.calls == []
 
 
@@ -75,6 +84,7 @@ def test_search_returns_chunks_joined_with_separator() -> None:
 
     result = asyncio.run(tool_func("线性表"))
 
+    _assert_text_block(result)
     text = result.content[0]["text"]
     assert "线性表是相同类型数据元素的有限序列" in text
     assert "---" in text
@@ -97,7 +107,7 @@ def test_empty_search_returns_empty_message() -> None:
 
     result = asyncio.run(tool_func("不存在的内容"))
 
-    assert result.content == [{"text": "未找到相关课程知识。"}]
+    _assert_text_block(result, "未找到相关课程知识。")
 
 
 def test_embedding_failure_returns_error_message() -> None:
@@ -113,7 +123,7 @@ def test_embedding_failure_returns_error_message() -> None:
 
     result = asyncio.run(tool_func("线性表"))
 
-    assert result.content == [{"text": "课程知识检索暂时不可用。"}]
+    _assert_text_block(result, "课程知识检索暂时不可用。")
 
 
 def test_tool_schemas_expose_only_query() -> None:
@@ -163,6 +173,7 @@ def test_retrieve_user_memory_returns_facts() -> None:
 
     result = asyncio.run(tool_func("二叉树"))
 
+    _assert_text_block(result)
     text = result.content[0]["text"]
     assert "二叉树遍历" in text
     assert "---" in text
@@ -188,7 +199,7 @@ def test_retrieve_user_memory_empty_user_id_skips_embedding() -> None:
 
     result = asyncio.run(tool_func("二叉树"))
 
-    assert result.content == [{"text": "当前对话无用户记忆数据。"}]
+    _assert_text_block(result, "当前对话无用户记忆数据。")
     assert provider.calls == []
     assert store.calls == []
 
@@ -208,7 +219,7 @@ def test_retrieve_user_memory_empty_results() -> None:
 
     result = asyncio.run(tool_func("不存在的内容"))
 
-    assert result.content == [{"text": "未找到相关用户记忆。"}]
+    _assert_text_block(result, "未找到相关用户记忆。")
 
 
 def test_retrieve_user_memory_embedding_failure() -> None:
@@ -225,7 +236,7 @@ def test_retrieve_user_memory_embedding_failure() -> None:
 
     result = asyncio.run(tool_func("二叉树"))
 
-    assert result.content == [{"text": "用户记忆检索暂时不可用。"}]
+    _assert_text_block(result, "用户记忆检索暂时不可用。")
 
 
 def test_retrieve_user_memory_truncates_long_chunks() -> None:
@@ -244,6 +255,7 @@ def test_retrieve_user_memory_truncates_long_chunks() -> None:
 
     result = asyncio.run(tool_func("test"))
 
+    _assert_text_block(result)
     text = result.content[0]["text"]
     assert len(text) <= 503  # 500 chars + "..."
     assert text.endswith("...")

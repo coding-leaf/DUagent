@@ -67,12 +67,31 @@ def test_get_ai_providers_builds_agentscope_embedding_from_settings(monkeypatch)
         EMBEDDING_API_KEY = "test-key"
         EMBEDDING_MODEL = "BAAI/bge-m3"
         EMBEDDING_DIMENSION = 1024
+        EMBEDDING_REQUEST_DIMENSIONS_ENABLED = False
 
     monkeypatch.setattr(ai_module, "settings", FakeSettings())
 
     providers = get_ai_providers()
 
     assert isinstance(providers.embedding, AgentScopeEmbeddingProvider)
+    assert providers.embedding.model.dimensions is None
+
+
+def test_get_ai_providers_can_send_embedding_dimensions_when_enabled(monkeypatch) -> None:
+    class FakeSettings:
+        EMBEDDING_PROVIDER = "agentscope_openai"
+        EMBEDDING_BASE_URL = "https://api.openai.com/v1"
+        EMBEDDING_API_KEY = "test-key"
+        EMBEDDING_MODEL = "text-embedding-3-large"
+        EMBEDDING_DIMENSION = 1024
+        EMBEDDING_REQUEST_DIMENSIONS_ENABLED = True
+
+    monkeypatch.setattr(ai_module, "settings", FakeSettings())
+
+    providers = get_ai_providers()
+
+    assert isinstance(providers.embedding, AgentScopeEmbeddingProvider)
+    assert providers.embedding.model.dimensions == 1024
 
 
 def test_agentscope_embedding_provider_wraps_embedding_model() -> None:

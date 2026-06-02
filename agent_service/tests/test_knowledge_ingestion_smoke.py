@@ -144,6 +144,40 @@ def test_ingestion_is_idempotent(tmp_path: Path) -> None:
     assert result2.chunk_count == 0
 
 
+def test_ingestion_batches_embedding_requests(tmp_path: Path) -> None:
+    from agent_service.memory.course_knowledge_ingestion import CourseKnowledgeChunk
+    from agent_service.tools.ingest_knowledge import ingest_course_knowledge
+
+    async def load_many_chunks(root, ingested_files=None):
+        return [
+            CourseKnowledgeChunk(
+                course_id=root.name,
+                source_file=f"chunk-{index}.md",
+                source_type="course_material",
+                content=f"第 {index} 个知识切片",
+                doc_id="doc-1",
+                chunk_id=index,
+                total_chunks=65,
+            )
+            for index in range(65)
+        ]
+
+    course_dir = tmp_path / "batch-course"
+    course_dir.mkdir()
+    embedding = FakeEmbeddingProvider()
+    qdrant_store = FakeQdrantStore(client=FakeQdrantClient())
+
+    result = asyncio.run(ingest_course_knowledge(
+        course_dir,
+        embedding_provider=embedding,
+        store=qdrant_store,
+        chunk_loader=load_many_chunks,
+    ))
+
+    assert result.chunk_count == 65
+    assert [len(call) for call in embedding.calls] == [64, 1]
+
+
 def test_retrieval_results_format_suitable_for_rag() -> None:
     from agent_service.memory.vector_store import VectorSearchResult
 

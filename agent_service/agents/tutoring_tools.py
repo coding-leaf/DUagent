@@ -22,7 +22,7 @@ def build_tutoring_toolkit(
     async def retrieve_course_knowledge(query: str) -> ToolResponse:
         """检索课程知识库中与查询相关的内容。"""
         if not course_id:
-            return ToolResponse(content=[{"text": "当前对话无指定课程知识库。"}])
+            return _text_response("当前对话无指定课程知识库。")
         try:
             vectors = await embedding_provider.embed_texts([query])
             results = await vector_store.search_course_knowledge(
@@ -30,27 +30,27 @@ def build_tutoring_toolkit(
             )
             logger.info("RAG retrieved %d chunks for course_id=%s", len(results) if results else 0, course_id)
             if not results:
-                return ToolResponse(content=[{"text": "未找到相关课程知识。"}])
+                return _text_response("未找到相关课程知识。")
             text = "\n---\n".join(r.text for r in results if r.text)
-            return ToolResponse(content=[{"text": text}])
+            return _text_response(text)
         except Exception:
-            return ToolResponse(content=[{"text": "课程知识检索暂时不可用。"}])
+            return _text_response("课程知识检索暂时不可用。")
 
     async def retrieve_user_memory(query: str) -> ToolResponse:
         """检索用户长期记忆中与查询相关的事实。"""
         if not user_id:
-            return ToolResponse(content=[{"text": "当前对话无用户记忆数据。"}])
+            return _text_response("当前对话无用户记忆数据。")
         try:
             vectors = await embedding_provider.embed_texts([query])
             results = await vector_store.search_user_memory(
                 user_id, vectors[0], limit=limit
             )
             if not results:
-                return ToolResponse(content=[{"text": "未找到相关用户记忆。"}])
+                return _text_response("未找到相关用户记忆。")
             text = "\n---\n".join(_truncate_chunk(r.text, 500) for r in results if r.text)
-            return ToolResponse(content=[{"text": text}])
+            return _text_response(text)
         except Exception:
-            return ToolResponse(content=[{"text": "用户记忆检索暂时不可用。"}])
+            return _text_response("用户记忆检索暂时不可用。")
 
     toolkit = Toolkit()
     toolkit.register_tool_function(
@@ -70,3 +70,7 @@ def _truncate_chunk(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "..."
+
+
+def _text_response(text: str) -> ToolResponse:
+    return ToolResponse(content=[{"type": "text", "text": text}])

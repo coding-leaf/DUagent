@@ -2,6 +2,8 @@ import json
 import re
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from agent_service.core.ai import ChatMessage
 from agent_service.core.logging import get_logger
 from agent_service.prompts.learning_path import (
@@ -141,6 +143,11 @@ _MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
 _VALID_STATUSES = {"completed", "in_progress", "pending", "recommended"}
 
 
+class _LearningPathStructuredOutput(BaseModel):
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
+    current_position: dict[str, Any] = Field(default_factory=dict)
+
+
 async def generate_learning_path_with_llm(
     request: LearningPathGenerateRequest,
     chat_provider,
@@ -158,6 +165,35 @@ async def generate_learning_path_with_llm(
             ChatMessage(role="system", content=build_learning_path_system_prompt()),
             ChatMessage(role="user", content=build_learning_path_user_message(request)),
         ]
+        
+        # Phase 1D: 优先尝试 AgentScope structured_model
+        try:
+            raw = await chat_provider.complete(messages, structured_model=_LearningPathStructuredOutput)
+            if raw:
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    llm_nodes = data.get("nodes")
+                    if not isinstance(llm_nodes, list):
+                        raise ValueError("LLM output missing nodes array")
+                    coerced_nodes = _coerce_path_nodes(llm_nodes, nodes_by_id)
+                    edges = [
+                        LearningPathEdge.model_validate({"from": e.from_, "to": e.to})
+                        for e in request.knowledge_graph.edges
+                    ]
+                    current_position = _coerce_current_position(
+                        data.get("current_position"),
+                        {n.id for n in coerced_nodes if n.id},
+                        nodes_by_id,
+                        coerced_nodes,
+                    )
+                    logger.info("LLM structured_model succeeded: %s", "learning-path/generate")
+                    return LearningPathData(
+                        nodes=coerced_nodes, edges=edges, current_position=current_position
+                    )
+        except Exception:
+            logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+
+        # Fallback: 原有 markdown fence JSON 解析
         raw = await chat_provider.complete(messages)
         data = _parse_learning_path_json(raw)
         llm_nodes = data.get("nodes")

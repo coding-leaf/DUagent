@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import patch
 
 from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
+from agent_service.agents.tutoring_strategy import TutoringStrategy
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
 
@@ -75,6 +76,42 @@ def test_react_response_returns_parsed_model_on_valid_json() -> None:
     assert len(fake_agent.calls) == 1
     assert "链式法则怎么用？" in fake_agent.calls[0]
     assert "用户容易把内外层顺序写反" in fake_agent.calls[0]
+
+
+def test_react_response_includes_strategy_context_in_user_message() -> None:
+    request = _make_request()
+    context = _make_context()
+    strategy = TutoringStrategy(
+        strategy="worked_example",
+        instruction="用相似例题或完整过程解释，再回到学生当前问题。",
+        focus_points=["链式法则", "复合函数"],
+        source="rule",
+    )
+
+    class FakeProvider:
+        model = object()
+        formatter = object()
+
+    fake_agent = FakeReactAgent(
+        output='{"model_text":"先看一个相似例题。","knowledge_points":["链式法则"],"suggestion":"再做一题。"}'
+    )
+
+    with patch(
+        "agent_service.agents.tutoring_react_flow.TutorReActAgent",
+        return_value=fake_agent,
+    ):
+        asyncio.run(
+            generate_tutoring_react_response(
+                request,
+                context,
+                FakeProvider(),
+                strategy=strategy,
+            )
+        )
+
+    assert "辅导策略：worked_example" in fake_agent.calls[0]
+    assert "策略要求：用相似例题或完整过程解释，再回到学生当前问题。" in fake_agent.calls[0]
+    assert "策略关注点：链式法则、复合函数" in fake_agent.calls[0]
 
 
 def test_react_response_returns_none_for_non_agentscope_provider() -> None:

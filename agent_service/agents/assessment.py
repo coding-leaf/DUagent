@@ -1,6 +1,9 @@
 import json
 import re
 from collections import Counter
+from typing import Any
+
+from pydantic import BaseModel
 
 from agent_service.core.ai import ChatMessage
 from agent_service.core.logging import get_logger
@@ -76,11 +79,23 @@ async def evaluate_assessment_with_llm(
     """
     if chat_provider is None:
         return None
+    messages = [
+        ChatMessage(role="system", content=build_evaluate_system_prompt()),
+        ChatMessage(role="user", content=build_evaluate_user_message(request, rule_result)),
+    ]
+    # Phase 1B: 优先尝试 AgentScope structured_model
     try:
-        messages = [
-            ChatMessage(role="system", content=build_evaluate_system_prompt()),
-            ChatMessage(role="user", content=build_evaluate_user_message(request, rule_result)),
-        ]
+        raw = await chat_provider.complete(messages, structured_model=_EvalDiagnosisStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                result = _enrich_rule_result(rule_result, data)
+                logger.info("LLM structured_model succeeded: %s", "assessment/evaluate")
+                return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
         data = _parse_evaluate_json(raw)
         result = _enrich_rule_result(rule_result, data)
@@ -335,6 +350,7 @@ def _truncate_chunk(text: str, max_chars: int) -> str:
 async def build_question_generation_knowledge_context(
     request: QuestionGenerateRequest,
     embedding_provider,
+    vector_store=None,
     limit: int = 5,
 ) -> str:
     """检索课程知识库中与出题请求相关的内容，输入请求和 embedding provider，输出拼接后的上下文字符串。
@@ -346,15 +362,16 @@ async def build_question_generation_knowledge_context(
     if not request.course_id:
         return ""
     try:
-        from agent_service.memory.vector_store import QdrantVectorStore
+        if vector_store is None:
+            from agent_service.memory.vector_store import QdrantVectorStore
+            vector_store = QdrantVectorStore()
 
         query_text = " ".join(
             part for part in [request.knowledge_point, request.chapter, request.course_id]
             if part
         )
         vectors = await embedding_provider.embed_texts([query_text])
-        store = QdrantVectorStore()
-        results = await store.search_course_knowledge(
+        results = await vector_store.search_course_knowledge(
             request.course_id, vectors[0], limit=limit
         )
         if not results:
@@ -373,6 +390,48 @@ async def build_question_generation_knowledge_context(
         return ""
 
 
+class _QuestionItem(BaseModel):
+    """structured_model 用单题 schema，字段对齐 GeneratedQuestion。"""
+
+    type: str = ""
+    content: str = ""
+    options: list[dict[str, Any]] = []
+    answer: str = ""
+    explanation: str = ""
+    chapter: str | None = None
+    knowledge_point: str = ""
+    difficulty: str | None = None
+
+
+class _QuestionListStructuredOutput(BaseModel):
+    """AgentScope structured_model 用题目列表 schema。"""
+
+    questions: list[_QuestionItem] = []
+
+
+class _EvalPerQuestionItem(BaseModel):
+    """evaluate structured_model 用单题增强 schema。"""
+
+    question_id: str = ""
+    explanation: str = ""
+    related_knowledge_points: list[str] = []
+
+
+class _EvalDiagnosisItem(BaseModel):
+    """evaluate structured_model 用诊断 schema。"""
+
+    summary: str = ""
+    weak_points: list[dict[str, Any]] = []
+    suggestions: list[str] = []
+
+
+class _EvalDiagnosisStructuredOutput(BaseModel):
+    """AgentScope structured_model 用 evaluate 结果 schema。"""
+
+    per_question_results: list[_EvalPerQuestionItem] = []
+    diagnosis: _EvalDiagnosisItem = _EvalDiagnosisItem()
+
+
 async def generate_questions_with_llm(
     request: QuestionGenerateRequest,
     chat_provider,
@@ -381,35 +440,65 @@ async def generate_questions_with_llm(
     """尝试用 LLM 生成题目，输入请求、chat provider 和可选的 RAG 上下文，输出 GeneratedQuestion 列表或 None（降级）。"""
     if chat_provider is None:
         return None
-    try:
-        messages = [
-            ChatMessage(role="system", content=build_question_generation_system_prompt()),
-            ChatMessage(
-                role="user",
-                content=build_question_generation_user_message(
-                    request, course_knowledge_context=course_knowledge_context
-                ),
+    messages = [
+        ChatMessage(role="system", content=build_question_generation_system_prompt()),
+        ChatMessage(
+            role="user",
+            content=build_question_generation_user_message(
+                request, course_knowledge_context=course_knowledge_context
             ),
-        ]
+        ),
+    ]
+    # Phase 0: 优先尝试 AgentScope structured_model
+    try:
+        raw = await chat_provider.complete(messages, structured_model=_QuestionListStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            items = data.get("questions", [])
+            if isinstance(items, list) and len(items) > 0:
+                result = _coerce_questions(items)
+                if result:
+                    logger.info("LLM structured_model succeeded: %s", "assessment/generate-questions")
+                    return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
-        parsed = _parse_question_json(raw)
+        parsed = _parse_question_payload(raw)
         result = _coerce_questions(parsed)
-        logger.info("LLM generation succeeded: %s", "assessment/generate-questions")
-        return result
+        if result:
+            logger.info("LLM generation succeeded: %s", "assessment/generate-questions")
+            return result
+        logger.warning("LLM question generation resulted in empty list, falling back to skeleton")
+        return None
     except Exception:
         logger.warning("LLM question generation failed, falling back to skeleton", exc_info=True)
         return None
 
 
-def _parse_question_json(raw: str) -> list[dict]:
+def _parse_question_payload(raw: str) -> list[dict]:
     text = raw.strip()
     match = _MARKDOWN_FENCE_PATTERN.search(text)
     if match:
         text = match.group(1).strip()
-    data = json.loads(text)
-    if not isinstance(data, list):
-        raise ValueError("LLM output is not a JSON array")
-    return [item for item in data if isinstance(item, dict)]
+    try:
+        data = json.loads(text)
+    except Exception:
+        raise ValueError("LLM output is not valid JSON")
+
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    elif isinstance(data, dict):
+        questions = data.get("questions")
+        if isinstance(questions, list):
+            return [item for item in questions if isinstance(item, dict)]
+    raise ValueError("LLM output does not match expected JSON array or object with 'questions' array")
+
+
+def _parse_question_json(raw: str) -> list[dict]:
+    # 兼容遗留调用，内部转调统一下沉方法
+    return _parse_question_payload(raw)
 
 
 def _coerce_questions(items: list[dict]) -> list[GeneratedQuestion]:
@@ -418,18 +507,21 @@ def _coerce_questions(items: list[dict]) -> list[GeneratedQuestion]:
         content = item.get("content")
         if not isinstance(content, str) or not content.strip():
             continue
-        questions.append(
-            GeneratedQuestion(
-                type=item.get("type", "single_choice"),
-                content=content.strip(),
-                options=_coerce_options(item.get("options")),
-                answer=item.get("answer", ""),
-                explanation=str(item.get("explanation", "")),
-                chapter=item.get("chapter"),
-                knowledge_point=str(item.get("knowledge_point", "")),
-                difficulty=item.get("difficulty"),
+        try:
+            questions.append(
+                GeneratedQuestion(
+                    type=item.get("type", "single_choice"),
+                    content=content.strip(),
+                    options=_coerce_options(item.get("options")),
+                    answer=item.get("answer", ""),
+                    explanation=str(item.get("explanation", "")),
+                    chapter=item.get("chapter"),
+                    knowledge_point=str(item.get("knowledge_point", "")),
+                    difficulty=item.get("difficulty"),
+                )
             )
-        )
+        except Exception:
+            logger.debug("Discarded invalid generated question: %s", item, exc_info=True)
     return questions
 
 
@@ -441,3 +533,118 @@ def _coerce_options(raw_options) -> list:
         if isinstance(opt, dict):
             result.append({"key": str(opt.get("key", "")), "text": str(opt.get("text", ""))})
     return result
+
+
+async def generate_questions_with_agent(
+    request: QuestionGenerateRequest,
+    providers=None,
+    vector_store=None,
+) -> list[GeneratedQuestion]:
+    """生成题目编排层入口：封装 AI Providers 初始化、RAG 注入、ReAct Agent 调度及全面降级链。"""
+    if providers is None:
+        from agent_service.core.ai import get_ai_providers
+        providers = get_ai_providers()
+
+    embedding_provider = getattr(providers, "embedding", None)
+    chat_provider = getattr(providers, "chat", None)
+    effective_vector_store = vector_store
+    if effective_vector_store is None and embedding_provider is not None and request.course_id:
+        try:
+            from agent_service.memory.vector_store import QdrantVectorStore
+            effective_vector_store = QdrantVectorStore()
+        except Exception:
+            logger.warning("Failed to create QdrantVectorStore for assessment generation", exc_info=True)
+
+    course_knowledge_context = await build_question_generation_knowledge_context(
+        request, embedding_provider, vector_store=effective_vector_store
+    )
+    retrieval_hit_count = _context_chunk_count(course_knowledge_context)
+
+    # Step B: 优先尝试 ReActAgent
+    if chat_provider and hasattr(chat_provider, "model") and hasattr(chat_provider, "formatter"):
+        from agent_service.agents.assessment_react import QuestionGeneratorReActAgent
+        from agent_service.agents.assessment_tools import build_assessment_toolkit
+
+        toolkit = build_assessment_toolkit(
+            course_id=request.course_id,
+            embedding_provider=embedding_provider,
+            vector_store=effective_vector_store,
+        )
+        react_agent = QuestionGeneratorReActAgent(
+            chat_model=chat_provider.model,
+            formatter=chat_provider.formatter,
+            toolkit=toolkit,
+        )
+        parsed = await react_agent.generate(
+            request, course_knowledge_context=course_knowledge_context
+        )
+        if parsed:
+            questions = _coerce_questions(parsed)
+            if questions:
+                from agent_service.agents.assessment_quality import review_generated_questions
+
+                quality_result = await review_generated_questions(
+                    request,
+                    questions,
+                    chat_provider=chat_provider,
+                    course_knowledge_context=course_knowledge_context,
+                )
+                if quality_result.accepted:
+                    logger.info("ReActAgent generation succeeded: assessment/generate-questions")
+                    logger.info(
+                        "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=react quality_gate=accepted fallback_path=none output_source=react",
+                        request.user_id,
+                        request.course_id,
+                        retrieval_hit_count,
+                    )
+                    return questions
+                else:
+                    logger.warning(
+                        "Assessment quality gate rejected ReAct questions; falling back to LLM path: gate=%s reasons=%s",
+                        quality_result.gate,
+                        quality_result.reasons,
+                    )
+
+    # LLM fallback
+    questions = await generate_questions_with_llm(
+        request, chat_provider, course_knowledge_context=course_knowledge_context
+    )
+    if questions:
+        from agent_service.agents.assessment_quality import review_generated_questions
+
+        quality_result = await review_generated_questions(
+            request,
+            questions,
+            chat_provider=chat_provider,
+            course_knowledge_context=course_knowledge_context,
+            include_basic_quality=False,
+        )
+        if quality_result.accepted:
+            logger.info(
+                "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=llm quality_gate=accepted fallback_path=llm output_source=llm",
+                request.user_id,
+                request.course_id,
+                retrieval_hit_count,
+            )
+            return questions
+        else:
+            logger.warning(
+                "Assessment quality gate rejected LLM questions; falling back to skeleton: gate=%s reasons=%s",
+                quality_result.gate,
+                quality_result.reasons,
+            )
+
+    # 规则骨架题 fallback
+    logger.info(
+        "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=rule quality_gate=not_applicable fallback_path=skeleton output_source=skeleton",
+        request.user_id,
+        request.course_id,
+        retrieval_hit_count,
+    )
+    return generate_questions_data(request).questions
+
+
+def _context_chunk_count(context: str | None) -> int:
+    if not context:
+        return 0
+    return len([chunk for chunk in context.split("\n---\n") if chunk.strip()])

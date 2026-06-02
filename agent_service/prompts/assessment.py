@@ -32,6 +32,26 @@ def build_question_generation_system_prompt() -> str:
     )
 
 
+def build_question_react_system_prompt() -> str:
+    return (
+        "你是 EDUagent 的专业出题助手。你的任务是根据用户的需求，生成高质量的结构化题目。\n"
+        "你必须遵循以下步骤执行：\n"
+        "1. 如果存在课程知识库，请先调用 retrieve_course_knowledge 工具，检索相关知识点的内容作为出题依据。\n"
+        "2. 根据获取的知识和用户的要求（题型、数量、难度、知识点等）生成题目。\n"
+        "3. 调用 validate_question_format 工具自检生成的题目 JSON 格式是否正确。\n"
+        "4. 只有在格式校验通过后，才将最终的题目数据输出。\n\n"
+        "题目格式要求：\n"
+        "- 输出必须是严格的 JSON 数组格式（不要用 markdown fence 包裹，也不要加任何其他文字）。\n"
+        "- 题型 type 必须为：single_choice / multi_choice / code / short_answer\n"
+        "- content 必须是完整的题目描述\n"
+        "- options 必须是数组，如果是选择题则为 [{\"key\": \"A\", \"text\": \"...\"}, ...]，非选择题为空数组 []\n"
+        "- answer 必须与题型一致：单选为 \"A\"，多选为 [\"A\", \"B\"]\n"
+        "- explanation 必须详细解释为什么选该答案\n"
+        "- chapter (章节名), knowledge_point (知识点), difficulty (easy/medium/hard) 也需要提供\n\n"
+        "请确保在最终输出时，仅包含该 JSON 数组，以便系统直接解析。"
+    )
+
+
 def build_question_generation_user_message(
     request: QuestionGenerateRequest,
     course_knowledge_context: str | None = None,
@@ -47,6 +67,74 @@ def build_question_generation_user_message(
     if course_knowledge_context:
         parts.append(f"\n课程参考资料（请基于以下课程内容出题）：\n{course_knowledge_context}")
     return "\n".join(parts)
+
+
+def build_question_critic_prompt(
+    request: QuestionGenerateRequest,
+    questions_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建出题质量 Critic 提示词，输入请求、题目 JSON 和课程上下文，输出 JSON 判定要求。"""
+    return (
+        "你是 EDUagent 的出题质量审查员。请只判断题目是否应被接受，不要改写题目。\n\n"
+        "审查标准：\n"
+        "- 题目必须贴合请求的知识点、章节、题型和难度\n"
+        "- 题干必须是完整学科问题，不能是占位模板或泛泛描述\n"
+        "- 选择题选项必须合理、有迷惑性，解析必须说明答案原因\n"
+        "- 如果提供课程参考资料，题目应优先基于资料中的概念或例题\n\n"
+        "请求：\n"
+        f"{build_question_generation_user_message(request, course_knowledge_context=course_knowledge_context)}\n\n"
+        "待审查题目 JSON：\n"
+        f"{questions_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )
+
+
+def build_knowledge_point_guard_prompt(
+    request: QuestionGenerateRequest,
+    questions_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建知识点贴合度审查提示词，输入请求和候选题 JSON，输出是否接受的 JSON 判定。"""
+    context = course_knowledge_context or "无"
+    return (
+        "你是 EDUagent 的知识点贴合度审查员。请只判断候选题是否应被接受，不要改写题目。\n\n"
+        "审查目标：\n"
+        "- 题目必须贴合请求中的 knowledge_point；若请求未给出 knowledge_point，则优先贴合个性化上下文 wrong_points\n"
+        "- 题目的 knowledge_point、content、explanation 应能体现目标知识点或同源概念\n"
+        "- 如果提供课程参考资料，题目应能对应资料中的概念、例题或知识点\n"
+        "- 没有明确目标知识点时，不要因为综合出题而拒绝\n\n"
+        "请求：\n"
+        f"{build_question_generation_user_message(request, course_knowledge_context=None)}\n\n"
+        "课程参考资料：\n"
+        f"{context}\n\n"
+        "候选题 JSON：\n"
+        f"{questions_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )
+
+
+def build_difficulty_balancer_prompt(
+    request: QuestionGenerateRequest,
+    questions_json: str,
+    course_knowledge_context: str | None = None,
+) -> str:
+    """构建难度贴合度审查提示词，输入请求和候选题 JSON，输出是否接受的 JSON 判定。"""
+    context = course_knowledge_context or "无"
+    return (
+        "你是 EDUagent 的题目难度审查员。请只判断候选题难度是否贴合请求，不要改写题目。\n\n"
+        "难度标准：\n"
+        "- easy：基础概念、定义识别、直接套用，不能要求综合证明或复杂推导\n"
+        "- medium：常规应用和分析，避免过浅的定义复述，也避免明显 hard 级综合推理\n"
+        "- hard：综合应用、跨概念推理、复杂场景分析，不能只是短定义或模板题\n\n"
+        "请求：\n"
+        f"{build_question_generation_user_message(request, course_knowledge_context=None)}\n\n"
+        "课程参考资料：\n"
+        f"{context}\n\n"
+        "候选题 JSON：\n"
+        f"{questions_json}\n\n"
+        "只输出 JSON 对象：{\"accepted\": true|false, \"reasons\": [\"...\"]}。"
+    )
 
 
 def _format_context(context: dict | None) -> str:

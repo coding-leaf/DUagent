@@ -50,6 +50,7 @@ async def _main_async() -> int:
     health.build_health_data = _build_smoke_health_data
 
     results: dict[str, bool] = {}
+    details: dict[str, dict] = {}
 
     # -- health -------------------------------------------------------
     try:
@@ -193,9 +194,16 @@ async def _main_async() -> int:
             ),
             BackgroundTasks(),
         )
-        results["resources/generate"] = response.code == 202 and response.data.task_id == "smoke-task"
+        accepted = response.code == 202 and response.data.task_id == "smoke-task"
+        workflow_detail = await _smoke_resources_multi_agent_path()
+        results["resources/generate"] = accepted and workflow_detail["status"] == "PASS"
+        details["resources/generate"] = {
+            "accepted": accepted,
+            **workflow_detail,
+        }
     except Exception:
         results["resources/generate"] = False
+        details["resources/generate"] = {"accepted": False, "path": "error"}
 
     # -- tutoring/chat SSE -------------------------------------------
     try:
@@ -222,6 +230,7 @@ async def _main_async() -> int:
             {
                 "status": "PASS" if all_pass else "FAIL",
                 "results": {key: "PASS" if value else "FAIL" for key, value in results.items()},
+                "details": details,
             },
             ensure_ascii=False,
             indent=2,
@@ -229,6 +238,34 @@ async def _main_async() -> int:
     )
 
     return 0 if all_pass else 1
+
+
+async def _smoke_resources_multi_agent_path() -> dict:
+    from agent_service.agents.resources_workflow import run_multi_agent_resource_workflow
+    from agent_service.schemas.resources import ResourceGenerateRequest
+    from agent_service.tools.smoke_resources_workflow import (
+        _FakeResourcesChatProvider,
+        _evaluate_payload,
+    )
+
+    chat = _FakeResourcesChatProvider()
+    payload = await run_multi_agent_resource_workflow(
+        ResourceGenerateRequest(
+            task_id="smoke-resources-workflow",
+            user_id="smoke",
+            course_id="smoke-course",
+            webhook_url="http://localhost:9999/webhook",
+            chapter="函数",
+            knowledge_point="一次函数",
+            resource_types=["document", "mindmap", "reading", "code"],
+        ),
+        chat,
+        embedding_provider=None,
+    )
+    detail = _evaluate_payload(payload)
+    detail["path"] = "multi_agent" if payload is not None else "fallback_required"
+    detail["llm_calls"] = chat.calls
+    return detail
 
 
 if __name__ == "__main__":

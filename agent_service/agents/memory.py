@@ -1,5 +1,8 @@
 import json
 import re
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 from agent_service.core.ai import ChatMessage, EmbeddingProvider, get_ai_providers
 from agent_service.core.logging import get_logger
@@ -23,6 +26,11 @@ def compress_memory_data(request: MemoryCompressRequest) -> MemoryCompressResult
     return MemoryCompressResult(new_summary=new_summary, extracted_facts=extracted_facts)
 
 
+class _MemoryCompressStructuredOutput(BaseModel):
+    new_summary: str = ""
+    extracted_facts: list[dict[str, Any]] = Field(default_factory=list)
+
+
 async def compress_memory_with_llm(
     request: MemoryCompressRequest,
     chat_provider,
@@ -30,11 +38,24 @@ async def compress_memory_with_llm(
     """尝试用 LLM 压缩记忆并提取事实，输入请求和 chat provider，输出 MemoryCompressResult 或 None（降级）。"""
     if chat_provider is None:
         return None
+    messages = [
+        ChatMessage(role="system", content=build_memory_compress_system_prompt()),
+        ChatMessage(role="user", content=build_memory_compress_user_message(request)),
+    ]
+    # Phase 1E: 优先尝试 AgentScope structured_model
     try:
-        messages = [
-            ChatMessage(role="system", content=build_memory_compress_system_prompt()),
-            ChatMessage(role="user", content=build_memory_compress_user_message(request)),
-        ]
+        raw = await chat_provider.complete(messages, structured_model=_MemoryCompressStructuredOutput)
+        if raw:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                result = _coerce_memory_compress_result(data)
+                logger.info("LLM structured_model succeeded: %s", "memory/compress")
+                return result
+    except Exception:
+        logger.debug("structured_model path failed, falling back to JSON parsing", exc_info=True)
+
+    # Fallback: 原有 markdown fence JSON 解析
+    try:
         raw = await chat_provider.complete(messages)
         parsed = _parse_memory_compress_json(raw)
         result = _coerce_memory_compress_result(parsed)

@@ -56,15 +56,18 @@ import asyncio
 
 
 class FakeChatProvider:
-    def __init__(self, output: str | None = None, should_raise: bool = False) -> None:
-        self.calls: list[list] = []
+    def __init__(self, output: str | None = None, should_raise: bool = False, fail_structured: bool = False) -> None:
+        self.calls: list[tuple[list, dict]] = []
         self._output = output
         self._should_raise = should_raise
+        self._fail_structured = fail_structured
 
-    async def complete(self, messages):
-        self.calls.append(messages)
+    async def complete(self, messages, **kwargs):
+        self.calls.append((messages, kwargs))
         if self._should_raise:
             raise RuntimeError("LLM unavailable")
+        if self._fail_structured and "structured_model" in kwargs:
+            raise RuntimeError("structured_model failed")
         return self._output
 
 
@@ -103,6 +106,7 @@ def test_generate_profile_with_llm_enriches_full_profile_data() -> None:
     )
 
     assert result is not None
+    assert "structured_model" in provider.calls[0][1]
     assert result.modal_preference.video_animation == 60.0
     assert result.modal_preference.text_analysis == 90.0
     assert result.guidance_level_suggestion.recommended == "L1"
@@ -119,6 +123,26 @@ def test_generate_profile_with_llm_enriches_full_profile_data() -> None:
     assert result.discipline_badge.subject == "course-1"
     assert result.discipline_badge.level == "sprint"
     assert result.discipline_badge.streak_days == 5
+
+
+def test_generate_profile_with_llm_structured_model_fails_and_falls_back() -> None:
+    import json as _json
+    from agent_service.agents.profile import generate_profile_with_llm
+
+    request = _build_request()
+    rule_result = generate_profile_data(request)
+    llm_output = f"```json\n{_json.dumps({'modal_preference': {'video_animation': 80.0}})}\n```"
+    provider = FakeChatProvider(output=llm_output, fail_structured=True)
+
+    result = asyncio.run(
+        generate_profile_with_llm(request, rule_result, provider)
+    )
+
+    assert result is not None
+    assert len(provider.calls) == 2
+    assert "structured_model" in provider.calls[0][1]
+    assert "structured_model" not in provider.calls[1][1]
+    assert result.modal_preference.video_animation == 80.0
 
 
 def test_generate_profile_with_llm_rejects_invalid_or_fabricated_fields() -> None:

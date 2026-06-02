@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
@@ -49,3 +50,19 @@ def require_role(*roles: str):
         return current_user
 
     return role_checker
+
+
+async def verify_webhook_secret(
+    x_webhook_secret: str = Header(None, alias="X-Webhook-Secret"),
+) -> None:
+    """Webhook 端点鉴权：校验 X-Webhook-Secret header。
+
+    WEBHOOK_SECRET 未配置时自动跳过（向后兼容）。
+    """
+    if not settings.WEBHOOK_SECRET:
+        return
+    if x_webhook_secret != settings.WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40100, "message": "Webhook secret 无效", "data": None},
+        )

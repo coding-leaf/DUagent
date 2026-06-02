@@ -7,112 +7,109 @@
 
 ## 当前方向
 
-- 当前不继续打磨旧 `tutoring/chat` 主链路；后续 tutoring 计划切换到 AgentScope ReActAgent / ReAct 编排。
-- 非主线能力以简洁可用为准，避免为了本地 smoke 继续扩大 Qdrant、ID、并发 client 等实现细节。
-- AgentScope 仍是后续 AI 编排主框架，但接入应落在 `agents/`、`memory/`、`tools/` 边界内，不泄漏到 OpenAPI/schema。
-- `WORKFLOW.md` 不再记录长流水日志，只保留当前状态、最近验证和下一步。
+- Agent Service 负责智能体编排、RAG、工具调用和结构化结果生成，不直接写 Backend SQL 数据库。
+- Agent 全链路架构升级主干已完成：适合 Agent/Workflow 的重点链路已具备 Agent 编排、质量门禁和 fallback。
+- 后续进入工程化收尾：真实 LLM/RAG 联调验证、统一 trace/log、AgentScope Studio trace 评估和比赛 demo 验收。
+- 不再为了“升级架构”继续大改已完成接口；新增改动必须服务于联调质量、可观测性、部署稳定性或明确缺陷修复。
+- deterministic / 统计型接口继续以 structured output + 规则保护为主：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
+- AgentScope 接入必须落在 `agents/`、`memory/`、`tools/`、`prompts/`、`core/` 边界内，不泄漏到 API/schema/Backend 契约。
+
+## 全链路升级状态
+
+- 已完成主干升级的 Agent 化链路：
+  - `tutoring/chat`：StrategyAgent → ReAct/chat → ResponseCritic → rule-based fallback。
+  - `assessment/generate-questions`：ReActAgent + RAG toolkit → AssessmentQualityGate → LLM/skeleton fallback。
+  - `resources/generate`：Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator → fallback。
+- 已保持 deterministic / 统计型接口稳定：`profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate`、`memory/compress`。
+- 未完成的是生产化收尾，不是架构主干：真实模型效果验证、统一观测、Studio trace 和 demo 链路验收。
 
 ## 接口进度
 
-| 接口 | 状态 | 备注 |
-|------|------|------|
-| `GET /agent/v1/health` | 已完成 | Qdrant 探针 + model_loaded/model_name/uptime；HealthData 5 字段严格匹配 OpenAPI；探针逻辑在 agents/health.py，API 层薄路由 |
-| `POST /agent/v1/tutoring/chat` | ReActAgent 最小垂直链路已完成 | 降级链：ReActAgent → chat JSON → rule-based；第一版无 toolkit |
-| `POST /agent/v1/profile/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full ProfileData enrichment → 规则版；LLM 输出经 schema/枚举/范围/观测名称保护后合并 |
-| `POST /agent/v1/evaluation/generate` | LLM full enrichment + 规则版 fallback 已完成 | 降级链：LLM guarded full EvaluationData enrichment → 规则版；表格和 summary 均经列/范围/观测名称保护后合并 |
-| `POST /agent/v1/assessment/evaluate` | LLM + 规则版 fallback 已完成 | 判分由规则确定；LLM 增强 explanation、diagnosis.summary、weak_points.error_pattern、suggestions；降级链：LLM enrichment → 规则版 |
-| `POST /agent/v1/assessment/generate-questions` | LLM + RAG + fallback 已完成 | 降级链：LLM（含 course_knowledge RAG context）→ 骨架占位题；prompt 强化质量约束 |
-| `POST /agent/v1/learning-path/generate` | LLM + 规则版 fallback 已完成 | 降级链：LLM（节点 ID 白名单 + name 回填）→ 规则版；LLM 不发明节点 |
-| `POST /agent/v1/resources/generate` | LLM + RAG + fallback 已完成 | 202 + 后台任务；LLM 并行生成四类资源 + course_knowledge RAG 检索注入 prompt；skeleton fallback → webhook completed |
-| `POST /agent/v1/memory/compress` | LLM + 规则版 fallback 已完成 | 降级链：LLM → 规则版；规则版补齐 mastered_point / cognitive_preference / blind_spot 三种类型；LLM 提取 3 种 fact 类型 + 生成摘要；Qdrant 写入 best-effort |
+| 接口 | 状态 | 当前实现要点 |
+|------|------|--------------|
+| `GET /agent/v1/health` | 已完成 | health 探针逻辑在 `agents/health.py`，API 层薄路由 |
+| `POST /agent/v1/tutoring/chat` | StrategyAgent + ResponseCritic 首阶段已完成 | StrategyAgent 先选提示式引导 / 直接解释 / 追问澄清 / 例题讲解；ResponseCriticAgent 对 ReAct/chat 候选答复做质量门禁；降级链：Strategy 规则兜底 → ReAct → critic → chat JSON → critic → rule-based |
+| `POST /agent/v1/profile/generate` | 已完成 | LLM enrichment + schema/枚举/范围保护 + 规则 fallback |
+| `POST /agent/v1/evaluation/generate` | 已完成 | LLM enrichment + 表格/summary 保护 + 规则 fallback |
+| `POST /agent/v1/assessment/evaluate` | 已完成 | 判分由规则确定；LLM 只增强解析、诊断和建议 |
+| `POST /agent/v1/assessment/generate-questions` | AssessmentQualityGate 已合并 | ReAct + RAG toolkit → 统一质量门禁（基础质量 / 知识点 / 难度）→ LLM fallback → 质量门禁（知识点 / 难度）→ 骨架题 |
+| `POST /agent/v1/learning-path/generate` | 已完成 | LLM 只在节点白名单内补全；失败回落规则路径 |
+| `POST /agent/v1/resources/generate` | Multi-Agent Workflow + ResourceCritic 已完成 | Planner → AgentScope fanout ResourceAgents → ResourceCriticAgent → Aggregator；单资源局部 fallback |
+| `POST /agent/v1/memory/compress` | 已完成 | LLM fact extraction + 规则 fallback；Qdrant 写入 best-effort |
 
-## 当前已确认能力
+## AgentScope 使用状态
 
-- FastAPI API 骨架、Pydantic schemas、OpenAPI 对齐测试体系已建立。
-- 多个非 tutoring 接口已有规则版实现和测试覆盖。
-- AgentScope 依赖已进入项目，ReActAgent、Reader、Embedding、QdrantStore 可用。
-- 课程知识摄入 CLI 已完成幂等闭环：支持 PDF/MD/TXT，重复执行跳过已摄入源文件。
-- `knowledge_base/` 已加入 `.gitignore`，含 `README.md` 说明用法。
-- ReActAgent 最小垂直链路已接入 `tutoring/chat`：`agents/tutoring_react_flow.py` 做胶水层，`_build_model_response()` 内部顺序 ReAct → chat JSON → None。
-- `retrieve_course_knowledge` + `retrieve_user_memory` toolkit 已挂载：两个工具均闭包隐藏内部参数，模型只暴露 query。user_memory_facts 首轮注入保持不变。
-- 《数据结构（C语言版）》PDF 可被 AgentScope PDFReader 解析，约 760 chunks。
-- embedding provider 已验证可返回 1024 维向量。
-- Provider readiness CLI 已完成：`./.venv/bin/python -m agent_service.tools.readiness_check` 默认检查配置与 provider 构建；`--live` 才发真实 LLM/Embedding/Reranker 探针。
-- tutoring/chat structured output 已接入：`generate_tutoring_model_response()` 优先用 AgentScope `structured_model` → 失败回落 `parse_tutoring_model_response()` → 再失败回落 rule-based；不改 SSE/API/schema。
-- E2E smoke 验收工具已完成：`./.venv/bin/python -m agent_service.tools.smoke_all` 一次命令验证全部 9 接口最小可用。
-- Knowledge ingestion 闭环 smoke 已完成：ingest → retrieve → RAG context 端到端验证，幂等，fake embedding/Qdrant 隔离。
-- Qdrant collection 自动创建：`ensure_collection_exists()` 在 course_knowledge 和 user_memory 首次写入前确保 collection 存在，fresh Qdrant 不再报错。
-- Readiness 不再调用 `get_ai_providers()` 混用全局 settings，直接使用注入的 provider。
-- Structured output 结果可从 `ChatResponse.metadata` 提取，避免正文为空时路径失效。
-- Agent observability INFO 日志：LLM enrichment/generation 成功、RAG 检索 chunk 数、ReAct/structured output 命中，共 12 条。
-- API 边界收束已完成：health 探针逻辑下沉到 `agents/health.py`；tutoring API 恢复薄路由且不暴露测试注入参数；assessment 出题不再从 API 层导入 agents 私有函数。
-- OpenAPI 对齐测试已扩展到主要 request/result schema，当前 25 个 alignment 测试覆盖 HealthData、assessment、learning-path、resources、memory、tutoring SSE 参数等。
-- 本地启动与运维文档已补充：`docs/Agent-Service_本地启动与运维.md` 记录 uvicorn 启动、health、readiness、smoke、知识入库和常见问题。
+- 已接入：ChatModel/Formatter、Embedding、ReActAgent、Toolkit/ToolResponse、InMemoryMemory、Reader/PDFReader、QdrantStore、fanout_pipeline。
+- tutoring 已接入内部 StrategyAgent 和 ResponseCriticAgent，策略选择/质量判断失败时回落规则策略或继续降级，不改变 SSE / schemas。
+- tutoring toolkit 已返回 AgentScope 合法 TextBlock：`{"type": "text", "text": "..."}`。
+- assessment toolkit 已返回 AgentScope 合法 TextBlock；assessment 出题质量门禁已合并到 `agents/assessment_quality.py`，统一处理基础质量、知识点贴合度和难度贴合度。
+- resources workflow 已通过 AgentScope `fanout_pipeline` 调度 Document/Mindmap/Reading/Code ResourceAgent，并新增 `ResourceCriticAgent` 单资源质量门禁。
+- Qdrant 已支持 `QDRANT_URL` server 模式，未配置时回落 `QDRANT_PATH` local 模式；readiness 探针会真实请求 Qdrant collections。
 
-## AgentScope 使用审查
+## 当前注意事项
 
-### 已使用的框架能力
+- 不修改 `../docs`，除非用户明确要求。
+- 不改变 OpenAPI、schemas 或 Backend 调用契约。
+- API 层保持薄路由，业务逻辑放入 `agents/`。
+- 新增 AgentScope API 用法前必须查官方文档或用本地包 introspection 验证。
+- 工作区存在用户/历史未提交改动，提交时只暂存本轮文件，不回滚无关改动。
 
-| 能力 | 当前文件 | 用途 |
-|------|----------|------|
-| AgentScope ChatModel + Formatter | `core/ai.py` | `AgentScopeChatProvider` 封装 OpenAIChatModel + DeepSeekChatFormatter，作为项目 `ChatProvider` 边界实现 |
-| AgentScope Embedding | `core/ai.py` | `AgentScopeEmbeddingProvider` 封装 OpenAITextEmbedding，作为项目 `EmbeddingProvider` 边界实现 |
-| ReActAgent | `agents/tutoring_react.py` | tutoring/chat 的 ReAct 编排适配器，失败时回落到 chat JSON / rule-based |
-| Msg / InMemoryMemory | `agents/tutoring_react.py` | 将用户消息转为 AgentScope Msg，并为 ReActAgent 提供短期内存 |
-| Toolkit / ToolResponse | `agents/tutoring_tools.py` | 挂载 `retrieve_course_knowledge`、`retrieve_user_memory` 两个模型可调用工具 |
-| Reader / PDFReader 路径 | `tools/ingest_knowledge.py`、`memory/course_knowledge_store.py` | 课程知识摄入：PDF/MD/TXT → chunks → embedding → Qdrant course_knowledge |
+## 最近验证
 
-### 可用但尚未充分使用的框架能力
+- `./.venv/bin/python -m agent_service.tools.ingest_knowledge /tmp/758aeff588e84044`：**通过**（将 `knowledge_base/data_structures` 以 Backend 课程 ID `758aeff588e84044` 摄入 Qdrant，写入 `course_knowledge_v1_1024`，760 chunks）
+- `QdrantVectorStore().search_course_knowledge("758aeff588e84044", embedding("数据结构 顺序表 随机访问"), limit=3)`：**3 hits**（真实课程知识检索可用，collection count=760）
+- `./.venv/bin/pytest tests/test_ai_providers.py tests/test_core_config.py -q`：**19 passed**（SiliconFlow embedding 请求维度开关；默认不向 embeddings API 发送有效 dimensions，保留 `EMBEDDING_DIMENSION` 给 Qdrant collection）
+- `./.venv/bin/pytest -q`：**418 passed**（统一 agent_trace 日志后全量回归）
+- `./.venv/bin/pytest tests/test_tutoring_agent.py tests/test_assessment_agent.py tests/test_resources_workflow.py -q`：**133 passed**（tutoring / assessment / resources trace 与主链路回归）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py tests/test_schema_contracts.py -q`：**49 passed**（OpenAPI + schema/import contract）
+- `./.venv/bin/python -m agent_service.tools.smoke_resources_workflow --live`：**PASS**（resources live multi-agent workflow，4 类资源齐全，path=multi_agent）
+- `curl -X POST /agent/v1/assessment/generate-questions`：**200**（`course_id=data_structures`，生成顺序存储结构单选题）
+- `curl -N -X POST /agent/v1/tutoring/chat`：**SSE 通过**（chunk / knowledge_points / suggestion / done，知识点来自 `data_structures`）
+- `./.venv/bin/python -m agent_service.tools.readiness_check`：**ready**（LLM / embedding / reranker provider_built=true，Qdrant ok=true）
+- `curl http://127.0.0.1:8002/agent/v1/health`：**200**（`qdrant_connected=true`，`model_loaded=true`）
+- `./.venv/bin/pytest -q`：**416 passed**（readiness provider 构建修复后全量回归）
+- `./.venv/bin/pytest tests/test_course_knowledge_store.py tests/test_knowledge_ingestion_smoke.py tests/test_readiness.py tests/test_qdrant_store.py -q`：**21 passed**（Qdrant ingestion/readiness 相关回归）
+- `./.venv/bin/python -m agent_service.tools.ingest_knowledge knowledge_base/data_structures`：**通过**（Qdrant server 写入 `course_id=data_structures`，760 chunks）
+- `QdrantClient(...).count(course_knowledge_v1_1024)`：**760**（server collection 已创建且非空）
+- `QdrantVectorStore().search_course_knowledge("data_structures", embedding("顺序表的随机访问"), limit=3)`：**3 hits**（真实 RAG 检索可用）
+- `./.venv/bin/pytest -q`：**415 passed**（Qdrant server 首导入修复后全量回归）
+- `./.venv/bin/pytest tests/test_course_knowledge_store.py tests/test_knowledge_ingestion_smoke.py tests/test_qdrant_store.py tests/test_readiness.py -q`：**20 passed**（fresh collection、UUID point id、embedding batch、Qdrant server/local）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py tests/test_schema_contracts.py -q`：**49 passed**（OpenAPI + schema/import contract）
+- `./.venv/bin/pytest -q`：**413 passed**（Qdrant server URL 模式接入后全量回归）
+- `./.venv/bin/pytest tests/test_qdrant_store.py tests/test_core_config.py tests/test_vector_store.py tests/test_readiness.py -q`：**21 passed**（Qdrant server/local 配置与 readiness 探针）
+- `./.venv/bin/python ... build_qdrant_store(...).get_client().get_collections()`：**通过**（提权访问本机 `http://127.0.0.1:6333`，collections 当前为空）
+- `./.venv/bin/python ... build_readiness_report(live=False)`：**Qdrant check ok=True**（整体 status degraded 来自其他配置/服务检查，不影响 Qdrant 子项）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
+- `./.venv/bin/pytest -q`：**408 passed**（AssessmentQualityGate 合并后全量回归）
+- `./.venv/bin/pytest tests/test_resources_workflow.py tests/test_tutoring_agent.py tests/test_tutoring_response_critic.py -q`：**91 passed**（resources/tutoring 相关回归）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
+- `./.venv/bin/pytest tests/test_assessment_quality.py tests/test_assessment_knowledge_guard.py tests/test_assessment_difficulty_balancer.py tests/test_assessment_agent.py -q`：**69 passed**（AssessmentQualityGate 合并与 assessment 出题降级链）
+- `./.venv/bin/pytest tests/test_resources_critic.py tests/test_resources_workflow.py -q`：**77 passed**（ResourceCriticAgent + resources workflow 回归）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
+- `./.venv/bin/pytest tests/test_assessment_difficulty_balancer.py tests/test_assessment_agent.py -q`：**55 passed**（DifficultyBalancer + assessment 出题降级链）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
+- `./.venv/bin/pytest tests/test_assessment_knowledge_guard.py tests/test_assessment_agent.py -q`：**51 passed**（KnowledgePointGuard + assessment 出题降级链）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_schema_contracts.py -q`：**24 passed**（schema/import contract 回归）
+- `./.venv/bin/pytest tests/test_assessment_agent.py -q`：**41 passed**（QuestionCriticAgent）
+- `./.venv/bin/pytest tests/test_openapi_alignment.py -q`：**25 passed**（OpenAPI 契约不漂移）
+- `./.venv/bin/pytest tests/test_tutoring_tools.py tests/test_vector_store.py -q`：**16 passed**
+- `./.venv/bin/pytest tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py -q`：**31 passed**（StrategyAgent + tutoring prompt 传递）
+- `./.venv/bin/pytest tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py -q`：**24 passed**
+- `./.venv/bin/pytest tests/test_tutoring_api.py -q`：**10 passed**（SSE / 降级链回归）
+- `./.venv/bin/pytest tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py tests/test_tutoring_api.py -q`：**41 passed**（最终 tutoring 回归）
+- `./.venv/bin/pytest tests/test_tutoring_response_critic.py tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py tests/test_tutoring_api.py -q`：**50 passed**（ResponseCriticAgent + tutoring 回归）
+- `./.venv/bin/pytest tests/test_resources_agent.py tests/test_resources_workflow.py -q`：**85 passed**
+- 近期全量记录：`./.venv/bin/pytest -q` 曾为 **335 passed**；后续若改共享逻辑需重新跑相关范围或全量。
 
-| AgentScope 能力 | 推荐状态 | 说明 |
-|-----------------|----------|------|
-| Structured output | 推荐优先评估 | 可替代当前多处 `json.loads` / markdown fence / prompt-only JSON 解析，降低 LLM 输出脆弱性 |
-| Knowledge / Generic RAG | 推荐用于 tutoring/chat | 可把课程知识作为 ReActAgent knowledge 注入，和现有工具检索形成对照；先保持现有 Qdrant 检索 fallback |
-| Agentic RAG / retrieve_knowledge tool | 暂缓 | 依赖模型稳定 tool-use，当前已手写 retrieve_course_knowledge 工具，短期够用 |
-| Planning / multi-step workflow | 适合 resources/generate 后续升级 | resources/generate 是多资源并行/多步骤任务，适合后续 AgentScope workflow/planning；不要先用于简单 deterministic 接口 |
-| Memory/session/state | 暂缓 | 当前长期记忆 schema 和 Qdrant 写入是产品边界，先不迁移到 AgentScope memory |
-| Observability/evaluation hooks | 生产化后推荐 | 适合后续追踪 ReAct tool call、LLM 输出、降级路径；不影响当前 OpenAPI |
+## 下一步建议
 
-### 推荐使用 AgentScope 的链路优先级
-
-1. `POST /agent/v1/tutoring/chat`
-   - 推荐方向：Structured output 或 Generic Knowledge 集成。
-   - 涉及文件：`agents/tutoring_react.py`、`agents/tutoring_react_flow.py`、`agents/tutoring_tools.py`、`prompts/tutoring.py`、`memory/tutoring_retrieval.py`。
-   - 原因：当前已经有 ReActAgent + toolkit，继续用 AgentScope 的收益最高；仍需保持 SSE 输出和 rule fallback。
-
-2. `POST /agent/v1/resources/generate`
-   - 推荐方向：后续引入 AgentScope planning / workflow 编排四类资源生成。
-   - 涉及文件：`agents/resources.py`、`prompts/resources.py`、`tests/test_resources_agent.py`。
-   - 原因：资源生成是多步骤异步任务，适合 workflow；但 webhook worker 调试复杂，应排在 readiness 之后。
-
-3. `POST /agent/v1/assessment/generate-questions`
-   - 推荐方向：Structured output，不优先 ReActAgent。
-   - 涉及文件：`agents/assessment.py`、`prompts/assessment.py`、`tests/test_assessment_agent.py`。
-   - 原因：已有 RAG + LLM 主路径，主要痛点是结构化题目输出稳定性。
-
-### 不推荐优先使用 AgentScope 的链路
-
-- `GET /agent/v1/health` / provider readiness：基础设施确定性检查，不需要 Agent。
-- `POST /agent/v1/assessment/evaluate`：判分必须由规则确定，LLM 只做诊断 enrichment。
-- `POST /agent/v1/profile/generate`、`POST /agent/v1/evaluation/generate`：当前 guarded schema enrichment 已清晰可控，除非先验证 structured output，否则不引入 ReActAgent。
-- `POST /agent/v1/memory/compress`：可后续评估 AgentScope memory，但当前 fact 类型和 Qdrant 写入属于产品记忆边界，暂不迁移。
-
-## 当前不继续推进的事项
-
-- 不继续修旧 `tutoring/chat` 的单路径 JSON mode / fallback 细节。
-- 不继续围绕 Qdrant local 文件锁、UUID point id、shared client 做扩大修补。
-- 不继续执行耗时的全量 PDF 入库 smoke。
-
-## 最近测试/验证
-
-- `./.venv/bin/pytest -q`：**246 passed**
-- OpenAPI 对齐：25 个测试覆盖全部主要 request/result schema，并守卫 tutoring/chat 不暴露测试注入参数
-- `./.venv/bin/python -m agent_service.tools.smoke_all`：9/9 PASS；smoke 工具直接调用 API handlers，避免本地验收依赖外部 Qdrant/TestClient lifespan/webhook
-- 本地启动验证：`./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002` 可启动到 `Application startup complete`
-- LearningPath / KnowledgeGraph edge alias 支持 Python 内部 `from_` + OpenAPI `from` 输出
-
-## 下一步
-
-- 短期：按 `docs/superpowers/plans/2026-05-26-backend-agent-integration.md` 从最新 `main` 的 backend 开始联调；推荐先做 Agent client + profile refresh 垂直链路。
-- 中期：tutoring/chat SSE proxy、resources/generate webhook 落库、quiz/generate 题库写入。
-- 远期：Qdrant server 模式 / shared client 改造
+1. 统一 trace/log：记录 assessment/resources/tutoring 中各 gate 拒绝原因、fallback 路径和最终输出来源，不改变 API/schema/webhook。
+2. 真实 LLM/RAG 联调：验证 assessment 出题质量、resources 生成质量和 tutoring prompt 效果。
+3. AgentScope Studio trace：先查官方文档或本地安装包 introspection，再决定是否接入；不凭空编造 Studio API。
+4. 如需展示 AgentScope Studio，先启动 Studio 或临时清空 `AGENTSCOPE_STUDIO_URL` 避免启动日志里出现连接失败堆栈。
+5. 整理比赛 demo 顺序：health/readiness → Qdrant count/search → resources workflow → assessment 出题 → tutoring SSE，并展示 `agent_trace` 日志。

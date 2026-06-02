@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 from agent_service.core import readiness
 
@@ -76,6 +77,41 @@ def test_readiness_default_mode_does_not_call_live_providers() -> None:
     assert report["checks"]["qdrant"]["ok"] is True
 
 
+def test_readiness_builds_providers_when_not_injected(monkeypatch) -> None:
+    from agent_service.core.ai import AIProviders
+
+    configured = type("Configured", (FakeSettings,), {
+        "LLM_PROVIDER": "agentscope_openai",
+        "LLM_BASE_URL": "http://llm",
+        "LLM_API_KEY": "key",
+        "LLM_MODEL": "model",
+        "EMBEDDING_PROVIDER": "agentscope_openai",
+        "EMBEDDING_BASE_URL": "http://embedding",
+        "EMBEDDING_API_KEY": "key",
+        "EMBEDDING_MODEL": "embedding",
+        "RERANKER_PROVIDER": "openai_compatible",
+        "RERANKER_BASE_URL": "http://reranker",
+        "RERANKER_API_KEY": "key",
+        "RERANKER_MODEL": "reranker",
+    })()
+
+    report = asyncio.run(readiness.build_readiness_report(
+        settings_obj=configured,
+        live=False,
+        qdrant_probe=lambda: True,
+        provider_factory=lambda: AIProviders(
+            embedding=FakeEmbeddingProvider(),
+            reranker=FakeRerankerProvider(),
+            chat=FakeChatProvider(),
+        ),
+    ))
+
+    assert report["status"] == "ready"
+    assert report["checks"]["llm"]["provider_built"] is True
+    assert report["checks"]["embedding"]["provider_built"] is True
+    assert report["checks"]["reranker"]["provider_built"] is True
+
+
 def test_readiness_live_mode_calls_fake_providers() -> None:
     configured = type("Configured", (FakeSettings,), {
         "LLM_PROVIDER": "agentscope_openai",
@@ -144,6 +180,48 @@ def test_readiness_qdrant_failure_marks_degraded() -> None:
     assert report["status"] == "degraded"
     assert report["checks"]["qdrant"]["ok"] is False
     assert "qdrant down" in report["checks"]["qdrant"]["error"]
+
+
+def test_probe_qdrant_uses_server_url_when_configured(monkeypatch) -> None:
+    calls = []
+
+    class FakeQdrantClient:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+        def get_collections(self):
+            return []
+
+    class FakeQdrantModule:
+        QdrantClient = FakeQdrantClient
+
+    monkeypatch.setitem(sys.modules, "qdrant_client", FakeQdrantModule())
+    monkeypatch.setattr(readiness.settings, "QDRANT_URL", "http://127.0.0.1:6333", raising=False)
+    monkeypatch.setattr(readiness.settings, "QDRANT_API_KEY", None, raising=False)
+
+    assert readiness._probe_qdrant() is True
+    assert calls == [{"url": "http://127.0.0.1:6333"}]
+
+
+def test_probe_qdrant_falls_back_to_local_path(monkeypatch) -> None:
+    calls = []
+
+    class FakeQdrantClient:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+        def get_collections(self):
+            return []
+
+    class FakeQdrantModule:
+        QdrantClient = FakeQdrantClient
+
+    monkeypatch.setitem(sys.modules, "qdrant_client", FakeQdrantModule())
+    monkeypatch.setattr(readiness.settings, "QDRANT_URL", None, raising=False)
+    monkeypatch.setattr(readiness.settings, "QDRANT_PATH", "./qdrant_data")
+
+    assert readiness._probe_qdrant() is True
+    assert calls == [{"path": "./qdrant_data"}]
 
 
 def test_readiness_cli_imports() -> None:

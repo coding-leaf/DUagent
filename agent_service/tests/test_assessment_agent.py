@@ -243,6 +243,118 @@ def test_generate_questions_with_llm_returns_none_when_provider_is_none() -> Non
     assert result is None
 
 
+# ── Phase 0: structured_model spike tests ─────────────────────────
+
+
+class FakeChatProviderV2:
+    """支持 structured_model 参数的 FakeChatProvider。
+
+    structured_output 若为 list 则自动包装为 {"questions": [...]}（适配 generate_questions）；
+    若为 dict 则直接序列化（适配 evaluate 等接口）。
+    """
+
+    def __init__(
+        self,
+        output: str | None = None,
+        should_raise: bool = False,
+        structured_output: list[dict] | dict | None = None,
+    ) -> None:
+        self.calls: list[dict] = []
+        self._output = output
+        self._should_raise = should_raise
+        self._structured_output = structured_output
+
+    async def complete(self, messages, **kwargs):
+        self.calls.append({"messages": messages, "kwargs": kwargs})
+        if self._should_raise:
+            raise RuntimeError("LLM unavailable")
+        if self._structured_output is not None and "structured_model" in kwargs:
+            import json as _json
+            if isinstance(self._structured_output, list):
+                return _json.dumps({"questions": self._structured_output})
+            return _json.dumps(self._structured_output)
+        return self._output
+
+
+def test_structured_model_is_attempted_before_json_fallback() -> None:
+    """structured_model 优先于 markdown fence JSON 解析被调用。"""
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProviderV2(
+        structured_output=[
+            {
+                "type": "single_choice",
+                "content": "测试题",
+                "options": [{"key": "A", "text": "选项A"}],
+                "answer": "A",
+                "explanation": "解析",
+                "knowledge_point": "测试知识点",
+                "difficulty": "easy",
+            }
+        ],
+    )
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="测试知识点", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].content == "测试题"
+    # 验证 structured_model 被传入了
+    assert len(provider.calls) == 1
+    assert "structured_model" in provider.calls[0]["kwargs"]
+
+
+def test_structured_model_failure_falls_back_to_json_parsing() -> None:
+    """structured_model 路径失败时回落到现有 markdown fence JSON 解析。"""
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    # 不提供 structured_output → structured_model 路径返回空或无效
+    # 但提供有效的 JSON 字符串作为原始输出 → fallback 应生效
+    provider = FakeChatProviderV2(
+        output=(
+            '[{"type":"single_choice","content":"fallback 题",'
+            '"options":[{"key":"A","text":"x"}],'
+            '"answer":"A","explanation":"fallback 解析",'
+            '"knowledge_point":"fallback","difficulty":"medium"}]'
+        ),
+    )
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="fallback", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].content == "fallback 题"
+
+
+def test_structured_model_raises_falls_back_to_json() -> None:
+    """structured_model 调用抛出异常时回落到 JSON 解析。"""
+    from agent_service.agents.assessment import generate_questions_with_llm
+
+    provider = FakeChatProviderV2(should_raise=True)
+    result = asyncio.run(
+        generate_questions_with_llm(
+            QuestionGenerateRequest(
+                user_id="u1", course_id="c1",
+                knowledge_point="x", count=1,
+            ),
+            provider,
+        )
+    )
+    assert result is None
+
+
 def test_generate_questions_with_llm_returns_none_when_llm_raises() -> None:
     from agent_service.agents.assessment import generate_questions_with_llm
 
@@ -493,6 +605,130 @@ def test_evaluate_with_llm_handles_markdown_wrapped_json() -> None:
     assert "正确答案是B" in (result.per_question_results[0].explanation or "")
 
 
+# ── Phase 1B: evaluate structured_model spike tests ────────────────
+
+
+def test_evaluate_structured_model_is_attempted_before_json_fallback() -> None:
+    """evaluate 路径优先使用 structured_model。"""
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    structured_data = {
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "structured 解析", "related_knowledge_points": ["加法"]},
+        ],
+        "diagnosis": {
+            "summary": "structured 诊断",
+            "weak_points": [{"name": "加法", "error_pattern": "基础概念混淆"}],
+            "suggestions": ["做练习题"],
+        },
+    }
+    provider = FakeChatProviderV2(structured_output=structured_data)
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert "structured 解析" in (result.per_question_results[0].explanation or "")
+    assert "structured 诊断" in (result.diagnosis.summary or "")
+    # 验证 structured_model 被传入
+    assert len(provider.calls) == 1
+    assert "structured_model" in provider.calls[0]["kwargs"]
+
+
+def test_evaluate_structured_model_failure_falls_back_to_json() -> None:
+    """evaluate structured_model 失败时回落到 markdown fence JSON 解析。"""
+    import json as _json
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    json_output = _json.dumps({
+        "per_question_results": [
+            {"question_id": "q1", "explanation": "fallback 解析", "related_knowledge_points": ["加法"]},
+        ],
+        "diagnosis": {
+            "summary": "fallback 诊断",
+            "weak_points": [],
+            "suggestions": ["复习"],
+        },
+    })
+    # 不设 structured_output → structured_model 路径失败，回落 JSON
+    provider = FakeChatProviderV2(output=json_output)
+
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is not None
+    assert "fallback 解析" in (result.per_question_results[0].explanation or "")
+
+
+def test_evaluate_structured_model_exception_falls_back_to_none() -> None:
+    """evaluate structured_model 抛异常时返回 None（无 JSON fallback 数据）。"""
+    from agent_service.agents.assessment import evaluate_assessment_with_llm
+
+    rule_result = evaluate_assessment_data(
+        _build_request(
+            questions=[
+                AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+            ],
+            answers=[AssessmentAnswer(question_id="q1", answer="A")],
+        )
+    )
+
+    provider = FakeChatProviderV2(should_raise=True)
+    result = asyncio.run(
+        evaluate_assessment_with_llm(
+            _build_request(
+                questions=[
+                    AssessmentQuestion(id="q1", type="single_choice", content="1+1=?", correct_answer="B", knowledge_point="加法"),
+                ],
+                answers=[AssessmentAnswer(question_id="q1", answer="A")],
+            ),
+            rule_result,
+            provider,
+        )
+    )
+
+    assert result is None
+
+
 # ── generate-questions RAG tests ───────────────────────────────────
 
 
@@ -583,25 +819,659 @@ class TestQuestionRAG:
             )
         assert context == ""
 
-    def test_api_falls_back_to_skeleton_when_llm_returns_none(self) -> None:
+    def test_generate_questions_with_agent_falls_back_when_llm_returns_none(self) -> None:
         from unittest.mock import patch
-        from agent_service.api.v1.assessment import generate_questions
+        from agent_service.agents.assessment import generate_questions_with_agent
 
-        async def _fake_retrieval(*args, **kwargs):
-            return ""
+        class FakeProviders:
+            chat = None
+            embedding = None
 
         async def _fake_llm(*args, **kwargs):
             return None
 
-        with (
-            patch("agent_service.api.v1.assessment.build_question_generation_knowledge_context", _fake_retrieval),
-            patch("agent_service.api.v1.assessment.generate_questions_with_llm", _fake_llm),
-        ):
-            response = asyncio.run(generate_questions(self._request()))
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
-        assert response.code == 200
-        assert len(response.data.questions) == 2
-        assert "完成一道单选题" in response.data.questions[0].content
+        assert len(questions) == 2
+        assert "完成一道单选题" in questions[0].content
+
+    def test_generate_questions_with_agent_returns_llm_result(self) -> None:
+        from unittest.mock import patch
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构 LLM 题目",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="本题围绕顺序存储结构进行考查。",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content == "顺序存储结构 LLM 题目"
+
+
+    def test_generate_questions_with_agent_returns_react_result(self) -> None:
+        from unittest.mock import patch, MagicMock
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return None  # should not be reached if react succeeds
+
+        class FakeModel:
+            pass
+
+        class FakeFormatter:
+            pass
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = FakeModel()
+                self.chat.formatter = FakeFormatter()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                    "options": [
+                        {"key": "A", "text": "O(1)"},
+                        {"key": "B", "text": "O(n)"},
+                        {"key": "C", "text": "O(log n)"},
+                        {"key": "D", "text": "O(n log n)"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert "访问第 i 个元素" in questions[0].content
+
+    def test_generate_questions_with_agent_logs_agent_trace_for_react_path(self, caplog) -> None:
+        from unittest.mock import MagicMock, patch
+        from agent_service.agents.assessment import generate_questions_with_agent
+
+        async def _fake_llm(*args, **kwargs):
+            return None
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                    "options": [
+                        {"key": "A", "text": "O(1)"},
+                        {"key": "B", "text": "O(n)"},
+                        {"key": "C", "text": "O(log n)"},
+                        {"key": "D", "text": "O(n log n)"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+            caplog.at_level("INFO", logger="agent_service.agents.assessment"),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        combined = caplog.text
+        assert "agent_trace interface=assessment/generate-questions" in combined
+        assert "agent_path=react" in combined
+        assert "quality_gate=accepted" in combined
+        assert "fallback_path=none" in combined
+        assert "output_source=react" in combined
+
+    def test_generate_questions_with_agent_falls_back_when_critic_rejects_bad_options(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构 LLM fallback 题目",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="本题围绕顺序存储结构进行考查。",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "顺序表的随机访问时间复杂度是多少？",
+                    "options": [{"key": "A", "text": "O(1)"}],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "顺序表可按下标直接定位元素。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content == "顺序存储结构 LLM fallback 题目"
+
+    def test_assessment_quality_fail_open_when_llm_review_raises_after_rule_pass(self) -> None:
+        from agent_service.agents.assessment_quality import review_generated_questions
+        from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
+
+        class FailingChatProvider:
+            async def complete(self, messages):
+                raise RuntimeError("quality review unavailable")
+
+        questions = [
+            GeneratedQuestion(
+                type="single_choice",
+                content="顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                options=[
+                    QuestionOption(key="A", text="O(1)"),
+                    QuestionOption(key="B", text="O(n)"),
+                    QuestionOption(key="C", text="O(log n)"),
+                    QuestionOption(key="D", text="O(n log n)"),
+                ],
+                answer="A",
+                explanation="顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                knowledge_point="顺序存储结构",
+                difficulty="medium",
+            )
+        ]
+
+        result = asyncio.run(
+            review_generated_questions(
+                self._request(),
+                questions,
+                chat_provider=FailingChatProvider(),
+                course_knowledge_context="顺序表支持随机访问。",
+            )
+        )
+
+        assert result.accepted is True
+
+    def test_assessment_quality_rejects_when_llm_rejects_rule_passed_questions(self) -> None:
+        from agent_service.agents.assessment_quality import review_generated_questions
+        from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
+
+        class RejectingChatProvider:
+            async def complete(self, messages):
+                return '{"accepted": false, "reasons": ["题目没有贴合课程资料"]}'
+
+        questions = [
+            GeneratedQuestion(
+                type="single_choice",
+                content="顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                options=[
+                    QuestionOption(key="A", text="O(1)"),
+                    QuestionOption(key="B", text="O(n)"),
+                    QuestionOption(key="C", text="O(log n)"),
+                    QuestionOption(key="D", text="O(n log n)"),
+                ],
+                answer="A",
+                explanation="顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                knowledge_point="顺序存储结构",
+                difficulty="medium",
+            )
+        ]
+
+        result = asyncio.run(
+            review_generated_questions(
+                self._request(),
+                questions,
+                chat_provider=RejectingChatProvider(),
+                course_knowledge_context="课程资料只讲链表。",
+            )
+        )
+
+        assert result.accepted is False
+
+    def test_assessment_quality_accepts_rule_passed_questions_when_llm_returns_invalid_json(self) -> None:
+        from agent_service.agents.assessment_quality import review_generated_questions
+        from agent_service.schemas.assessment import GeneratedQuestion, QuestionOption
+
+        class BadJsonChatProvider:
+            async def complete(self, messages):
+                return "不是 JSON"
+
+        questions = [
+            GeneratedQuestion(
+                type="single_choice",
+                content="顺序表按地址连续存储时，访问第 i 个元素的时间复杂度是多少？",
+                options=[
+                    QuestionOption(key="A", text="O(1)"),
+                    QuestionOption(key="B", text="O(n)"),
+                    QuestionOption(key="C", text="O(log n)"),
+                    QuestionOption(key="D", text="O(n log n)"),
+                ],
+                answer="A",
+                explanation="顺序表元素地址可由首地址和下标直接计算，因此随机访问为 O(1)。",
+                knowledge_point="顺序存储结构",
+                difficulty="medium",
+            )
+        ]
+
+        result = asyncio.run(
+            review_generated_questions(
+                self._request(),
+                questions,
+                chat_provider=BadJsonChatProvider(),
+                course_knowledge_context="顺序表支持随机访问。",
+            )
+        )
+
+        assert result.accepted is True
+
+    def test_generate_questions_with_agent_falls_back_when_react_returns_invalid_question(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构 LLM fallback 题目",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="本题围绕顺序存储结构进行考查。",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [
+                    {
+                        "type": "true_false",
+                        "content": "契约外题型",
+                        "options": [],
+                        "answer": "true",
+                        "knowledge_point": "K",
+                        "explanation": "E",
+                    }
+                ]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content == "顺序存储结构 LLM fallback 题目"
+
+    def test_generate_questions_with_agent_falls_back_to_llm_when_react_misses_knowledge_point(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构要求元素在内存中连续存放，下列说法正确的是？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构通过连续地址保存线性表元素。",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "天气预报主要受哪些因素影响？",
+                    "options": [
+                        {"key": "A", "text": "气压"},
+                        {"key": "B", "text": "湿度"},
+                        {"key": "C", "text": "风向"},
+                        {"key": "D", "text": "地形"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "天气",
+                    "explanation": "天气变化通常与气压、湿度和风向有关。",
+                    "difficulty": "medium",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].knowledge_point == "顺序存储结构"
+
+    def test_generate_questions_with_agent_falls_back_to_skeleton_when_llm_misses_knowledge_point(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="天气预报主要受哪些因素影响？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="天气",
+                    explanation="天气变化通常与气压、湿度和风向有关。",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 2
+        assert questions[0].knowledge_point == "顺序存储结构"
+        assert "完成一道单选题" in questions[0].content
+
+    def test_generate_questions_with_agent_returns_llm_result_when_knowledge_point_matches(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构支持按下标随机访问，下列说法正确的是？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构可根据首地址和元素下标直接计算元素位置。",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
+
+        assert len(questions) == 1
+        assert questions[0].content.startswith("顺序存储结构支持")
+
+    def test_generate_questions_with_agent_falls_back_to_llm_when_react_misses_difficulty(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="顺序存储结构中，按下标访问元素的时间复杂度通常是多少？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构可直接根据下标计算地址，因此访问时间复杂度为 O(1)。",
+                    difficulty="easy",
+                )
+            ]
+
+        class FakeProviders:
+            def __init__(self):
+                self.chat = MagicMock()
+                self.chat.model = object()
+                self.chat.formatter = object()
+                self.embedding = None
+
+        class FakeReActAgent:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def generate(self, request, course_knowledge_context=None):
+                return [{
+                    "type": "single_choice",
+                    "content": "综合证明顺序表插入、删除和扩容策略在均摊复杂度下的性能边界。",
+                    "options": [
+                        {"key": "A", "text": "需要均摊分析"},
+                        {"key": "B", "text": "只需记忆定义"},
+                        {"key": "C", "text": "只比较数组长度"},
+                        {"key": "D", "text": "无需分析复杂度"},
+                    ],
+                    "answer": "A",
+                    "knowledge_point": "顺序存储结构",
+                    "explanation": "需要结合均摊分析、扩容策略和复杂度证明进行综合推导。",
+                    "difficulty": "easy",
+                }]
+
+        with (
+            patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm),
+            patch("agent_service.agents.assessment_react.QuestionGeneratorReActAgent", FakeReActAgent),
+        ):
+            questions = asyncio.run(
+                generate_questions_with_agent(self._request(difficulty="easy"), providers=FakeProviders())
+            )
+
+        assert len(questions) == 1
+        assert questions[0].content.startswith("顺序存储结构中")
+
+    def test_generate_questions_with_agent_falls_back_to_skeleton_when_llm_misses_difficulty(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="什么是顺序存储结构？",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="顺序存储结构是用连续存储空间保存元素。",
+                    difficulty="hard",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(
+                generate_questions_with_agent(self._request(difficulty="hard"), providers=FakeProviders())
+            )
+
+        assert len(questions) == 2
+        assert questions[0].knowledge_point == "顺序存储结构"
+        assert "完成一道单选题" in questions[0].content
+
+    def test_generate_questions_with_agent_returns_llm_result_when_difficulty_matches(self) -> None:
+        from unittest.mock import patch
+
+        from agent_service.agents.assessment import generate_questions_with_agent
+        from agent_service.schemas.assessment import GeneratedQuestion
+
+        class FakeProviders:
+            chat = None
+            embedding = None
+
+        async def _fake_llm(*args, **kwargs):
+            return [
+                GeneratedQuestion(
+                    type="single_choice",
+                    content="给定顺序表频繁插入、删除和随机访问的混合场景，综合分析扩容策略的影响。",
+                    options=[],
+                    answer="A",
+                    knowledge_point="顺序存储结构",
+                    explanation="需要比较随机访问、移动元素成本、扩容时机和空间冗余，综合推理复杂度。",
+                    difficulty="hard",
+                )
+            ]
+
+        with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
+            questions = asyncio.run(
+                generate_questions_with_agent(self._request(difficulty="hard"), providers=FakeProviders())
+            )
+
+        assert len(questions) == 1
+        assert questions[0].content.startswith("给定顺序表")
+
+
+def test_parse_question_payload_handles_array() -> None:
+    from agent_service.agents.assessment import _parse_question_payload
+    payload = '[{"content": "Q1"}]'
+    result = _parse_question_payload(payload)
+    assert len(result) == 1
+    assert result[0]["content"] == "Q1"
+
+
+def test_parse_question_payload_handles_object_with_questions() -> None:
+    from agent_service.agents.assessment import _parse_question_payload
+    payload = '{"questions": [{"content": "Q1"}]}'
+    result = _parse_question_payload(payload)
+    assert len(result) == 1
+    assert result[0]["content"] == "Q1"
+
+
+def test_parse_question_payload_handles_markdown() -> None:
+    from agent_service.agents.assessment import _parse_question_payload
+    payload = '```json\n{"questions": [{"content": "Q1"}]}\n```'
+    result = _parse_question_payload(payload)
+    assert len(result) == 1
+    assert result[0]["content"] == "Q1"
+
+
+def test_assessment_question_format_validator_matches_openapi_question_types() -> None:
+    from agent_service.agents.assessment_tools import _validate_question_format_content
+
+    code_payload = (
+        '[{"type":"code","content":"写一个函数","options":[],"answer":"def f(): pass",'
+        '"knowledge_point":"函数","explanation":"代码题解析"}]'
+    )
+    true_false_payload = (
+        '[{"type":"true_false","content":"判断题","options":[],"answer":"true",'
+        '"knowledge_point":"判断","explanation":"判断题解析"}]'
+    )
+
+    assert "校验通过" in _validate_question_format_content(code_payload)
+    assert "不支持 'true_false'" in _validate_question_format_content(true_false_payload)
+
+
+def test_assessment_toolkit_retrieval_fallback_returns_text_block() -> None:
+    from agent_service.agents.assessment_tools import build_assessment_toolkit
+
+    toolkit = build_assessment_toolkit(
+        course_id="course-1",
+        embedding_provider=None,
+        vector_store=None,
+    )
+    result = asyncio.run(
+        _get_registered_tool(toolkit, "retrieve_course_knowledge")("线性表")
+    )
+
+    assert result.content == [{"type": "text", "text": "知识检索暂时不可用。"}]
+
+
+def test_assessment_toolkit_validator_returns_text_block() -> None:
+    from agent_service.agents.assessment_tools import build_assessment_toolkit
+
+    payload = (
+        '[{"type":"code","content":"写一个函数","options":[],"answer":"def f(): pass",'
+        '"knowledge_point":"函数","explanation":"代码题解析"}]'
+    )
+    toolkit = build_assessment_toolkit(
+        course_id="course-1",
+        embedding_provider=None,
+        vector_store=None,
+    )
+    result = _get_registered_tool(toolkit, "validate_question_format")(payload)
+
+    assert result.content[0]["type"] == "text"
+    assert "校验通过" in result.content[0]["text"]
 
 
 def _build_request(
@@ -615,3 +1485,9 @@ def _build_request(
         questions=questions,
         answers=answers,
     )
+
+
+def _get_registered_tool(toolkit, name: str):
+    if name in toolkit.tools:
+        return toolkit.tools[name].original_func
+    raise KeyError(f"tool {name} not found in toolkit")

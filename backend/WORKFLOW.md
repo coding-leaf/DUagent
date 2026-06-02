@@ -131,54 +131,9 @@ _（当前无占位接口）_
   - Agent 侧 commit 2febbe6 修复 SiliconFlow `BAAI/bge-m3` embeddings 400（根因：AgentScope `OpenAITextEmbedding` 发送不支持的 `dimensions` 参数；通过 `EMBEDDING_REQUEST_DIMENSIONS_ENABLED=false` 解决）
   - Qdrant `course_knowledge_v1_1024` collection 已灌入 760 chunks 课程知识数据
   - 复验 resources/generate：Agent 日志确认 embeddings 200、Qdrant query 200、RAG 检索参与生成；resource 质量从泛化模板提升为课程知识驱动的具体内容
-- `2026-06-02` `resources + webhook 真实链路联调验收通过`
-  - 使用真实 Backend (8001) + Agent Service (8002) 端到端验证：`POST /resources/generate` → Agent LLM 生成 → Webhook 回调 → SQL 落库 → task 闭环
-  - 结果：202 + task_id → processing → completed（约 13s），task.result 含 2 条 LLM 生成资源（document + mindmap，中文内容），`GET /resources` 返回完整字段
-  - 无 bug，不改代码。resources + webhook 链路保持「半完成」
-- `2026-06-02` `quiz 收口：bug 修复 + 集成测试加强`
-  - Bug 修复（`app/api/v1/quiz.py`，3 处）：
-    - `total_attempts`：修复无答题记录时虚报 1（改为 `len(all_quizzes)`）
-    - `score_trend`：`all_qr` 查询补 `.order_by(QuizSession.create_time.asc())`，消除排序不确定性
-    - 非法 `question_id`：改为 `is_correct=False` + 不创建 QuizAnswer 记录 + 不进入 Agent 诊断 payload（消除 FK 违规 + 保守评分语义 + Agent payload 对齐）
-  - 集成测试加强（`test_quiz_async.py`）：
-    - 新增/增强测试场景：QuizAnswer 落库验证、多选题评分、非法 question_id 容错、空答案、无效 quiz_id → 404、统计计算精度、score_trend 排序、diagnosis 字段形状检查
-    - 增强后台任务触发验证、Agent payload questions/answers 对齐验证、diagnosis 字段无额外键验证
-    - diagnosis 仍保持当前数据驱动实现；LLM vs 数据驱动、何时返回 null 的前端契约语义继续作为待确认项，不以本轮测试判定为已收口
-  - quiz submit/result 继续保持「半完成」
-- `2026-06-02` `补充联调启动建议（Docker + 本地服务）`
-  - 更新根目录 `联调测试指导.md`：明确本地联调依赖的推荐启动顺序为 `docker run MySQL` → `docker run Qdrant` → 本地启动 `Agent Service` → 本地启动 `Backend`
-  - 补充现成命令：`docker run` / `docker start` / MySQL 连通性检查 / Qdrant health 检查，避免后端因 `localhost:3306` 不可达直接启动失败
-- `2026-06-01` `接口盘点初始化`
-  - 新增接口实现情况总览
-  - 明确后续每次改接口时必须同步更新最近状态
-- `2026-06-01` `修复 webhook task.status 闭环 + 实现两个占位接口`
-  - `POST /api/v1/webhooks/agent`：补充 task.status 设置（completed/failed），幂等保护生效，接口保持「半完成」
-  - `GET /api/v1/learning-path/nodes/{node_id}/resources`：新增 `course_id` 查询参数，从 `LearningPath` + `Resource` + `QuizQuestion` 表真实查询，状态提升至「半完成」。同步更新 `docs/10-client-api/Client-API.openapi.json` 补充 `course_id` 参数；已添加课程权限校验（学生需已加入课程）
-  - `GET /api/v1/quiz/result`：替换硬编码诊断为基于 `QuizAnswer` JOIN `QuizQuestion` 的数据驱动聚合计算，状态提升至「半完成」。无答题记录时 `diagnosis` 返回 `null`（符合 API 前端接口规范）
-- `2026-06-01` `webhook error_code 落库 + 鉴权`
-  - `POST /api/v1/webhooks/agent`：failed 分支补充 `task.error_code` 落库；Agent Service `build_resource_generation_failed_payload` 同步发送 `error_code: "agent_error"`
-  - 新增 `X-Webhook-Secret` 鉴权（两端都配同一个 secret 时生效；仅一端配置时，Agent 配 Backend 未配→header 被忽略，Backend 配 Agent 未配→401；两端都不配→跳过鉴权）
-- `2026-06-02` `实现 quiz/submit 后台异步 LLM 诊断（修正）`
-  - `POST /api/v1/quiz/submit`：评分完成后通过 `asyncio.create_task` 后台异步调用 `agent_client.post_json("/agent/v1/assessment/evaluate")`，LLM 诊断存入 `QuizSession.diagnosis_json`。后台任务使用独立 DB session，不创建 AsyncTask（避免新增未声明 task_type），失败时记录结构化日志。接口保持「半完成」— 诊断链路已打通但依赖后台异步完成
-  - `GET /api/v1/quiz/result`：诊断保持纯课程级数据驱动聚合（summary/weak_points/suggestions 全部基于 QuizAnswer JOIN QuizQuestion 计算），不混合 diagnosis_json。接口保持「半完成」— 数据驱动诊断可用，LLM 诊断数据存于 diagnosis_json 供未来 per-session 端点使用
-- `2026-06-02` `profile 刷新链路稳定化`
-  - `POST /api/v1/profile/refresh`：MySQL `GET_LOCK`/`RELEASE_LOCK` 序列化同用户+课程并发写入；软删旧行 → 插新行；显式 `commit()` 后再释放锁；异常兜底覆盖完整路径；GET `/profile` 改为 `.order_by(desc).first()`
-  - `POST /api/v1/profile/initialize`：同锁策略 + 显式 `commit()` 后释放锁；重复提交 = 覆盖；锁超时返回 `503`
-- `2026-06-02` `profile/refresh 真异步化`
-  - `POST /api/v1/profile/refresh`：请求内只做权限校验 + payload 组装 + task 创建/提交 + 返回 202；后台 `_run_profile_refresh_background` 通过 `asyncio.create_task` 执行 Agent 调用 → 锁 → 写库 → task 完成/失败，使用独立 DB session + `UPDATE AsyncTask` 写任务终态。接口从「半完成」提升至「真实完成」— Agent 调用不阻塞请求响应，task 状态真实反映后台进度
-- `2026-06-02` `evaluation + learning-path 真异步化（复制 profile 模板）`
-  - `POST /api/v1/evaluation/refresh`：同 profile 模式 — 请求内只做权限校验 + payload 组装 + task 创建/提交 + 返回 202；后台 `_run_evaluation_refresh_background` 执行 Agent 调用 + 锁 + 写库 + task 完成/失败。接口从「半完成」提升至「真实完成」
-  - `POST /api/v1/learning-path/refresh`：同 evaluation 模式。接口从「半完成」提升至「真实完成」
-- `2026-06-02` `evaluation + learning-path 刷新链路稳定化（复制 profile 模板）`
-  - `POST /api/v1/evaluation/refresh`：MySQL `GET_LOCK` 序列化写入；task 创建后显式 `commit()`；try 覆盖 Agent 调用 + DB 写入完整路径；成功路径 `commit → release lock`；AgentServiceError、锁超时和通用 Exception 分支都会先 `rollback()` 再落 `task failed`，不再残留 `processing`
-  - `POST /api/v1/learning-path/refresh`：同 evaluation 模式；额外修复 GET `/learning-path` 的 `scalar_one_or_none()` → `.order_by(desc).first()`（修复多次 refresh 后 GET 500 崩溃）；`_assemble_learning_path_payload` 中 UserProfile / CourseKnowledgeGraph 读取同改 `.first()`；`get_node_resources` 中 CourseKnowledgeGraph 同改 `.first()`；锁超时同样会落 `task failed`
-- `2026-06-02` `补充 backend 实际工作流程`
-  - 新增"Backend 工作流程"章节，固定约束：先审契约、一次只推进一个接口、修改前先给 4 项分析、优先收口异常路径和任务状态闭环、改完立即同步 `WORKFLOW.md`
-- `2026-06-02` `resources/generate + webhooks/agent 集成测试`
-  - 新增 `test_resources_async.py`（7 条用例）：generate 202 + task_type、webhook completed 落库、failed 落 error_code、幂等（不重复插 resources）、X-Webhook-Secret 鉴权通过+拒绝、task_type mismatch 400。全部使用 MySQL + AsyncMock
-- `2026-06-02` `refresh 锁相关集成测试补齐`
-  - 新增 `test_lock_async.py`：真实 MySQL `GET_LOCK` 超时路径集成测试，覆盖 `POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 三条链路。验证锁被占用时仍返回 `202 + task_id`，后台 task 最终 `failed`，且 `error_code = "lock_timeout"`
-  - 补充 `profile/refresh` 锁竞争测试：并发两个 refresh 请求，两个 task 都进入终态，最终仅保留一条 `is_deleted = false` 的活跃记录，验证锁 + 软删 + 插入 + commit 后释放锁的写入一致性
+- `2026-06-01 ~ 2026-06-02` `主链打通与稳定化`
+  - 已完成 refresh 真异步化、resources + webhook 闭环、quiz 收口、锁与 webhook 集成测试、联调启动手册补充等主干工作
+  - 细节以 git 提交记录和最近验证为准，不再在此处逐条展开历史流水账
 
 ## 文件用途
 
@@ -230,15 +185,6 @@ _（当前无占位接口）_
   - learning-path 链路成立，但前提是课程已有 `CourseKnowledgeGraph`
 - 当前阶段的主要问题已不再是“接口是否能通”，而是“系统级数据准备和生产可靠性是否收口”。
 
-## 当前方向
-
-- Backend 已具备对接 Agent Service 的基础：统一的 `AgentClient`、AsyncTask 管理、Webhook 接收落库。
-- 6 个 Agent 接口全部完成对接，所有调用统一走 `agent_client` 单例。
-- 联调重点从“逐接口启动两个服务验证主链”转为“补齐系统级缺口和长期可复现能力”。
-- 发现的问题优先区分：
-  - 链路未通 / 契约错误
-  - 系统级能力缺口（数据准备、任务恢复、流程产品化）
-
 ## Agent Service 接口对接状态
 
 | Backend 接口 | Agent 路径 | 类型 | 状态 | 备注 |
@@ -251,59 +197,9 @@ _（当前无占位接口）_
 | `POST /api/v1/learning-path/refresh` | `/agent/v1/learning-path/generate` | 真异步 | ✅ | 202 + task_id；后台 asyncio.create_task 执行 Agent 调用 + 写库 |
 | `POST /api/v1/webhooks/agent` | — | Webhook | ⚠️ | 见已知问题 |
 
-## 已改内容
+## 未完成项
 
-### 已完成并验证通过
-
-- `POST /api/v1/profile/refresh`
-  - 从请求内同步调用 Agent 改为后台异步执行
-  - 请求内只做 payload 组装、创建任务、返回 `202 + task_id`
-  - 后台独立 session 调 Agent、加锁、软删旧行、插新行、更新 task
-- `POST /api/v1/evaluation/refresh`
-  - 复制 profile 真异步模板
-  - 成功/失败路径都落稳定 task 终态
-- `POST /api/v1/learning-path/refresh`
-  - 复制 profile 真异步模板
-  - 额外修复历史多行读取导致的 GET 500 风险
-- `POST /api/v1/webhooks/agent`
-  - task.status completed/failed 闭环
-  - failed 分支 `error_code` 落库
-  - `X-Webhook-Secret` 鉴权
-- `GET /api/v1/learning-path/nodes/{node_id}/resources`
-  - 从占位实现改为真实 DB 查询
-  - 新增 `course_id` 查询参数并已同步前端契约
-  - 补课程权限校验
-- `GET /api/v1/quiz/result`
-  - 替换硬编码诊断为课程级数据驱动聚合
-  - 无数据时 `diagnosis: null`
-- `POST /api/v1/quiz/submit`
-  - 后台异步保存 Agent 诊断到 `QuizSession.diagnosis_json`
-  - 不新增未声明 `task_type`
-
-### 已完成的验证
-
-- `test_refresh_async.py`
-  - 当前 `24/24` 通过
-  - 覆盖三条 refresh 链路：
-    - `202 + task_id`
-    - immediate poll 仍为 `processing`
-    - 最终 `completed`
-    - SQL 写入成功
-    - Agent error -> `failed + error_code`
-
-## 暂不修改 / 不必要修改
-
-- 暂不为 `profile/evaluation/learning-path` 引入 Celery、RQ、消息队列或持久化 worker
-  - 当前阶段以前端可见异步语义和任务状态闭环为完成标准
-- 暂不再投入 SQLite 兼容测试
-  - 当前真实运行环境是 MySQL
-  - 联调测试以 MySQL 为准
-- 暂不大规模抽象三条 refresh 的公共 service 层
-  - 当前虽有重复模式，但仍以 minimal diff 为主
-- 暂不扩展 quiz 的 per-session 新接口
-  - 先保持当前课程级结果语义稳定
-
-## 等待修改 / 待办项
+以下项目不是“链路没通”，而是联调通过后暴露出的系统级能力缺口或待收口问题。
 
 ### 优先级高
 
@@ -347,16 +243,6 @@ _（当前无占位接口）_
 - 新课程的 Qdrant 知识灌入流程
   - 老课程已验证真实 RAG 可用，但新课程若要复现课程级 RAG，仍需单独灌入课程知识
   - 当前属于“能力存在，但流程未产品化”
-
-### 等待更后续再考虑
-
-- 异步任务持久化恢复能力
-  - 当前使用 `asyncio.create_task`
-  - 进程重启后后台任务不会自动续跑
-  - 这属于后续生产级可靠性增强，不是当前联调主阻塞
-- 锁等待秒数配置化
-  - 对锁超时测试和运维有帮助
-  - 但不是当前第一优先级
 
 ## 已知问题
 

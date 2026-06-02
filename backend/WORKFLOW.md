@@ -117,6 +117,24 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-03` `联调 v1 验收完成`
+  - 根目录 `联调v1结果.md` 已记录 7 条链路的完整验收结果：服务健康、账号课程、profile/evaluation refresh、resources + webhook、tutoring/chat RAG、quiz/generate + submit + result、learning-path/refresh
+  - `tutoring/chat` 首次拿到完整 RAG 证据：SSE 正常、课程知识命中、教材特征内容、Mermaid 图表、知识点和建议完整
+  - `learning-path/refresh` 经手工灌入 `CourseKnowledgeGraph` 后复跑为 `7 nodes / 6 edges`，证明 learning-path 链路成立；当前缺口不再是接口本身，而是 KG 数据准备链路
+  - 联调主链已从“逐接口打通”转入“收口系统级能力缺口”：KG 数据准备、refresh 任务持久化恢复、quiz 个性化质量与 diagnosis 语义、新课程 Qdrant 知识灌入流程
+- `2026-06-02` `沉淀完整联调验收手册`
+  - 重写根目录 `联调测试指导.md`，将原有接口清单式说明升级为阶段化联调验收手册
+  - 明确服务启动顺序、健康检查、环境一致性、AI 执行规则、通过/降级可用/未通过判定标准
+  - 明确 `tutoring/chat` 是核心 RAG 验收链路，`learning-path/refresh` 非 RAG 且依赖 `CourseKnowledgeGraph`
+  - 后续联调默认先按该手册执行，再把验收结果回写本文件
+- `2026-06-02` `RAG embeddings 400 修复 + resources 复验通过`
+  - Agent 侧 commit 2febbe6 修复 SiliconFlow `BAAI/bge-m3` embeddings 400（根因：AgentScope `OpenAITextEmbedding` 发送不支持的 `dimensions` 参数；通过 `EMBEDDING_REQUEST_DIMENSIONS_ENABLED=false` 解决）
+  - Qdrant `course_knowledge_v1_1024` collection 已灌入 760 chunks 课程知识数据
+  - 复验 resources/generate：Agent 日志确认 embeddings 200、Qdrant query 200、RAG 检索参与生成；resource 质量从泛化模板提升为课程知识驱动的具体内容
+- `2026-06-02` `resources + webhook 真实链路联调验收通过`
+  - 使用真实 Backend (8001) + Agent Service (8002) 端到端验证：`POST /resources/generate` → Agent LLM 生成 → Webhook 回调 → SQL 落库 → task 闭环
+  - 结果：202 + task_id → processing → completed（约 13s），task.result 含 2 条 LLM 生成资源（document + mindmap，中文内容），`GET /resources` 返回完整字段
+  - 无 bug，不改代码。resources + webhook 链路保持「半完成」
 - `2026-06-02` `quiz 收口：bug 修复 + 集成测试加强`
   - Bug 修复（`app/api/v1/quiz.py`，3 处）：
     - `total_attempts`：修复无答题记录时虚报 1（改为 `len(all_quizzes)`）
@@ -195,28 +213,31 @@ _（当前无占位接口）_
 
 ## 当前联调结论
 
-- Backend -> Agent Service 主干已打通，且不是仅“能调接口”，而是已有任务状态闭环和 SQL 落库闭环。
-- 目前最稳定的联调能力是 3 条 refresh 链路：
-  - `POST /api/v1/profile/refresh`
-  - `POST /api/v1/evaluation/refresh`
+- Backend -> Agent Service 主干已打通，且不是仅“能调接口”，而是已完成任务状态闭环、SQL 落库闭环和真实业务验收。
+- 联调 v1 已完成 7 条目标链路验收：
+  - 服务健康
+  - 账号课程
+  - `POST /api/v1/profile/refresh` + `POST /api/v1/evaluation/refresh`
+  - `POST /api/v1/resources/generate` + `POST /api/v1/webhooks/agent`
+  - `POST /api/v1/tutoring/chat`
+  - `POST /api/v1/quiz/generate` + `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`
   - `POST /api/v1/learning-path/refresh`
-- 三条链路当前都满足：
-  - 请求内快速返回 `202 + task_id`
-  - 立即轮询 `GET /api/v1/tasks/{task_id}` 可见 `processing`
-  - 后台协程独立调用 Agent Service
-  - 成功时 `AsyncTask -> completed`
-  - 失败时 `AsyncTask -> failed`
-  - `error_code` / `error_message` 正确落库
-  - 成功时对应业务表写入新记录
-- 资源生成链路已接近完整闭环，但仍需补更扎实的集成测试。
-- quiz 链路已从明显占位提升到半完成，但仍不建议继续扩功能，应先保持当前语义稳定。
+- 当前可以确认：
+  - refresh 三条链路在运行态下真异步语义成立
+  - resources + webhook 真实闭环成立
+  - tutoring/chat 已验证真实 RAG 命中，不再只是“可回答”
+  - quiz 主链功能成立，评分、结果统计、后台 diagnosis 写入都可用
+  - learning-path 链路成立，但前提是课程已有 `CourseKnowledgeGraph`
+- 当前阶段的主要问题已不再是“接口是否能通”，而是“系统级数据准备和生产可靠性是否收口”。
 
 ## 当前方向
 
 - Backend 已具备对接 Agent Service 的基础：统一的 `AgentClient`、AsyncTask 管理、Webhook 接收落库。
 - 6 个 Agent 接口全部完成对接，所有调用统一走 `agent_client` 单例。
-- 后续进入联调验证：逐接口启动两个服务，验证完整链路（请求 → Agent 返回 → Backend 落库）。
-- 发现的问题优先修 bug，再补 stub。
+- 联调重点从“逐接口启动两个服务验证主链”转为“补齐系统级缺口和长期可复现能力”。
+- 发现的问题优先区分：
+  - 链路未通 / 契约错误
+  - 系统级能力缺口（数据准备、任务恢复、流程产品化）
 
 ## Agent Service 接口对接状态
 
@@ -286,30 +307,46 @@ _（当前无占位接口）_
 
 ### 优先级高
 
+- `CourseKnowledgeGraph` 正式数据准备链路
+  - `learning-path/refresh` 接口本身已验证成立，但课程若无 KG 则只能返回空 `nodes/edges`
+  - 当前 KG 需要手工写库；没有正式导入工具、生成能力或管理界面
+  - 这不是 learning-path 接口未完成，而是它依赖的上游数据生产能力未完成
 - refresh 真异步任务持久化/恢复
   - `POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 当前在返回 `202` 后使用进程内 `asyncio.create_task`
   - worker reload / 进程重启 / crash 后，已接受任务可能永久停留在 `AsyncTask.status = processing`
   - 需要补持久化执行机制，或至少补启动恢复 / stuck task 回收策略
 - `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`
-  - 继续保持课程级语义单一
-  - ✅ MySQL 集成测试已补齐（71/71 通过）
-  - 待确认：diagnosis 契约语义（LLM vs 数据驱动、何时 null），需与前端/Agent 侧对齐后单独收口
+  - 功能主链已成立，MySQL 集成测试已补齐（71/71 通过）
+  - 仍未收口的是个性化质量与语义统一：
+    - 没有足够 profile/evaluation/context 时，题目会退化为泛化题
+    - diagnosis 仍有“课程级聚合”和后台 `diagnosis_json` 并存问题
+  - 需与前端/Agent 侧对齐后单独收口
 - `POST /api/v1/webhooks/agent`
   - failed 回调当前已验证 `error_code present`
   - 若继续收口，可补精确 `error_code` 值校验与更多异常负例
+- KG 自动生成能力
+  - 当前不是没有 learning-path，而是没有正式的 KG 生成/导入机制
+  - 若后续希望新课程自动具备 learning-path，需要补：
+    - 手工导入工具
+    - 或 Agent 生成候选 KG + Backend 落库
+  - 当前这块尚未开始实现
 
 ### 优先级中
 
 - RAG 检索 embeddings 400 排查与修复
-  - `retrieve_course_knowledge` / `retrieve_user_memory` 当前会在 embeddings 阶段返回 `400 Bad Request`
-  - 导致课程知识库检索和用户记忆检索一起降级为“暂时不可用”，Agent 实际退化为无检索直答
-  - 需要排查 embedding model / 请求体 / 权限配置，并补失败响应日志
+  - ✅ Agent 侧已修复（`agent_service` commit 2febbe6）：根因为 AgentScope `OpenAITextEmbedding` 对 SiliconFlow `BAAI/bge-m3` 发送了不支持的 `dimensions` 参数；通过 `EMBEDDING_REQUEST_DIMENSIONS_ENABLED=false` 默认不传 `dimensions` 解决
+  - ✅ 课程知识已灌入 Qdrant（`course_knowledge_v1_1024`，760 chunks from 数据结构教材），实测 `search_course_knowledge` limit=3 命中 3 hits
+  - ✅ embeddings 400 和空 collection 问题已不再是当前联调阻塞；RAG 检索链路已验证可用
+  - 后续：验证 tutoring/chat 等场景下 RAG 命中率与检索质量
 - `POST /api/v1/profile/initialize`
   - 当前可用，但仍属于半完成
   - 若后续继续稳定化，可补更多重复提交和异常路径测试
 - `POST /api/v1/resources/generate` + `POST /api/v1/webhooks/agent`
   - 当前主链路和鉴权/幂等已覆盖
   - 若后续继续加强，可补更高并发 webhook 场景验证
+- 新课程的 Qdrant 知识灌入流程
+  - 老课程已验证真实 RAG 可用，但新课程若要复现课程级 RAG，仍需单独灌入课程知识
+  - 当前属于“能力存在，但流程未产品化”
 
 ### 等待更后续再考虑
 
@@ -327,7 +364,9 @@ _（当前无占位接口）_
 2. **`GET /learning-path/nodes/{id}/resources` chapter_materials 依赖 KG 预置数据**：`chapter_materials` 从 `CourseKnowledgeGraph.nodes` JSON 中提取 `chapter` 字段并匹配 `Resource.chapter`。若 KG 未预置完整数据，该字段将返回空数组（不影响其他字段）。
 3. **`POST /quiz/submit` 诊断链路已后台异步化，GET /quiz/result 保持纯课程级**：后台 `_run_diagnosis_background` 通过 `asyncio.create_task` 调用 Agent `/assessment/evaluate`，使用 UPDATE 写入 `QuizSession.diagnosis_json`（无 DB 读依赖，消除竞态）。`GET /quiz/result` 的 summary/weak_points/suggestions 全部基于课程级聚合计算，不混合 `diagnosis_json`（该字段保留供未来 per-session 诊断端点使用）。
 4. **refresh 真异步任务当前不具备持久性**：`POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 在返回 `202` 后使用进程内 `asyncio.create_task` 执行 Agent 调用和写库。若 worker reload、服务重启或进程 crash，后台协程会丢失，已创建的 `AsyncTask` 可能永久停留在 `processing`。当前联调测试覆盖了正常成功/失败与锁语义，但尚未解决任务持久化/恢复问题。
-5. **RAG 检索当前可能整体失效**：日志显示 `retrieve_course_knowledge` 和 `retrieve_user_memory` 在调用 embeddings 接口时返回 `HTTP 400 Bad Request`，随后工具层统一降级为“课程知识检索暂时不可用 / 用户记忆检索暂时不可用”。这意味着问题发生在查询向量生成阶段，而非 Qdrant 查询阶段；当前 Tutor 可继续回答，但实际退化为无课程知识、无用户记忆的直答模式。
+5. ~~**RAG 检索当前可能整体失效**~~（已修复，2026-06-02）：Agent 侧 embeddings 400 已修复（commit 2febbe6），课程知识已灌入 Qdrant（course `758aeff588e84044`，760 chunks，检索命中 3/3）。RAG 不再整体失效，resources/generate 真实链路验收已确认日志中不再出现 embeddings 400 或 Qdrant collection 404。
+6. **`learning-path/refresh` 依赖 KG 数据准备，不等于 KG 流程已完成**：当前已通过手工写入 `CourseKnowledgeGraph` 验证 learning-path 链路成立，但系统仍缺正式 KG 导入、自动生成或管理方式。新课程若不补 KG，learning-path 仍会空结果。
+7. **新课程课程知识灌入流程未产品化**：已验证课程 `758aeff588e84044` 的 RAG 可用，但新课程若要复现课程级 tutoring/resources/quiz 上下文，仍需额外灌入 Qdrant 数据。
 
 ## 联调命令
 
@@ -415,6 +454,7 @@ cd agent_service && ./.venv/bin/pytest -q
 
 ## 下一步建议
 
-1. 先集中收口 `POST /api/v1/quiz/submit` + `GET /api/v1/quiz/result`，补 MySQL 集成测试，验证课程级语义、后台诊断写入和前端读取行为一致。
-2. 若继续加强 resources/webhook 链路，优先补 `failed` 分支精确 `error_code` 校验和更高并发 webhook 场景测试。
-3. 暂不继续扩展新的 Agent 能力或持久化队列，先把现有已接通链路的测试和语义完全收口。
+1. 优先补 `CourseKnowledgeGraph` 的正式数据准备链路，先解决“可复现导入”，再考虑自动生成或管理界面。
+2. 为 refresh 三条真异步链路设计最小可行的持久化恢复或 stuck task 回收策略，避免运行中可用但重启后不可靠。
+3. 收口 quiz 的个性化质量与 diagnosis 语义，而不是继续证明主链是否可用。
+4. 将新课程 Qdrant 知识灌入流程文档化或工具化，避免每次联调都重复手工操作。

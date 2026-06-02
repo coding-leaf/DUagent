@@ -42,7 +42,7 @@ node_modules/
 Thumbs.db
 
 .claude
-
+.antigravitycli
 # Environments
 .env
 .env.*
@@ -58,6 +58,8 @@ Thumbs.db
 # Local vector stores
 qdrant_data/
 **/qdrant_data/
+qdrant_storage/
+**/qdrant_storage/
 
 # Coverage & Build
 coverage/

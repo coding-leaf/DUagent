@@ -56,6 +56,8 @@
 
 ## 最近验证
 
+- `./.venv/bin/python -m agent_service.tools.ingest_knowledge /tmp/758aeff588e84044`：**通过**（将 `knowledge_base/data_structures` 以 Backend 课程 ID `758aeff588e84044` 摄入 Qdrant，写入 `course_knowledge_v1_1024`，760 chunks）
+- `QdrantVectorStore().search_course_knowledge("758aeff588e84044", embedding("数据结构 顺序表 随机访问"), limit=3)`：**3 hits**（真实课程知识检索可用，collection count=760）
 - `./.venv/bin/pytest tests/test_ai_providers.py tests/test_core_config.py -q`：**19 passed**（SiliconFlow embedding 请求维度开关；默认不向 embeddings API 发送有效 dimensions，保留 `EMBEDDING_DIMENSION` 给 Qdrant collection）
 - `./.venv/bin/pytest -q`：**418 passed**（统一 agent_trace 日志后全量回归）
 - `./.venv/bin/pytest tests/test_tutoring_agent.py tests/test_assessment_agent.py tests/test_resources_workflow.py -q`：**133 passed**（tutoring / assessment / resources trace 与主链路回归）

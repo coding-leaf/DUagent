@@ -1,5 +1,15 @@
 # WORKFLOW.md
 
+## 文件用途
+
+本文件只记录 `backend/` 当前阶段状态、最近验证和下一步。
+
+- 模块目标与边界：看 `docs/goals.md`
+- 术语：看 `docs/glossary.md`
+- 关键决策：看 `docs/decisions.md`
+- 临时实现与已知限制：看 `docs/temporary-implementation.md`
+- 正式契约：看根目录 `docs/10-client-api/*` 与 `docs/20-agent-api/*`
+
 ## 接口实现状态维护约定
 
 本文件开头固定维护一份“接口实现情况”总览，用于区分：
@@ -134,37 +144,6 @@ _（当前无占位接口）_
 - `2026-06-01 ~ 2026-06-02` `主链打通与稳定化`
   - 已完成 refresh 真异步化、resources + webhook 闭环、quiz 收口、锁与 webhook 集成测试、联调启动手册补充等主干工作
   - 细节以 git 提交记录和最近验证为准，不再在此处逐条展开历史流水账
-
-## 文件用途
-
-本文件记录 Backend 联调的开发进度和跨窗口恢复上下文。
-接口契约以 `../docs/20-agent-api/Agent-Service.openapi.json` 和 `../docs/20-agent-api/API_Agent内部接口规范.md` 为准，本文件不是接口契约来源。
-
-## 当前项目结构
-
-### Backend 负责范围
-
-- `app/api/v1`
-  - 前端 API 路由
-  - 鉴权、权限校验、HTTP 状态码、统一返回包装
-  - AsyncTask 协议适配
-  - Webhook 接收
-- `app/services/agent_client.py`
-  - Backend -> Agent Service 的统一 HTTP client
-- `app/models`
-  - SQLAlchemy ORM，保存用户、课程、题目、任务、画像、评估、学习路径、资源、对话等业务数据
-- `app/db`
-  - 数据库连接、session、启动初始化
-- `app/schemas`
-  - 前端请求/响应实体、Webhook 请求实体
-- `WORKFLOW.md`
-  - 当前联调状态、已改/未改能力、最近验证和下一步任务
-
-### Agent Service 负责范围
-
-- 只通过 `/agent/v1/*` HTTP 接口被 Backend 调用
-- 负责 LLM、AgentScope 编排、RAG、结构化 AI 结果生成、SSE 内容生成
-- 不直接写 Backend SQL
 
 ## 当前联调结论
 

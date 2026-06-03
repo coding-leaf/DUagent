@@ -2,6 +2,9 @@
 
 ## Scope
 
+- 开始前先读 `README.md` 获取文件导读和阅读顺序。
+- `AGENTS.md` 只负责协作规则与修改约束，不承担模块文档导航职责。
+
 - 负责 `backend/` 内的主业务后端服务。
 - 负责用户、鉴权、课程、SQL 持久化、任务状态、前端 API、Agent Service HTTP 调用适配和 Webhook 落库。
 - 不负责 `agent_service/` 内部的 LLM、AgentScope、Qdrant RAG、提示词、智能体编排实现。
@@ -19,6 +22,7 @@
 5. `backend/schema.sql` — 数据库 schema 参考
 
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
+- `README.md` 是模块文档入口。
 - `WORKFLOW.md` 是联调进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
 
 ## Contract Discipline

@@ -1,18 +1,20 @@
-# Agent Docs Moved
+# Agent Service Docs
 
-`agent_service/docs/` 不再维护正式接口文档。
+`agent_service/docs/` 不维护正式接口契约；正式契约请看根目录 `docs/20-agent-api/*`。
 
-请改看根目录 `docs/`：
+本目录当前分工如下：
 
-- `docs/20-agent-api/API_Agent内部接口规范.md`
-- `docs/20-agent-api/Agent-Service.openapi.json`
-- `docs/30-dev-guide/Agent-Service_开发导读.md`
-
-当前目录只保留这个入口说明，避免出现第二套真相源。
-
-## Local Development Skills
-
-本目录可以保留面向 `agent_service` 开发的本地 skill / 参考资料，但它们不是接口契约来源。
-
-- `docs/skills/agentscope-framework/`：AgentScope 官方文档索引、项目适配原则和开发导航。
-- `docs/Agent-Service_本地启动与运维.md`：本地启动、readiness、smoke、知识入库和常见问题操作说明。
+- `goals.md`
+  - 模块目标、边界、明确不做事项
+- `glossary.md`
+  - 模块术语表
+- `decisions.md`
+  - 关键实现决策与原因
+- `temporary-implementation.md`
+  - 当前临时实现与已知限制
+- `Agent-Service_本地启动与运维.md`
+  - 启动、readiness、smoke、知识入库和常见问题操作说明
+- `skills/agentscope-framework/`
+  - AgentScope 开发导航与参考资料
+- `superpowers/`
+  - 历史实施设计/计划材料，不作为当前真相源

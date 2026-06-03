@@ -116,6 +116,7 @@
 - `./.venv/bin/pytest tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py tests/test_tutoring_api.py -q`：**41 passed**（最终 tutoring 回归）
 - `./.venv/bin/pytest tests/test_tutoring_response_critic.py tests/test_tutoring_strategy.py tests/test_tutoring_react_flow.py tests/test_tutoring_agent.py tests/test_tutoring_prompts.py tests/test_tutoring_api.py -q`：**50 passed**（ResponseCriticAgent + tutoring 回归）
 - `./.venv/bin/pytest tests/test_resources_agent.py tests/test_resources_workflow.py -q`：**85 passed**
+- `./.venv/bin/pytest tests/test_ingest_knowledge_cli.py tests/test_ingest_knowledge.py --cov=agent_service.tools.ingest_knowledge -q`：**12 passed**（`ingest_knowledge.py` CLI 工程化加固，支持异常捕获、更完备的前置校验包括单文件后缀校验、与退出码，测试覆盖率 96%）
 - 近期全量记录：`./.venv/bin/pytest -q` 曾为 **335 passed**；后续若改共享逻辑需重新跑相关范围或全量。
 
 ## 下一步建议

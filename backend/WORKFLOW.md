@@ -137,6 +137,11 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-03` `CourseKnowledgeGraph 手工导入工具`
+  - **新增**：`tools/import_knowledge_graph.py` — CLI upsert 工具
+  - **验证**：导入 7 nodes/6 edges → learning-path/refresh → task completed → GET 返回 7 nodes/6 edges（从降级到真实通过）
+  - **契约**：无 HTTP API 变化
+
 - `2026-06-03` `quiz diagnosis 语义收口（方向 A）`
   - **问题**：Agent LLM 诊断写入 `diagnosis_json` 后无任何 API 消费，Agent 计算被浪费
   - **修复**：`GET /quiz/result` 优先使用 Agent 诊断的 `summary`/`suggestions`（带类型校验）；`weak_points` 保持 SQL 聚合。Agent 诊断缺失或格式异常时完整回退现有 SQL 逻辑

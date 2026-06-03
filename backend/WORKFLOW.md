@@ -137,8 +137,19 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-04` `Refresh 刷新端点契约对齐与 SQLite 锁适配`
+  - **修复**：将 `/profile/refresh`、`/evaluation/refresh`、`/learning-path/refresh` 从接收 Query 参数改回接收 **JSON Body**，对齐既有的 Client API OpenAPI 契约。
+  - **修复**：对 refresh 锁机制进行 SQLite 环境适配，若 Dialect 为 SQLite 则直接跳过 MySQL 特有的 `GET_LOCK` / `RELEASE_LOCK`，防止测试环境报 `no such function: GET_LOCK` 异常。
+  - **重构**：完成测试文件从根目录向 `tests/` 目录的安全迁移与适配；修复了 `simulate_real_study.py` 中 `message`、`stats` 和 `resources` 嵌套契约键，以及 `test_api.py` 中缺失 query 参和 `student_id` Typo 的测试缺陷。
+  - **验证**：
+    - 运行 `python tests/simulate_real_study.py` (真实用户流模拟) **全链路通过，无任何错误**。
+    - 运行 `python tests/test_api.py` (全量冒烟测试) **56/56 全量通过**。
+    - 运行 `python tests/test_refresh_async.py` (真异步集成测试) **24/24 全量通过**。
+    - 运行 `python tests/test_lock_async.py` (锁竞争一致性测试) **16/16 全量通过**。
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+
 - `2026-06-04` `CourseKnowledgeGraph 智能生成与导入临时过渡工具`
-  - **新增**：`tools/generate_knowledge_graph.py` — 作为单课程过渡方案的临时 KG 冷启动工具，不在 backend 内作为正式产品功能，仅供开发和运维阶段本地提取生成。
+  - **新增**：`tools/generate_knowledge_graph.py` — 作为单课程过渡方案的临时 KG 冷启动工具，不在 backend 内作为正式产品功能，仅供开发 and 运维阶段本地提取生成。
   - **新增**：`tests/test_generate_kg.py` — 针对该工具的数据去重、必填项过滤和悬空边剔除等核心校验逻辑进行单元测试。
   - **验证**：运行 `pytest tests/test_generate_kg.py`，所有 4 个测试点全部通过（4/4 passed）。
   - **契约**：无 HTTP API 契约变化（Client API 漂移：否，Agent API 漂移：否）。存在架构边界放宽/临时例外（在工具脚本内部直接实现了一次性 Prompt 和 LLM 接口调用）。

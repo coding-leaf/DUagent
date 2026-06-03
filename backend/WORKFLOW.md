@@ -82,7 +82,7 @@
 
 ## 当前接口实现情况总览
 
-更新日期：`2026-06-02`
+更新日期：`2026-06-04`
 
 ### 真实完成
 
@@ -105,6 +105,10 @@
 - `POST /api/v1/profile/refresh`
 - `POST /api/v1/evaluation/refresh`
 - `POST /api/v1/learning-path/refresh`
+- `GET /api/v1/quiz/questions`
+- `POST /api/v1/quiz/generate`
+- `POST /api/v1/quiz/submit`
+- `GET /api/v1/quiz/result`
 
 ### 半完成
 
@@ -112,8 +116,6 @@
 - `POST /api/v1/profile/initialize`
 - `GET /api/v1/profile`
 - `GET /api/v1/learning-path`
-- `GET /api/v1/quiz/questions`
-- `POST /api/v1/quiz/generate`
 - `GET /api/v1/quiz/history`
 - `GET /api/v1/resources`
 - `POST /api/v1/resources/generate`
@@ -123,8 +125,6 @@
 - `GET /api/v1/teaching/classes/{class_id}/students/{student_id}/learning`
 - `POST /api/v1/webhooks/agent`
 - `GET /api/v1/learning-path/nodes/{node_id}/resources`
-- `POST /api/v1/quiz/submit`
-- `GET /api/v1/quiz/result`
 
 ### 占位/规则完成
 
@@ -136,6 +136,16 @@ _（当前无占位接口）_
 - `POST /api/v1/auth/send-reset-code`
 
 ## 最近状态变更
+
+- `2026-06-04` `重构 Quiz 部分接口：解耦 submit 与 generate 业务逻辑`
+  - **重构**：针对 `backend/app/api/v1/quiz.py` 进行部分解耦，将 `/submit` 接口的答题评分比对、DB 持久化写库、后台诊断调用等核心业务编排，以及 `/generate` 接口的生题 payload 拼装逻辑，移至新增的业务服务层 `backend/app/services/quiz_service.py`。
+  - **说明**：此轮为最小范围重构。`/generate` 端点的任务状态管理、直接 Agent 请求与写入生成的题目记录，以及所有查询类端点（`/questions`、`/result`、`/history`）的逻辑依然留在 `quiz.py` 控制器内。
+  - **验证**：
+    - 在 MySQL 本地开发环境下运行 `python tests/test_quiz_async.py`，所有 78 项测试全数通过。
+    - 在 SQLite 测试环境下运行 `python tests/test_api.py`（56 项测试）与 `python tests/simulate_real_study.py`（完整用户学习流），全数通过无报错。
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+
+
 
 - `2026-06-04` `Refresh 刷新端点契约对齐与 SQLite 锁适配`
   - **修复**：将 `/profile/refresh`、`/evaluation/refresh`、`/learning-path/refresh` 从接收 Query 参数改回接收 **JSON Body**，对齐既有的 Client API OpenAPI 契约。
@@ -299,7 +309,7 @@ _（当前无占位接口）_
 
 1. **Webhook 鉴权需要两端同步配置**（`webhooks.py` + Agent Service `resources.py`）：Backend 已实现 `X-Webhook-Secret` 校验，Agent Service 的 `_post_json_payload` 已同步发送该 header。两端需配置一致的 `WEBHOOK_SECRET` 环境变量，未配时鉴权自动跳过（向后兼容）。
 2. **`GET /learning-path/nodes/{id}/resources` chapter_materials 依赖 KG 预置数据**：`chapter_materials` 从 `CourseKnowledgeGraph.nodes` JSON 中提取 `chapter` 字段并匹配 `Resource.chapter`。若 KG 未预置完整数据，该字段将返回空数组（不影响其他字段）。
-3. **`POST /quiz/submit` 诊断链路已后台异步化，GET /quiz/result 为折中融合语义**：后台 `_run_diagnosis_background` 通过 `asyncio.create_task` 调用 Agent `/assessment/evaluate`，使用 UPDATE 写入 `QuizSession.diagnosis_json`（无 DB 读依赖，消除竞态）。当前 `GET /quiz/result` 保持课程级 SQL `summary/weak_points`，只部分消费 Agent `suggestions`；这条链路已不再“完全未消费 Agent 诊断”，但语义尚未最终收口。
+3. **`POST /quiz/submit` 诊断链路已后台异步化，GET /quiz/result 为折中融合语义**：后台 `quiz_service.run_diagnosis_background` 通过 `asyncio.create_task` 调用 Agent `/assessment/evaluate`，使用 UPDATE 写入 `QuizSession.diagnosis_json`（无 DB 读依赖，消除竞态）。当前 `GET /quiz/result` 保持课程级 SQL `summary/weak_points`，只部分消费 Agent `suggestions`；这条链路已不再“完全未消费 Agent 诊断”，但语义尚未最终收口。
 4. **refresh 真异步任务当前不具备持久执行能力**：`POST /api/v1/profile/refresh`、`POST /api/v1/evaluation/refresh`、`POST /api/v1/learning-path/refresh` 在返回 `202` 后使用进程内 `asyncio.create_task` 执行 Agent 调用和写库。当前已补启动恢复：服务启动时将残留 refresh `processing` 任务标记为 `failed`；但尚未解决任务持久化执行/恢复问题。
 5. ~~**RAG 检索当前可能整体失效**~~（已修复，2026-06-02）：Agent 侧 embeddings 400 已修复（commit 2febbe6），课程知识已灌入 Qdrant（course `758aeff588e84044`，760 chunks，检索命中 3/3）。RAG 不再整体失效，resources/generate 真实链路验收已确认日志中不再出现 embeddings 400 或 Qdrant collection 404。
 6. **`learning-path/refresh` 依赖 KG 数据准备已具备临时工具支持**：当前已通过手工写入与 `generate_knowledge_graph.py` 智能命令行提取导入工具验证 learning-path 拓扑结构闭环。新课程若不准备 KG 图谱，则 learning-path 仍会空结果，但现在可通过 CLI 工具快速完成图谱抽取与数据灌入。

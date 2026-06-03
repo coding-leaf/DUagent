@@ -137,6 +137,12 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-03` `refresh 孤儿任务启动恢复`
+  - **问题**：profile/evaluation/learning-path refresh 使用 `asyncio.create_task`，进程重启后协程丢失，task 永久卡在 `status="processing"`
+  - **修复**：`app/main.py` lifespan 中新增 `_recover_orphaned_refresh_tasks()`，启动时将 refresh 三类 processing 任务标记 `failed`（`error_code=None`, `error_message="服务重启，后台任务丢失"`）
+  - **验证**：插入 3 个 processing refresh 任务 → 运行恢复 → 3 个变为 failed, 1 个 resource_generation 未受影响
+  - **契约**：不新增对外 API，`error_code` 保持 null
+
 - `2026-06-03` `resources/generate + quiz/generate Agent 失败分支 task 可见性修复`
   - **问题**：Agent 同步调用失败时，`db.flush()` 不提交事务。`get_db` 在 HTTP 202 发出后才 `session.commit()`，导致客户端立即轮询 `GET /tasks/{id}` 时 task 行对其他事务不可见（MySQL REPEATABLE READ）
   - **修复**：`resources.py` 和 `quiz.py` 的 `except AgentServiceError` 分支中 `db.flush()` → `db.commit()`，确保 202 返回前 task 已稳定落库

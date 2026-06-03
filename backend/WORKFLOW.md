@@ -137,6 +137,11 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-03` `quiz diagnosis 语义收口（方向 A）`
+  - **问题**：Agent LLM 诊断写入 `diagnosis_json` 后无任何 API 消费，Agent 计算被浪费
+  - **修复**：`GET /quiz/result` 优先使用 Agent 诊断的 `summary`/`suggestions`（带类型校验）；`weak_points` 保持 SQL 聚合。Agent 诊断缺失或格式异常时完整回退现有 SQL 逻辑
+  - **契约**：Client API 字段名/类型均不变；`error_pattern` 不暴露
+
 - `2026-06-03` `quiz wrong_points 查询修复`
   - **问题**：`_assemble_quiz_generate_payload` 中"最近错题知识点"查询只从 `QuizQuestion` 表直接取点，无 `QuizAnswer.is_correct=False` 过滤、无 `user_id` 限定，传给 Agent 的不是真实错题
   - **修复**：改为显式 JOIN `QuizSession` + `QuizAnswer` + `QuizQuestion`，限定 `user_id` + `is_correct=False`，按 `QuizAnswer.create_time DESC` 去重取最近 10 个

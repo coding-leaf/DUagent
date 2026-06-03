@@ -10,6 +10,14 @@
 - 临时实现与已知限制：看 `docs/temporary-implementation.md`
 - 正式契约：看根目录 `docs/20-agent-api/*`
 
+不要把以下内容继续堆回本文件：
+
+- 长篇模块导读
+- glossary 术语解释
+- decisions 决策正文
+- 历史实施计划与演进讨论
+- 可独立存在的操作手册或调试手册
+
 ## 当前方向
 
 - Agent 全链路架构升级主干已完成：适合 Agent/Workflow 的重点链路已具备 Agent 编排、质量门禁和 fallback。

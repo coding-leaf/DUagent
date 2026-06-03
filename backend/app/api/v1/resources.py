@@ -108,7 +108,7 @@ async def generate_resources(
         task.error_code = str(e.agent_code or "agent_error")
         task.error_message = e.message
         task.completed_at = datetime.now(timezone.utc)
-        await db.flush()
+        await db.commit()
         return JSONResponse(
             status_code=202,
             content={"code": 202, "message": "accepted", "data": {"task_id": task.id}},

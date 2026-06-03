@@ -78,6 +78,7 @@
    - 只提交本轮相关文件
    - 最终回复必须说明：当前完成、修改文件、测试结果、契约是否漂移、下一步建议
 9. 需要及时通过git 存档 commit内容为简短的修改总结
+10. 根据workflow内容,更新相关记录文件
 
 ## 当前接口实现情况总览
 
@@ -135,6 +136,12 @@ _（当前无占位接口）_
 - `POST /api/v1/auth/send-reset-code`
 
 ## 最近状态变更
+
+- `2026-06-03` `resources/generate + quiz/generate Agent 失败分支 task 可见性修复`
+  - **问题**：Agent 同步调用失败时，`db.flush()` 不提交事务。`get_db` 在 HTTP 202 发出后才 `session.commit()`，导致客户端立即轮询 `GET /tasks/{id}` 时 task 行对其他事务不可见（MySQL REPEATABLE READ）
+  - **修复**：`resources.py` 和 `quiz.py` 的 `except AgentServiceError` 分支中 `db.flush()` → `db.commit()`，确保 202 返回前 task 已稳定落库
+  - **验证**：停 Agent → POST resources/generate → ORM 直查确认 `status=failed, error_code=agent_error` 在 202 返回时已可见
+  - **契约**：Client API / Agent API 均未变化
 
 - `2026-06-03` `tutoring knowledge_points 字段解析修复 + 联调验证`
   - **问题**：`tutoring/chat` SSE 解析中 `parsed.get("points", [])` 只匹配 `points` key，但 Agent 实际发送 `{"type":"knowledge_points","knowledge_points":[{...}]}`，导致 knowledge_points 静默丢失

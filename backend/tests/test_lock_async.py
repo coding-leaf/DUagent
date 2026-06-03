@@ -16,6 +16,9 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4",
 )
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.db.session import async_session_factory
 from httpx import AsyncClient, ASGITransport
 from app.main import app
@@ -119,7 +122,7 @@ async def test():
                     "modal_preference": {},
                     "guidance_level_suggestion": {"recommended": "L3"},
                 }
-                r = await client.post(f"/api/v1/profile/refresh?course_id={course_id}", headers=headers)
+                r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
                 chk("lock held → 202", r.status_code == 202)
                 task_id = r.json()["data"]["task_id"]
                 chk("lock held → task_id present", bool(task_id))
@@ -148,7 +151,7 @@ async def test():
             print("  (waiting ~5s for eval lock timeout...)")
             with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
                 mock_agent.return_value = {"progress_table": {"columns": [], "rows": []}}
-                r = await client.post(f"/api/v1/evaluation/refresh?course_id={course_id}", headers=headers)
+                r = await client.post("/api/v1/evaluation/refresh", headers=headers, json={"course_id": course_id})
                 chk("eval lock held → 202", r.status_code == 202)
                 task_id = r.json()["data"]["task_id"]
                 result = await _poll_task(client, task_id, headers, timeout=15)
@@ -175,7 +178,7 @@ async def test():
             print("  (waiting ~5s for lp lock timeout...)")
             with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
                 mock_agent.return_value = {"nodes": [], "edges": [], "current_position": None}
-                r = await client.post(f"/api/v1/learning-path/refresh?course_id={course_id}", headers=headers)
+                r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
                 chk("lp lock held → 202", r.status_code == 202)
                 task_id = r.json()["data"]["task_id"]
                 result = await _poll_task(client, task_id, headers, timeout=15)
@@ -199,7 +202,7 @@ async def test():
             }
 
             async def _send_refresh():
-                r = await client.post(f"/api/v1/profile/refresh?course_id={course_id}", headers=headers)
+                r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
                 return r.json()["data"]["task_id"]
 
             # Concurrent requests — both background tasks compete for the same lock

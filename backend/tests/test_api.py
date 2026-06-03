@@ -1,8 +1,12 @@
 import asyncio
 import os
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_v3.db"
+os.environ["WEBHOOK_SECRET"] = ""
 
 from app.db.session import init_db, async_session_factory
 asyncio.run(init_db())
@@ -58,7 +62,8 @@ async def test():
             "password": "Abc12345", "username": "stu",
             "captcha_token": ct_token, "captcha_code": ct_ans,
         })
-        chk("Register student", r.status_code == 201 and r.json()["data"]["user_id"])
+        student_id = r.json()["data"]["user_id"]
+        chk("Register student", r.status_code == 201 and student_id)
 
         ct_token, ct_ans = await get_captcha_answer()
         r = await client.post("/api/v1/auth/register", json={
@@ -141,11 +146,11 @@ async def test():
         chk("Students obj wrap", "students" in r.json()["data"])
 
         # === Teaching: student detail ===
-        r = await client.get(f"/api/v1/teaching/classes/{course_id}/students/{teacher_id}", headers=t_h)
+        r = await client.get(f"/api/v1/teaching/classes/{course_id}/students/{student_id}", headers=t_h)
         chk("Student detail", r.json()["data"]["username"] == "stu")
 
         # === Teaching: learning ===
-        r = await client.get(f"/api/v1/teaching/classes/{course_id}/students/{teacher_id}/learning", headers=t_h)
+        r = await client.get(f"/api/v1/teaching/classes/{course_id}/students/{student_id}/learning", headers=t_h)
         chk("Student learning", "student" in r.json()["data"])
         chk("Student learning weak_points", "weak_points" in r.json()["data"])
         chk("Student learning recent_activity", "recent_activity" in r.json()["data"])
@@ -183,7 +188,7 @@ async def test():
         r = await client.get(f"/api/v1/evaluation?course_id={course_id}", headers=s_h)
         chk("Evaluation", r.json()["code"] == 200)
 
-        r = await client.post(f"/api/v1/evaluation/refresh?course_id={course_id}", headers=s_h)
+        r = await client.post("/api/v1/evaluation/refresh", headers=s_h, json={"course_id": course_id})
         chk("Eval refresh 202", r.status_code == 202)
         task_id = r.json()["data"]["task_id"]
 
@@ -198,7 +203,7 @@ async def test():
         r = await client.get(f"/api/v1/profile?course_id={course_id}", headers=s_h)
         chk("Profile get", r.json()["code"] == 200)
 
-        r = await client.post(f"/api/v1/profile/refresh?course_id={course_id}", headers=s_h)
+        r = await client.post("/api/v1/profile/refresh", headers=s_h, json={"course_id": course_id})
         chk("Profile refresh 202", r.status_code == 202)
 
         # === Learning path ===
@@ -206,11 +211,11 @@ async def test():
         chk("Learning path", r.json()["code"] == 200)
         chk("LP current_position null ok", r.json()["data"]["current_position"] is None or isinstance(r.json()["data"]["current_position"], dict))
 
-        r = await client.post(f"/api/v1/learning-path/refresh?course_id={course_id}", headers=s_h)
+        r = await client.post("/api/v1/learning-path/refresh", headers=s_h, json={"course_id": course_id})
         chk("LP refresh 202", r.status_code == 202)
 
         # === Node resources ===
-        r = await client.get("/api/v1/learning-path/nodes/n1/resources", headers=s_h)
+        r = await client.get(f"/api/v1/learning-path/nodes/n1/resources?course_id={course_id}", headers=s_h)
         chk("Node resources", r.json()["code"] == 200)
 
         # === Resources (knowledge_point, pagination in data object) ===

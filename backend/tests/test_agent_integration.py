@@ -8,6 +8,16 @@
 """
 import asyncio
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+db_file = "./test_agent_v1.db"
+if os.path.exists(db_file):
+    try:
+        os.remove(db_file)
+    except Exception:
+        pass
 
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_agent_v1.db"
 
@@ -119,7 +129,7 @@ class TestProfileRefreshIntegration:
 
             # Agent Service 不可用时，刷新仍应返回 202（任务标记为 failed）
             r = await client.post(
-                f"/api/v1/profile/refresh?course_id={course_id}", headers=s_h
+                "/api/v1/profile/refresh", headers=s_h, json={"course_id": course_id}
             )
             assert r.status_code == 202, f"Expected 202, got {r.status_code}"
             data = r.json()["data"]
@@ -165,7 +175,7 @@ class TestProfileRefreshIntegration:
             })
             h = {"Authorization": f"Bearer {r.json()['data']['token']}"}
 
-            r = await client.post("/api/v1/profile/refresh?course_id=fake_course", headers=h)
+            r = await client.post("/api/v1/profile/refresh", headers=h, json={"course_id": "fake_course"})
             assert r.status_code == 403
 
 
@@ -373,6 +383,7 @@ class TestResourcesGenerateIntegration:
 
             # 1. 创建 resource_generation 任务
             from app.models.others import AsyncTask
+            from app.core.config import settings
             async with async_session_factory() as db:
                 task = AsyncTask(
                     task_type="resource_generation",
@@ -383,6 +394,8 @@ class TestResourcesGenerateIntegration:
                 db.add(task)
                 await db.commit()
                 task_id = task.id
+
+            headers = {"X-Webhook-Secret": settings.WEBHOOK_SECRET} if settings.WEBHOOK_SECRET else None
 
             # 2. 模拟 Agent Webhook 回调 completed
             r = await client.post("/api/v1/webhooks/agent", json={
@@ -402,7 +415,7 @@ class TestResourcesGenerateIntegration:
                         }
                     ]
                 },
-            })
+            }, headers=headers)
             assert r.status_code == 200
 
             # 3. 验证 resources 表有数据
@@ -419,7 +432,7 @@ class TestResourcesGenerateIntegration:
                 "task_type": "resource_generation",
                 "status": "completed",
                 "result": {"resources": [{"title": "重复的", "type": "document"}]},
-            })
+            }, headers=headers)
             assert r.status_code == 200
             r = await client.get(f"/api/v1/resources?course_id={course_id}", headers=t_h)
             # 幂等：再次回调不新增重复资源
@@ -579,7 +592,7 @@ class TestEvaluationLearningPathIntegration:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             s_h, course_id = await self._setup_student(client)
 
-            r = await client.post(f"/api/v1/evaluation/refresh?course_id={course_id}", headers=s_h)
+            r = await client.post("/api/v1/evaluation/refresh", headers=s_h, json={"course_id": course_id})
             assert r.status_code == 202
             assert "task_id" in r.json()["data"]
 
@@ -590,7 +603,7 @@ class TestEvaluationLearningPathIntegration:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             s_h, course_id = await self._setup_student(client)
 
-            r = await client.post(f"/api/v1/learning-path/refresh?course_id={course_id}", headers=s_h)
+            r = await client.post("/api/v1/learning-path/refresh", headers=s_h, json={"course_id": course_id})
             assert r.status_code == 202
             assert "task_id" in r.json()["data"]
 

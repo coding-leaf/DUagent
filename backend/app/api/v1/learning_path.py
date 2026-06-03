@@ -14,6 +14,7 @@ from app.models.others import AsyncTask, CourseKnowledgeGraph, Evaluation, Learn
 from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
+from app.schemas.ai_features import RefreshRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
@@ -22,6 +23,8 @@ router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
 async def _acquire_learning_path_lock(db: AsyncSession, user_id: str, course_id: str) -> str:
     """Acquire a MySQL named lock for serializing learning-path writes."""
     lock_name = f"learningpath_{user_id}_{course_id}"
+    if db.bind.dialect.name == "sqlite":
+        return lock_name
     lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
     if not lock_result.scalar():
         raise HTTPException(
@@ -33,6 +36,8 @@ async def _acquire_learning_path_lock(db: AsyncSession, user_id: str, course_id:
 
 async def _release_learning_path_lock(db: AsyncSession, lock_name: str) -> None:
     """Release a previously acquired MySQL named lock for learning-path writes."""
+    if db.bind.dialect.name == "sqlite":
+        return
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
@@ -147,8 +152,12 @@ async def _run_learning_path_refresh_background(
             data = await agent_client.post_json("/agent/v1/learning-path/generate", payload)
 
             lock_name = f"learningpath_{user_id}_{course_id}"
-            lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
-            if not lock_result.scalar():
+            if db.bind.dialect.name == "sqlite":
+                locked = 1
+            else:
+                lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
+                locked = lock_result.scalar()
+            if not locked:
                 raise RuntimeError(f"GET_LOCK timeout: {lock_name}")
 
             try:
@@ -191,7 +200,8 @@ async def _run_learning_path_refresh_background(
                 )
             finally:
                 try:
-                    await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+                    if db.bind.dialect.name != "sqlite":
+                        await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
                 except Exception:
                     logger.warning(
                         "Learning path refresh background: RELEASE_LOCK failed lock_name=%s",
@@ -239,7 +249,7 @@ async def _run_learning_path_refresh_background(
 
 @router.post("/refresh")
 async def refresh_learning_path(
-    course_id: str = Query(...),
+    req: RefreshRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -248,6 +258,7 @@ async def refresh_learning_path(
     请求内：权限校验 → payload 组装 → 创建 AsyncTask → commit → 返回 202。
     后台 _run_learning_path_refresh_background：Agent 调用 → 锁 → 写库 → task 完成/失败。
     """
+    course_id = req.course_id
     if current_user.role == "student":
         check = await db.execute(
             select(CourseEnrollment).where(

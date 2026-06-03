@@ -141,7 +141,7 @@ _（当前无占位接口）_
   - `learning-path/refresh` 经手工灌入 `CourseKnowledgeGraph` 后复跑为 `7 nodes / 6 edges`，证明 learning-path 链路成立；当前缺口不再是接口本身，而是 KG 数据准备链路
   - 联调主链已从“逐接口打通”转入“收口系统级能力缺口”：KG 数据准备、refresh 任务持久化恢复、quiz 个性化质量与 diagnosis 语义、新课程 Qdrant 知识灌入流程
 - `2026-06-02` `沉淀完整联调验收手册`
-  - 重写根目录 `联调测试指导.md`，将原有接口清单式说明升级为阶段化联调验收手册
+  - 重写 `../docs/30-dev-guide/联调测试指导.md`，将原有接口清单式说明升级为阶段化联调验收手册
   - 明确服务启动顺序、健康检查、环境一致性、AI 执行规则、通过/降级可用/未通过判定标准
   - 明确 `tutoring/chat` 是核心 RAG 验收链路，`learning-path/refresh` 非 RAG 且依赖 `CourseKnowledgeGraph`
   - 后续联调默认先按该手册执行，再把验收结果回写本文件

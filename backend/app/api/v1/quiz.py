@@ -522,26 +522,26 @@ async def get_result(
         suggestions.append("进行一次练习以生成个性化诊断")
 
     # 诊断：优先消费 Agent LLM 诊断的 suggestions（现有契约内部分融合）
-    # summary 保持 SQL 模板（课程级聚合，与 course-level weak_points 语义一致）
-    # suggestions 优先用 Agent 生成（actionable，不受 per-session vs course-level 影响）
-    # weak_points 始终 SQL 聚合
+    # 从最新到最旧遍历 QuizSession，取第一条有效 Agent suggestions
+    # summary 保持 SQL 模板（课程级），weak_points 始终 SQL 聚合
     diagnosis_data = None
     if all_quizzes:
-        agent_diag = latest.diagnosis_json if latest and isinstance(latest.diagnosis_json, dict) else None
+        merged_suggestions = suggestions
 
-        if agent_diag:
-            # suggestions：Agent 值仅在非空 list 且元素全为 str 时覆盖
-            agent_sug = agent_diag.get("suggestions")
-            merged_suggestions = (
-                agent_sug
-                if isinstance(agent_sug, list) and len(agent_sug) > 0
-                and all(isinstance(s, str) for s in agent_sug)
-                else suggestions
-            )
-        else:
-            merged_suggestions = suggestions
+        for session in reversed(all_quizzes):
+            diag = session.diagnosis_json
+            if not isinstance(diag, dict):
+                continue
+            agent_sug = diag.get("suggestions")
+            # Agent 值仅在非空 list 且所有元素为非空 str 时覆盖
+            if (
+                isinstance(agent_sug, list)
+                and len(agent_sug) > 0
+                and all(isinstance(s, str) and s.strip() for s in agent_sug)
+            ):
+                merged_suggestions = agent_sug
+                break
 
-        # summary 保持 SQL 模板（课程级），weak_points 保持 SQL 聚合
         diagnosis_data = {
             "summary": summary,
             "weak_points": weak_points,

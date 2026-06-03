@@ -566,6 +566,47 @@ async def test():
             and len(rd["diagnosis"]["suggestions"]) > 0)
         chk("no diag -> summary is str", isinstance(rd["diagnosis"]["summary"], str))
 
+        # (d) Whitespace-only suggestion strings → rejected, fallback to SQL
+        async with async_session_factory() as db:
+            ds = await db.get(QuizSession, ds_agent_id)
+            ds.diagnosis_json = {
+                "summary": "s", "weak_points": [],
+                "suggestions": ["   ", "\t", "valid tip"],
+            }
+            await db.commit()
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("whitespace strings -> rejected, fallback to SQL",
+            "agent:" not in str(rd["diagnosis"]["suggestions"])
+            and len(rd["diagnosis"]["suggestions"]) > 0)
+
+        # (e) Latest session no diagnosis, older session has valid → consumed
+        async with async_session_factory() as db:
+            # Add a newer session WITHOUT diagnosis_json
+            ds_new = QuizSession(
+                user_id=stu_id, course_id=diag_course_id, chapter="ch1",
+                score=100, correct_count=1, total_count=1, time_spent=20,
+                diagnosis_json=None,  # no diagnosis
+            )
+            db.add(ds_new)
+            await db.flush()
+            db.add(QuizAnswer(
+                quiz_id=ds_new.id, question_id=dq_id, user_answer="A",
+                is_correct=True, correct_answer="A", explanation="Diag expl",
+            ))
+            # The OLDER session (ds_agent) now has valid suggestions set
+            ds = await db.get(QuizSession, ds_agent_id)
+            ds.diagnosis_json = {
+                "summary": "old agent summary",
+                "weak_points": [],
+                "suggestions": ["old agent: review fundamentals", "old agent: practice more"],
+            }
+            await db.commit()
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("latest no diag, old has valid -> consumed from old",
+            "old agent: review fundamentals" in rd["diagnosis"]["suggestions"])
+
         # =============================================
         # F. Stats computation accuracy
         # =============================================

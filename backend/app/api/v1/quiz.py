@@ -125,15 +125,32 @@ async def _assemble_quiz_generate_payload(
                 "blindspots": pf.cognitive_blindspots,
             }
 
-        # 最近错题知识点
+        # 用户最近错题知识点（显式 JOIN QuizSession + QuizAnswer + QuizQuestion）
         wrong_r = await db.execute(
             select(QuizQuestion.knowledge_point)
-            .where(QuizQuestion.course_id == course_id, QuizQuestion.is_deleted == False)
+            .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
+            .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
+            .where(
+                QuizSession.user_id == user_id,
+                QuizSession.course_id == course_id,
+                QuizSession.is_deleted == False,
+                QuizAnswer.is_correct == False,
+                QuizAnswer.is_deleted == False,
+                QuizQuestion.course_id == course_id,
+                QuizQuestion.is_deleted == False,
+            )
+            .order_by(QuizAnswer.create_time.desc())
             .limit(10)
         )
-        wrong_points = list(set(row[0] for row in wrong_r if row[0]))
+        seen = set()
+        wrong_points = []
+        for row in wrong_r:
+            kp = row[0]
+            if kp and kp not in seen:
+                seen.add(kp)
+                wrong_points.append({"name": kp})
         if wrong_points:
-            ctx["wrong_points"] = [{"name": wp} for wp in wrong_points]
+            ctx["wrong_points"] = wrong_points
 
         lp_result = await db.execute(
             select(LearningPath)

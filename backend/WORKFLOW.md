@@ -137,6 +137,11 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-03` `quiz wrong_points 查询修复`
+  - **问题**：`_assemble_quiz_generate_payload` 中"最近错题知识点"查询只从 `QuizQuestion` 表直接取点，无 `QuizAnswer.is_correct=False` 过滤、无 `user_id` 限定，传给 Agent 的不是真实错题
+  - **修复**：改为显式 JOIN `QuizSession` + `QuizAnswer` + `QuizQuestion`，限定 `user_id` + `is_correct=False`，按 `QuizAnswer.create_time DESC` 去重取最近 10 个
+  - **契约**：`wrong_points` 输出结构不变，Client/Agent API 均未漂移
+
 - `2026-06-03` `refresh 孤儿任务启动恢复`
   - **问题**：profile/evaluation/learning-path refresh 使用 `asyncio.create_task`，进程重启后协程丢失，task 永久卡在 `status="processing"`
   - **修复**：`app/main.py` lifespan 中新增 `_recover_orphaned_refresh_tasks()`，启动时将 refresh 三类 processing 任务标记 `failed`（`error_code=None`, `error_message="服务重启，后台任务丢失"`）
@@ -195,6 +200,10 @@ _（当前无占位接口）_
   - quiz 主链功能成立，评分、结果统计、后台 diagnosis 写入都可用
   - learning-path 链路成立，但前提是课程已有 `CourseKnowledgeGraph`
 - 当前阶段的主要问题已不再是“接口是否能通”，而是“系统级数据准备和生产可靠性是否收口”。
+- 当前阶段优先级决策：
+  - 优先继续收口 Backend-Agent 联调本身的问题
+  - 优先修复会影响 Agent 输入质量、Agent 输出消费、任务状态闭环和系统级可靠性的缺陷
+  - 前端展示层相关问题（例如教师看板展示质量）可在前端真实接入对应页面时再集中修复
 
 ## Agent Service 接口对接状态
 

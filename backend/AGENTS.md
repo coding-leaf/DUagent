@@ -95,6 +95,7 @@
 - Agent Service 直接写 Backend SQL
 - Agent Service 自行生成 `task_id`（必须由 Backend 传入）
 - 修改 `../docs/` 下已有文档，除非用户明确要求
+- WORKFLOW.md 只维护“状态、最近验证、下一步”，不要重复工作流程、测试文件清单、长篇操作说明。
 
 ## Code Change Rules
 

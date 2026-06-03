@@ -26,6 +26,8 @@
 - 保持已联调主链稳定：profile/evaluation/learning-path refresh、resources + webhook、tutoring/chat、quiz 主链。
 - 收口系统级缺口，而不是继续扩大接口面。
 - 优先解决运行可靠性、临时方案治理和文档收口。
+- 当前阶段优先继续收口 Backend-Agent 联调本身的问题，优先处理 Agent 输入质量、Agent 输出消费和联调闭环可靠性。
+- 前端展示层相关问题在前端真实接入对应页面时再集中治理，不提前扩散到当前联调范围。
 
 ## 成功标准
 

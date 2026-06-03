@@ -1,0 +1,445 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { teachingService } from '../api/services/teaching';
+import RadarChart from '../components/RadarChart';
+
+export default function TeacherStudentReport() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const studentId = location.state?.student_id || 'u_01'; // Default to u_01 if navigated directly
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    teachingService.getStudentReport(studentId).then(res => {
+      if (res.code === 200) {
+        setReport(res.data);
+      }
+    }).catch(console.error).finally(() => setLoading(false));
+  }, [studentId]);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-background"><span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span></div>;
+  }
+
+  if (!report) {
+    return <div className="min-h-screen flex items-center justify-center bg-background">未找到报告数据</div>;
+  }
+
+  return (
+    <div className="text-on-surface bg-background font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container flex flex-col min-h-screen">
+      {/* Top Header */}
+      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-gutter h-20 bg-white border-b border-outline-variant shadow-sm font-['Public_Sans'] antialiased">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold tracking-tight text-on-surface">数据结构 (Data Structures)</h1>
+          <span className="px-2 py-1 bg-surface-container-high text-primary font-bold text-xs rounded uppercase">教学控制台</span>
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-outline-variant">
+              <img alt="Teacher Profile" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEmN6iPeykBJM4g-FxZGQKujWsCGE-ECZSb2n7Om_izFEwlflhnVLi8aiRkOPALKmOqmYspwDxQXhjRwpKinCsHeX82NYknLqB_BawjcrrG_R6fLceDe8E-djpgDunaUfMKNUpTMvJLEglTno8tbrwrX-u5ZbtloceQzZNyT3tUP1_YmA6sL8f0Py7ra53pu1vfMKFX-rn8TRIvfzsTB_Q-Pgp0_gVgYl-Cff4Cg2VxJf1eYU35oScr-WfgA0scltfK38DvdpCbyzX" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-on-surface">Prof. Zhang</span>
+              <span className="text-[10px] text-outline uppercase tracking-wider">系统管理员</span>
+            </div>
+          </div>
+          <div className="h-8 w-[1px] bg-outline-variant"></div>
+          <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-error hover:bg-error-container/20 rounded-lg transition-colors cursor-pointer" onClick={() => navigate('/')}>
+            <span className="material-symbols-outlined text-sm">logout</span>
+            退出登入
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 pt-20 px-gutter pb-xl overflow-y-auto">
+        <div className="max-w-[1280px] mx-auto py-margin">
+          
+          {/* Breadcrumb & Header */}
+          <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-slate-400 text-sm mb-1 cursor-pointer hover:text-primary transition-colors" onClick={() => navigate('/teacher')}>
+                <span className="material-symbols-outlined text-xs transform rotate-180">chevron_right</span>
+                <span>返回学生列表</span>
+              </div>
+              <h1 className="font-h1 text-h1 text-on-background">学情详尽报告 <span className="text-primary-container">· 李华</span></h1>
+            </div>
+            <div className="flex gap-3">
+              <button className="flex items-center px-4 py-2 bg-white border border-outline-variant rounded-xl font-label-sm text-label-sm text-on-surface-variant hover:bg-surface-container transition-all hover:-translate-y-0.5">
+                <span className="material-symbols-outlined mr-2">print</span> 导出报告
+              </button>
+              <button className="flex items-center px-4 py-2 bg-primary text-white rounded-xl font-label-sm text-label-sm font-bold shadow-md hover:opacity-90 active:scale-95 transition-all hover:-translate-y-0.5">
+                <span className="material-symbols-outlined mr-2">send</span> 发送反馈
+              </button>
+            </div>
+          </div>
+
+          {/* TOP SECTION: Profile and Analysis */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            {/* Profile Card */}
+            <div className="lg:col-span-2 relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-10">
+                <img alt="Abstract AI" className="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzMAEOheT0KjN_V4Fs50iduiqAbY41brWEWJxp4OTj7_UEp-xIaxcjCg_nD7gFlxpJA02J20-08588bHb0rXh9DPDwVliY11SE63OLe49p49EPdhdtV3tTmvxzYZDpegvuIRbUOt73p55PYcIPkbbpQ2m9zU1qHjuedH2kiKkGvLzCoqlaAVBdvhbk1k_bRiNJkR1nKy0pWxkiz8th0-NwNlCiS_m3BF-O5D1TV2PGqwwetrQvRYYY_qJql5n3DmySA98y7i-zv3sV" />
+              </div>
+              <div className="relative">
+                <div className="relative w-32 h-32 rounded-full border-4 border-slate-100 overflow-hidden bg-slate-100">
+                  <img alt="李华 Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC07BOGJWseHN9894enM_L7lbL1vknF4bHPCaAyGzyUrT7QT9ojTqzKZd17pkUqgZxu_g1e-UUG6gk1UC_Z2aa-joN2oOlX8fqOWDwrDXOE4pUdrNbJ0EZGcKTA6lMEXTrjLnY2_q-kHPKiUSvs0oO2CTPzmQFrLJ_p4JMk9FPtJ-BgXnCfTEvyFHg7LihxKWSWyiW9jwSnp2xGWINNyUWGusGrFi9r4sy9ch386vd528d4f-kqTB4wQNzXiauJm_zQapOmDKlx49pt" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-4 mb-2">
+                  <h1 className="font-h1 text-3xl text-on-surface">{report.username}</h1>
+                  <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{report.level}</span>
+                </div>
+                <p className="text-body-md text-secondary font-body-md mb-2">学号: {report.student_id} · {report.major}</p>
+                <div className="flex gap-2">
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">{report.status}</span>
+                  <span className="px-3 py-1 bg-primary-container/10 text-primary-container rounded-full text-xs font-bold">{report.class_name}</span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4 w-full pt-6 mt-4 border-t border-slate-100">
+                  <div>
+                    <p className="text-2xl font-black text-slate-900">{report.score}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">综合评分</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-slate-900">{report.total_duration_hours}h</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">累计时长</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-slate-900">{report.rank}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">排位名次</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Card */}
+            <div className="bg-cyan-600 rounded-2xl p-8 text-white relative overflow-hidden flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+              <div>
+                <p className="text-white/70 text-label-sm uppercase tracking-widest mb-1">学习动力指数</p>
+                <div className="text-6xl font-black">{report.motivation_index}<span className="text-2xl opacity-60 ml-1">%</span></div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-white/20 flex items-center justify-between">
+                <span className="text-sm font-medium text-white/80">领先 92% 的学习者</span>
+                <span className="material-symbols-outlined">trending_up</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Bento Grid Top Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 mb-12">
+            
+            {/* Modality Card */}
+            <div className="lg:col-span-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col items-center hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="w-full flex justify-between items-center mb-6">
+                <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface font-bold">
+                  <span className="material-symbols-outlined text-cyan-500">pie_chart</span> 模态偏好
+                </h3>
+              </div>
+              <div className="relative w-52 h-52 flex items-center justify-center p-2">
+                <RadarChart 
+                  data={[
+                    { subject: '视觉化交互', value: 85 },
+                    { subject: '理论推导', value: 60 },
+                    { subject: '代码实操', value: 90 },
+                    { subject: '文字阅读', value: 45 },
+                    { subject: '讨论交流', value: 75 }
+                  ]} 
+                  size={200} 
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-4 leading-relaxed w-full text-left">
+                <span className="font-bold text-primary">AI诊断：</span> {report.ai_diagnosis}
+              </p>
+            </div>
+
+            {/* Granularity Card */}
+            <div className="lg:col-span-8 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="mb-8">
+                <h3 className="font-h3 text-xl mb-4 flex items-center gap-2 text-on-surface font-bold">
+                  <span className="material-symbols-outlined text-cyan-500">tune</span> 引导粒度
+                </h3>
+                <p className="text-body-md text-secondary">根据当前任务难度与心流状态，动态调整智能体的介入深度。</p>
+              </div>
+              <div className="relative px-6 py-12 flex-1">
+                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden relative">
+                  <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-600" style={{ width: '50%' }}></div>
+                </div>
+                <div className="flex justify-between items-center absolute w-full left-0 top-0 mt-[38px] px-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-6 h-6 rounded-full bg-white border-4 border-slate-200 shadow-sm z-10"></div>
+                    <div className="mt-6 text-center">
+                      <p className="text-label-sm font-bold text-slate-400">L1: 启发点拨</p>
+                      <p className="text-[10px] text-slate-400 mt-1">核心思路提示</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 rounded-full bg-cyan-500 border-[6px] border-white shadow-xl shadow-cyan-200 z-20"></div>
+                    <div className="mt-4 text-center">
+                      <p className="text-label-sm font-bold text-cyan-600">L2: 伴学拆解</p>
+                      <p className="text-[10px] text-cyan-400 mt-1">分步引导学习</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="w-6 h-6 rounded-full bg-white border-4 border-slate-200 shadow-sm z-10"></div>
+                    <div className="mt-6 text-center">
+                      <p className="text-label-sm font-bold text-slate-400">L3: 保姆生成</p>
+                      <p className="text-[10px] text-slate-400 mt-1">全自动代码生成</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-8 bg-cyan-50 p-5 rounded-xl flex items-start gap-4 border border-cyan-100">
+                <span className="material-symbols-outlined text-cyan-600 mt-0.5">verified</span>
+                <p className="text-sm text-cyan-700 leading-relaxed">
+                  <span className="font-bold">系统建议：</span>{report.guidance_suggestion}
+                </p>
+              </div>
+            </div>
+
+            {/* Knowledge Map */}
+            <div className="lg:col-span-7 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="absolute top-0 right-0 p-4 opacity-5">
+                <span className="material-symbols-outlined text-9xl">hub</span>
+              </div>
+              <h3 className="font-h3 text-xl mb-8 flex items-center gap-2 text-on-surface font-bold">
+                <span className="material-symbols-outlined text-cyan-500">grid_view</span> 知识坐标 &amp; 认知盲区
+              </h3>
+              <div className="flex flex-wrap gap-4 relative">
+                {report.knowledge_coordinates?.map((kc, i) => {
+                  let style = '';
+                  let icon = '';
+                  if (kc.type === 'mastered') {
+                    style = 'bg-green-50 text-green-700 border-green-100';
+                    icon = 'check_circle';
+                  } else if (kc.type === 'learning') {
+                    style = 'bg-blue-50 text-blue-700 border-blue-100';
+                    icon = 'check_circle';
+                  } else {
+                    style = 'bg-orange-50 text-orange-700 border-orange-200 shadow-md shadow-orange-100';
+                    icon = 'local_fire_department';
+                  }
+                  return (
+                    <span key={i} className={`px-5 py-3 rounded-xl border font-bold flex items-center gap-2 text-sm transition-all hover:scale-105 ${style}`}>
+                      <span className="material-symbols-outlined text-base" style={kc.type === 'weak' ? { fontVariationSettings: '"FILL" 1' } : {}}>{icon}</span> {kc.name}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Learning Heat and Accuracy Card */}
+            <div className="lg:col-span-5 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col hover:-translate-y-0.5 transition-transform duration-300">
+              <h3 className="font-h3 text-xl mb-6 flex items-center gap-2 text-on-surface font-bold">
+                <span className="material-symbols-outlined text-cyan-500">analytics</span> 学习热度与准度
+              </h3>
+              <div className="flex-1 flex flex-col space-y-4">
+                <div className="h-32 w-full relative flex items-end justify-between px-2">
+                  <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                    <path d="M0,60 Q10,50 20,40 T40,45 T60,30 T80,35 T100,20" fill="none" stroke="#00677f" strokeWidth="2"></path>
+                    <path d="M0,80 Q10,75 20,60 T40,65 T60,55 T80,45 T100,40" fill="none" stroke="#00d1ff" strokeDasharray="2 1" strokeWidth="2"></path>
+                  </svg>
+                  <div className="absolute bottom-0 w-full flex justify-between text-[8px] text-slate-400 font-bold px-1">
+                    <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-1 bg-cyan-400"></div>
+                    <span className="text-xs text-secondary font-bold">近期学习频度</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-1 bg-primary"></div>
+                    <span className="text-xs text-secondary font-bold">做题准确率</span>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
+                    <span className="text-primary font-black text-lg">94%</span>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold">本周最高准度</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
+                    <span className="text-cyan-600 font-black text-lg">{report.total_duration_hours}h</span>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold">累计学习时长</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Activity Growth Card */}
+            <div className="lg:col-span-12 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden mb-12 hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="absolute inset-0 abstract-pattern opacity-5"></div>
+              <div className="relative z-10">
+                <div className="flex justify-between items-center mb-10">
+                  <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface font-bold">
+                    <span className="material-symbols-outlined text-cyan-500">timeline</span> 认知成长曲线
+                  </h3>
+                  <div className="flex p-1 bg-slate-100 rounded-xl">
+                    <button className="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-400">周</button>
+                    <button className="px-5 py-1.5 bg-white rounded-lg text-xs font-bold text-cyan-600 shadow-sm">月</button>
+                  </div>
+                </div>
+                <div className="h-64 flex items-end justify-between gap-4 px-2">
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[40%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[55%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[35%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[70%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[85%]"></div>
+                  <div className="flex-1 bg-cyan-500 rounded-t-2xl relative group h-[95%] shadow-lg shadow-cyan-200">
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
+                      当前峰值: 95
+                    </div>
+                  </div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[60%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[45%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[75%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[30%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[50%]"></div>
+                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[65%]"></div>
+                </div>
+                <div className="flex justify-between mt-6 px-2 text-xs text-slate-400 font-bold uppercase tracking-wider">
+                  <span>1月</span><span>2月</span><span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span><span>8月</span><span>9月</span><span>10月</span><span>11月</span><span>12月</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider with Label */}
+          <div className="relative flex items-center py-4 mb-8">
+            <div className="flex-grow border-t border-slate-200"></div>
+            <span className="flex-shrink mx-4 text-slate-400 font-bold text-xs uppercase tracking-[0.2em]">Learning Outcomes &amp; AI Analysis</span>
+            <div className="flex-grow border-t border-slate-200"></div>
+          </div>
+
+          {/* BOTTOM SECTION: Learning Results */}
+          <div className="grid grid-cols-12 gap-gutter pb-12">
+            
+            {/* AI Insight Card */}
+            <div className="col-span-12 lg:col-span-8 glass-panel rounded-xl p-md flex flex-col md:flex-row gap-md items-start shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 transition-transform duration-300">
+              <div className="flex-shrink-0 w-16 h-16 bg-primary-container/20 rounded-full flex items-center justify-center">
+                <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
+              </div>
+              <div>
+                <h3 className="font-h3 text-h3 mb-2 flex items-center">
+                  AI 智能分析报告
+                  <span className="ml-3 px-2 py-0.5 bg-cyan-100 text-cyan-700 text-[10px] rounded-full font-bold">实时分析</span>
+                </h3>
+                <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                  {report.ai_insight}
+                </p>
+                <div className="p-4 mt-4 bg-slate-50 rounded-lg border-l-4 border-primary-container">
+                  <h4 className="text-xs font-bold text-primary uppercase mb-2">下一阶段行动建议</h4>
+                  <ul className="text-sm text-slate-700 space-y-2 list-disc pl-4">
+                    {report.action_suggestions?.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Exercise/Test Mastery Chart */}
+            <div className="col-span-12 lg:col-span-4 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 transition-transform duration-300">
+              <h3 className="font-h3 text-h3 mb-sm flex items-center">
+                <span className="material-symbols-outlined mr-2 text-primary">assessment</span> 练习掌握度
+              </h3>
+              <div className="flex flex-col gap-4 mt-6">
+                {report.mastery_stats?.map((stat, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="flex justify-between text-label-sm font-label-sm">
+                      <span>{stat.name}</span>
+                      <span className="text-primary">{stat.percent}%</span>
+                    </div>
+                    <div className="h-2 bg-surface-container rounded-full overflow-hidden">
+                      <div className="h-full bg-primary-container" style={{ width: `${stat.percent}%` }}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Path Progression Table */}
+            <div className="col-span-12 lg:col-span-7 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 transition-transform duration-300">
+              <h3 className="font-h3 text-h3 mb-md">学习路径进度</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="pb-3 font-label-sm text-label-sm text-outline">模块名称</th>
+                      <th className="pb-3 font-label-sm text-label-sm text-outline">当前状态</th>
+                      <th className="pb-3 font-label-sm text-label-sm text-outline">平均耗时</th>
+                      <th className="pb-3 font-label-sm text-label-sm text-outline">达成率</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {report.learning_path_progress?.map((path, i) => {
+                      let statusStyle = '';
+                      let textStyle = '';
+                      if (path.status === '已过关') {
+                        statusStyle = 'bg-green-50 text-green-600';
+                        textStyle = 'text-green-600';
+                      } else if (path.status === '进行中') {
+                        statusStyle = 'bg-cyan-50 text-cyan-600';
+                        textStyle = 'text-primary';
+                      } else {
+                        statusStyle = 'bg-gray-100 text-gray-500';
+                        textStyle = 'text-outline';
+                      }
+                      
+                      return (
+                        <tr key={i} className="group hover:bg-surface-container-low transition-colors">
+                          <td className="py-4 font-body-md text-body-md">{path.module}</td>
+                          <td className="py-4">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusStyle}`}>{path.status}</span>
+                          </td>
+                          <td className="py-4 font-body-md text-body-md text-on-surface-variant">{path.time}</td>
+                          <td className={`py-4 font-bold ${textStyle}`}>{path.completion}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Resource Usage Distribution */}
+            <div className="col-span-12 lg:col-span-5 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col hover:-translate-y-0.5 transition-transform duration-300">
+              <h3 className="font-h3 text-h3 mb-md">资源反馈分布</h3>
+              <div className="flex-grow flex items-center justify-center relative min-h-[220px]">
+                <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#e5eeff" strokeWidth="3"></circle>
+                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#00d1ff" strokeDasharray="60 40" strokeDashoffset="25" strokeWidth="3"></circle>
+                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#00677f" strokeDasharray="25 75" strokeDashoffset="85" strokeWidth="3"></circle>
+                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#aec4c7" strokeDasharray="15 85" strokeDashoffset="100" strokeWidth="3"></circle>
+                </svg>
+                <div className="absolute flex flex-col items-center">
+                  <span className="font-h2 text-h2 text-primary">{report.resource_distribution?.avg_score || 0}</span>
+                  <span className="font-label-sm text-label-sm text-outline">平均分</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-6">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 rounded-full bg-primary-container mr-2"></div>
+                  <span className="font-label-sm text-label-sm text-on-surface-variant">视频教程 ({report.resource_distribution?.video}%)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 rounded-full bg-primary mr-2"></div>
+                  <span className="font-label-sm text-label-sm text-on-surface-variant">交互练习 ({report.resource_distribution?.interactive}%)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 rounded-full bg-tertiary-container mr-2"></div>
+                  <span className="font-label-sm text-label-sm text-on-surface-variant">文档解析 ({report.resource_distribution?.document}%)</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

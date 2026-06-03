@@ -1,0 +1,318 @@
+<!DOCTYPE html><html class="light" lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;900&amp;family=Source+Han+Sans+CN:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-tertiary-fixed-variant": "#364a4d",
+                        "primary-fixed": "#b7eaff",
+                        "secondary": "#585e6c",
+                        "on-tertiary-fixed": "#091f21",
+                        "secondary-fixed": "#dde2f3",
+                        "surface-container-low": "#eff4ff",
+                        "inverse-surface": "#213145",
+                        "on-surface-variant": "#3c494e",
+                        "inverse-primary": "#4cd6ff",
+                        "secondary-container": "#dde2f3",
+                        "on-primary-fixed-variant": "#004e60",
+                        "tertiary-fixed": "#d0e7ea",
+                        "surface": "#f8f9ff",
+                        "background": "#f8f9ff",
+                        "primary-fixed-dim": "#4cd6ff",
+                        "on-surface": "#0b1c30",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#00d1ff",
+                        "surface-container": "#e5eeff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#00566a",
+                        "secondary-fixed-dim": "#c1c6d7",
+                        "on-background": "#0b1c30",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#414754",
+                        "tertiary": "#4d6265",
+                        "on-tertiary-container": "#3d5254",
+                        "tertiary-fixed-dim": "#b4cbce",
+                        "outline": "#6c797f",
+                        "surface-container-highest": "#d3e4fe",
+                        "on-secondary-fixed": "#161c27",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-high": "#dce9ff",
+                        "on-secondary-container": "#5e6473",
+                        "surface-tint": "#00677f",
+                        "surface-dim": "#cbdbf5",
+                        "tertiary-container": "#aec4c7",
+                        "surface-bright": "#f8f9ff",
+                        "primary": "#00677f",
+                        "on-secondary": "#ffffff",
+                        "outline-variant": "#bbc9cf",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#001f28"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "48px",
+                        "gutter": "24px",
+                        "base": "8px",
+                        "md": "24px",
+                        "sm": "12px",
+                        "xs": "4px",
+                        "margin": "32px",
+                        "xl": "80px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Source Han Sans CN"],
+                        "label-sm": ["Source Han Sans CN"],
+                        "h2": ["Source Han Sans CN"],
+                        "h3": ["Source Han Sans CN"],
+                        "body-md": ["Source Han Sans CN"],
+                        "h1": ["Source Han Sans CN"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-sm": ["13px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "h2": ["32px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h1": ["40px", {"lineHeight": "1.2", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Source Han Sans CN', sans-serif; background-color: #f8f9ff; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid #E2E8F0; }
+        .chart-bar { transition: height 0.3s ease; }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- TopNavBar (Updated to match SCREEN_39) -->
+<nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans'] antialiased">
+<div class="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
+<div class="text-xl font-bold tracking-tight text-cyan-600">DS_MASTERY_AI</div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">个人信息</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">路径规划</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">资源库</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">AI答疑</a>
+<a class="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1" href="#">学习效果</a>
+</div>
+<div class="flex items-center space-x-4">
+<button class="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined text-gray-600">notifications</span>
+</button>
+<button class="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined text-gray-600">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+<img alt="用户头像" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIZ6HO5HA-odVe8eyF37yBdDVqfay9WuU9hiH5bUmPQ7FHVUvaaDZxx-umrUXutVljxyDA8RZg_DaakLk5239e-wEBGWbcvlz6m8ugJDjJkfWVXu3go6THqG3cG20AZz_Fo9e3nQQaFkyLTMljw6gQ7C9zzMSbkb9zWAcMi735c3jXolvzaKkf1ukO4JFCIGvZKAEYUotf7YS7Eh9YXEBhXk-zbyI3drYFjCejkZNYy2Xw_yQjYjF31dF20X5HAXjP5TdmPPzYQVXQ">
+</div>
+</div>
+</div>
+</nav>
+<!-- SideNavBar (Updated to match SCREEN_39) -->
+<aside class="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden lg:flex">
+<div class="px-6 mb-6">
+<div class="flex items-center space-x-3 mb-2">
+<div class="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">smart_toy</span>
+</div>
+<div>
+<h3 class="text-lg font-black text-cyan-600 leading-tight">数据结构掌控者</h3>
+<p class="text-[10px] text-gray-400 uppercase tracking-widest">多智能体学习系统</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="px-4">
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-body-md">学习节点</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">library_books</span>
+<span class="font-body-md">资源库</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-body-md">智能体类型</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">tune</span>
+<span class="font-body-md">设置</span>
+</a>
+</div>
+</nav>
+<div class="px-6 mt-auto">
+<button class="w-full py-3 bg-primary-container text-on-primary-container rounded-xl font-bold active:scale-95 transition-all shadow-sm">
+            启动新任务
+        </button>
+</div>
+</aside>
+<!-- Content starts with Top Margin for Fixed Header -->
+<main class="lg:pl-64 pt-24 pb-12 px-6 max-w-[1280px] mx-auto min-h-screen">
+<!-- Header Section -->
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h1 class="font-h1 text-h1 text-on-surface">学习效果展示</h1>
+<p class="text-body-md text-outline mt-2">基于多智能体系统的实时数据结构掌握度分析</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center px-4 py-2 bg-white border border-outline-variant rounded-xl font-label-sm text-label-sm text-on-surface-variant hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined mr-2">download</span> 导出报告
+            </button>
+<button class="flex items-center px-4 py-2 bg-primary-container text-on-primary-container rounded-xl font-label-sm text-label-sm font-bold shadow-sm hover:brightness-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined mr-2">refresh</span> 重新评估
+            </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- AI Insight Card (Full Width Span) -->
+<div class="col-span-12 lg:col-span-8 glass-panel rounded-xl p-md flex flex-col md:flex-row gap-md items-start shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+<div class="flex-shrink-0 w-16 h-16 bg-primary-container/20 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: &quot;FILL&quot; 1;">smart_toy</span>
+</div>
+<div>
+<h3 class="font-h3 text-h3 mb-2 flex items-center">
+                    AI 智能分析报告
+                    <span class="ml-3 px-2 py-0.5 bg-cyan-100 text-cyan-700 text-[10px] rounded-full font-bold">LIVE FEED</span>
+</h3>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                    根据过去 7 天的学习轨迹，您的<span class="text-primary font-bold">“非线性数据结构”</span>掌握程度提升了 32%。系统检测到您在“B+树删除操作”中存在逻辑瓶颈，建议协同“排序智能体”进行专项练习。资源使用分布显示，您对视觉化节点的交互反馈频率远高于纯文本阅读，后续路径将自动增加动态演示权重。
+                </p>
+</div>
+</div>
+<!-- Exercise/Test Mastery Chart -->
+<div class="col-span-12 lg:col-span-4 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+<h3 class="font-h3 text-h3 mb-sm flex items-center">
+<span class="material-symbols-outlined mr-2 text-primary">assessment</span> 练习掌握度
+            </h3>
+<div class="flex flex-col gap-4 mt-6">
+<div class="space-y-2">
+<div class="flex justify-between text-label-sm font-label-sm">
+<span class="">链表基础</span>
+<span class="text-primary">95%</span>
+</div>
+<div class="h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[95%]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-label-sm font-label-sm">
+<span class="">二叉搜索树</span>
+<span class="text-primary">78%</span>
+</div>
+<div class="h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[78%]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-label-sm font-label-sm">
+<span class="">图论算法</span>
+<span class="text-primary">42%</span>
+</div>
+<div class="h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[42%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Path Progression Table -->
+<div class="col-span-12 lg:col-span-7 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+<h3 class="font-h3 text-h3 mb-md">学习路径进度</h3>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-gray-100">
+<th class="pb-3 font-label-sm text-label-sm text-outline">模块名称</th>
+<th class="pb-3 font-label-sm text-label-sm text-outline">当前状态</th>
+<th class="pb-3 font-label-sm text-label-sm text-outline">平均耗时</th>
+<th class="pb-3 font-label-sm text-label-sm text-outline">掌握评分</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-gray-50">
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-body-md text-body-md">线性表与栈</td>
+<td class="py-4">
+<span class="px-3 py-1 bg-green-50 text-green-600 rounded-full text-xs font-bold">已完成</span>
+</td>
+<td class="py-4 font-body-md text-body-md text-on-surface-variant">4.2h</td>
+<td class="py-4 font-bold text-primary">A+</td>
+</tr>
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-body-md text-body-md">散列表(Hash)</td>
+<td class="py-4">
+<span class="px-3 py-1 bg-cyan-50 text-cyan-600 rounded-full text-xs font-bold">进行中</span>
+</td>
+<td class="py-4 font-body-md text-body-md text-on-surface-variant">1.5h</td>
+<td class="py-4 font-bold text-primary">B</td>
+</tr>
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-body-md text-body-md">红黑树进阶</td>
+<td class="py-4">
+<span class="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-bold">待解锁</span>
+</td>
+<td class="py-4 font-body-md text-body-md text-on-surface-variant">--</td>
+<td class="py-4 font-bold text-outline">--</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Resource Usage Distribution -->
+<div class="col-span-12 lg:col-span-5 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col">
+<h3 class="font-h3 text-h3 mb-md">资源反馈分布</h3>
+<div class="flex-grow flex items-center justify-center relative min-h-[220px]">
+<!-- Simulated Pie/Donut Chart via SVG -->
+<svg class="w-48 h-48 transform -rotate-90" viewBox="0 0 36 36">
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#e5eeff" stroke-width="3"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#00d1ff" stroke-dasharray="60 40" stroke-dashoffset="25" stroke-width="3"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#00677f" stroke-dasharray="25 75" stroke-dashoffset="85" stroke-width="3"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#aec4c7" stroke-dasharray="15 85" stroke-dashoffset="100" stroke-width="3"></circle>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="font-h2 text-h2 text-primary">128</span>
+<span class="font-label-sm text-label-sm text-outline">总交互数</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-6">
+<div class="flex items-center">
+<div class="w-3 h-3 rounded-full bg-primary-container mr-2"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">动态演示 (60%)</span>
+</div>
+<div class="flex items-center">
+<div class="w-3 h-3 rounded-full bg-primary mr-2"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">代码调试 (25%)</span>
+</div>
+<div class="flex items-center">
+<div class="w-3 h-3 rounded-full bg-tertiary-container mr-2"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">理论文档 (15%)</span>
+</div>
+<div class="flex items-center">
+<div class="w-3 h-3 rounded-full bg-surface-container mr-2"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">其它 (5%)</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+
+</body></html>

@@ -115,12 +115,14 @@
 ## Incremental Development
 
 - 默认一次只推进一个接口或一个明确子能力。
-- 推荐流程：
-  1. 写或补测试
+- TDD 强制流程（非可选）：
+  1. 写或补测试（RED）
   2. 运行测试确认失败
-  3. 最小实现
-  4. 运行相关测试
-  5. 更新 `WORKFLOW.md`
+  3. 最小实现让测试通过（GREEN）
+  4. 运行相关测试确认通过
+  5. 重构优化（IMPROVE）
+  6. 确认覆盖率 >= 80%
+  7. 更新 `WORKFLOW.md`
 
 ## Progress Tracking
 
@@ -135,13 +137,21 @@
 
 ## Testing
 
-- 修改代码后优先运行相关测试。
+- 使用 `pytest` 作为测试框架。
+- 目标覆盖率 >= 80%，使用 `pytest-cov` 查看：
+  ```bash
+  pytest --cov=app --cov-report=term-missing
+  ```
+- 修改代码后必须运行相关测试，确认全部通过。
 - 修改 Agent 联调逻辑后覆盖：
   - Agent 请求 payload 正确性
   - Agent 不可用时降级（task failed，不崩服务）
   - Agent 超时处理
   - SQL 落库正确性
 - 修改 `models/`/`db`/`schema.sql` 后运行导入检查。
+- 如无现有测试，至少运行基本导入检查或启动检查，不应静默跳过验证。
+- 测试文件放在 `tests/` 目录下。
+- 不为测试而大规模重构项目。
 
 ## Context Handoff
 

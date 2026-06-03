@@ -194,9 +194,21 @@ async def tutoring_chat(
                         elif t == "diagram":
                             diagrams.append(parsed.get("data", parsed))
                         elif t == "knowledge_points":
-                            knowledge_points = parsed.get("points", [])
+                            # parsed 是 dict，兼容多种 key：points / knowledge_points / data
+                            # 优先 "points"（向后兼容），其次 "knowledge_points"，最后 "data"
+                            kp_candidate = (
+                                parsed.get("points")
+                                or parsed.get("knowledge_points")
+                                or parsed.get("data")
+                            )
+                            if isinstance(kp_candidate, list):
+                                knowledge_points = kp_candidate
                         elif t == "done":
                             done_sent = True
+                            # done 事件的 knowledge_points_used 作为兜底捕获
+                            kp_used = parsed.get("knowledge_points_used")
+                            if not knowledge_points and isinstance(kp_used, list):
+                                knowledge_points = kp_used
                     except json.JSONDecodeError:
                         pass
 

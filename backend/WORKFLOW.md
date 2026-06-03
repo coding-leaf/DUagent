@@ -77,6 +77,7 @@
    - 至少跑语法检查、导入检查或相关接口测试
    - 只提交本轮相关文件
    - 最终回复必须说明：当前完成、修改文件、测试结果、契约是否漂移、下一步建议
+9. 需要及时通过git 存档 commit内容为简短的修改总结
 
 ## 当前接口实现情况总览
 
@@ -134,6 +135,16 @@ _（当前无占位接口）_
 - `POST /api/v1/auth/send-reset-code`
 
 ## 最近状态变更
+
+- `2026-06-03` `tutoring knowledge_points 字段解析修复 + 联调验证`
+  - **问题**：`tutoring/chat` SSE 解析中 `parsed.get("points", [])` 只匹配 `points` key，但 Agent 实际发送 `{"type":"knowledge_points","knowledge_points":[{...}]}`，导致 knowledge_points 静默丢失
+  - **修复**：`app/api/v1/tutoring.py` event_generator 中扩大多 key 兼容：`points` → `knowledge_points` → `data`，并新增 `done.knowledge_points_used` 兜底捕获
+  - **联调验证**（课程 `758aeff588e84044`，学生 `stu_1446b359@test.com`）：
+    - SSE 事件解析 ✅（Agent key=`knowledge_points`，兼容命中）
+    - GET conversation API ✅（3 个 knowledge_points 返回）
+    - SQL messages.knowledge_points ✅（3 个知识点 JSON 已落库）
+    - Agent/Client API 契约均未漂移
+  - **结论**：knowledge_points 从「代码已修」升级为「联调已验证」
 
 - `2026-06-03` `联调 v1 验收完成`
   - 根目录 `联调v1结果.md` 已记录 7 条链路的完整验收结果：服务健康、账号课程、profile/evaluation refresh、resources + webhook、tutoring/chat RAG、quiz/generate + submit + result、learning-path/refresh

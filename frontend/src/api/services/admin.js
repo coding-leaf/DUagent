@@ -1,0 +1,28 @@
+import apiClient from '../client';
+
+export const adminService = {
+  // 获取全量用户列表
+  getUsers: async (params) => {
+    return apiClient.get('/admin/users', { params });
+  },
+
+  // 修改指定用户信息及权限
+  updateUser: async (userId, data) => {
+    return apiClient.put(`/admin/users/${userId}`, data);
+  },
+
+  // 移除/封禁用户
+  removeUser: async (userId) => {
+    return apiClient.delete(`/admin/users/${userId}`);
+  },
+
+  // 拉取核心调度器与子智能体的运行日志
+  getAgentLogs: async (params) => {
+    return apiClient.get('/admin/logs/agents', { params });
+  },
+
+  // 拉取系统基础日志
+  getSystemLogs: async (params) => {
+    return apiClient.get('/admin/logs/system', { params });
+  }
+};

@@ -17,15 +17,15 @@
 
 ## 补充阅读
 
-- `Agent-Service_代码导读与自学手册.md`
+- `supplemental/Agent-Service_代码导读与自学手册.md`
   - 代码阅读辅导材料；适合新人上手，不替代正式导航和状态板
-- `Agent-AI编排审计.md`
+- `supplemental/Agent-AI编排审计.md`
   - AI 编排专题审计；适合针对某条链路深挖时使用
-- `Agent架构演进与多智能体进程.md`
+- `supplemental/Agent架构演进与多智能体进程.md`
   - 架构演进讨论；用于理解历史取舍，不作为当前实现计划
-- `Apifox_Agent_Service_全接口测试指南.md`
+- `supplemental/Apifox_Agent_Service_全接口测试指南.md`
   - 接口测试操作手册；联调执行时按需阅读
-- `Apifox_resources_generate_调试说明.md`
+- `supplemental/Apifox_resources_generate_调试说明.md`
   - 资源生成调试手册；按需阅读
 
 ## 参考与历史材料

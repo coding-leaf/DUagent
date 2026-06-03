@@ -53,13 +53,13 @@
 
 以下文档保留，但默认不作为第一阅读入口：
 
-- `docs/Agent-Service_代码导读与自学手册.md`
+- `docs/supplemental/Agent-Service_代码导读与自学手册.md`
   - 面向新同学的补充阅读材料，不是当前实现真相源
-- `docs/Agent-AI编排审计.md`
+- `docs/supplemental/Agent-AI编排审计.md`
   - 专题审计材料，不替代 goals / decisions / workflow
-- `docs/Apifox_*`
+- `docs/supplemental/Apifox_*`
   - 操作与调试手册，只在联调执行时按需查看
-- `docs/Agent架构演进与多智能体进程.md`
+- `docs/supplemental/Agent架构演进与多智能体进程.md`
   - 架构演进讨论材料，不是当前实现计划
 - `docs/superpowers/`
   - 历史实施设计/计划材料，视为 archive-like 内容

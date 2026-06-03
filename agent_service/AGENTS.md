@@ -25,7 +25,7 @@
 
 `WORKFLOW.md` 是开发进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
 
-`docs/Agent架构演进与多智能体进程.md` 记录 Agent 架构演进讨论、multi-agent 候选项和阶段性取舍，不是接口契约来源，也不是具体实现计划。
+`docs/supplemental/Agent架构演进与多智能体进程.md` 记录 Agent 架构演进讨论、multi-agent 候选项和阶段性取舍，不是接口契约来源，也不是具体实现计划。
 
 ## Architecture Boundaries
 
@@ -46,7 +46,7 @@
 - EduAgent 后续以多智能体架构优先，但不为所有接口强行套用 subagent / multi-agent。
 - 多智能体优先用于天然需要拆分、协作、检索、自检或并行的链路，例如 `resources/generate`、`tutoring/chat`、`assessment/generate-questions`。
 - `profile/generate`、`evaluation/generate`、`assessment/evaluate`、`learning-path/generate` 等确定性或统计型接口，优先保持 structured output + 规则保护，不做无收益的多 Agent 化。
-- 涉及 Agent 编排升级时，优先参考 `docs/Agent架构演进与多智能体进程.md`，再写单独 design / implementation plan。
+- 涉及 Agent 编排升级时，优先参考 `docs/supplemental/Agent架构演进与多智能体进程.md`，再写单独 design / implementation plan。
 - 多 Agent 实现不能改变 OpenAPI、schemas 或 Backend 调用契约；AgentScope 内部对象不得泄漏到 API 层。
 
 ## Code Change Rules

@@ -72,15 +72,28 @@ def test_main_keyboard_interrupt(caplog):
 
 def test_main_verbose(caplog):
     import logging
-    caplog.set_level(logging.DEBUG)
     from agent_service.tools.ingest_knowledge import KnowledgeIngestionResult
     with tempfile.TemporaryDirectory() as temp_dir:
         (Path(temp_dir) / "dummy.md").touch()
         mock_result = KnowledgeIngestionResult(course_id="dummy", chunk_count=5, duration_seconds=1.23)
-        with patch("agent_service.tools.ingest_knowledge.ingest_course_knowledge", return_value=mock_result):
+        with patch("agent_service.tools.ingest_knowledge.ingest_course_knowledge", return_value=mock_result), \
+             patch("logging.basicConfig") as mock_basic_config:
             with patch.object(sys, "argv", ["ingest_knowledge.py", temp_dir, "--verbose"]):
                 with pytest.raises(SystemExit) as excinfo:
                     main()
                 assert excinfo.value.code == 0
-        assert "Starting ingestion for" in caplog.text
+            mock_basic_config.assert_called_once()
+            _, kwargs = mock_basic_config.call_args
+            assert kwargs.get("level") == logging.DEBUG
+
+        # Test non-verbose sets level to INFO
+        with patch("agent_service.tools.ingest_knowledge.ingest_course_knowledge", return_value=mock_result), \
+             patch("logging.basicConfig") as mock_basic_config_info:
+            with patch.object(sys, "argv", ["ingest_knowledge.py", temp_dir]):
+                with pytest.raises(SystemExit) as excinfo:
+                    main()
+                assert excinfo.value.code == 0
+            mock_basic_config_info.assert_called_once()
+            _, kwargs = mock_basic_config_info.call_args
+            assert kwargs.get("level") == logging.INFO
 

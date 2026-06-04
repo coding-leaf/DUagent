@@ -49,20 +49,23 @@
 
 **完整启动与运行顺序:**
 ```bash
-# 1. 启动 Agent Service（依赖关系）
+# 0. 创建测试数据库（如不存在）
+mysql -u root -p123456 -e "CREATE DATABASE IF NOT EXISTS duagent_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 1. 启动 Agent Service
 cd agent_service && ./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002 &
 
-# 2. 使用测试 DB 启动 Backend
-cd backend && DB_NAME=duagent_test python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 &
+# 2. 使用测试 DB 启动 Backend（显式 DATABASE_URL 覆盖 .env）
+cd backend && DATABASE_URL='mysql+aiomysql://root:123456@localhost:3306/duagent_test?charset=utf8mb4' python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 &
 
-# 3. 执行种子脚本（使用相同 DB 配置）
-cd backend && ALLOW_E2E_SEED=true DB_NAME=duagent_test python scripts/seed_e2e_data.py
+# 3. 执行种子脚本（使用相同 DATABASE_URL）
+cd backend && ALLOW_E2E_SEED=true DATABASE_URL='mysql+aiomysql://root:123456@localhost:3306/duagent_test?charset=utf8mb4' python scripts/seed_e2e_data.py
 
-# 4. 运行 E2E（Playwright webServer 自动启动前端）
+# 4. 运行 E2E（Playwright webServer 自动启动前端并注入 VITE_API_BASE_URL）
 cd frontend && npm run test:e2e
 ```
 
-后端、种子脚本、前端通过 `DB_NAME=duagent_test` 和 `VITE_API_BASE_URL` 共同指向同一测试后端，确保数据一致性。
+Backend 与种子脚本使用同一 DATABASE_URL；Playwright 前端通过 VITE_API_BASE_URL 连接该 Backend。
 
 ---
 
@@ -127,18 +130,27 @@ cd frontend && npm run test:e2e
 
 ---
 
-### 批次 4: TeacherStudentReport 兼容性记录
+### 批次 4: TeacherStudentReport 兼容性修正（独立提交）
 
-**文件:** 不修改任何文件（如审查确认无需修改）
+**文件:**
+- Modify: `TeacherStudentReport.jsx`
+
+**需修改的未声明字段引用（已通过代码审查确认）:**
+
+| 行 | 当前引用 | 问题 | 修正 |
+|----|---------|------|------|
+| ~92 | `report.username`（标题） | StudentLearning.student 无 username | 改为 `report.student?.real_name \|\| report.student?.student_id \|\| '学生报告'` |
+| ~448 | `report.username`（Profile banner） | 同上 | 同上 |
+| ~537 | `report.weak_points` | 不在正式契约中 | 隐藏区块或标记"未提供" |
+| ~568 | `report.recent_activity` | 不在正式契约中 | 隐藏区块或标记"未提供" |
+
+**正式 StudentLearning 契约仅声明 8 个字段:** student、evaluation_summary、profile_summary、path_progress、quiz_stats、last_message、message_count、updated_at。weak_points 和 recent_activity 不属于正式契约，真实模式不得依赖。
 
 **操作:**
-- 核对 `TeacherStudentReport.jsx` 真实模式（`!useMock` 分支）所消费的字段
-- 确认仅依赖正式 StudentLearning 字段：`student`, `evaluation_summary`, `profile_summary`, `path_progress`, `quiz_stats`
-- 确认不消费旧假数据字段（`score`, `rank`, `mastery_stats`, `resource_distribution`, `motivation_index` 等，均在 `useMock` 块内）
-- 处理 `weak_points` / `recent_activity`：这两个字段不在正式 StudentLearning 契约中（契约仅声明 student、evaluation_summary、profile_summary、path_progress、quiz_stats、last_message、message_count、updated_at）。前端真实模式必须隐藏对应区块或标记为"未提供"。不能将未声明字段视为正式依赖。
-- 记录结论："已核对，真实模式仅消费正式 StudentLearning 字段；[weak_points/recent_activity 处理结果][是否修改了 report.username 引用]"
-
-如需修改（发现消费未声明字段、页面渲染异常），则纳入本批次修改 `TeacherStudentReport.jsx`。
+- 将 `report.username` 替换为 `report.student?.real_name || report.student?.student_id || '学生报告'`
+- weak_points 区块：当 `report.weak_points` 为空/不存在时显示"未提供"，或直接隐藏该区块
+- recent_activity 区块：当 `report.recent_activity` 为空/不存在时显示"暂无数据"，或隐藏该区块
+- 不对 useMock 分支做任何修改
 
 ---
 

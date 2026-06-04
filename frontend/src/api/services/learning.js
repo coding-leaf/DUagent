@@ -17,6 +17,6 @@ export const learningService = {
     return apiClient.post('/resources/generate', params);
   },
   getTaskStatus(taskId) {
-    return apiClient.get(`/tasks/${taskId}/status`);
+    return apiClient.get(`/tasks/${taskId}`);
   }
 };

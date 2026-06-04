@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 import RadarChart from '../components/RadarChart';
@@ -6,18 +6,19 @@ import RadarChart from '../components/RadarChart';
 export default function TeacherStudentReport() {
   const navigate = useNavigate();
   const location = useLocation();
+  const classId = location.state?.class_id || localStorage.getItem('course_id') || 'default_course';
   const studentId = location.state?.student_id || 'u_01'; // Default to u_01 if navigated directly
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    teachingService.getStudentReport(studentId).then(res => {
+    setTimeout(() => setLoading(true), 0);
+    teachingService.getStudentReport(classId, studentId).then(res => {
       if (res.code === 200) {
         setReport(res.data);
       }
     }).catch(console.error).finally(() => setLoading(false));
-  }, [studentId]);
+  }, [classId, studentId]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span></div>;
@@ -211,8 +212,8 @@ export default function TeacherStudentReport() {
               </h3>
               <div className="flex flex-wrap gap-4 relative">
                 {report.knowledge_coordinates?.map((kc, i) => {
-                  let style = '';
-                  let icon = '';
+                  let style;
+                  let icon;
                   if (kc.type === 'mastered') {
                     style = 'bg-green-50 text-green-700 border-green-100';
                     icon = 'check_circle';
@@ -377,8 +378,8 @@ export default function TeacherStudentReport() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {report.learning_path_progress?.map((path, i) => {
-                      let statusStyle = '';
-                      let textStyle = '';
+                      let statusStyle;
+                      let textStyle;
                       if (path.status === '已过关') {
                         statusStyle = 'bg-green-50 text-green-600';
                         textStyle = 'text-green-600';

@@ -13,8 +13,7 @@ export default function chatMock(mock) {
     ]
   });
 
-  // 历史记录
-  mock.onGet(/\/api\/v1\/chat\/history/).reply((config) => {
+  mock.onGet(/\/api\/v1\/chat\/history/).reply(() => {
     return [200, {
       code: 200,
       message: 'success',

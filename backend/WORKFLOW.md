@@ -137,6 +137,17 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-04` `前端对齐现有接口联调（阶段一实施）完成`
+  - **完成**：Vite 前端已成功对齐后端 API 契约与数据模型结构。
+    - **Mock 开关**：利用环境变量 `VITE_USE_MOCK` 实现前端 API Mock 拦截器的条件性加载。
+    - **登录态与安全路由**：搭建 `AuthContext` 统一管理登录态并集成 `/users/me`；配置 `ProtectedRoute` 拦截组件防护核心页面。
+    - **多课程上下文同步**：搭建 `CourseContext` 实现与 URL `?course_id=` 及 Navbar 选择栏的无缝同步。
+    - **SSE 智能辅导对话**：重构 `chat.js` 和 `AIChat.jsx` 接口为 `/tutoring/*`，利用 Fetch 对接 SSE `text/event-stream` 流，完美渲染打字机 chunk 片段、Mermaid 图解和引用知识点标签。
+    - **教学看板与报告**：将 `getClassStudents` 和 `getStudentReport` 改造对齐 `/teaching/*`，追加数据适配层转换数据库画像至教师报告所需的完整展示结构。
+    - **系统审计日志**：更新 `admin.js`，将核心日志获取改至 `/admin/logs/agent` 与 `/admin/logs/operations`。
+    - **ESLint 修复**：清除前端项目全部编译警告与错误（累计修复了 28 个 unused imports, setState-in-effect, impure Date.now, variable hoisting 等 lint 报错），实现 `0 errors, 0 warnings`。
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+
 - `2026-06-04` `产品方向变化与前后端契约脱节确认`
   - **结论**：当前问题已不再是单纯的前后端接口接入，而是静态前端原型、现有 Client API、Agent API 和最新口述产品需求之间存在明显断层。
   - **产品方向**：资源与题目调整为课程级公共内容，由 Agent 统一生成后供通过课程码加入课程的学生共享；资源定期更新暂不作为当前 MVP。

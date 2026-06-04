@@ -1,84 +1,180 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import { chatService } from '../api/services/chat';
+import { useCourse } from '../context/CourseContext';
+import Navbar from '../components/Navbar';
 
 export default function AIChat() {
-  const navigate = useNavigate();
+  const { activeCourseId } = useCourse();
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
+  
   const messagesEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
+  // Sync sessions list when course changes
   useEffect(() => {
-    chatService.getSessions().then(res => {
-      if (res.code === 200) {
-        setSessions(res.data);
-        if (res.data.length > 0) setActiveSession(res.data[0].session_id);
-      }
-    }).catch(console.error);
-  }, []);
+    if (activeCourseId) {
+      chatService.getSessions(activeCourseId).then(res => {
+        if (res.code === 200 && res.data) {
+          const list = res.data.conversations || res.data;
+          setSessions(list);
+          if (list.length > 0) {
+            setActiveSession(list[0].id);
+          } else {
+            setActiveSession(null);
+            setTimeout(() => setMessages([]), 0);
+          }
+        }
+      }).catch(console.error);
+    }
+  }, [activeCourseId]);
 
+  // Fetch messages when active session changes
   useEffect(() => {
     if (activeSession) {
       chatService.getHistory(activeSession).then(res => {
-        if (res.code === 200) {
+        if (res.code === 200 && res.data) {
           setMessages(res.data.messages || []);
           setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         }
       }).catch(console.error);
+    } else {
+      setTimeout(() => setMessages([]), 0);
     }
   }, [activeSession]);
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim() || isSending) return;
-    const msgText = inputValue;
-    setInputValue('');
-    
-    // Optimistic UI update
-    const newMsg = { id: 'temp-' + Date.now(), role: 'user', content: msgText };
-    setMessages(prev => [...prev, newMsg]);
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current();
+      }
+    };
+  }, []);
+
+  const handleResetConversation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current();
+      abortControllerRef.current = null;
+    }
+    setActiveSession(null);
+    setMessages([]);
+    setIsSending(false);
+  };
+
+  const handleSendMessage = (overrideText = '') => {
+    const textToSend = (overrideText || inputValue).trim();
+    if (!textToSend || isSending || !activeCourseId) return;
+
+    if (!overrideText) {
+      setInputValue('');
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current();
+    }
+
+    // Optimistic UI updates using pure functions
+    setMessages(prev => {
+      const userMsg = { id: `user-${prev.length}`, role: 'user', content: textToSend };
+      const aiPlaceholder = { id: 'ai-placeholder', role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [] };
+      return [...prev, userMsg, aiPlaceholder];
+    });
     setIsSending(true);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
 
-    chatService.sendMessage(activeSession, msgText).then(res => {
-      if (res.code === 200) {
-        setMessages(prev => [...prev, res.data]);
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    abortControllerRef.current = chatService.streamChat(
+      {
+        message: textToSend,
+        scope: 'course',
+        course_id: activeCourseId,
+        conversation_id: activeSession
+      },
+      (msg) => {
+        if (msg.type === 'chunk') {
+          setMessages(prev => prev.map(m => {
+            if (m.id === 'ai-placeholder') {
+              return { ...m, content: m.content + (msg.content || '') };
+            }
+            return m;
+          }));
+          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+        } else if (msg.type === 'diagram') {
+          setMessages(prev => prev.map(m => {
+            if (m.id === 'ai-placeholder') {
+              const currentDiags = m.diagrams || [];
+              const newDiag = msg.data || msg.content;
+              return { ...m, diagrams: [...currentDiags, newDiag] };
+            }
+            return m;
+          }));
+        } else if (msg.type === 'knowledge_points') {
+          setMessages(prev => prev.map(m => {
+            if (m.id === 'ai-placeholder') {
+              return { ...m, knowledge_points: msg.points || [] };
+            }
+            return m;
+          }));
+        } else if (msg.type === 'suggestion') {
+          setMessages(prev => prev.map(m => {
+            if (m.id === 'ai-placeholder') {
+              const currentSugs = m.suggestions || [];
+              const newSugs = msg.data || msg.content || [];
+              const combined = Array.isArray(newSugs) ? newSugs : [newSugs];
+              return { ...m, suggestions: [...currentSugs, ...combined] };
+            }
+            return m;
+          }));
+        }
+      },
+      (doneData) => {
+        setMessages(prev => prev.map(m => {
+          if (m.id === 'ai-placeholder') {
+            return {
+              ...m,
+              id: doneData.message_id || `ai-${prev.length}`,
+              loading: false
+            };
+          }
+          return m;
+        }));
+        setIsSending(false);
+        abortControllerRef.current = null;
+
+        // If it was a new conversation, fetch the new ID and refresh sessions
+        if (!activeSession && doneData.conversation_id) {
+          setActiveSession(doneData.conversation_id);
+          chatService.getSessions(activeCourseId).then(res => {
+            if (res.code === 200 && res.data) {
+              setSessions(res.data.conversations || res.data);
+            }
+          }).catch(console.error);
+        }
+      },
+      (err) => {
+        setMessages(prev => prev.map(m => {
+          if (m.id === 'ai-placeholder') {
+            return {
+              ...m,
+              content: m.content + '\n\n[发送失败: ' + (err.message || '网络连接故障') + ']',
+              loading: false,
+              isError: true
+            };
+          }
+          return m;
+        }));
+        setIsSending(false);
+        abortControllerRef.current = null;
       }
-    }).catch(console.error).finally(() => setIsSending(false));
+    );
   };
+
   return (
     <div className="font-body-md text-on-background bg-background min-h-screen">
-      {/* TopNavBar */}
-      <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans'] antialiased">
-        <div className="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto relative">
-          <div className="flex items-center">
-            <span className="text-xl font-bold tracking-tight text-cyan-600">数据结构智能助手</span>
-          </div>
-          <nav className="hidden md:flex items-center space-x-8 absolute left-1/2 -translate-x-1/2">
-            <Link to="/profile" className="text-gray-600 hover:text-cyan-50 transition-colors">个人信息</Link>
-            <Link to="/learning-path" className="text-gray-600 hover:text-cyan-50 transition-colors">路径规划</Link>
-            <Link to="/dashboard" className="text-gray-600 hover:text-cyan-50 transition-colors">资源库</Link>
-            <Link to="/ai-chat" className="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1">AI答疑</Link>
-            <Link to="/learning-effects" className="text-gray-600 hover:text-cyan-500 transition-colors">学习效果</Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-gray-600">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-gray-600">settings</span>
-            </button>
-            <img 
-              alt="用户头像" 
-              className="w-8 h-8 rounded-full border border-gray-200 object-cover" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfQu5sK-V7EbXBUDlh6kjwwkNR5pdom0FK1_3cafAOLjQkJsGkpsUbNxPRq72U74LZF2hZ7O1v59Z-yIhiCRPQvCgeh7EynAmocFsNtBnxkOzW8K24s2lGRS5X944k7PL-2Nrwf3B3FVrqpFtH-Wp2mfH9mLesN1RMzA_sKknDKaSbys7LW3NCJG0WUMlJ0iSryXU6ZJ_SOYfuJWvuJsJ2cG4wesJ-Syz2Y1PSEeFljmyuX2tLfES_2cr8lfGIqst5YsZpzoiivFur" 
-            />
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Sidebar specific for Chat */}
       <aside className="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden lg:flex z-40">
@@ -92,27 +188,39 @@ export default function AIChat() {
               <p className="text-xs text-gray-500">多智能体学习系统</p>
             </div>
           </div>
-          <button onClick={() => navigate('/dashboard')} className="w-full mt-4 bg-primary-container text-on-primary-container py-2 rounded-lg font-semibold active:scale-95 transition-all cursor-pointer">
-            启动新任务
+          <button 
+            onClick={handleResetConversation} 
+            className="w-full mt-4 bg-primary-container text-on-primary-container py-2 rounded-lg font-semibold active:scale-95 transition-all cursor-pointer hover:opacity-90"
+          >
+            启动新对话
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-4 space-y-1">
           <div className="px-2 py-1 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">历史记录</div>
           {sessions.map(session => (
             <div 
-              key={session.session_id} 
-              onClick={() => setActiveSession(session.session_id)}
-              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:pl-4 transition-all duration-200 ${activeSession === session.session_id ? 'bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500' : 'text-gray-500 hover:bg-gray-50'}`}
+              key={session.id} 
+              onClick={() => {
+                if (abortControllerRef.current) {
+                  abortControllerRef.current();
+                  abortControllerRef.current = null;
+                }
+                setActiveSession(session.id);
+              }}
+              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:pl-4 transition-all duration-200 ${activeSession === session.id ? 'bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
             >
-              <span className="material-symbols-outlined">{session.icon || 'chat'}</span>
-              <span>{session.title}</span>
+              <span className="material-symbols-outlined">chat</span>
+              <span className="truncate">{session.title}</span>
             </div>
           ))}
+          {sessions.length === 0 && (
+            <p className="text-xs text-gray-400 px-2 py-4">无历史对话</p>
+          )}
         </div>
       </aside>
 
       {/* Main Content Stage */}
-      <main className="flex-1 ml-0 md:ml-64 relative pt-16">
+      <main className="flex-1 ml-0 lg:ml-64 relative pt-16">
         <div className="max-w-[1280px] mx-auto p-6 md:p-8 h-[calc(100vh-64px)] flex flex-col">
           
           {/* Chat Header */}
@@ -135,7 +243,10 @@ export default function AIChat() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button className="flex items-center gap-1 px-4 py-2 text-cyan-600 border border-cyan-200 rounded-lg hover:bg-cyan-50 transition-all text-label-sm cursor-pointer">
+              <button 
+                onClick={handleResetConversation}
+                className="flex items-center gap-1 px-4 py-2 text-cyan-600 border border-cyan-200 rounded-lg hover:bg-cyan-50 transition-all text-[13px] font-medium cursor-pointer"
+              >
                 <span className="material-symbols-outlined text-sm">refresh</span>
                 重置对话
               </button>
@@ -147,55 +258,66 @@ export default function AIChat() {
             
             {messages.map(msg => (
               <div key={msg.id} className={`flex gap-4 max-w-[85%] ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${msg.role === 'user' ? 'bg-primary-container text-white' : 'bg-cyan-100 text-cyan-600'}`}>
+                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${msg.role === 'user' ? 'bg-cyan-600 text-white' : 'bg-cyan-100 text-cyan-600'}`}>
                   <span className="material-symbols-outlined text-sm" style={msg.role !== 'user' ? { fontVariationSettings: '"FILL" 1' } : {}}>
                     {msg.role === 'user' ? 'person' : 'smart_toy'}
                   </span>
                 </div>
-                <div className={`p-4 rounded-2xl w-full ${msg.role === 'user' ? 'chat-bubble-user rounded-tr-none' : 'chat-bubble-ai rounded-tl-none'}`}>
-                  <p className="text-body-md text-on-surface whitespace-pre-wrap">{msg.content}</p>
+                <div className={`p-4 rounded-2xl w-full ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none shadow-sm' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none shadow-sm'}`}>
+                  <p className="text-body-md whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   
-                  {msg.suggestions && (
-                    <div className="flex flex-wrap gap-2 mt-3">
+                  {/* Suggestions rendering */}
+                  {msg.suggestions && msg.suggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
                       {msg.suggestions.map((sug, i) => (
-                        <span key={i} onClick={() => { setInputValue(sug); setTimeout(handleSendMessage, 0); }} className="px-3 py-1 bg-surface-container text-primary text-xs rounded-full cursor-pointer hover:bg-primary-fixed transition-colors">
+                        <span 
+                          key={i} 
+                          onClick={() => handleSendMessage(sug)} 
+                          className="px-3 py-1 bg-gray-50 text-cyan-600 text-xs rounded-full cursor-pointer hover:bg-cyan-50 transition-colors border border-gray-100"
+                        >
                           {sug}
                         </span>
                       ))}
                     </div>
                   )}
 
-                  {msg.has_visual && (
-                    <div className="bg-gray-50 rounded-xl p-6 border border-dashed border-gray-200 mt-4 mb-4 relative overflow-hidden group">
-                      <div className="flex justify-center items-center py-12">
-                        <div className="relative w-full h-48">
-                          {/* Simplified Tree Representation */}
-                          <div className="absolute left-1/2 -translate-x-1/2 top-0 w-10 h-10 rounded-full border-2 border-cyan-500 bg-white flex items-center justify-center font-bold text-cyan-600 shadow-sm z-10">20</div>
-                          <div className="absolute left-1/3 top-16 w-8 h-8 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center text-sm text-gray-400">10</div>
-                          <div className="absolute right-1/3 top-16 w-8 h-8 rounded-full border-2 border-cyan-400 bg-white flex items-center justify-center text-sm text-cyan-600 font-bold">30</div>
-                          <svg className="absolute top-0 left-0 w-full h-full opacity-30" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <line x1="50" y1="20" x2="35" y2="70" stroke="#94a3b8" strokeWidth="1.5"></line>
-                            <line x1="50" y1="20" x2="65" y2="70" stroke="#00d1ff" strokeWidth="1.5"></line>
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="bg-white px-4 py-2 rounded-lg shadow-lg border border-gray-100 flex items-center gap-2 text-cyan-600 font-bold text-sm cursor-pointer">
-                          <span className="material-symbols-outlined text-sm">play_arrow</span>
-                          播放模拟
-                        </button>
-                      </div>
+                  {/* Knowledge Points Badges */}
+                  {msg.knowledge_points && msg.knowledge_points.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-400 flex items-center gap-1 mr-1">
+                        <span className="material-symbols-outlined text-[14px]">school</span>
+                        关联知识点:
+                      </span>
+                      {msg.knowledge_points.map((kp, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] rounded-full font-medium">
+                          {kp}
+                        </span>
+                      ))}
                     </div>
                   )}
+
+                  {/* Diagrams rendering */}
+                  {msg.diagrams && msg.diagrams.map((diag, index) => (
+                    <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200 mt-4 mb-4">
+                      <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
+                        <span className="material-symbols-outlined text-sm">schema</span>
+                        <span>图解模式 (Mermaid)</span>
+                      </div>
+                      <pre className="text-xs font-mono bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto whitespace-pre">
+                        {typeof diag === 'object' ? diag.code || JSON.stringify(diag) : diag}
+                      </pre>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
-            {isSending && (
+            
+            {isSending && messages.length > 0 && messages[messages.length - 1].loading && messages[messages.length - 1].content === '' && (
                <div className="flex gap-4 max-w-[85%]">
                  <div className="w-8 h-8 rounded-full bg-cyan-100 flex-shrink-0 flex items-center justify-center">
                    <span className="material-symbols-outlined text-cyan-600 text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
                  </div>
-                 <div className="chat-bubble-ai p-4 rounded-2xl rounded-tl-none w-16 flex justify-center items-center">
+                 <div className="bg-white p-4 border border-gray-100 rounded-2xl rounded-tl-none w-16 flex justify-center items-center shadow-sm">
                    <span className="material-symbols-outlined animate-spin text-cyan-600">progress_activity</span>
                  </div>
                </div>
@@ -204,7 +326,7 @@ export default function AIChat() {
           </div>
 
           {/* Input Anchor */}
-          <div className="fixed bottom-gutter left-gutter lg:left-[280px] right-gutter max-w-[1280px] xl:mx-auto bg-background pb-gutter pt-4 px-6 md:px-8">
+          <div className="fixed bottom-4 left-4 lg:left-[280px] right-4 max-w-[1280px] xl:mx-auto bg-background pb-2 pt-2 px-4">
             <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-2 flex items-end gap-2">
               <button className="p-3 text-gray-400 hover:text-cyan-500 transition-all cursor-pointer">
                 <span className="material-symbols-outlined">attach_file</span>
@@ -213,7 +335,7 @@ export default function AIChat() {
                 <textarea 
                   className="w-full border-none focus:ring-0 p-0 text-body-md placeholder-gray-400 resize-none outline-none" 
                   placeholder="在这里输入你的问题，或者输入 / 呼唤特定智能体..." 
-                  rows="1"
+                  rows={1}
                   value={inputValue}
                   onChange={e => setInputValue(e.target.value)}
                   onKeyDown={e => {
@@ -229,9 +351,9 @@ export default function AIChat() {
                   <span className="material-symbols-outlined">mic</span>
                 </button>
                 <button 
-                  onClick={handleSendMessage}
-                  disabled={isSending || !inputValue.trim()}
-                  className="bg-primary-container text-on-primary-container disabled:opacity-50 w-10 h-10 rounded-xl flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer hover:bg-primary-container/90"
+                  onClick={() => handleSendMessage()}
+                  disabled={isSending || !inputValue.trim() || !activeCourseId}
+                  className="bg-cyan-600 text-white disabled:opacity-50 w-10 h-10 rounded-xl flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer hover:bg-cyan-700"
                 >
                   <span className="material-symbols-outlined">send</span>
                 </button>
@@ -244,12 +366,6 @@ export default function AIChat() {
 
         </div>
       </main>
-
-      {/* FAB for quick action (only on main screens) */}
-      <button className="fixed bottom-24 right-8 w-14 h-14 bg-cyan-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform lg:hidden cursor-pointer">
-        <span className="material-symbols-outlined">add</span>
-      </button>
-
     </div>
   );
 }

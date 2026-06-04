@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminService } from '../api/services/admin';
 
@@ -13,18 +13,9 @@ export default function AdminConsole() {
   
   // Log Data State
   const [agentLogs, setAgentLogs] = useState([]);
-  const [systemLogs, setSystemLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
-  useEffect(() => {
-    if (activeTab === 'users') {
-      fetchUsers();
-    } else {
-      fetchLogs();
-    }
-  }, [activeTab]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
       const res = await adminService.getUsers({ search: searchQuery });
@@ -36,23 +27,36 @@ export default function AdminConsole() {
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, [searchQuery]);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
-      const [agentRes, sysRes] = await Promise.all([
+      const [agentRes] = await Promise.all([
         adminService.getAgentLogs(),
         adminService.getSystemLogs()
       ]);
-      if (agentRes.code === 200) setAgentLogs(agentRes.data);
-      if (sysRes.code === 200) setSystemLogs(sysRes.data);
+      if (agentRes.code === 200) {
+        // Handle database array structure or direct mock list structure
+        setAgentLogs(agentRes.data.logs || agentRes.data);
+      }
     } catch (e) {
       console.error(e);
     } finally {
       setLoadingLogs(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activeTab === 'users') {
+        fetchUsers();
+      } else {
+        fetchLogs();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeTab, fetchUsers, fetchLogs]);
 
   const handleSearch = (e) => {
     e.preventDefault();

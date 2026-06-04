@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 
 export default function TeacherConsole() {
@@ -23,7 +23,7 @@ export default function TeacherConsole() {
   // 当选择的班级改变时，获取学生列表和AI洞察
   useEffect(() => {
     if (activeClass) {
-      setLoading(true);
+      setTimeout(() => setLoading(true), 0);
       Promise.all([
         teachingService.getClassStudents(activeClass),
         teachingService.getConsoleInsights(activeClass)
@@ -123,7 +123,7 @@ export default function TeacherConsole() {
                     students.map(student => (
                       <div 
                         key={student.user_id}
-                        onClick={() => navigate('/teacher/report', { state: { student_id: student.user_id }})}
+                        onClick={() => navigate('/teacher/report', { state: { student_id: student.user_id, class_id: activeClass }})}
                         className="flex items-center gap-6 p-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-3 w-48">
@@ -204,7 +204,7 @@ export default function TeacherConsole() {
                 {insights?.special_students?.map(ss => (
                   <div 
                     key={ss.user_id}
-                    onClick={() => navigate('/teacher/report', { state: { student_id: ss.user_id }})}
+                    onClick={() => navigate('/teacher/report', { state: { student_id: ss.user_id, class_id: activeClass }})}
                     className={`flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent ${ss.border_color}`}
                   >
                     <div className="flex items-center gap-3">

@@ -1,7 +1,6 @@
 export default function adminMock(mock) {
   // 生成虚拟用户列表
   const generateUsers = () => {
-    const roles = ['student', 'teacher', 'admin'];
     const users = [];
     for (let i = 1; i <= 55; i++) {
       const role = i === 1 ? 'admin' : (i <= 5 ? 'teacher' : 'student');
@@ -46,14 +45,14 @@ export default function adminMock(mock) {
     }];
   });
 
-  mock.onPut(/\/api\/v1\/admin\/users\/[a-zA-Z0-9_]+/).reply((config) => {
+  mock.onPut(/\/api\/v1\/admin\/users\/[a-zA-Z0-9_]+/).reply(() => {
     return [200, {
       code: 200,
       message: 'success'
     }];
   });
 
-  mock.onDelete(/\/api\/v1\/admin\/users\/[a-zA-Z0-9_]+/).reply((config) => {
+  mock.onDelete(/\/api\/v1\/admin\/users\/[a-zA-Z0-9_]+/).reply(() => {
     return [200, {
       code: 200,
       message: 'success'
@@ -61,7 +60,7 @@ export default function adminMock(mock) {
   });
 
   // 模拟 Agent 调度日志
-  mock.onGet('/api/v1/admin/logs/agents').reply((config) => {
+  mock.onGet('/api/v1/admin/logs/agents').reply(() => {
     const logs = [];
     const agents = ['ORCHESTRATOR', 'CODE_AGENT', 'THEORY_AGENT', 'EVAL_AGENT'];
     const levels = ['INFO', 'WARN', 'ERROR', 'DEBUG'];
@@ -87,7 +86,7 @@ export default function adminMock(mock) {
     }];
   });
 
-  mock.onGet('/api/v1/admin/logs/system').reply((config) => {
+  mock.onGet('/api/v1/admin/logs/system').reply(() => {
     return [200, {
       code: 200,
       message: 'success',

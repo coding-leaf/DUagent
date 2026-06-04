@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 export default function TrainingReportModal({ isOpen, onClose }) {
   if (!isOpen) return null;

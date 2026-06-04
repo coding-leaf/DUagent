@@ -2,6 +2,9 @@
 
 ## Scope
 
+- 开始前先读 `README.md` 获取文件导读和阅读顺序。
+- `AGENTS.md` 只负责协作规则与修改约束，不承担模块文档导航职责。
+
 - 负责 `backend/` 内的主业务后端服务。
 - 负责用户、鉴权、课程、SQL 持久化、任务状态、前端 API、Agent Service HTTP 调用适配和 Webhook 落库。
 - 不负责 `agent_service/` 内部的 LLM、AgentScope、Qdrant RAG、提示词、智能体编排实现。
@@ -19,6 +22,7 @@
 5. `backend/schema.sql` — 数据库 schema 参考
 
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
+- `README.md` 是模块文档入口。
 - `WORKFLOW.md` 是联调进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
 
 ## Contract Discipline
@@ -91,6 +95,7 @@
 - Agent Service 直接写 Backend SQL
 - Agent Service 自行生成 `task_id`（必须由 Backend 传入）
 - 修改 `../docs/` 下已有文档，除非用户明确要求
+- WORKFLOW.md 只维护“状态、最近验证、下一步”，不要重复工作流程、测试文件清单、长篇操作说明。
 
 ## Code Change Rules
 
@@ -111,12 +116,14 @@
 ## Incremental Development
 
 - 默认一次只推进一个接口或一个明确子能力。
-- 推荐流程：
-  1. 写或补测试
+- TDD 强制流程（非可选）：
+  1. 写或补测试（RED）
   2. 运行测试确认失败
-  3. 最小实现
-  4. 运行相关测试
-  5. 更新 `WORKFLOW.md`
+  3. 最小实现让测试通过（GREEN）
+  4. 运行相关测试确认通过
+  5. 重构优化（IMPROVE）
+  6. 确认覆盖率 >= 80%
+  7. 更新 `WORKFLOW.md`
 
 ## Progress Tracking
 
@@ -131,13 +138,21 @@
 
 ## Testing
 
-- 修改代码后优先运行相关测试。
+- 使用 `pytest` 作为测试框架。
+- 目标覆盖率 >= 80%，使用 `pytest-cov` 查看：
+  ```bash
+  pytest --cov=app --cov-report=term-missing
+  ```
+- 修改代码后必须运行相关测试，确认全部通过。
 - 修改 Agent 联调逻辑后覆盖：
   - Agent 请求 payload 正确性
   - Agent 不可用时降级（task failed，不崩服务）
   - Agent 超时处理
   - SQL 落库正确性
 - 修改 `models/`/`db`/`schema.sql` 后运行导入检查。
+- 如无现有测试，至少运行基本导入检查或启动检查，不应静默跳过验证。
+- 测试文件放在 `tests/` 目录下。
+- 不为测试而大规模重构项目。
 
 ## Context Handoff
 

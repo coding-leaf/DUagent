@@ -2,12 +2,24 @@
 
 ## 文件用途
 
-本文件只记录 `agent_service` 跨窗口恢复开发所需的最小状态。
-接口契约以 `../docs/20-agent-api/Agent-Service.openapi.json` 和 `../docs/20-agent-api/API_Agent内部接口规范.md` 为准，本文件不是接口契约来源。
+本文件只记录 `agent_service/` 当前阶段状态、最近验证和下一步。
+
+- 模块目标与边界：看 `docs/goals.md`
+- 术语：看 `docs/glossary.md`
+- 关键决策：看 `docs/decisions.md`
+- 临时实现与已知限制：看 `docs/temporary-implementation.md`
+- 正式契约：看根目录 `docs/20-agent-api/*`
+
+不要把以下内容继续堆回本文件：
+
+- 长篇模块导读
+- glossary 术语解释
+- decisions 决策正文
+- 历史实施计划与演进讨论
+- 可独立存在的操作手册或调试手册
 
 ## 当前方向
 
-- Agent Service 负责智能体编排、RAG、工具调用和结构化结果生成，不直接写 Backend SQL 数据库。
 - Agent 全链路架构升级主干已完成：适合 Agent/Workflow 的重点链路已具备 Agent 编排、质量门禁和 fallback。
 - 真实联调主链已完成：resources live workflow、tutoring/chat 真实 RAG、Backend v1 联调闭环均已验证。
 - 后续不再为“升级架构”继续大改已完成接口；新增改动必须服务于质量收口、可观测性、部署稳定性、数据准备流程或明确缺陷修复。

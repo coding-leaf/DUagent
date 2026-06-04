@@ -62,7 +62,7 @@
    - 看当前哪些接口已经完成，哪些是 fallback，哪些是 AgentScope 主链。
 3. `../docs/30-dev-guide/Agent-Service_开发导读.md`
    - 建立业务职责和前后端边界。
-4. `docs/Agent-AI编排审计.md`
+4. `docs/supplemental/Agent-AI编排审计.md`
    - 看每个接口的 AI 输入、prompt、RAG、fallback 链。
 5. `main.py`
    - 看服务是怎么启动、怎么挂路由、怎么初始化 observability 的。
@@ -857,7 +857,7 @@ prompt 很重要，但单靠 prompt 不够。
 
 读：
 
-- `docs/Agent-AI编排审计.md`
+- `docs/supplemental/Agent-AI编排审计.md`
 
 ### 看本地启动、smoke、readiness、知识入库操作
 
@@ -869,7 +869,7 @@ prompt 很重要，但单靠 prompt 不够。
 
 读：
 
-- 本文 `docs/Agent-Service_代码导读与自学手册.md`
+- 本文 `docs/supplemental/Agent-Service_代码导读与自学手册.md`
 
 ---
 

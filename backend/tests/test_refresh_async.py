@@ -22,6 +22,9 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4",
 )
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.db.session import async_session_factory
 from httpx import AsyncClient, ASGITransport
 from app.main import app
@@ -118,7 +121,7 @@ async def test():
                 "drive_intent": {"type": "casual"},
                 "discipline_badge": {"subject": "math"},
             }
-            r = await client.post(f"/api/v1/profile/refresh?course_id={course_id}", headers=headers)
+            r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
             chk("profile/refresh → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             chk("profile/refresh → task_id present", bool(task_id))
@@ -151,7 +154,7 @@ async def test():
         with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="Agent unavailable", status_code=503, agent_code=50301)
-            r = await client.post(f"/api/v1/profile/refresh?course_id={course_id}", headers=headers)
+            r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
             chk("Agent error → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             result = await _poll_task(client, task_id, headers)
@@ -170,7 +173,7 @@ async def test():
                 "resource_usage_table": {"columns": [], "rows": []},
                 "summary_text": "Good progress",
             }
-            r = await client.post(f"/api/v1/evaluation/refresh?course_id={course_id}", headers=headers)
+            r = await client.post("/api/v1/evaluation/refresh", headers=headers, json={"course_id": course_id})
             chk("eval/refresh → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             chk("eval/refresh → task_id present", bool(task_id))
@@ -199,7 +202,7 @@ async def test():
         with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="eval failed", status_code=500, agent_code=50001)
-            r = await client.post(f"/api/v1/evaluation/refresh?course_id={course_id}", headers=headers)
+            r = await client.post("/api/v1/evaluation/refresh", headers=headers, json={"course_id": course_id})
             chk("eval Agent error → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             result = await _poll_task(client, task_id, headers)
@@ -217,7 +220,7 @@ async def test():
                 "edges": [],
                 "current_position": {"node_id": "n1", "node_name": "Intro"},
             }
-            r = await client.post(f"/api/v1/learning-path/refresh?course_id={course_id}", headers=headers)
+            r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
             chk("lp/refresh → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             chk("lp/refresh → task_id present", bool(task_id))
@@ -246,7 +249,7 @@ async def test():
         with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="lp failed", status_code=500, agent_code=50002)
-            r = await client.post(f"/api/v1/learning-path/refresh?course_id={course_id}", headers=headers)
+            r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
             chk("lp Agent error → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             result = await _poll_task(client, task_id, headers)

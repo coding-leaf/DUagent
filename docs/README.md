@@ -41,6 +41,12 @@
 - `90-review/`：接口一致性审查和最终结论
 - `archive/`：历史归档，仅作留档，不参与当前开发决策
 
+## Supplemental Materials
+
+- `30-dev-guide/联调测试指导.md`：联调执行手册，属于开发补充材料，不是接口契约
+- `archive/Agent-Service-接口JSON示例说明.md`：历史 JSON 示例汇总；如与 OpenAPI 冲突，以正式契约为准
+- `archive/implementation_plan.md`：历史实施计划，不作为当前实现真相源
+
 ## Archive Policy
 
 - `archive/` 只保留历史版本、分析过程和废弃材料

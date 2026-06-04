@@ -43,7 +43,7 @@
   - Prove settings can load `agent_service/.env` regardless of process cwd.
 - Modify: `docs/Agent-Service_本地启动与运维.md`
   - Document cwd-independent `.env` loading and how to verify `model_loaded`.
-- Modify: `docs/Apifox_Agent_Service_全接口测试指南.md`
+- Modify: `docs/supplemental/Apifox_Agent_Service_全接口测试指南.md`
   - Add Studio visibility / non-Agent interface table.
 - Modify: `agents/resources_agents.py`
   - Harden `_parse_resource_json()` against control characters and common LLM JSON failures.
@@ -57,7 +57,7 @@
 - Add or modify: memory tests after discovery, likely:
   - `tests/test_memory*.py`
 - Optional docs-only change:
-  - `docs/Apifox_Agent_Service_全接口测试指南.md`
+  - `docs/supplemental/Apifox_Agent_Service_全接口测试指南.md`
   - `docs/Agent-Service_本地启动与运维.md`
 
 Do not modify:
@@ -181,7 +181,7 @@ git commit -m "fix(core): load service env independent of cwd"
 
 **Files:**
 - Modify: `docs/Agent-Service_本地启动与运维.md`
-- Modify: `docs/Apifox_Agent_Service_全接口测试指南.md`
+- Modify: `docs/supplemental/Apifox_Agent_Service_全接口测试指南.md`
 
 - [ ] **Step 1: Add Qdrant local lock section to operations doc**
 
@@ -209,7 +209,7 @@ Storage folder ./qdrant_data is already accessed by another instance of Qdrant c
 
 - [ ] **Step 2: Add Apifox warning**
 
-In `docs/Apifox_Agent_Service_全接口测试指南.md`, under resources or common failures, add:
+In `docs/supplemental/Apifox_Agent_Service_全接口测试指南.md`, under resources or common failures, add:
 
 ```markdown
 - Qdrant local lock：如果日志出现 `Storage folder ./qdrant_data is already accessed by another instance`，停止其他正在运行的 Agent Service/smoke/ingest/readiness 进程后重试。该问题不是 Apifox 请求体错误。
@@ -220,20 +220,20 @@ In `docs/Apifox_Agent_Service_全接口测试指南.md`, under resources or comm
 Run:
 
 ```bash
-rg -n "Qdrant local|Storage folder ./qdrant_data|QDRANT_PATH" docs/Agent-Service_本地启动与运维.md docs/Apifox_Agent_Service_全接口测试指南.md
+rg -n "Qdrant local|Storage folder ./qdrant_data|QDRANT_PATH" docs/Agent-Service_本地启动与运维.md docs/supplemental/Apifox_Agent_Service_全接口测试指南.md
 ```
 
 Expected:
 
 ```text
 docs/Agent-Service_本地启动与运维.md:...
-docs/Apifox_Agent_Service_全接口测试指南.md:...
+docs/supplemental/Apifox_Agent_Service_全接口测试指南.md:...
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/Agent-Service_本地启动与运维.md docs/Apifox_Agent_Service_全接口测试指南.md
+git add docs/Agent-Service_本地启动与运维.md docs/supplemental/Apifox_Agent_Service_全接口测试指南.md
 git commit -m "docs(agent): document qdrant local lock behavior"
 ```
 
@@ -473,11 +473,11 @@ git commit -m "fix(memory): use uuid point ids for qdrant"
 ## Task 5: Add Studio Visibility and Real-AI Testing Matrix
 
 **Files:**
-- Modify: `docs/Apifox_Agent_Service_全接口测试指南.md`
+- Modify: `docs/supplemental/Apifox_Agent_Service_全接口测试指南.md`
 
 - [ ] **Step 1: Add Studio visibility table**
 
-Add this section near the end of `docs/Apifox_Agent_Service_全接口测试指南.md`:
+Add this section near the end of `docs/supplemental/Apifox_Agent_Service_全接口测试指南.md`:
 
 ```markdown
 ## Studio 可见性矩阵
@@ -515,7 +515,7 @@ Add:
 Run:
 
 ```bash
-rg -n "Studio 可见性矩阵|真实 AI 命中证据|QuestionGenerator|fanout_pipeline|chat_provider=None" docs/Apifox_Agent_Service_全接口测试指南.md
+rg -n "Studio 可见性矩阵|真实 AI 命中证据|QuestionGenerator|fanout_pipeline|chat_provider=None" docs/supplemental/Apifox_Agent_Service_全接口测试指南.md
 ```
 
 Expected: all phrases found.
@@ -523,7 +523,7 @@ Expected: all phrases found.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/Apifox_Agent_Service_全接口测试指南.md
+git add docs/supplemental/Apifox_Agent_Service_全接口测试指南.md
 git commit -m "docs(agent): clarify studio visibility for apifox tests"
 ```
 

@@ -21,6 +21,9 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4",
 )
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.db.session import async_session_factory
 from httpx import AsyncClient, ASGITransport
 from app.main import app
@@ -492,6 +495,117 @@ async def test():
         extra_keys = actual_keys - allowed_keys
         chk(f"data-driven -> diagnosis shape has no extra keys (found: {extra_keys})",
             len(extra_keys) == 0)
+
+        # =============================================
+        # 6b. Agent diagnosis fusion regression guard
+        # =============================================
+        print("\n-- 6b. Agent diagnosis fusion --")
+        diag_course_id = f"diag_fusion_{uuid.uuid4().hex[:8]}"
+        async with async_session_factory() as db:
+            c = Course(id=diag_course_id, name="Diag Fusion Course", course_code=diag_course_id, teacher_id=tea_id)
+            db.add(c)
+            db.add(CourseEnrollment(course_id=diag_course_id, student_id=stu_id))
+            dq = QuizQuestion(
+                course_id=diag_course_id, chapter="ch1",
+                knowledge_point="kp_diag", type="single_choice",
+                content="Diag Q?", options=["A", "B"], correct_answer="A",
+                explanation="Diag expl",
+            )
+            db.add(dq)
+            await db.flush()
+            dq_id = dq.id
+            # Session with Agent diagnosis (non-empty suggestions)
+            ds_agent = QuizSession(
+                user_id=stu_id, course_id=diag_course_id, chapter="ch1",
+                score=50, correct_count=0, total_count=1, time_spent=30,
+                diagnosis_json={
+                    "summary": "agent: you missed kp_diag",
+                    "weak_points": [{"name": "kp_diag", "error_pattern": "gap"}],
+                    "suggestions": ["agent: review kp_diag fundamentals"],
+                },
+            )
+            db.add(ds_agent)
+            await db.flush()
+            db.add(QuizAnswer(
+                quiz_id=ds_agent.id, question_id=dq_id, user_answer="B",
+                is_correct=False, correct_answer="A", explanation="Diag expl",
+            ))
+            await db.commit()
+            ds_agent_id = ds_agent.id
+
+        # (a) Agent suggestions non-empty → consumed
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("agent diag -> suggestions consumed",
+            "agent: review kp_diag fundamentals" in rd["diagnosis"]["suggestions"])
+        chk("agent diag -> summary stays SQL (course-level, not per-session)",
+            rd["diagnosis"]["summary"] != "agent: you missed kp_diag")
+
+        # (b) Agent suggestions empty → fall back to SQL
+        async with async_session_factory() as db:
+            ds = await db.get(QuizSession, ds_agent_id)
+            ds.diagnosis_json = {
+                "summary": "agent summary", "weak_points": [], "suggestions": [],
+            }
+            await db.commit()
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("empty suggestions -> fallback to SQL",
+            "agent:" not in str(rd["diagnosis"]["suggestions"])
+            and len(rd["diagnosis"]["suggestions"]) > 0)
+
+        # (c) No diagnosis_json → full SQL fallback
+        async with async_session_factory() as db:
+            ds = await db.get(QuizSession, ds_agent_id)
+            ds.diagnosis_json = None
+            await db.commit()
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("no diag -> suggestions non-empty",
+            isinstance(rd["diagnosis"]["suggestions"], list)
+            and len(rd["diagnosis"]["suggestions"]) > 0)
+        chk("no diag -> summary is str", isinstance(rd["diagnosis"]["summary"], str))
+
+        # (d) Whitespace-only suggestion strings → rejected, fallback to SQL
+        async with async_session_factory() as db:
+            ds = await db.get(QuizSession, ds_agent_id)
+            ds.diagnosis_json = {
+                "summary": "s", "weak_points": [],
+                "suggestions": ["   ", "\t", "valid tip"],
+            }
+            await db.commit()
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("whitespace strings -> rejected, fallback to SQL",
+            "agent:" not in str(rd["diagnosis"]["suggestions"])
+            and len(rd["diagnosis"]["suggestions"]) > 0)
+
+        # (e) Latest session no diagnosis, older session has valid → consumed
+        async with async_session_factory() as db:
+            # Add a newer session WITHOUT diagnosis_json
+            ds_new = QuizSession(
+                user_id=stu_id, course_id=diag_course_id, chapter="ch1",
+                score=100, correct_count=1, total_count=1, time_spent=20,
+                diagnosis_json=None,  # no diagnosis
+            )
+            db.add(ds_new)
+            await db.flush()
+            db.add(QuizAnswer(
+                quiz_id=ds_new.id, question_id=dq_id, user_answer="A",
+                is_correct=True, correct_answer="A", explanation="Diag expl",
+            ))
+            # The OLDER session (ds_agent) now has valid suggestions set
+            ds = await db.get(QuizSession, ds_agent_id)
+            ds.diagnosis_json = {
+                "summary": "old agent summary",
+                "weak_points": [],
+                "suggestions": ["old agent: review fundamentals", "old agent: practice more"],
+            }
+            await db.commit()
+        r = await client.get(f"/api/v1/quiz/result?course_id={diag_course_id}", headers=stu_headers)
+        rd = r.json()["data"]
+        chk("latest no diag, old has valid -> consumed from old",
+            "old agent: review fundamentals" in rd["diagnosis"]["suggestions"])
 
         # =============================================
         # F. Stats computation accuracy

@@ -13,9 +13,49 @@ from app.core.config import settings
 from app.db.session import init_db
 
 
+async def _recover_orphaned_refresh_tasks() -> None:
+    """启动时将残留的 refresh 类 processing 任务标记为 failed。
+
+    只覆盖 profile_refresh / evaluation_refresh / learning_path_refresh，
+    这三类使用 asyncio.create_task，进程重启后协程丢失。
+    resource_generation / quiz_generation 不在此范围。
+    """
+    import logging
+    from datetime import datetime, timezone
+
+    from sqlalchemy import update as sql_update
+    from app.db.session import async_session_factory
+    from app.models.others import AsyncTask
+
+    logger = logging.getLogger(__name__)
+    _refresh_types = ["profile_refresh", "evaluation_refresh", "learning_path_refresh"]
+
+    async with async_session_factory() as db:
+        result = await db.execute(
+            sql_update(AsyncTask)
+            .where(
+                AsyncTask.status == "processing",
+                AsyncTask.task_type.in_(_refresh_types),
+            )
+            .values(
+                status="failed",
+                error_code=None,
+                error_message="服务重启，后台任务丢失",
+                completed_at=datetime.now(timezone.utc),
+            )
+        )
+        await db.commit()
+        if result.rowcount:
+            logger.warning(
+                "Startup recovery: marked %d orphaned refresh tasks as failed",
+                result.rowcount,
+            )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await _recover_orphaned_refresh_tasks()
     yield
 
 

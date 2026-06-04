@@ -15,6 +15,9 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4",
 )
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.db.session import async_session_factory
 from httpx import AsyncClient, ASGITransport
 from app.main import app

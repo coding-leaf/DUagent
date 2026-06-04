@@ -1,15 +1,38 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../api/services/auth';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
 
+  const [captchaQuestion, setCaptchaQuestion] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaCode, setCaptchaCode] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const fetchCaptcha = async () => {
+    try {
+      const response = await authService.getCaptcha();
+      if (response.code === 200) {
+        setCaptchaQuestion(response.data.captcha_question);
+        setCaptchaToken(response.data.captcha_token);
+      }
+    } catch (err) {
+      console.error('获取验证码失败:', err);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchCaptcha();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,25 +41,31 @@ export default function Login() {
 
     try {
       const response = await authService.login({
-        email: username,
+        email: email,
         password: password,
-        captcha_token: 'dummy-token',
-        captcha_code: '8', 
+        captcha_token: captchaToken,
+        captcha_code: captchaCode,
       });
 
       if (response.code === 200) {
-        localStorage.setItem('access_token', response.data.access_token);
-        localStorage.setItem('refresh_token', response.data.refresh_token);
+        const token = response.data.token || response.data.access_token;
+        localStorage.setItem('access_token', token);
+        if (response.data.refresh_token) {
+          localStorage.setItem('refresh_token', response.data.refresh_token);
+        }
         
-        if (response.data.user.role === 'admin' || username === 'teacher') {
+        const userRole = response.data.user?.role;
+        if (userRole === 'admin' || userRole === 'teacher') {
           navigate('/teacher');
         } else {
           navigate('/dashboard');
         }
       } else {
         setError(response.message || '登录失败，请检查账号密码');
+        fetchCaptcha();
       }
     } catch (err) {
+      fetchCaptcha();
       if (err.response && err.response.data) {
         setError(err.response.data.message || '登录失败');
       } else {
@@ -148,15 +177,15 @@ export default function Login() {
               )}
               <form onSubmit={handleSubmit} className="space-y-md text-left">
                 <div className="space-y-xs">
-                  <label className="text-label-sm text-secondary block font-medium text-xs">账号 (用户名 / 邮箱)</label>
+                  <label className="text-label-sm text-secondary block font-medium text-xs">电子邮箱 (Email)</label>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">person</span>
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">mail</span>
                     <input
                       className={`w-full pl-10 pr-4 py-3 rounded-lg border bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all ${error ? 'border-error ring-1 ring-error/20' : 'border-outline-variant'}`}
-                      placeholder="输入您的账号"
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="输入您的邮箱"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
                     />
                   </div>
@@ -174,6 +203,31 @@ export default function Login() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-xs">
+                  <label className="text-label-sm text-secondary block font-medium text-xs">验证码 (Captcha)</label>
+                  <div className="flex space-x-sm">
+                    <div className="relative flex-grow">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">verified_user</span>
+                      <input
+                        className={`w-full pl-10 pr-4 py-3 rounded-lg border bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all ${error ? 'border-error ring-1 ring-error/20' : 'border-outline-variant'}`}
+                        placeholder="输入计算结果"
+                        type="text"
+                        value={captchaCode}
+                        onChange={(e) => setCaptchaCode(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchCaptcha}
+                      className="px-md bg-secondary-container text-on-secondary-container font-h3 text-sm rounded-lg hover:brightness-105 active:scale-95 transition-all whitespace-nowrap cursor-pointer flex items-center justify-center min-w-[120px]"
+                      title="点击刷新验证码"
+                    >
+                      {captchaQuestion || '加载中...'}
+                    </button>
                   </div>
                 </div>
 

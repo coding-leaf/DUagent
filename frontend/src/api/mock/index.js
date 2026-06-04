@@ -8,19 +8,27 @@ import teachingMock from './teachingMock';
 import chatMock from './chatMock';
 import adminMock from './adminMock';
 
-// This sets the mock adapter on the default instance
-// Set a 500ms delay to simulate network latency
-const mock = new MockAdapter(apiClient, { delayResponse: 500 });
+const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
-// Register mocks
-authMock(mock);
-learningMock(mock);
-quizMock(mock);
-profileMock(mock);
-teachingMock(mock);
-chatMock(mock);
-adminMock(mock);
+let mock = null;
 
-console.log('[Mock API] Interceptor enabled.');
+if (useMock) {
+  // This sets the mock adapter on the default instance
+  // Set a 500ms delay to simulate network latency
+  mock = new MockAdapter(apiClient, { delayResponse: 500 });
+
+  // Register mocks
+  authMock(mock);
+  learningMock(mock);
+  quizMock(mock);
+  profileMock(mock);
+  teachingMock(mock);
+  chatMock(mock);
+  adminMock(mock);
+
+  console.log('[Mock API] Interceptor enabled.');
+} else {
+  console.log('[Mock API] Interceptor disabled. Using real API endpoints.');
+}
 
 export default mock;

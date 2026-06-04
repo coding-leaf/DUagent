@@ -1,6 +1,9 @@
 import apiClient from '../client';
 
 export const authService = {
+  getCurrentUser() {
+    return apiClient.get('/users/me');
+  },
   getCaptcha() {
     return apiClient.get('/auth/captcha');
   },

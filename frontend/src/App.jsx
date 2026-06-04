@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -14,26 +13,36 @@ import AIChat from './pages/AIChat';
 import LearningEffects from './pages/LearningEffects';
 import PracticeResult from './pages/PracticeResult';
 import AdminConsole from './pages/AdminConsole';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/success" element={<Success />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/profile" element={<StudentProfile />} />
-        <Route path="/teacher" element={<TeacherConsole />} />
-        <Route path="/teacher/report" element={<TeacherStudentReport />} />
-        <Route path="/learning-path" element={<LearningPath />} />
-        <Route path="/resource/detail" element={<ResourceDetail />} />
-        <Route path="/quiz" element={<Quiz />} />
-        <Route path="/quiz/result" element={<PracticeResult />} />
-        <Route path="/ai-chat" element={<AIChat />} />
-        <Route path="/learning-effects" element={<LearningEffects />} />
-        <Route path="/admin" element={<AdminConsole />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/success" element={<Success />} />
+          
+          {/* Student routes */}
+          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
+          <Route path="/learning-path" element={<ProtectedRoute allowedRoles={['student']}><LearningPath /></ProtectedRoute>} />
+          <Route path="/resource/detail" element={<ProtectedRoute allowedRoles={['student']}><ResourceDetail /></ProtectedRoute>} />
+          <Route path="/quiz" element={<ProtectedRoute allowedRoles={['student']}><Quiz /></ProtectedRoute>} />
+          <Route path="/quiz/result" element={<ProtectedRoute allowedRoles={['student']}><PracticeResult /></ProtectedRoute>} />
+          <Route path="/ai-chat" element={<ProtectedRoute allowedRoles={['student']}><AIChat /></ProtectedRoute>} />
+          <Route path="/learning-effects" element={<ProtectedRoute allowedRoles={['student']}><LearningEffects /></ProtectedRoute>} />
+          
+          {/* Teacher / Admin routes */}
+          <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherConsole /></ProtectedRoute>} />
+          <Route path="/teacher/report" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherStudentReport /></ProtectedRoute>} />
+          
+          {/* Admin routes */}
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminConsole /></ProtectedRoute>} />
+        </Routes>
+      </AuthProvider>
     </Router>
   );
 }

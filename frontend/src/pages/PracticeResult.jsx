@@ -1,25 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
+import { useCourse } from '../context/CourseContext';
 
 export default function PracticeResult() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { activeCourseId } = useCourse();
   const [resultData, setResultData] = useState(location.state?.result || null);
   const [loading, setLoading] = useState(!location.state?.result);
 
   useEffect(() => {
-    if (!resultData) {
+    if (!resultData && activeCourseId) {
       const fetchResult = async () => {
         try {
-          const res = await quizService.getResult('default_course');
+          const res = await quizService.getResult(activeCourseId);
           if (res.code === 200) {
             setResultData({
               score: res.data.latest_quiz.score,
               time_spent: res.data.latest_quiz.time_spent,
               total_count: 10,
               correct_count: Math.round((res.data.latest_quiz.score / 100) * 10),
-              per_question_results: [] // API GET /quiz/result might not return per question results in my mock
+              per_question_results: []
             });
           }
         } catch (error) {
@@ -30,7 +32,7 @@ export default function PracticeResult() {
       };
       fetchResult();
     }
-  }, [resultData]);
+  }, [resultData, activeCourseId]);
 
   if (loading) {
     return (

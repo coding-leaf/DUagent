@@ -1,46 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { profileService } from '../api/services/profile';
+import { useCourse } from '../context/CourseContext';
+import Navbar from '../components/Navbar';
 
 export default function LearningEffects() {
   const navigate = useNavigate();
+  const { activeCourseId } = useCourse();
   const [effectsData, setEffectsData] = useState(null);
 
   useEffect(() => {
-    profileService.getLearningEffects().then(res => {
+    if (!activeCourseId) return;
+    profileService.getLearningEffects(activeCourseId).then(res => {
       if (res.code === 200) {
         setEffectsData(res.data);
       }
     }).catch(console.error);
-  }, []);
+  }, [activeCourseId]);
+
+  const knowledgeNodes = effectsData?.knowledge_nodes || 
+    (effectsData?.mastery_table?.rows?.map(row => ({
+      name: row.chapter,
+      status: row.mastery_level,
+      score: row.average_score
+    })) || []);
 
 
   return (
     <div className="bg-background text-on-surface font-body-md min-h-screen">
       {/* TopNavBar */}
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans'] antialiased">
-        <div className="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
-          <div className="text-xl font-bold tracking-tight text-cyan-600">数据结构智能助手</div>
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/profile" className="text-gray-600 hover:text-cyan-500 transition-colors">个人信息</Link>
-            <Link to="/learning-path" className="text-gray-600 hover:text-cyan-500 transition-colors">路径规划</Link>
-            <Link to="/dashboard" className="text-gray-600 hover:text-cyan-500 transition-colors">资源库</Link>
-            <Link to="/ai-chat" className="text-gray-600 hover:text-cyan-500 transition-colors">AI答疑</Link>
-            <Link to="/learning-effects" className="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1">学习效果</Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-gray-600">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-gray-600">settings</span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant cursor-pointer" onClick={() => navigate('/profile')}>
-              <img alt="用户头像" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIZ6HO5HA-odVe8eyF37yBdDVqfay9WuU9hiH5bUmPQ7FHVUvaaDZxx-umrUXutVljxyDA8RZg_DaakLk5239e-wEBGWbcvlz6m8ugJDjJkfWVXu3go6THqG3cG20AZz_Fo9e3nQQaFkyLTMljw6gQ7C9zzMSbkb9zWAcMi735c3jXolvzaKkf1ukO4JFCIGvZKAEYUotf7YS7Eh9YXEBhXk-zbyI3drYFjCejkZNYy2Xw_yQjYjF31dF20X5HAXjP5TdmPPzYQVXQ" />
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* SideNavBar */}
       <aside className="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden lg:flex">
@@ -116,12 +105,14 @@ export default function LearningEffects() {
               <span className="material-symbols-outlined mr-2 text-cyan-600">assessment</span> 练习掌握度
             </h3>
             <div className="flex flex-col gap-4 mt-6">
-              {effectsData?.knowledge_nodes?.map((node, i) => {
-                let p = 0;
-                if (node.status === 'mastered') p = 95;
-                else if (node.status === 'familiar') p = 78;
-                else if (node.status === 'weak') p = 42;
-                else p = 20;
+              {knowledgeNodes.map((node, i) => {
+                let p = node.score !== undefined ? Math.round(node.score) : 0;
+                if (node.score === undefined) {
+                  if (node.status === 'mastered') p = 95;
+                  else if (node.status === 'familiar') p = 78;
+                  else if (node.status === 'weak') p = 42;
+                  else p = 20;
+                }
 
                 return (
                   <div key={i} className="space-y-2">
@@ -135,7 +126,7 @@ export default function LearningEffects() {
                   </div>
                 );
               })}
-              {(!effectsData?.knowledge_nodes || effectsData.knowledge_nodes.length === 0) && (
+              {knowledgeNodes.length === 0 && (
                 <div className="text-slate-400 text-sm">暂无数据</div>
               )}
             </div>

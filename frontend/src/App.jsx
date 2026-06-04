@@ -7,7 +7,7 @@ import StudentProfile from './pages/StudentProfile';
 import TeacherConsole from './pages/TeacherConsole';
 import TeacherStudentReport from './pages/TeacherStudentReport';
 import LearningPath from './pages/LearningPath';
-import ResourceDetail from './pages/ResourceDetail';
+
 import Quiz from './pages/Quiz';
 import AIChat from './pages/AIChat';
 import LearningEffects from './pages/LearningEffects';
@@ -31,7 +31,7 @@ function App() {
             <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
             <Route path="/learning-path" element={<ProtectedRoute allowedRoles={['student']}><LearningPath /></ProtectedRoute>} />
-            <Route path="/resource/detail" element={<ProtectedRoute allowedRoles={['student']}><ResourceDetail /></ProtectedRoute>} />
+
             <Route path="/quiz" element={<ProtectedRoute allowedRoles={['student']}><Quiz /></ProtectedRoute>} />
             <Route path="/quiz/result" element={<ProtectedRoute allowedRoles={['student']}><PracticeResult /></ProtectedRoute>} />
             <Route path="/ai-chat" element={<ProtectedRoute allowedRoles={['student']}><AIChat /></ProtectedRoute>} />

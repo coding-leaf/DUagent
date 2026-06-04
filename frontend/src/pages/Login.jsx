@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../api/services/auth';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -48,13 +50,12 @@ export default function Login() {
       });
 
       if (response.code === 200) {
-        const token = response.data.token || response.data.access_token;
-        localStorage.setItem('access_token', token);
-        if (response.data.refresh_token) {
-          localStorage.setItem('refresh_token', response.data.refresh_token);
-        }
-        
-        const userRole = response.data.user?.role;
+        const token = response.data.token;
+        const userData = response.data.user;
+
+        login(token, userData);
+
+        const userRole = userData?.role;
         if (userRole === 'admin' || userRole === 'teacher') {
           navigate('/teacher');
         } else {

@@ -1,7 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import { courseService } from '../api/services/course';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from './AuthContext';
 
 const CourseContext = createContext(null);
 
@@ -10,24 +11,28 @@ export function CourseProvider({ children }) {
   const [activeCourseId, setActiveCourseId] = useState(null);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const fetchCourses = async () => {
     try {
+      setLoading(true);
       const res = await courseService.getMyCourses();
       if (res.code === 200 && res.data) {
-        setCourses(res.data);
+        const coursesList = res.data.courses || (Array.isArray(res.data) ? res.data : []);
+        setCourses(coursesList);
         
         const queryParams = new URLSearchParams(location.search);
         const urlCourseId = queryParams.get('course_id');
         const localCourseId = localStorage.getItem('course_id');
         
         let targetCourseId = null;
-        if (urlCourseId && res.data.some(c => c.id === urlCourseId)) {
+        if (urlCourseId && coursesList.some(c => c.id === urlCourseId)) {
           targetCourseId = urlCourseId;
-        } else if (localCourseId && res.data.some(c => c.id === localCourseId)) {
+        } else if (localCourseId && coursesList.some(c => c.id === localCourseId)) {
           targetCourseId = localCourseId;
-        } else if (res.data.length > 0) {
-          targetCourseId = res.data[0].id;
+        } else if (coursesList.length > 0) {
+          targetCourseId = coursesList[0].id;
         }
         
         if (targetCourseId) {
@@ -42,13 +47,20 @@ export function CourseProvider({ children }) {
     }
   };
 
+  // Sync courses whenever authenticated user changes (login/logout/refresh)
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchCourses();
+      if (user) {
+        fetchCourses();
+      } else {
+        setCourses([]);
+        setActiveCourseId(null);
+        setLoading(false);
+      }
     }, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   // Sync with URL query parameter changes
   useEffect(() => {
@@ -68,6 +80,14 @@ export function CourseProvider({ children }) {
   const changeCourse = (courseId) => {
     setActiveCourseId(courseId);
     localStorage.setItem('course_id', courseId);
+
+    // Sync to URL query parameters
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set('course_id', courseId);
+    navigate({
+      pathname: location.pathname,
+      search: searchParams.toString()
+    }, { replace: true });
   };
 
   return (

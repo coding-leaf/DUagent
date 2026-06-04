@@ -114,7 +114,14 @@ export default function AIChat() {
         } else if (msg.type === 'knowledge_points') {
           setMessages(prev => prev.map(m => {
             if (m.id === 'ai-placeholder') {
-              return { ...m, knowledge_points: msg.points || [] };
+              const rawPoints = msg.knowledge_points || msg.points || msg.data || [];
+              const parsedPoints = (Array.isArray(rawPoints) ? rawPoints : [rawPoints]).map(kp => {
+                if (typeof kp === 'object' && kp !== null) {
+                  return kp.name || kp.title || kp.id || JSON.stringify(kp);
+                }
+                return String(kp);
+              });
+              return { ...m, knowledge_points: parsedPoints };
             }
             return m;
           }));

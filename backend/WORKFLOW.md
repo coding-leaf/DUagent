@@ -137,10 +137,17 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-05` `前端阶段边界与后续 Client API 扩展审查`
+  - **阶段一边界**：当前只收口现有 `docs/10-client-api/*` 能承接的基础主链，包括鉴权、课程切换、资源列表、学习路径、Quiz、AI Chat、教师学生列表与基础学情报告；以真实环境 E2E 验收为完成条件，不继续混入新增页面能力。
+  - **正式字段纠错**：`StudentLearning.weak_points` 与 `StudentLearning.recent_activity` 已在正式 OpenAPI 和前端接口规范中声明，前端不得以“未声明”为由移除。后端当前仅返回空数组，属于实现或数据来源待完善，不是契约缺失。
+  - **后续审查范围**：资源详情与正文阅读、阅读进度、累计学习时长、建议学习时长、认知成长曲线、班级 AI 洞察、覆盖率、排名、动力指数、资源偏好分布等页面能力，现有契约与 SQL 数据来源不足，进入后续产品与契约扩展审查。
+  - **变更预判**：后续能力大概率需要修改 Client API 契约并可能修改 SQL Schema；是否修改 Agent API 需按具体能力的数据来源判断。未完成字段语义、计算方式、数据来源和空值规则确认前，不修改正式契约。
+  - **契约**：本次仅记录后续审查边界；Client API 契约改变：`否` / Agent API 契约改变：`否`。
+
 - `2026-06-05` `前端阶段一验收缺陷修复（v2）`
-  - **完成**：审查并提交 6 个候选修复，移除未声明契约字段，建立 E2E 种子数据脚本。
+  - **完成**：审查并提交 6 个候选修复，清理部分顶层非契约字段回退，建立 E2E 种子数据脚本。
     - **候选修复提交**：[Login.jsx] AuthContext.login() 集成；[CourseContext.jsx] data.courses 解析 + user 守卫；[teaching.js] 移除假数据适配器，真实 API 透传；[AIChat.jsx] 多键 knowledge_points 兼容解析；[App.jsx] 移除 ResourceDetail 路由。
-    - **契约对齐**：[TeacherStudentReport.jsx] 真实模式移除 report.username、report.student_id 顶层回退、weak_points、recent_activity（均不在正式 StudentLearning 契约中）。
+    - **契约对齐纠错**：[TeacherStudentReport.jsx] 真实模式移除 `report.username`、`report.student_id` 顶层回退是正确的；移除 `weak_points`、`recent_activity` 的依据错误，这两个字段属于正式 `StudentLearning`，待恢复展示。
     - **E2E 种子脚本**：新增 `backend/scripts/seed_e2e_data.py`，幂等创建测试账号（s@t.com / t@t.com）、课程、资源、题库、画像、测评、学习路径数据。需 `ALLOW_E2E_SEED=true` + DB 名含 `test` 守卫。
     - **E2E 基础设施**：[playwright.config.js] webServer.env 注入 VITE_API_BASE_URL；[specs.spec.js] 验证码等待算术题文本 + 解析失败 throw 替代静默返回 0。
     - **路径修正**：[learning.js] getTaskStatus 路径 `/tasks/{id}/status` → `/tasks/{id}`。

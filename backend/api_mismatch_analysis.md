@@ -21,7 +21,7 @@
 | 对比项 | 前端实际调用 (Mock/Axios) | 后端契约与实现 (OpenAPI / Pydantic) | 脱节程度与影响 |
 | :--- | :--- | :--- | :--- |
 | **注册请求** | `POST /auth/register`<br>Payload: `{ registration_code, email, password, username }` | `POST /auth/register`<br>Payload: 额外必填 `captcha_token`, `captcha_code` | **严重脱节**。前端未传递验证码凭证，后端 Pydantic 校验将直接抛出 `422 Unprocessable Entity` 错误，导致注册彻底失效。 |
-| **登录响应** | 返回 `{ access_token, refresh_token, user: { role } }` | 仅返回 `{ token }` (即 `access_token`) | **严重脱节**。前端试图在 `localStorage` 中写入 `refresh_token`，并根据 `user.role` 做路由重定向。后端无此字段，会导致重定向逻辑崩溃。 |
+| **登录响应** | 返回 `{ access_token, refresh_token, user: { role } }` | 返回 `{ token, expires_in, user: { id, email, username, role } }` | **字段名称不符**。前端读取 `access_token` / `refresh_token`，而后端返回的字段是 `token`。后端确实返回了 `user.role`，无需硬编码判断。 |
 | **辅助端点** | 实现了 `/auth/logout`, `/auth/refresh`, `/auth/reset-password/code`, `/auth/reset-password` | 后端均未声明或实现以上端点 | **中度脱节**。前端包含登出、刷新 Token 及找回密码功能，后端暂不支持，调用将返回 `404`。 |
 
 ---
@@ -85,7 +85,7 @@
 | :--- | :--- | :--- | :--- |
 | **班级/课程列表** | `GET /api/v1/teacher/classes` | `GET /courses` (教师与学生共用此列表) | 前端请求报 `404`。 |
 | **学生名册列表** | `GET /api/v1/course/{courseId}/students` | `GET /teaching/classes/{class_id}/students` | 前端请求报 `404`。 |
-| **AI 洞察数据** | `GET /api/v1/course/{courseId}/insights` | 无此接口。AI 洞察已被下沉整合。 | 前端请求报 `404`。 |
+| **AI 洞察数据** | `GET /api/v1/course/{courseId}/insights` | **后端不存在此接口**。正式契约中没有班级 AI 洞察接口，也没有被其他接口承接。 | **严重脱节**。前端看板的 AI 洞察模块（平均活跃时间、知识点覆盖率等）由于没有真实接口，在阶段一联调中必须进行**隐藏或屏蔽**。 |
 | **学生学情报告** | `GET /api/v1/teacher/students/{studentId}/report` | `GET /teaching/classes/{class_id}/students/{student_id}` (个人信息)<br>`GET /teaching/classes/{class_id}/students/{student_id}/learning` (学情评估) | 前端试图用一个 API 拿完所有画像与评估，而后端将其拆分为了基础画像与学情评估两个端点。 |
 
 ---
@@ -94,7 +94,7 @@
 
 管理员端存在单复数和命名上的小幅脱节。
 * **智能体日志：** 前端请求 `/admin/logs/agents`，后端为 `/admin/logs/agent`（单数）。
-* **系统基础日志：** 前端请求 `/admin/logs/system`，后端为 `/admin/logs/operations`。
+* **系统基础日志：** 前端请求 `/admin/logs/system` , 后端为 `/admin/logs/operations`。
 * **影响：** 管理员后台日志审计功能在真实环境下返回 `404`。
 
 ---
@@ -102,23 +102,12 @@
 ## 三、 对后端的承接能力评估
 
 ### 后端 API 能承接什么？
-1. **数据库存储与字段映射：** 后端 API 完美承接了 `backend/schema.sql` 物理表的增删改查。
-2. **多智能体交互流：** 后端拥有完整的 SSE 消费逻辑与 Webhook 结果落库逻辑，能完美接收 Agent 的回调。
-3. **任务状态机控制：** `AsyncTask` 模型的创建、轮询逻辑在后端非常完整。
+根据当前项目 `WORKFLOW.md` 的进度记录，后端目前处于 **半完成状态**：
+1. **数据模型与存储：** 后端承接了 `backend/schema.sql` 物理表的增删改查逻辑。
+2. **多智能体交互与任务机制：** 拥有基本的异步任务处理与 Webhook 接收框架。
 
-### 后端 API 为什么无法“迁就”当前的客户端实现？
-若直接修改后端 API 去适配当前的客户端（Vite 临时 Mock 数据）：
-1. 会导致后端完全抛弃数据库中的 `UserProfile` 与 `Evaluation` 实体设计，退化为仅存储前端 UI 展示所需的零散字段。
-2. 违背了多智能体系统“结构化大模型分析生成”的初衷（例如后端需要表格式的数据来进行复杂的统计，而前端仅要简单的掌握度进度条）。
-3. 会导致项目背离已冻结的 `Client-API.openapi.json` 契约，造成“契约漂移”，违反协作规则。
-
----
-
-## 四、 建议的修复路径 (Action Plan)
-
-为了实现真正的联调，需要分步对前端的 Axios 服务进行重构：
-
-1. **统一路径前缀：** 彻底理清 `/api/v1` 在 `apiClient` 的 baseUrl 中的作用，避免前端代码中写死重复前缀（如 `/api/v1/chat/...`）。
-2. **修复登录凭证与重定向：** 前端移除对 `refresh_token` 的依赖，并在登录响应中通过解码 `token` 或调用 `/users/me` 获取用户角色，进行页面重定向。
-3. **流式消费重构 (AIChat)：** 前端必须将 `AIChat.jsx` 中发送消息的接口由 `Axios` 改为原生 `fetch`，解析 `text/event-stream`，以承接后端的流式智能体答疑。
-4. **画像数据字段适配：** 前端在 `StudentProfile.jsx` 和 `LearningEffects.jsx` 中将字段绑定从 `name`, `level` 等 mock 字段修改为后端返回的 `modal_preference` 及 `knowledge_coordinates`。
+### 后端承接能力的局限性 (不可过度表述)
+在当前联调阶段，后端 API 仍有大量**硬编码或未完全实现的业务指标**，前端无法通过 API 获得动态真实值：
+1. **教师端学生掌握度硬编码：** 教师端获取的学生整体课程掌握度仍为硬编码计算，未真正联动智能体进行动态分析。
+2. **评估时长占位：** 评估数据中的累计学习时长在后端目前为 **零值占位** 或死数据，不反映学生的真实阅读时间。
+3. 因此，后端无法支持前端全部拟真的学情画像，阶段一中前端页面需要隐藏或重构这些不完整的指标，仅做基础字段对接。

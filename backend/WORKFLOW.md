@@ -9,7 +9,7 @@
 - 关键决策：看 `docs/decisions.md`
 - 临时实现与已知限制：看 `docs/temporary-implementation.md`
 - 正式契约：看根目录 `docs/10-client-api/*` 与 `docs/20-agent-api/*`
-- 注意,目前属于前后端联调阶段,故前端api规范属于待审核阶段
+- 当前处于前端页面需求与 Client API 契约完整性审查阶段。现有 `docs/10-client-api/*` 仍作为阶段一实现与联调基线；发现契约缺口时，应记录差异，区分前端隐藏或重构与后续契约扩展，并经用户确认后再修改正式契约。
 不要把以下内容继续堆回本文件：
 
 - 长篇架构导读

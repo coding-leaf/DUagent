@@ -9,7 +9,7 @@
 - 关键决策：看 `docs/decisions.md`
 - 临时实现与已知限制：看 `docs/temporary-implementation.md`
 - 正式契约：看根目录 `docs/10-client-api/*` 与 `docs/20-agent-api/*`
-
+- 注意,目前属于前后端联调阶段,故前端api规范属于待审核阶段
 不要把以下内容继续堆回本文件：
 
 - 长篇架构导读
@@ -136,6 +136,24 @@ _（当前无占位接口）_
 - `POST /api/v1/auth/send-reset-code`
 
 ## 最近状态变更
+
+- `2026-06-05` `前端阶段一验收缺陷修复（E2E 待测试账号就绪后重验）`
+  - **完成**：修复了阶段一评审报告中指出的 7 个缺陷（CORS、声明不实、组件未接入、E2E 覆盖不足、永久 Loading、硬编码回退、文档不实）。
+    - **登录主链**：[Login.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/Login.jsx) 彻底集成 `login(token, user)`，清除无用 Mock 参数，确保角色路由切换与受保护页面正常进入。
+    - **课程上下文**：[CourseContext.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/context/CourseContext.jsx) 异步化 fetch 与 clear 逻辑，清除 state 级联更新产生的 React 警告。
+    - **资源分类对齐契约**：[Dashboard.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/Dashboard.jsx) 对齐 `document/mindmap/reading/code/video` 正式类型，清理 Required/Recommended，删除详情页和 Mock 专用字段。
+    - **教师端数据去伪存真**：[teaching.js](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/api/services/teaching.js) 清理假数据源。[TeacherConsole.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/TeacherConsole.jsx) 和 [TeacherStudentReport.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/TeacherStudentReport.jsx) 自动读取 url 查询参数实现深链刷新，隐藏全部假指标/假曲线，并在 real 模式下只渲染纯净的 `StudentLearning` 仪表盘，禁用无接口按钮。
+    - **AI Chat 提取修复**：[AIChat.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/AIChat.jsx) 对引用知识点支持多重键（points, knowledge_points, data）解析和对象提取。
+    - **状态组件与E2E用例**：FeedbackStatus 已接入 Dashboard、TeacherConsole、TeacherStudentReport（loading/empty/error 三态）。保留 `triggerResourceGeneration()` 和 `getTaskStatus()` API 服务函数（前端页面未接入，待后续阶段实现）。E2E 用例已修复 CORS 和选择器，覆盖率已补强。
+    - **代码规范**：`git diff --check` 通过，`npm run lint` 为 0 errors 0 warnings，`npm run build` 通过（含 chunk 大小警告）。
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+  - **验证结果**：
+    - `npm run lint`：0 errors, 0 warnings
+    - `npm run build`：通过（含 chunk 大小警告，>500KB）
+    - `npm run test:e2e`：3/3 失败（根因：测试账号 s@t.com / t@t.com 在当前数据库中不存在，CORS 修复已确认生效）。待数据库包含测试账号后重验。
+    - `git diff --check`：通过
+    - Client API 契约漂移：否
+    - Agent API 契约漂移：否
 
 - `2026-06-04` `前端对齐现有接口联调（阶段一实施）完成`
   - **完成**：Vite 前端已成功对齐后端 API 契约与数据模型结构。

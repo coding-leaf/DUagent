@@ -20,7 +20,7 @@
 
 **安全守卫:**
 - `ALLOW_E2E_SEED=true` 环境变量，缺失时立即 `sys.exit(1)`
-- 数据库名称必须包含 `test`（大小写不敏感），不满足时立即 `sys.exit(1)`
+- 从 `settings.resolved_database_url` 解析实际数据库名称，该名称必须包含 `test`（大小写不敏感），不满足时立即 `sys.exit(1)`
 - 不接受命令行参数覆盖守卫
 
 **职责:**
@@ -141,15 +141,17 @@ Backend 与种子脚本使用同一 DATABASE_URL；Playwright 前端通过 VITE_
 |----|---------|------|------|
 | ~92 | `report.username`（标题） | StudentLearning.student 无 username | 改为 `report.student?.real_name \|\| report.student?.student_id \|\| '学生报告'` |
 | ~448 | `report.username`（Profile banner） | 同上 | 同上 |
-| ~537 | `report.weak_points` | 不在正式契约中 | 隐藏区块或标记"未提供" |
-| ~568 | `report.recent_activity` | 不在正式契约中 | 隐藏区块或标记"未提供" |
+| ~449 | `report.student_id`（学号回退） | StudentLearning 无顶层 student_id | 仅使用 `report.student?.student_id \|\| '未知'` |
+| ~537 | `report.weak_points` | 不在正式契约中 | 真实模式完全不读取该字段，隐藏区块或静态标记"正式接口暂未提供" |
+| ~568 | `report.recent_activity` | 不在正式契约中 | 真实模式完全不读取该字段，隐藏区块或静态标记"正式接口暂未提供" |
 
 **正式 StudentLearning 契约仅声明 8 个字段:** student、evaluation_summary、profile_summary、path_progress、quiz_stats、last_message、message_count、updated_at。weak_points 和 recent_activity 不属于正式契约，真实模式不得依赖。
 
 **操作:**
 - 将 `report.username` 替换为 `report.student?.real_name || report.student?.student_id || '学生报告'`
-- weak_points 区块：当 `report.weak_points` 为空/不存在时显示"未提供"，或直接隐藏该区块
-- recent_activity 区块：当 `report.recent_activity` 为空/不存在时显示"暂无数据"，或隐藏该区块
+- 将 `report.student?.student_id || report.student_id || '未知'` 替换为 `report.student?.student_id || '未知'`
+- weak_points 区块：真实模式完全移除对 `report.weak_points` 的读取，直接隐藏区块或显示静态文案"正式接口暂未提供"
+- recent_activity 区块：真实模式完全移除对 `report.recent_activity` 的读取，直接隐藏区块或显示静态文案"正式接口暂未提供"
 - 不对 useMock 分支做任何修改
 
 ---

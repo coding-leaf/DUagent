@@ -89,7 +89,7 @@ export default function TeacherStudentReport() {
                 <span className="material-symbols-outlined text-xs transform rotate-180">chevron_right</span>
                 <span>返回学生列表</span>
               </div>
-              <h1 className="font-h1 text-h1 text-on-background">学情详尽报告 <span className="text-primary-container">· {report.student?.real_name || report.username || '学生报告'}</span></h1>
+              <h1 className="font-h1 text-h1 text-on-background">学情详尽报告 <span className="text-primary-container">· {report.student?.real_name || report.student?.student_id || '学生报告'}</span></h1>
             </div>
             <div className="flex gap-3">
               <button disabled className="flex items-center px-4 py-2 bg-slate-100 border border-outline-variant rounded-xl font-label-sm text-label-sm text-slate-400 cursor-not-allowed opacity-60">
@@ -445,8 +445,8 @@ export default function TeacherStudentReport() {
               <img alt="Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC07BOGJWseHN9894enM_L7lbL1vknF4bHPCaAyGzyUrT7QT9ojTqzKZd17pkUqgZxu_g1e-UUG6gk1UC_Z2aa-joN2oOlX8fqOWDwrDXOE4pUdrNbJ0EZGcKTA6lMEXTrjLnY2_q-kHPKiUSvs0oO2CTPzmQFrLJ_p4JMk9FPtJ-BgXnCfTEvyFHg7LihxKWSWyiW9jwSnp2xGWINNyUWGusGrFi9r4sy9ch386vd528d4f-kqTB4wQNzXiauJm_zQapOmDKlx49pt" />
             </div>
             <div className="flex-grow text-center md:text-left">
-              <h2 className="text-2xl font-bold text-on-surface mb-1">{report.student?.real_name || report.username || '学生'}</h2>
-              <p className="text-sm text-secondary">学号: {report.student?.student_id || report.student_id || '未知'} · 班级ID: {classId}</p>
+              <h2 className="text-2xl font-bold text-on-surface mb-1">{report.student?.real_name || report.student?.student_id || '学生'}</h2>
+              <p className="text-sm text-secondary">学号: {report.student?.student_id || '未知'} · 班级ID: {classId}</p>
             </div>
             <div className="bg-primary/5 border border-primary/20 rounded-xl px-6 py-4 flex flex-col items-center">
               <span className="text-3xl font-black text-primary">{report.evaluation_summary?.overall_score || 0}</span>
@@ -534,15 +534,8 @@ export default function TeacherStudentReport() {
                   薄弱知识点 (Weak Points)
                 </h3>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {report.weak_points && report.weak_points.length > 0 ? (
-                    report.weak_points.map((wp, idx) => (
-                      <span key={idx} className="px-3 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-xl border border-orange-100 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-xs">warning</span> {wp}
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-xs text-outline italic">暂无薄弱知识点记录</p>
-                  )}
+                  {/* weak_points — 不在正式 StudentLearning 契约中 */}
+                  <p className="text-xs text-outline italic">正式接口暂未提供</p>
                 </div>
               </div>
 
@@ -565,35 +558,8 @@ export default function TeacherStudentReport() {
                 最近学习活动 (Recent Activity)
               </h3>
               <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2 scrollbar-thin">
-                {report.recent_activity && report.recent_activity.length > 0 ? (
-                  report.recent_activity.map((act, idx) => {
-                    let icon = 'school';
-                    let iconColor = 'text-primary bg-primary/10';
-                    if (act.type === 'quiz') {
-                      icon = 'quiz';
-                      iconColor = 'text-cyan-600 bg-cyan-50';
-                    } else if (act.type === 'resource') {
-                      icon = 'menu_book';
-                      iconColor = 'text-purple-600 bg-purple-50';
-                    } else if (act.type === 'tutoring') {
-                      icon = 'chat_bubble';
-                      iconColor = 'text-emerald-600 bg-emerald-50';
-                    }
-                    return (
-                      <div key={idx} className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${iconColor}`}>
-                          <span className="material-symbols-outlined text-sm">{icon}</span>
-                        </div>
-                        <div className="flex-grow">
-                          <p className="text-xs font-bold text-on-surface leading-tight">{act.title}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{act.created_at ? new Date(act.created_at).toLocaleString() : ''}</p>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-xs text-outline italic text-center py-8">暂无最近学习记录</p>
-                )}
+                {/* recent_activity — 不在正式 StudentLearning 契约中 */}
+                <p className="text-xs text-outline italic text-center py-8">正式接口暂未提供</p>
               </div>
             </div>
           </div>

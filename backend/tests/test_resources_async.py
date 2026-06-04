@@ -1,6 +1,6 @@
 """MySQL integration test for resources/generate + webhooks/agent.
 
-Covers: generate 202, webhook completed/failed/idempotent, auth, task_type mismatch.
+Covers: generate 202, webhook completed/failed/idempotent, auth, payload validation.
 Requires MySQL + WEBHOOK_SECRET in .env. Agent calls mocked.
 
 Run: python test_resources_async.py
@@ -124,9 +124,11 @@ async def test():
             "result": {
                 "resources": [
                     {"title": "Test Doc", "type": "document", "chapter": "ch1",
-                     "knowledge_point": "kp1", "content": "content here", "tags": []},
+                     "knowledge_point": "kp1", "description": "doc description",
+                     "content": "content here", "tags": []},
                     {"title": "Test Code", "type": "code", "chapter": "ch2",
-                     "knowledge_point": "kp2", "content": "print(1)", "tags": []},
+                     "knowledge_point": "kp2", "description": "code description",
+                     "content": "print(1)", "tags": []},
                 ]
             },
         }
@@ -216,6 +218,7 @@ async def test():
             "status": "completed",
             "result": {"resources": [{"title": "Auth Test", "type": "document",
                                       "chapter": "ch1", "knowledge_point": "kp1",
+                                      "description": "auth description",
                                       "content": "x", "tags": []}]},
         }
         r = await client.post("/api/v1/webhooks/agent", json=auth_payload,
@@ -250,6 +253,112 @@ async def test():
         r = await client.post("/api/v1/webhooks/agent", json=mismatch_payload,
                               headers=_webhook_headers())
         chk("task_type mismatch → 400", r.status_code == 400)
+
+        # =============================================
+        # 8. webhook malformed completed payloads → 400
+        # =============================================
+        print("\n-- 8. webhook malformed completed payloads --")
+
+        async def create_processing_task():
+            async with async_session_factory() as db:
+                invalid_task = AsyncTask(
+                    task_type="resource_generation",
+                    status="processing",
+                    user_id=user_id,
+                    course_id=course_id,
+                )
+                db.add(invalid_task)
+                await db.commit()
+                return invalid_task.id
+
+        invalid_payloads = [
+            ("completed missing result", {"status": "completed"}),
+            ("completed missing resources", {"status": "completed", "result": {}}),
+            ("resources not array", {"status": "completed", "result": {"resources": {}}}),
+            ("resource not object", {"status": "completed", "result": {"resources": ["bad"]}}),
+            (
+                "resource missing required field",
+                {
+                    "status": "completed",
+                    "result": {
+                        "resources": [
+                            {
+                                "title": "Missing Description",
+                                "type": "document",
+                                "chapter": "ch1",
+                                "knowledge_point": "kp1",
+                                "content": "x",
+                                "tags": [],
+                            }
+                        ]
+                    },
+                },
+            ),
+            (
+                "resource invalid type",
+                {
+                    "status": "completed",
+                    "result": {
+                        "resources": [
+                            {
+                                "title": "Bad Type",
+                                "type": "audio",
+                                "description": "bad type",
+                                "chapter": "ch1",
+                                "knowledge_point": "kp1",
+                                "content": "x",
+                                "tags": [],
+                            }
+                        ]
+                    },
+                },
+            ),
+        ]
+
+        async with async_session_factory() as db:
+            count_r = await db.execute(select(Resource).where(Resource.is_deleted == False))
+            invalid_resource_count_before = len(count_r.scalars().all())
+
+        for name, partial_payload in invalid_payloads:
+            invalid_task_id = await create_processing_task()
+            payload = {
+                "task_id": invalid_task_id,
+                "task_type": "resource_generation",
+                **partial_payload,
+            }
+            r = await client.post("/api/v1/webhooks/agent", json=payload,
+                                  headers=_webhook_headers())
+            chk(f"{name} → 400", r.status_code == 400)
+
+            rt = await client.get(f"/api/v1/tasks/{invalid_task_id}", headers=headers)
+            td = rt.json().get("data", {})
+            chk(f"{name} → task remains processing", td.get("status") == "processing")
+
+        async with async_session_factory() as db:
+            count_r = await db.execute(select(Resource).where(Resource.is_deleted == False))
+            invalid_resource_count_after = len(count_r.scalars().all())
+        chk("malformed completed payloads → no resources written",
+            invalid_resource_count_after == invalid_resource_count_before)
+
+        # =============================================
+        # 9. webhook malformed status/failed payload → 400
+        # =============================================
+        print("\n-- 9. webhook malformed status/failed payload --")
+        invalid_task_id = await create_processing_task()
+        r = await client.post("/api/v1/webhooks/agent", json={
+            "task_id": invalid_task_id,
+            "task_type": "resource_generation",
+            "status": "unknown",
+        }, headers=_webhook_headers())
+        chk("invalid status → 400", r.status_code == 400)
+
+        failed_missing_message_task_id = await create_processing_task()
+        r = await client.post("/api/v1/webhooks/agent", json={
+            "task_id": failed_missing_message_task_id,
+            "task_type": "resource_generation",
+            "status": "failed",
+        }, headers=_webhook_headers())
+        chk("failed missing error_message → 400", r.status_code == 400)
 
     print(f"\n{'='*50}")
     print(f"  Total: {ok} OK, {fail} FAIL")

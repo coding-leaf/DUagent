@@ -11,6 +11,52 @@ from app.schemas.webhook import AgentWebhookRequest
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 
+_RESOURCE_TYPES = {"document", "mindmap", "reading", "code", "video"}
+_RESOURCE_REQUIRED_FIELDS = {
+    "title",
+    "type",
+    "description",
+    "content",
+    "chapter",
+    "knowledge_point",
+    "tags",
+}
+
+
+def _bad_webhook_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": 40001, "message": message, "data": None},
+    )
+
+
+def _validate_resource_generation_result(result: dict | None) -> list[dict]:
+    """校验资源生成完成回调，返回可安全落库的资源列表。"""
+    if not isinstance(result, dict):
+        raise _bad_webhook_request("completed 回调必须包含 result")
+
+    resources = result.get("resources")
+    if not isinstance(resources, list):
+        raise _bad_webhook_request("result.resources 必须为数组")
+
+    for resource in resources:
+        if not isinstance(resource, dict):
+            raise _bad_webhook_request("result.resources 元素必须为对象")
+        missing_fields = _RESOURCE_REQUIRED_FIELDS - resource.keys()
+        if missing_fields:
+            raise _bad_webhook_request(
+                f"资源缺少必填字段: {', '.join(sorted(missing_fields))}"
+            )
+        if resource["type"] not in _RESOURCE_TYPES:
+            raise _bad_webhook_request("资源类型不合法")
+        for field in _RESOURCE_REQUIRED_FIELDS - {"tags"}:
+            if not isinstance(resource[field], str):
+                raise _bad_webhook_request(f"资源字段 {field} 必须为字符串")
+        if not isinstance(resource["tags"], list):
+            raise _bad_webhook_request("资源字段 tags 必须为数组")
+
+    return resources
+
 
 @router.post("/agent")
 async def agent_webhook(
@@ -38,12 +84,12 @@ async def agent_webhook(
             detail={"code": 40400, "message": "任务不存在", "data": None},
         )
 
-    # Validate task_type consistency
-    if req.task_type and task.task_type and req.task_type != task.task_type:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": 40001, "message": "task_type 与本地任务类型不一致", "data": None},
-        )
+    if req.task_type != "resource_generation":
+        raise _bad_webhook_request("task_type 不合法")
+    if task.task_type != req.task_type:
+        raise _bad_webhook_request("task_type 与本地任务类型不一致")
+    if req.status not in {"completed", "failed"}:
+        raise _bad_webhook_request("status 不合法")
 
     # Idempotency: skip if already completed
     if task.status == "completed":
@@ -51,28 +97,29 @@ async def agent_webhook(
 
     if req.status == "completed":
         # --- resource_generation: write result.resources to SQL ---
-        if task.task_type == "resource_generation" and req.result:
-            resources_data = req.result.get("resources", [])
-            for r in resources_data:
-                resource = Resource(
-                    id=uuid.uuid4().hex[:16],
-                    course_id=task.course_id or "",
-                    title=r.get("title", ""),
-                    type=r.get("type", "document"),
-                    description=r.get("description", ""),
-                    tags=r.get("tags", []),
-                    chapter=r.get("chapter", ""),
-                    knowledge_point=r.get("knowledge_point", ""),
-                    content=r.get("content", ""),
-                    url="",
-                )
-                db.add(resource)
+        resources_data = _validate_resource_generation_result(req.result)
+        for r in resources_data:
+            resource = Resource(
+                id=uuid.uuid4().hex[:16],
+                course_id=task.course_id or "",
+                title=r["title"],
+                type=r["type"],
+                description=r["description"],
+                tags=r["tags"],
+                chapter=r["chapter"],
+                knowledge_point=r["knowledge_point"],
+                content=r["content"],
+                url="",
+            )
+            db.add(resource)
 
         task.status = "completed"
         task.result = req.result
         task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
     elif req.status == "failed":
+        if not req.error_message or not req.error_message.strip():
+            raise _bad_webhook_request("failed 回调必须包含 error_message")
         task.status = "failed"
         task.error_code = req.error_code or ""
         task.error_message = req.error_message or ""

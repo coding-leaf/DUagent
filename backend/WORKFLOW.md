@@ -137,6 +137,17 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-04` `Resource Webhook completed 结果校验收口`
+  - **修复**：`POST /api/v1/webhooks/agent` 在更新任务状态和写入 Resource 前，严格校验 `task_type`、`status`、`result.resources` 数组及资源必填字段/类型。
+  - **修复**：畸形 completed 回调不再被错误标记为 completed，也不会因非对象资源元素触发未处理异常；failed 回调缺少 `error_message` 时返回 400。
+  - **测试**：`tests/test_resources_async.py` 新增缺失 result/resources、非法资源类型、非法 status、failed 缺少错误信息等负例；同步修正 `tests/test_api.py` 中非资源任务调用 Webhook 的过期断言。
+  - **验证**：
+    - `python tests/test_resources_async.py`：`30 OK, 0 FAIL`
+    - `python tests/test_api.py`：`56 PASSED, 0 FAILED`
+    - `python tests/test_agent_integration.py`：`16 passed`
+    - `pytest --cov=app --cov-report=term-missing`：`20 passed, 5 failed`，覆盖率 `51%`；失败原因为 5 个脚本的顶层 `async def test()` 未被 pytest-asyncio 标记，属于既有测试收集缺陷，覆盖率目标未达成
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+
 - `2026-06-04` `重构 Quiz 部分接口：解耦 submit 与 generate 业务逻辑`
   - **重构**：针对 `backend/app/api/v1/quiz.py` 进行部分解耦，将 `/submit` 接口的答题评分比对、DB 持久化写库、后台诊断调用等核心业务编排，以及 `/generate` 接口的生题 payload 拼装逻辑，移至新增的业务服务层 `backend/app/services/quiz_service.py`。
   - **说明**：此轮为最小范围重构。`/generate` 端点的任务状态管理、直接 Agent 请求与写入生成的题目记录，以及所有查询类端点（`/questions`、`/result`、`/history`）的逻辑依然留在 `quiz.py` 控制器内。
@@ -279,8 +290,8 @@ _（当前无占位接口）_
     - diagnosis 当前是折中融合：课程级 SQL `summary/weak_points` + Agent `suggestions`
   - 需与前端/Agent 侧对齐后单独收口
 - `POST /api/v1/webhooks/agent`
-  - failed 回调当前已验证 `error_code present`
-  - 若继续收口，可补精确 `error_code` 值校验与更多异常负例
+  - completed 结果结构校验、failed 错误信息校验、鉴权和幂等已覆盖
+  - 当前保留可选 `error_code` 兼容行为，不新增精确错误码语义
 - KG 自动生成能力
   - 当前不是没有 learning-path，而是没有正式的 KG 生成/导入机制
   - 若后续希望新课程自动具备 learning-path，需要补：
@@ -317,6 +328,9 @@ _（当前无占位接口）_
 
 ## 当前待修复缺陷
 
+- **高优先级：全量 pytest 无法正确收集脚本式异步测试**
+  - `tests/test_api.py`、`tests/test_lock_async.py`、`tests/test_quiz_async.py`、`tests/test_refresh_async.py`、`tests/test_resources_async.py` 使用顶层 `async def test()` + `asyncio.run(test())`，被 pytest 收集后因缺少 asyncio 标记而失败
+  - 当前 `pytest --cov=app --cov-report=term-missing` 只能得到 `51%` 覆盖率，未达到项目要求的 80%
 - **高优先级：teaching 学习看板存在假数据/占位数据**
   - `GET /api/v1/teaching/classes/{class_id}/students/{student_id}/learning` 仍存在硬编码/空数组字段，不能作为真实学习看板结果使用
   - 该问题更偏前端接入阶段的数据真实性缺口，不属于当前 Backend-Agent 主链阻塞
@@ -362,7 +376,7 @@ cd agent_service && ./.venv/bin/pytest -q
 | `tests/test_agent_integration.py` | Agent 联调集成测试 | 6 个 Agent 接口 + Webhook + 权限 + 降级 |
 | `tests/test_api.py` | 全量冒烟测试 | 所有端点的基础可用性 |
 | `tests/test_refresh_async.py` | refresh 真异步链路集成测试 | profile / evaluation / learning-path 的 202、processing、completed、DB 写入、Agent error |
-| `tests/test_resources_async.py` | resources 异步链路集成测试 | generate 202 + task_type、webhook completed/failed、幂等、鉴权、task_type mismatch |
+| `tests/test_resources_async.py` | resources 异步链路集成测试 | generate 202 + task_type、webhook completed/failed、结果结构校验、幂等、鉴权、task_type mismatch |
 | `tests/test_lock_async.py` | refresh 锁相关集成测试 | 三条 refresh 的 lock_timeout + profile/refresh 锁竞争一致性 |
 | `tests/test_quiz_async.py` | quiz 链路集成测试 | submit 评分 + 落库、多选题评分、非法 question_id 容错、Agent payload 对齐、空答案、404、后台诊断写入/失败、result 聚合 + 统计 + trend 排序 + diagnosis 字段形状检查 |
 

@@ -249,12 +249,12 @@ async def test():
         r = await client.get("/api/v1/admin/logs/operations", headers=a_h)
         chk("Admin op logs", "logs" in r.json()["data"])
 
-        # === Webhook (v1: no auth key needed) ===
+        # === Webhook rejects non-resource task types ===
         r = await client.post("/api/v1/webhooks/agent", json={
             "task_id": task_id, "task_type": "evaluation_refresh",
             "status": "completed", "result": {"ok": True},
         })
-        chk("Webhook", r.json()["code"] == 200)
+        chk("Webhook task_type validation", r.status_code == 400)
 
         # === Admin blocked for student ===
         r = await client.get("/api/v1/admin/users", headers=s_h)

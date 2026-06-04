@@ -32,6 +32,7 @@ export default defineConfig({
     stderr: 'pipe',
     env: {
       VITE_USE_MOCK: 'false',
+      VITE_API_BASE_URL: 'http://localhost:8001/api/v1',
     },
   },
 });

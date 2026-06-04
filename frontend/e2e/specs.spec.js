@@ -3,14 +3,16 @@ import { test, expect } from '@playwright/test';
 // Arithmetic Captcha solver for automated login
 const solveCaptcha = (question) => {
   const match = question.match(/(\d+)\s*([+\-*])\s*(\d+)/);
-  if (!match) return "0";
+  if (!match) {
+    throw new Error(`Failed to parse captcha question: "${question}"`);
+  }
   const num1 = parseInt(match[1]);
   const op = match[2];
   const num2 = parseInt(match[3]);
   if (op === '+') return String(num1 + num2);
   if (op === '-') return String(num1 - num2);
   if (op === '*') return String(num1 * num2);
-  return "0";
+  throw new Error(`Unknown captcha operator: "${op}"`);
 };
 
 const loginUser = async (page, email, password) => {
@@ -21,6 +23,7 @@ const loginUser = async (page, email, password) => {
   // Solve Captcha dynamically
   const captchaEl = page.locator('button[title="点击刷新验证码"]');
   await captchaEl.waitFor({ state: 'visible' });
+  await expect(captchaEl).toHaveText(/^\d+\s*[-+*]\s*\d+\s*=\s*\?\s*$/, { timeout: 5000 });
   const question = await captchaEl.innerText();
   const answer = solveCaptcha(question);
   await page.fill('input[placeholder="输入计算结果"]', answer);

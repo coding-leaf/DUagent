@@ -28,6 +28,7 @@
 | `Dashboard.jsx` | 接入 FeedbackStatus、修复无课程永久 Loading、添加 data-testid、提取 fetchResources 到组件作用域 |
 | `TeacherConsole.jsx` | 接入 FeedbackStatus、分离班级/学生 Loading、硬编码回退改为 —、添加 data-testid |
 | `TeacherStudentReport.jsx` | 仅接受 URL Query 参数、缺失时显示错误、标题改为真实数据 |
+| `Quiz.jsx` | 添加 `data-testid="quiz-question"` 和 `data-testid="quiz-empty"` |
 
 ### 第二轮：E2E 修复（5 个文件）
 
@@ -99,7 +100,7 @@
 
 **specs.spec.js**:
 - UseCase 1（第 42-47 行）：追加断言 `page.locator('[data-testid="resource-card"]').first()` 或 `page.locator('[data-testid="resources-empty"]')` 可见
-- UseCase 2（第 58-61 行）：课程数量断言改用 `await expect(selectEl.locator('option')).toHaveCount(2)`（≥2），不使用 `test.fail()`
+- UseCase 2（第 58-61 行）：课程数量断言改用 `const optionCount = await selectEl.locator('option').count(); expect(optionCount).toBeGreaterThanOrEqual(2);`，不使用 `test.fail()`
 - UseCase 2（第 70-72 行）：追加断言 Quiz 页面存在 `[data-testid="quiz-question"]` 或 `[data-testid="quiz-empty"]`
 - UseCase 3（第 91 行）：`div[onClick*="report"]` → `[data-testid="student-card"]`
 - 移除所有 `page.waitForTimeout()`，改用基于断言的等待
@@ -174,7 +175,7 @@ teachingService.getClasses()
 - [ ] `npm run build` 通过
 - [ ] `npm run test:e2e` 3/3 通过
 - [ ] `git diff --check` 通过
-- [ ] 真实模式下 Dashboard 无课程时显示 Empty 而非永久 spinner
-- [ ] 真实模式下 TeacherConsole 无班级时显示 Empty 而非永久 spinner
+- [ ] 真实模式下 Dashboard 无课程时显示 Empty 而非永久 spinner（人工验证：现有 E2E 账号均有课程，无法自动化覆盖）
+- [ ] 真实模式下 TeacherConsole 无班级时显示 Empty 而非永久 spinner（人工验证：现有 E2E 账号均有班级，无法自动化覆盖）
 - [ ] TeacherStudentReport 缺少参数时显示错误而非假数据
 - [ ] WORKFLOW.md 记录实际验证结果（非预估）

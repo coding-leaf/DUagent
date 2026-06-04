@@ -1,0 +1,26 @@
+import MockAdapter from 'axios-mock-adapter';
+import apiClient from '../client';
+import authMock from './authMock';
+import learningMock from './learningMock';
+import quizMock from './quizMock';
+import profileMock from './profileMock';
+import teachingMock from './teachingMock';
+import chatMock from './chatMock';
+import adminMock from './adminMock';
+
+// This sets the mock adapter on the default instance
+// Set a 500ms delay to simulate network latency
+const mock = new MockAdapter(apiClient, { delayResponse: 500 });
+
+// Register mocks
+authMock(mock);
+learningMock(mock);
+quizMock(mock);
+profileMock(mock);
+teachingMock(mock);
+chatMock(mock);
+adminMock(mock);
+
+console.log('[Mock API] Interceptor enabled.');
+
+export default mock;

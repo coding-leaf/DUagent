@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>路径规划 - DS_MASTERY_AI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;900&amp;family=Source+Han+Sans+CN:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-tertiary-fixed-variant": "#364a4d",
+                        "primary-fixed": "#b7eaff",
+                        "secondary": "#585e6c",
+                        "on-tertiary-fixed": "#091f21",
+                        "secondary-fixed": "#dde2f3",
+                        "surface-container-low": "#eff4ff",
+                        "inverse-surface": "#213145",
+                        "on-surface-variant": "#3c494e",
+                        "inverse-primary": "#4cd6ff",
+                        "secondary-container": "#dde2f3",
+                        "on-primary-fixed-variant": "#004e60",
+                        "tertiary-fixed": "#d0e7ea",
+                        "surface": "#f8f9ff",
+                        "background": "#f8f9ff",
+                        "primary-fixed-dim": "#4cd6ff",
+                        "on-surface": "#0b1c30",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#00d1ff",
+                        "surface-container": "#e5eeff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#00566a",
+                        "secondary-fixed-dim": "#c1c6d7",
+                        "on-background": "#0b1c30",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#414754",
+                        "tertiary": "#4d6265",
+                        "on-tertiary-container": "#3d5254",
+                        "tertiary-fixed-dim": "#b4cbce",
+                        "outline": "#6c797f",
+                        "surface-container-highest": "#d3e4fe",
+                        "on-secondary-fixed": "#161c27",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-high": "#dce9ff",
+                        "on-secondary-container": "#5e6473",
+                        "surface-tint": "#00677f",
+                        "surface-dim": "#cbdbf5",
+                        "tertiary-container": "#aec4c7",
+                        "surface-bright": "#f8f9ff",
+                        "primary": "#00677f",
+                        "on-secondary": "#ffffff",
+                        "outline-variant": "#bbc9cf",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#001f28"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "48px",
+                        "gutter": "24px",
+                        "base": "8px",
+                        "md": "24px",
+                        "sm": "12px",
+                        "xs": "4px",
+                        "margin": "32px",
+                        "xl": "80px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Source Han Sans CN"],
+                        "label-sm": ["Source Han Sans CN"],
+                        "h2": ["Source Han Sans CN"],
+                        "h3": ["Source Han Sans CN"],
+                        "body-md": ["Source Han Sans CN"],
+                        "h1": ["Source Han Sans CN"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-sm": ["13px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "h2": ["32px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h1": ["40px", {"lineHeight": "1.2", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f8f9ff;
+            color: #0b1c30;
+        }
+    </style>
+</head>
+<body class="font-body-md bg-background">
+<!-- TopNavBar Implementation -->
+<nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans'] antialiased">
+<div class="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
+<div class="text-xl font-bold tracking-tight text-cyan-600">DS_MASTERY_AI</div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">个人信息</a>
+<a class="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1" href="#">路径规划</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">资源库</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">AI答疑</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">学习效果</a>
+</div>
+<div class="flex items-center space-x-4">
+<button class="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined text-gray-600">notifications</span>
+</button>
+<button class="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined text-gray-600">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+<img alt="用户头像" class="" data-alt="A clean and professional circular avatar of a user profile in a high-tech UI environment. The design features soft focus and a bright light-mode aesthetic with a palette of subtle blues and cyans. The background is a clean, neutral white, reflecting a professional academic and technical atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIZ6HO5HA-odVe8eyF37yBdDVqfay9WuU9hiH5bUmPQ7FHVUvaaDZxx-umrUXutVljxyDA8RZg_DaakLk5239e-wEBGWbcvlz6m8ugJDjJkfWVXu3go6THqG3cG20AZz_Fo9e3nQQaFkyLTMljw6gQ7C9zzMSbkb9zWAcMi735c3jXolvzaKkf1ukO4JFCIGvZKAEYUotf7YS7Eh9YXEBhXk-zbyI3drYFjCejkZNYy2Xw_yQjYjF31dF20X5HAXjP5TdmPPzYQVXQ"/>
+</div>
+</div>
+</div>
+</nav>
+<!-- SideNavBar Implementation -->
+<aside class="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden lg:flex">
+<div class="px-6 mb-6">
+<div class="flex items-center space-x-3 mb-2">
+<div class="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>smart_toy</span>
+</div>
+<div>
+<h3 class="text-lg font-black text-cyan-600 leading-tight">数据结构掌控者</h3>
+<p class="text-[10px] text-gray-400 uppercase tracking-widest">多智能体学习系统</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="px-4">
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-body-md">学习节点</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">library_books</span>
+<span class="font-body-md">资源库</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-body-md">智能体类型</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">tune</span>
+<span class="font-body-md">设置</span>
+</a>
+</div>
+</nav>
+<div class="px-6 mt-auto">
+<button class="w-full py-3 bg-primary-container text-on-primary-container rounded-xl font-bold active:scale-95 transition-all shadow-sm">
+                启动新任务
+            </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="lg:pl-64 pt-16 min-h-screen">
+<div class="max-w-[1280px] mx-auto p-gutter space-y-md">
+<!-- Header Section -->
+<header class="flex flex-col md:flex-row md:items-end justify-between gap-md mb-sm">
+<div>
+<h1 class="font-h1 text-h1 text-on-background">学习路径规划</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mt-xs">
+                        基于您的实时掌握情况，系统已为您动态生成“二叉树与图论”进阶路径。
+                    </p>
+</div>
+<div class="flex space-x-sm">
+<div class="flex items-center space-x-xs px-sm py-xs bg-surface-container rounded-full border border-outline-variant">
+<span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+<span class="text-label-sm font-label-sm text-on-surface">分析智能体在线</span>
+</div>
+</div>
+</header>
+<!-- Learning Path Visualizer (Bento/Card Mix) -->
+<section class="bg-surface-container-lowest border border-gray-100 rounded-xl p-md shadow-sm overflow-hidden">
+<div class="flex items-center justify-between mb-lg">
+<h3 class="font-h3 text-h3 flex items-center space-x-sm">
+<span class="material-symbols-outlined text-cyan-600">insights</span>
+<span class="">闯关节点规划</span>
+</h3>
+<div class="flex space-x-base">
+<div class="flex items-center text-label-sm text-gray-400">
+<span class="w-3 h-3 rounded-full bg-cyan-500 mr-xs"></span> 已完成
+                        </div>
+<div class="flex items-center text-label-sm text-gray-400">
+<span class="w-3 h-3 rounded-full bg-surface-container-highest mr-xs"></span> 进行中
+                        </div>
+</div>
+</div>
+<!-- Horizontal Scrolling Path -->
+<div class="relative flex items-center py-xl overflow-x-auto no-scrollbar scroll-smooth">
+<!-- Path Line -->
+<div class="absolute top-1/2 left-0 w-full h-[2px] bg-gray-100 -translate-y-1/2 z-0"></div>
+<div class="absolute top-1/2 left-0 w-[45%] h-[2.5px] bg-cyan-500 -translate-y-1/2 z-0"></div>
+<!-- Node 1: Completed -->
+<div class="relative z-10 flex-shrink-0 px-sm flex flex-col items-center group w-80">
+<div class="w-12 h-12 rounded-full bg-cyan-500 flex items-center justify-center text-white mb-sm shadow-lg shadow-cyan-500/20 ring-4 ring-white">
+<span class="material-symbols-outlined">check</span>
+</div>
+<div class="bg-white p-sm rounded-xl border border-gray-100 shadow-sm w-full transition-all group-hover:border-cyan-200"><span class="text-label-sm text-cyan-600 font-bold mb-xs block">基础概念</span><p class="text-body-md font-bold mb-xs">递归与栈</p><div class="h-1 w-full bg-gray-100 rounded-full overflow-hidden mb-sm"><div class="h-full bg-cyan-500 w-full"></div></div><div class="space-y-sm pt-sm border-t border-gray-50"><div class="space-y-1"><p class="text-[11px] font-bold text-error">欠缺知识点推荐：</p><div class="flex flex-wrap gap-1"><span class="px-1.5 py-0.5 bg-error-container text-on-error-container text-[10px] rounded">尾递归优化</span><span class="px-1.5 py-0.5 bg-error-container text-on-error-container text-[10px] rounded">栈空间溢出处理</span></div></div><div class="space-y-1"><p class="text-[11px] font-bold text-on-surface-variant">配套习题：</p><div class="flex flex-col gap-1"><a class="text-[10px] text-primary hover:underline flex items-center" href="#"><span class="material-symbols-outlined text-[12px] mr-1">link</span>习题集: 递归深度练习</a><a class="text-[10px] text-primary hover:underline flex items-center" href="#"><span class="material-symbols-outlined text-[12px] mr-1">link</span>习题集: 栈的应用</a></div></div></div></div>
+</div>
+<!-- Node 2: Current -->
+<div class="relative z-10 flex-shrink-0 w-80 px-sm flex flex-col items-center group">
+<div class="w-16 h-16 rounded-full bg-white border-4 border-cyan-500 flex items-center justify-center text-cyan-600 mb-sm shadow-xl ring-4 ring-white animate-pulse">
+<span class="material-symbols-outlined text-3xl">play_arrow</span>
+</div>
+<div class="bg-white p-md rounded-xl border-2 border-cyan-500 shadow-md w-full relative"><div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">进行中</div><span class="text-label-sm text-cyan-600 font-bold mb-xs block">进阶结构</span><p class="text-body-lg font-bold mb-base">平衡二叉树 (AVL)</p><div class="space-y-xs"><div class="flex justify-between text-label-sm text-gray-500"><span>进度: 65%</span><span>关键缺失: 旋转平衡因子</span></div><div class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-cyan-500 w-[65%]"></div></div></div><div class="mt-md space-y-sm"><div class="bg-surface-container rounded-lg p-sm border border-outline-variant"><p class="text-label-sm font-bold text-on-surface">智能体提示：</p><p class="text-[12px] text-on-surface-variant leading-relaxed">检测到在"双旋转"概念上的平均停留时间过长，建议通过下方的可视化课件巩固。</p></div><button class="w-full py-2 bg-primary text-white rounded-lg text-label-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"><span class="material-symbols-outlined text-sm">auto_stories</span>前往资源库继续闯关</button></div></div>
+</div>
+<!-- Node 3: Locked -->
+<div class="relative z-10 flex-shrink-0 w-64 px-sm flex flex-col items-center opacity-60 grayscale group hover:opacity-100 transition-all">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-gray-400 mb-sm border-2 border-white">
+<span class="material-symbols-outlined">lock</span>
+</div>
+<div class="bg-white p-sm rounded-xl border border-gray-100 shadow-sm w-full" title="点击解锁详细路径">
+<span class="text-label-sm text-gray-400 font-bold mb-xs block">高级模型</span>
+<p class="text-body-md font-bold mb-xs">B+ 树索引</p>
+<div class="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+<div class="h-full bg-gray-300 w-0"></div>
+</div>
+<div class="mt-sm text-[12px] text-gray-400 flex items-center">
+<span class="material-symbols-outlined text-sm mr-1">exercise</span>
+                                待开启节点
+                            </div>
+</div>
+</div>
+<!-- Node 4: Locked -->
+<div class="relative z-10 flex-shrink-0 w-64 px-sm flex flex-col items-center opacity-40 grayscale">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-gray-400 mb-sm border-2 border-white">
+<span class="material-symbols-outlined">lock</span>
+</div>
+<div class="bg-white p-sm rounded-xl border border-gray-100 shadow-sm w-full">
+<span class="text-label-sm text-gray-400 font-bold mb-xs block">综合应用</span>
+<p class="text-body-md font-bold mb-xs">数据库引擎模拟</p>
+<div class="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+<div class="h-full bg-gray-300 w-0"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Modules: Recommendations -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<!-- 1. Mind Map recommendations -->
+<div class="bg-white rounded-xl border border-gray-100 p-md shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center space-x-sm mb-md">
+<div class="p-base bg-cyan-50 rounded-lg text-cyan-600">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<h4 class="font-h3 text-body-md font-bold">知识导图推荐</h4>
+</div>
+<div class="aspect-video rounded-xl bg-slate-50 border border-gray-100 mb-md overflow-hidden group relative">
+<img alt="知识导图预览" class="w-full h-full object-cover transition-transform group-hover:scale-105" data-alt="A highly complex and detailed knowledge graph or mind map visualized with neon cyan nodes and clean white connecting lines. The aesthetic is digital and architectural, set against a pristine, minimalist white background with subtle depth through soft ambient shadows. The overall mood is intelligent, technical, and organized, representing a multi-agent learning system's data structure." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnDFl8Run1qwlA-CNLYbe6WNavCtCuJeF1d-9CRy94aVhRou-FrJZ-Wd8xapKIY4TuJ6WxmoJfWnZbTAJutPJj5PuEHx-K9N-3pb3trq0vYBWZhKq1Xt9UnorqQkmq_V5BQVyOMRVMCafz1T0wtS-M3nfH_hdGeyD__WzcZDG1C--NRkCmBtaQQ5aNeGNDMEWEiymmn5q7y5B5JdTMOojSom5ppFXUwEcrvCa5KP0Qe_pSj6BpcrpO83XkJCUNokBNxCVZywj1GyEQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+</div>
+<ul class="space-y-sm">
+<li class="flex items-start space-x-base p-sm hover:bg-gray-50 rounded-lg cursor-pointer">
+<span class="material-symbols-outlined text-sm text-cyan-500 mt-0.5">schema</span>
+<div>
+<p class="text-label-sm font-bold">非线性结构全景图</p>
+<p class="text-[11px] text-gray-400">覆盖树与图的所有基本变换</p>
+</div>
+</li>
+</ul>
+</div>
+<!-- 2. Lecture document recommendations -->
+<div class="bg-white rounded-xl border border-gray-100 p-md shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center space-x-sm mb-md">
+<div class="p-base bg-cyan-50 rounded-lg text-cyan-600">
+<span class="material-symbols-outlined">menu_book</span>
+</div>
+<h4 class="font-h3 text-body-md font-bold">课件讲义推荐</h4>
+</div>
+<div class="space-y-sm">
+<div class="p-sm bg-surface-container rounded-xl border border-outline-variant flex items-center space-x-sm group cursor-pointer">
+<div class="w-12 h-14 bg-white rounded-md shadow-sm flex items-center justify-center text-cyan-600">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div class="flex-1">
+<p class="text-label-sm font-bold group-hover:text-cyan-600">AVL树：旋转的艺术.pdf</p>
+<p class="text-[11px] text-gray-400">斯坦福大学 DS101 精选</p>
+</div>
+</div>
+<div class="p-sm border border-gray-100 rounded-xl flex items-center space-x-sm group cursor-pointer hover:border-cyan-200">
+<div class="w-12 h-14 bg-gray-50 rounded-md flex items-center justify-center text-gray-400">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div class="flex-1">
+<p class="text-label-sm font-bold">哈希冲突与红黑树.pptx</p>
+<p class="text-[11px] text-gray-400">高效查询机制专题</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-lg py-2 text-label-sm text-cyan-600 font-bold hover:bg-cyan-50 rounded-lg transition-colors">查看更多文档</button>
+</div>
+<!-- 3. Mixed exercise set recommendations -->
+<div class="bg-white rounded-xl border border-gray-100 p-md shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center space-x-sm mb-md">
+<div class="p-base bg-cyan-50 rounded-lg text-cyan-600">
+<span class="material-symbols-outlined">task_alt</span>
+</div>
+<h4 class="font-h3 text-body-md font-bold">混合练习集推荐</h4>
+</div>
+<div class="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl p-md text-white mb-md relative overflow-hidden">
+<div class="relative z-10">
+<p class="text-[10px] font-bold uppercase tracking-widest opacity-80">智能体严选</p>
+<h5 class="text-body-lg font-bold mt-xs">中阶数据结构挑战赛</h5>
+<p class="text-[12px] opacity-90 mt-base leading-relaxed">包含AVL树、堆排序及图遍历的15道经典面试题。</p>
+<button class="mt-md bg-white text-cyan-600 px-md py-base rounded-lg text-label-sm font-bold shadow-lg">开始练习</button>
+</div>
+<span class="material-symbols-outlined absolute -bottom-4 -right-4 text-[120px] opacity-10 rotate-12">extension</span>
+</div>
+<div class="space-y-base">
+<div class="flex items-center justify-between p-sm border-b border-gray-50">
+<span class="text-label-sm">每日算法打卡</span>
+<span class="text-[10px] font-bold text-cyan-500 bg-cyan-50 px-2 py-0.5 rounded">难度: 中等</span>
+</div>
+<div class="flex items-center justify-between p-sm border-b border-gray-50">
+<span class="text-label-sm">时间复杂度专项</span>
+<span class="text-[10px] font-bold text-tertiary bg-tertiary-container px-2 py-0.5 rounded">难度: 简单</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Contextual Floating Action Button -->
+<button class="fixed bottom-margin right-margin w-14 h-14 bg-cyan-500 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-50">
+<span class="material-symbols-outlined text-2xl">auto_awesome</span>
+</button>
+</body></html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html><html class="light" lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;900&amp;family=Noto+Sans+SC:wght@300;400;500;700&amp;family=Source+Han+Sans+CN:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+        body { font-family: 'Public Sans', 'Source Han Sans CN', 'Noto Sans SC', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-tertiary-fixed-variant": "#364a4d",
+                        "primary-fixed": "#b7eaff",
+                        "secondary": "#585e6c",
+                        "on-tertiary-fixed": "#091f21",
+                        "secondary-fixed": "#dde2f3",
+                        "surface-container-low": "#eff4ff",
+                        "inverse-surface": "#213145",
+                        "on-surface-variant": "#3c494e",
+                        "inverse-primary": "#4cd6ff",
+                        "secondary-container": "#dde2f3",
+                        "on-primary-fixed-variant": "#004e60",
+                        "tertiary-fixed": "#d0e7ea",
+                        "surface": "#f8f9ff",
+                        "background": "#f8f9ff",
+                        "primary-fixed-dim": "#4cd6ff",
+                        "on-surface": "#0b1c30",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#00d1ff",
+                        "surface-container": "#e5eeff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#00566a",
+                        "secondary-fixed-dim": "#c1c6d7",
+                        "on-background": "#0b1c30",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#414754",
+                        "tertiary": "#4d6265",
+                        "on-tertiary-container": "#3d5254",
+                        "tertiary-fixed-dim": "#b4cbce",
+                        "outline": "#6c797f",
+                        "surface-container-highest": "#d3e4fe",
+                        "on-secondary-fixed": "#161c27",
+                        "surface-variant": "#d3e4fe",
+                        "surface-container-high": "#dce9ff",
+                        "on-secondary-container": "#5e6473",
+                        "surface-tint": "#00677f",
+                        "surface-dim": "#cbdbf5",
+                        "tertiary-container": "#aec4c7",
+                        "surface-bright": "#f8f9ff",
+                        "primary": "#00677f",
+                        "on-secondary": "#ffffff",
+                        "outline-variant": "#bbc9cf",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#001f28"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "48px",
+                        "gutter": "24px",
+                        "base": "8px",
+                        "md": "24px",
+                        "sm": "12px",
+                        "xs": "4px",
+                        "margin": "32px",
+                        "xl": "80px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Source Han Sans CN"],
+                        "label-sm": ["Source Han Sans CN"],
+                        "h2": ["Source Han Sans CN"],
+                        "h3": ["Source Han Sans CN"],
+                        "body-md": ["Source Han Sans CN"],
+                        "h1": ["Source Han Sans CN"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-sm": ["13px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "h2": ["32px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h1": ["40px", {"lineHeight": "1.2", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased overflow-x-hidden">
+<!-- TopNavBar Implementation -->
+<nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans'] antialiased">
+<div class="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
+<div class="text-xl font-bold tracking-tight text-cyan-600">DS_MASTERY_AI</div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">个人信息</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">路径规划</a>
+<a class="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1" href="#">资源库</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">AI答疑</a>
+<a class="text-gray-600 hover:text-cyan-500 transition-colors" href="#">学习效果</a>
+</div>
+<div class="flex items-center space-x-4">
+<div class="relative hidden lg:block">
+<input class="w-64 pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" placeholder="搜索资源..." type="text">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-gray-400 text-sm">search</span>
+</div>
+<button class="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined text-gray-600">notifications</span>
+</button>
+<button class="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
+<span class="material-symbols-outlined text-gray-600">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+<img alt="用户头像" data-alt="A clean and professional circular avatar of a user profile in a high-tech UI environment. The design features soft focus and a bright light-mode aesthetic with a palette of subtle blues and cyans. The background is a clean, neutral white, reflecting a professional academic and technical atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIZ6HO5HA-odVe8eyF37yBdDVqfay9WuU9hiH5bUmPQ7FHVUvaaDZxx-umrUXutVljxyDA8RZg_DaakLk5239e-wEBGWbcvlz6m8ugJDjJkfWVXu3go6THqG3cG20AZz_Fo9e3nQQaFkyLTMljw6gQ7C9zzMSbkb9zWAcMi735c3jXolvzaKkf1ukO4JFCIGvZKAEYUotf7YS7Eh9YXEBhXk-zbyI3drYFjCejkZNYy2Xw_yQjYjF31dF20X5HAXjP5TdmPPzYQVXQ" class="">
+</div>
+</div>
+</div>
+</nav>
+<!-- SideNavBar Implementation -->
+<aside class="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden md:flex">
+<div class="px-6 mb-6">
+<div class="flex items-center space-x-3 mb-2">
+<div class="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">smart_toy</span>
+</div>
+<div>
+<h3 class="text-lg font-black text-cyan-600 leading-tight">数据结构掌控者</h3>
+<p class="text-[10px] text-gray-400 uppercase tracking-widest">多智能体学习系统</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="px-4">
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-body-md">学习节点</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">library_books</span>
+<span class="font-body-md">资源库</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-body-md">智能体类型</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5" href="#">
+<span class="material-symbols-outlined">tune</span>
+<span class="font-body-md">设置</span>
+</a>
+</div>
+</nav>
+<div class="px-6 mt-auto">
+<button class="w-full py-3 bg-primary-container text-on-primary-container rounded-xl font-bold active:scale-95 transition-all shadow-sm">
+                启动新任务
+            </button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="pt-24 pb-12 md:pl-64 min-h-screen">
+<div class="max-w-[1280px] mx-auto px-6 md:px-8">
+<!-- Header Section -->
+<div class="mb-8">
+<h1 class="text-h2 font-h2 text-on-surface mb-2">资源库</h1>
+<p class="text-secondary text-body-md">获取最新的数据结构学习资料、思维导图和实操代码。</p>
+</div>
+<!-- Categories Filter -->
+<div class="flex flex-wrap gap-3 mb-8">
+<button class="px-5 py-2.5 bg-primary-container text-white rounded-full font-medium shadow-md shadow-cyan-100 transition-all active:scale-95">全部资源</button>
+<button class="px-5 py-2.5 bg-white border border-outline-variant text-secondary rounded-full font-medium hover:border-cyan-500 hover:text-cyan-600 transition-all active:scale-95">专业课程讲解</button>
+<button class="px-5 py-2.5 bg-white border border-outline-variant text-secondary rounded-full font-medium hover:border-cyan-500 hover:text-cyan-600 transition-all active:scale-95">知识点讲解</button>
+<button class="px-5 py-2.5 bg-white border border-outline-variant text-secondary rounded-full font-medium hover:border-cyan-500 hover:text-cyan-600 transition-all active:scale-95">知识点思维导图</button>
+<button class="px-5 py-2.5 bg-white border border-outline-variant text-secondary rounded-full font-medium hover:border-cyan-500 hover:text-cyan-600 transition-all active:scale-95">练习题目组</button>
+<button class="px-5 py-2.5 bg-white border border-outline-variant text-secondary rounded-full font-medium hover:border-cyan-500 hover:text-cyan-600 transition-all active:scale-95">拓展阅读</button>
+<button class="px-5 py-2.5 bg-white border border-outline-variant text-secondary rounded-full font-medium hover:border-cyan-500 hover:text-cyan-600 transition-all active:scale-95">代码实操</button>
+</div>
+<!-- Resource Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
+<!-- Large Featured Card (Course) -->
+<div class="lg:col-span-2 group relative overflow-hidden rounded-xl bg-white border border-outline-variant shadow-sm hover:shadow-xl hover:shadow-cyan-500/10 transition-all duration-300">
+<div class="aspect-[21/9] w-full overflow-hidden">
+<img alt="Featured Course" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A clean, minimalist digital environment featuring abstract data structure visualizations. Glowing lines and nodes represent complex network connections on a bright white surface. The aesthetic is clinical yet sophisticated, with soft cyan lighting and sharp technological details consistent with a high-end AI learning platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD29ZtHTVdxLScCBHl-JmHbt_8BnRdOmwjyIALZeNDFmW-L23xifi_lxqPsCTkiAId0WMVVS09tJjozfujiBjgfBdFfxj6AfO4mX78RAhwEGXjTjKTKwt_yAZOpfi5YhE9dJztsT1_RBqKjjnbqUjKA_mPxcAJH9JkYukBIjhpR_ZzAiRZOwXhc6_ytNoAes7yU8TMj2YnUGa7D8IdkGMN9-Gz3qedIYUHg01IhkFk_lxZ799E88He_ETD-N9wbzc2itxGS3b6IIi4R">
+</div>
+<div class="p-6">
+<div class="flex items-center gap-2 mb-3">
+<span class="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs font-bold rounded uppercase">专业课程讲解</span>
+<span class="text-xs text-gray-400">45 课时</span>
+</div>
+<h3 class="text-h3 font-h3 text-on-surface mb-2">深度解析：图论与现代网络算法</h3>
+<p class="text-secondary text-body-md mb-4 line-clamp-2">本课程由资深智能体导师主讲，深入探讨图的存储结构（邻接矩阵、邻接表）及其在社交网络、路由规划中的实际应用。包含最短路径与拓扑排序的精讲。</p>
+<div class="flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-bold">SA</div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-cyan-100 flex items-center justify-center text-[10px] font-bold">GA</div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold">+12</div>
+</div>
+<button class="text-cyan-600 font-bold flex items-center gap-1 hover:gap-2 transition-all">
+                                开始学习 <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Mind Map Card -->
+<div class="bg-white rounded-xl border border-outline-variant p-6 shadow-sm flex flex-col hover:border-cyan-200 transition-colors">
+<div class="w-12 h-12 bg-cyan-50 rounded-lg flex items-center justify-center text-cyan-600 mb-4">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">schema</span>
+</div>
+<div class="flex-1">
+<span class="text-xs font-bold text-cyan-600 mb-2 block">知识点思维导图</span>
+<h3 class="text-lg font-bold mb-2">红黑树（Red-Black Tree）全景视图</h3>
+<p class="text-sm text-secondary mb-4">包含所有权、旋转操作（左旋/右旋）及插入删除修复逻辑的完整可视化导图。支持互动式节点展开。</p>
+</div>
+<div class="pt-4 border-t border-gray-100 flex items-center justify-between">
+<span class="text-xs text-gray-400">PDF / 可交互网页</span>
+<button class="p-2 hover:bg-gray-50 rounded-full transition-colors">
+<span class="material-symbols-outlined text-gray-400">download</span>
+</button>
+</div>
+</div>
+<!-- Exercise Set Card -->
+<div class="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-200 transition-colors">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center text-orange-500">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">quiz</span>
+</div>
+<span class="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded">推荐练习</span>
+</div>
+<span class="text-xs font-bold text-orange-500 mb-2 block">练习题目组</span>
+<h3 class="text-lg font-bold mb-2">栈与队列：名企笔试核心真题</h3>
+<p class="text-sm text-secondary mb-4">精选 2024 年秋招互联网大厂中涉及双栈实现队列、循环队列优化等经典考察点的 15 道精选题目。</p>
+<div class="flex items-center gap-4 text-xs text-gray-500">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">schedule</span> 45min</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">bar_chart</span> 中等难度</span>
+</div>
+</div>
+<!-- Code Practice Card -->
+<div class="bg-slate-900 rounded-xl p-6 shadow-lg relative overflow-hidden group">
+<!-- Tech edge background pattern -->
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+<svg fill="none" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 40H40V0M40 80H80V40M80 120H120V80" stroke="white" stroke-width="0.5"></path>
+</svg>
+</div>
+<div class="relative z-10 flex flex-col h-full">
+<div class="flex items-center justify-between mb-4">
+<div class="w-10 h-10 bg-cyan-400/20 rounded-lg flex items-center justify-center text-cyan-400">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<span class="text-cyan-400 font-mono text-xs">main.cpp</span>
+</div>
+<span class="text-xs font-bold text-cyan-400/80 mb-2 block">代码实操</span>
+<h3 class="text-lg font-bold text-white mb-2">B+ 树的 C++ 线程安全实现</h3>
+<p class="text-sm text-gray-400 mb-6 flex-1">基于内存映射（mmap）与读写锁实现的 B+ 树高性能索引结构，适用于数据库底层开发进阶练习。</p>
+<button class="w-full bg-cyan-400 text-slate-900 py-2.5 rounded-lg font-bold hover:bg-cyan-300 transition-colors">
+                            进入 IDE
+                        </button>
+</div>
+</div>
+<!-- Reading Card -->
+<div class="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-200 transition-colors">
+<div class="flex items-center gap-4 mb-4">
+<div class="w-16 h-20 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+<img alt="Book Cover" class="w-full h-full object-cover" data-alt="A clean, studio-lit close-up of a premium textbook or academic journal cover. The design is minimalist, with elegant typography on a bright off-white paper texture. The atmosphere is academic, intellectual, and professional, perfectly fitting a sophisticated data structure resource library." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmA5my9dtHq2gVWsh2OaI2fpDx9DNVg95brXi1o36lMCDVrfTyELChL2xSYkANPJmxlpclUTteWc6m2YNqucbMTdSW6mRVa6jyyRiOnEKu1rj7Z1MuXF2mwIsYMIMp5E5NWdF_C-cmpPQkJgH2rY4XKiyaGpcFb8BUZLCWCn2vAXBlZcdSPjQ0P4dGc1xIACKDMRKjUWkXr4xIr_O1kxwiRaQ0tB0EeaJLtolJX4RxKMvJVyLN4uFTpk2WFOKYanT47PBNkvaIk5qO">
+</div>
+<div>
+<span class="text-xs font-bold text-secondary mb-1 block">拓展阅读</span>
+<h3 class="text-base font-bold leading-tight">跳表 (Skip List) 在 Redis 中的深度实践</h3>
+<p class="text-xs text-gray-400 mt-1">作者: AI 智能体「专家」</p>
+</div>
+</div>
+<p class="text-sm text-secondary mb-4 line-clamp-3">本文详细拆解了 Redis 为何在 zset 中选择跳表而非平衡树的原因，对比了空间复杂度与实现难度，并附带了核心结构体的解析。</p>
+<div class="flex items-center gap-3">
+<span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">数据库底层</span>
+<span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">高性能</span>
+</div>
+</div>
+<!-- Knowledge Point Card -->
+<div class="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-200 transition-colors">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">lightbulb</span>
+</div>
+<span class="text-xs font-bold text-purple-600 uppercase tracking-tighter">核心知识点</span>
+</div>
+<h3 class="text-lg font-bold mb-2">哈希冲突：四种主流解决策略</h3>
+<p class="text-sm text-secondary mb-4">从链地址法到开放定址法（线性探测、二次探测），全面解析不同场景下的最优哈希性能方案。</p>
+<div class="grid grid-cols-2 gap-2 mb-4">
+<div class="bg-surface-container rounded p-2 flex flex-col items-center">
+<span class="text-cyan-600 font-bold text-sm">98%</span>
+<span class="text-[10px] text-gray-500 uppercase">掌握度要求</span>
+</div>
+<div class="bg-surface-container rounded p-2 flex flex-col items-center">
+<span class="text-cyan-600 font-bold text-sm">12</span>
+<span class="text-[10px] text-gray-500 uppercase">关联题目</span>
+</div>
+</div>
+<button class="w-full border border-cyan-500 text-cyan-600 py-2 rounded-lg font-bold hover:bg-cyan-50 transition-colors">
+                        查看解析
+                    </button>
+</div>
+</div>
+<!-- Load More -->
+<div class="mt-12 flex flex-col items-center gap-4">
+<button class="px-8 py-3 bg-white border border-outline-variant rounded-full text-secondary font-medium hover:bg-gray-50 transition-all active:scale-95 shadow-sm">
+                    加载更多资源
+                </button>
+<p class="text-xs text-gray-400">已显示 6 / 148 个资源</p>
+</div>
+</div>
+</main>
+<!-- Contextual FAB (Only for main browsing screens) -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-cyan-500 text-white rounded-full shadow-2xl shadow-cyan-500/40 flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-40">
+<span class="material-symbols-outlined text-2xl">chat_bubble</span>
+</button>
+
+
+</body></html>

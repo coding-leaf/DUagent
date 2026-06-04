@@ -37,21 +37,32 @@
 | CourseKnowledgeGraph | 2 门 × N nodes + edges | 供 learning-path 查询 |
 | Resource | 每门课程若干 | document/mindmap/reading/code/video 类型 |
 | QuizQuestion | 每门课程若干 | 供 Quiz 取题 |
-| UserProfile | 1（学生） | |
+| UserProfile | 每门课程 1 条（学生） | 供课程切换时两门课程均有画像数据 |
 | Evaluation | 每门课程 1 条（学生） | |
 | LearningPath | 每门课程 1 条（学生） | |
 | QuizSession | 1+ 已完成会话 | 供教师端 Quiz 统计 |
 
 **环境要求:**
 - 后端使用专用测试数据库启动（如 `DB_NAME=duagent_test`），**不允许对开发数据库执行种子脚本**
-- 种子脚本读取与该后端相同的数据库配置（通过 Backend 的 `Settings` 或环境变量）
+- 种子脚本读取与该后端相同的数据库配置（通过 Backend 的 `Settings` 或环境变量），确保两者连接同一数据库
 - Playwright 只连接该测试后端
 
-**运行命令:**
+**完整启动与运行顺序:**
 ```bash
-ALLOW_E2E_SEED=true python scripts/seed_e2e_data.py
-npm run test:e2e
+# 1. 启动 Agent Service（依赖关系）
+cd agent_service && ./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002 &
+
+# 2. 使用测试 DB 启动 Backend
+cd backend && DB_NAME=duagent_test python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 &
+
+# 3. 执行种子脚本（使用相同 DB 配置）
+cd backend && ALLOW_E2E_SEED=true DB_NAME=duagent_test python scripts/seed_e2e_data.py
+
+# 4. 运行 E2E（Playwright webServer 自动启动前端）
+cd frontend && npm run test:e2e
 ```
+
+后端、种子脚本、前端通过 `DB_NAME=duagent_test` 和 `VITE_API_BASE_URL` 共同指向同一测试后端，确保数据一致性。
 
 ---
 
@@ -103,13 +114,11 @@ npm run test:e2e
    - 教师登录 → TeacherConsole（学生列表、班级切换）
    - TeacherStudentReport（URL 深链 + 正式字段渲染）
 
-4. **weak_points / recent_activity 处理** — 这两个字段不在正式 StudentLearning 契约中。前端在真实模式下必须隐藏对应区块或标记为"未提供"。不能将未声明字段视为正式依赖。
-
 **页面验证的 StudentLearning 正式字段对照:**
 
 | 正式字段 | 页面消费 | 模式 |
 |---------|---------|------|
-| `student.real_name` / `student.username` | `report.student?.real_name \|\| report.username` | 真实模式 |
+| `student.real_name` / `student.student_id` | `report.student?.real_name \|\| report.student?.student_id` | 真实模式 |
 | `evaluation_summary.overall_score` | `report.evaluation_summary?.overall_score` | 真实模式 |
 | `quiz_stats.total_attempts` / `avg_score` / `avg_time_spent` | `report.quiz_stats?.total_attempts` 等 | 真实模式 |
 | `path_progress.current_node` / `completed_nodes` / `total_nodes` | `report.path_progress?.current_node` 等 | 真实模式 |
@@ -126,7 +135,8 @@ npm run test:e2e
 - 核对 `TeacherStudentReport.jsx` 真实模式（`!useMock` 分支）所消费的字段
 - 确认仅依赖正式 StudentLearning 字段：`student`, `evaluation_summary`, `profile_summary`, `path_progress`, `quiz_stats`
 - 确认不消费旧假数据字段（`score`, `rank`, `mastery_stats`, `resource_distribution`, `motivation_index` 等，均在 `useMock` 块内）
-- 记录结论："已核对，真实模式仅消费正式 StudentLearning 字段；未发现需要修改的字段映射"
+- 处理 `weak_points` / `recent_activity`：这两个字段不在正式 StudentLearning 契约中（契约仅声明 student、evaluation_summary、profile_summary、path_progress、quiz_stats、last_message、message_count、updated_at）。前端真实模式必须隐藏对应区块或标记为"未提供"。不能将未声明字段视为正式依赖。
+- 记录结论："已核对，真实模式仅消费正式 StudentLearning 字段；[weak_points/recent_activity 处理结果][是否修改了 report.username 引用]"
 
 如需修改（发现消费未声明字段、页面渲染异常），则纳入本批次修改 `TeacherStudentReport.jsx`。
 
@@ -150,7 +160,7 @@ npm run test:e2e
 
 **内容:**
 - 仅记录已验证通过的提交内容
-- E2E 结果按实际写入（3/3 通过才写"通过"；否则写"待账户数据就绪后验收"）
+- E2E 结果按实际写入（3/3 通过才写"通过"；否则写实际失败原因，如后端未启动、Agent 不可用、测试账号缺失、页面渲染错误等）
 - `npm run lint`、`npm run build`、`npm run test:e2e`、`git diff --check` 全部记录实际值
 - 移除所有未经验证的乐观声明
 

@@ -137,20 +137,19 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
-- `2026-06-05` `前端阶段一验收缺陷修复（E2E 待测试账号就绪后重验）`
-  - **完成**：修复了阶段一评审报告中指出的 7 个缺陷（CORS、声明不实、组件未接入、E2E 覆盖不足、永久 Loading、硬编码回退、文档不实）。
-    - **登录主链**：[Login.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/Login.jsx) 彻底集成 `login(token, user)`，清除无用 Mock 参数，确保角色路由切换与受保护页面正常进入。
-    - **课程上下文**：[CourseContext.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/context/CourseContext.jsx) 异步化 fetch 与 clear 逻辑，清除 state 级联更新产生的 React 警告。
-    - **资源分类对齐契约**：[Dashboard.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/Dashboard.jsx) 对齐 `document/mindmap/reading/code/video` 正式类型，清理 Required/Recommended，删除详情页和 Mock 专用字段。
-    - **教师端数据去伪存真**：[teaching.js](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/api/services/teaching.js) 清理假数据源。[TeacherConsole.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/TeacherConsole.jsx) 和 [TeacherStudentReport.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/TeacherStudentReport.jsx) 自动读取 url 查询参数实现深链刷新，隐藏全部假指标/假曲线，并在 real 模式下只渲染纯净的 `StudentLearning` 仪表盘，禁用无接口按钮。
-    - **AI Chat 提取修复**：[AIChat.jsx](file:///home/yezisama/workspace/workflow/EDUagent/frontend/src/pages/AIChat.jsx) 对引用知识点支持多重键（points, knowledge_points, data）解析和对象提取。
-    - **状态组件与E2E用例**：FeedbackStatus 已接入 Dashboard、TeacherConsole、TeacherStudentReport（loading/empty/error 三态）。保留 `triggerResourceGeneration()` 和 `getTaskStatus()` API 服务函数（前端页面未接入，待后续阶段实现）。E2E 用例已修复 CORS 和选择器，覆盖率已补强。
-    - **代码规范**：`git diff --check` 通过，`npm run lint` 为 0 errors 0 warnings，`npm run build` 通过（含 chunk 大小警告）。
+- `2026-06-05` `前端阶段一验收缺陷修复（v2）`
+  - **完成**：审查并提交 6 个候选修复，移除未声明契约字段，建立 E2E 种子数据脚本。
+    - **候选修复提交**：[Login.jsx] AuthContext.login() 集成；[CourseContext.jsx] data.courses 解析 + user 守卫；[teaching.js] 移除假数据适配器，真实 API 透传；[AIChat.jsx] 多键 knowledge_points 兼容解析；[App.jsx] 移除 ResourceDetail 路由。
+    - **契约对齐**：[TeacherStudentReport.jsx] 真实模式移除 report.username、report.student_id 顶层回退、weak_points、recent_activity（均不在正式 StudentLearning 契约中）。
+    - **E2E 种子脚本**：新增 `backend/scripts/seed_e2e_data.py`，幂等创建测试账号（s@t.com / t@t.com）、课程、资源、题库、画像、测评、学习路径数据。需 `ALLOW_E2E_SEED=true` + DB 名含 `test` 守卫。
+    - **E2E 基础设施**：[playwright.config.js] webServer.env 注入 VITE_API_BASE_URL；[specs.spec.js] 验证码等待算术题文本 + 解析失败 throw 替代静默返回 0。
+    - **路径修正**：[learning.js] getTaskStatus 路径 `/tasks/{id}/status` → `/tasks/{id}`。
+    - **页面状态修复**（前 3 轮 commit）：FeedbackStatus 接入、永久 Loading 修复、硬编码回退清理、data-testid 添加、E2E 用例补强、.gitignore test-results/。
   - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
   - **验证结果**：
     - `npm run lint`：0 errors, 0 warnings
     - `npm run build`：通过（含 chunk 大小警告，>500KB）
-    - `npm run test:e2e`：3/3 失败（根因：测试账号 s@t.com / t@t.com 在当前数据库中不存在，CORS 修复已确认生效）。待数据库包含测试账号后重验。
+    - `npm run test:e2e`：待测试 DB 后端 + 种子脚本执行后重验（当前 E2E 需专用测试数据库 `duagent_test`、种子数据、Agent Service 和后端同时在线的完整环境）
     - `git diff --check`：通过
     - Client API 契约漂移：否
     - Agent API 契约漂移：否

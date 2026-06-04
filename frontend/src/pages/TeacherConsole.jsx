@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
+import FeedbackStatus from '../components/FeedbackStatus';
+
+const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export default function TeacherConsole() {
   const navigate = useNavigate();
@@ -8,7 +11,8 @@ export default function TeacherConsole() {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [insights, setInsights] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [studentsLoading, setStudentsLoading] = useState(false);
 
   // 获取班级列表
   useEffect(() => {
@@ -17,22 +21,38 @@ export default function TeacherConsole() {
         setClasses(res.data);
         setActiveClass(res.data[0].id);
       }
-    }).catch(console.error);
+    }).catch(console.error).finally(() => setClassesLoading(false));
   }, []);
 
   // 当选择的班级改变时，获取学生列表和AI洞察
   useEffect(() => {
     if (activeClass) {
-      setTimeout(() => setLoading(true), 0);
+      setTimeout(() => setStudentsLoading(true), 0);
       Promise.all([
         teachingService.getClassStudents(activeClass),
         teachingService.getConsoleInsights(activeClass)
       ]).then(([studentsRes, insightsRes]) => {
         if (studentsRes.code === 200) setStudents(studentsRes.data);
         if (insightsRes.code === 200) setInsights(insightsRes.data);
-      }).catch(console.error).finally(() => setLoading(false));
+      }).catch(console.error).finally(() => setStudentsLoading(false));
     }
   }, [activeClass]);
+
+  if (classesLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="loading" title="加载班级列表..." />
+      </div>
+    );
+  }
+
+  if (!classesLoading && classes.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="empty" title="暂无班级" description="您目前没有管理任何班级" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-on-background font-body-md">
@@ -117,13 +137,16 @@ export default function TeacherConsole() {
               
               <div className="overflow-x-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-gutter gap-y-4 p-md">
-                  {loading ? (
-                    <div className="col-span-1 lg:col-span-2 py-8 flex justify-center"><span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span></div>
+                  {studentsLoading ? (
+                    <div className="col-span-1 lg:col-span-2 py-8 flex justify-center">
+                      <FeedbackStatus status="loading" title="加载学生列表..." />
+                    </div>
                   ) : (
                     students.map(student => (
-                      <div 
+                      <div
                         key={student.user_id}
-                        onClick={() => navigate('/teacher/report', { state: { student_id: student.user_id, class_id: activeClass }})}
+                        data-testid="student-card"
+                        onClick={() => navigate(`/teacher/report?course_id=${activeClass}&student_id=${student.user_id}`)}
                         className="flex items-center gap-6 p-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-3 w-48">
@@ -135,22 +158,41 @@ export default function TeacherConsole() {
                             <p className="text-[10px] text-outline">ID: {student.student_id}</p>
                           </div>
                         </div>
-                        <div className="w-32">
-                          <span className="px-2.5 py-1 bg-surface-container text-on-surface-variant text-[11px] font-medium rounded border border-outline-variant/30">
-                            {student.current_path_node}
-                          </span>
-                        </div>
-                        <div className="flex-1 flex items-center gap-3">
-                          <div className="flex-1 bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-primary h-full" style={{ width: `${student.overall_mastery * 100}%` }}></div>
-                          </div>
-                          <span className="text-xs font-bold text-on-surface">{Math.round(student.overall_mastery * 100)}%</span>
-                        </div>
+                        {useMock ? (
+                          <>
+                            <div className="w-32">
+                              <span className="px-2.5 py-1 bg-surface-container text-on-surface-variant text-[11px] font-medium rounded border border-outline-variant/30">
+                                {student.current_path_node}
+                              </span>
+                            </div>
+                            <div className="flex-1 flex items-center gap-3">
+                              <div className="flex-1 bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-primary h-full" style={{ width: `${student.overall_mastery * 100}%` }}></div>
+                              </div>
+                              <span className="text-xs font-bold text-on-surface">{Math.round(student.overall_mastery * 100)}%</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-32">
+                              <span className="text-xs text-outline font-medium truncate block max-w-[120px]">
+                                {student.major || '—'}
+                              </span>
+                            </div>
+                            <div className="flex-1 text-right">
+                              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-outline-variant/20">
+                                {student.grade || '—'}
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))
                   )}
-                  {!loading && students.length === 0 && (
-                     <div className="col-span-1 lg:col-span-2 py-8 text-center text-outline">暂无学生数据</div>
+                  {!studentsLoading && students.length === 0 && (
+                    <div className="col-span-1 lg:col-span-2 py-8">
+                      <FeedbackStatus status="empty" title="暂无学生" description="当前班级暂无学生数据" />
+                    </div>
                   )}
                 </div>
               </div>
@@ -169,61 +211,63 @@ export default function TeacherConsole() {
           </section>
 
           {/* AI Insights Section */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-            <div className="md:col-span-2 bg-white rounded-xl border border-outline-variant shadow-sm p-md">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="material-symbols-outlined text-primary">psychology</span>
-                <h3 className="font-h3 text-xl text-on-surface">AI 洞察 (AI Insights)</h3>
-              </div>
-              <div className="space-y-4">
-                <div className="p-4 bg-surface-container-low rounded-lg border-l-4 border-primary">
-                  <p className="font-bold text-on-surface text-sm mb-1">本周课程状态概览</p>
-                  <p className="text-sm text-on-surface-variant leading-relaxed">
-                    {insights?.overview || '加载中...'}
-                  </p>
+          {useMock && (
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+              <div className="md:col-span-2 bg-white rounded-xl border border-outline-variant shadow-sm p-md">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="material-symbols-outlined text-primary">psychology</span>
+                  <h3 className="font-h3 text-xl text-on-surface">AI 洞察 (AI Insights)</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 border border-outline-variant rounded-lg">
-                    <p className="text-xs text-outline mb-2">平均活跃时间</p>
-                    <p className="text-xl font-bold text-on-surface">{insights?.avg_duration || 0} <span className="text-xs text-outline font-normal">min/session</span></p>
+                <div className="space-y-4">
+                  <div className="p-4 bg-surface-container-low rounded-lg border-l-4 border-primary">
+                    <p className="font-bold text-on-surface text-sm mb-1">本周课程状态概览</p>
+                    <p className="text-sm text-on-surface-variant leading-relaxed">
+                      {insights?.overview || '加载中...'}
+                    </p>
                   </div>
-                  <div className="p-3 border border-outline-variant rounded-lg">
-                    <p className="text-xs text-outline mb-2">知识点覆盖率</p>
-                    <p className="text-xl font-bold text-on-surface">{insights?.coverage_rate || 0}% <span className="text-xs text-green-500 font-normal">↑ 4%</span></p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
-              <h4 className="font-bold text-on-surface text-sm mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-error text-lg">priority_high</span>
-                需重点关注学生 (Special Students)
-              </h4>
-              <div className="space-y-3">
-                {insights?.special_students?.map(ss => (
-                  <div 
-                    key={ss.user_id}
-                    onClick={() => navigate('/teacher/report', { state: { student_id: ss.user_id, class_id: activeClass }})}
-                    className={`flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent ${ss.border_color}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${ss.avatar_color}`}>{ss.avatar_text}</div>
-                      <div>
-                        <p className="text-xs font-bold">{ss.username} ({ss.english_name})</p>
-                        <p className={`text-[10px] ${ss.avatar_color.split(' ')[1]}`}>{ss.issue}</p>
-                      </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 border border-outline-variant rounded-lg">
+                      <p className="text-xs text-outline mb-2">平均活跃时间</p>
+                      <p className="text-xl font-bold text-on-surface">{insights?.avg_duration || 0} <span className="text-xs text-outline font-normal">min/session</span></p>
                     </div>
-                    <span className="material-symbols-outlined text-outline text-sm">chevron_right</span>
+                    <div className="p-3 border border-outline-variant rounded-lg">
+                      <p className="text-xs text-outline mb-2">知识点覆盖率</p>
+                      <p className="text-xl font-bold text-on-surface">{insights?.coverage_rate || 0}% <span className="text-xs text-green-500 font-normal">↑ 4%</span></p>
+                    </div>
                   </div>
-                ))}
-                {!insights?.special_students?.length && !loading && (
-                   <p className="text-xs text-outline text-center py-4">暂无需要特殊关注的学生</p>
-                )}
+                </div>
               </div>
-              <button className="w-full mt-6 py-2 border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors">生成完整班级报表</button>
-            </div>
-          </section>
+
+              <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
+                <h4 className="font-bold text-on-surface text-sm mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-error text-lg">priority_high</span>
+                  需重点关注学生 (Special Students)
+                </h4>
+                <div className="space-y-3">
+                  {insights?.special_students?.map(ss => (
+                    <div
+                      key={ss.user_id}
+                      onClick={() => navigate(`/teacher/report?course_id=${activeClass}&student_id=${ss.user_id}`)}
+                      className={`flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent ${ss.border_color}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${ss.avatar_color}`}>{ss.avatar_text}</div>
+                        <div>
+                          <p className="text-xs font-bold">{ss.username} ({ss.english_name})</p>
+                          <p className={`text-[10px] ${ss.avatar_color.split(' ')[1]}`}>{ss.issue}</p>
+                        </div>
+                      </div>
+                      <span className="material-symbols-outlined text-outline text-sm">chevron_right</span>
+                    </div>
+                  ))}
+                  {!insights?.special_students?.length && !studentsLoading && (
+                     <p className="text-xs text-outline text-center py-4">暂无需要特殊关注的学生</p>
+                  )}
+                </div>
+                <button className="w-full mt-6 py-2 border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors">生成完整班级报表</button>
+              </div>
+            </section>
+          )}
 
         </div>
       </main>

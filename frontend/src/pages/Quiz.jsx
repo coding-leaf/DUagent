@@ -88,7 +88,7 @@ export default function Quiz() {
 
   if (!quizData || !quizData.questions || quizData.questions.length === 0) {
     return (
-      <div className="bg-surface min-h-screen flex items-center justify-center flex-col gap-4">
+      <div data-testid="quiz-empty" className="bg-surface min-h-screen flex items-center justify-center flex-col gap-4">
         <p className="text-slate-500">无法加载题目，请稍后再试。</p>
         <button onClick={() => navigate(-1)} className="text-primary hover:underline">返回上一页</button>
       </div>
@@ -198,7 +198,7 @@ export default function Quiz() {
           </div>
 
           {/* Question Area */}
-          <section className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+          <section data-testid="quiz-question" className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
             <div className="flex items-start gap-4 mb-6">
               <span className="bg-primary-container text-on-primary-container px-3 py-1 rounded-lg font-bold text-sm shrink-0">
                 {currentQuestion.type === 'single_choice' ? '单选题' : '未知题型'}

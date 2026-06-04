@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
+import FeedbackStatus from '../components/FeedbackStatus';
 import RadarChart from '../components/RadarChart';
+
+const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export default function TeacherStudentReport() {
   const navigate = useNavigate();
   const location = useLocation();
-  const classId = location.state?.class_id || localStorage.getItem('course_id') || 'default_course';
-  const studentId = location.state?.student_id || 'u_01'; // Default to u_01 if navigated directly
+
+  const queryParams = new URLSearchParams(location.search);
+  const classId = queryParams.get('course_id');
+  const studentId = queryParams.get('student_id');
+
   const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!classId && !!studentId);
 
   useEffect(() => {
-    setTimeout(() => setLoading(true), 0);
+    if (!classId || !studentId) {
+      return;
+    }
     teachingService.getStudentReport(classId, studentId).then(res => {
       if (res.code === 200) {
         setReport(res.data);
@@ -21,11 +29,27 @@ export default function TeacherStudentReport() {
   }, [classId, studentId]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span></div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="loading" title="加载报告数据..." />
+      </div>
+    );
+  }
+
+  if (!classId || !studentId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="error" title="参数缺失" description="请从学生列表页面进入" />
+      </div>
+    );
   }
 
   if (!report) {
-    return <div className="min-h-screen flex items-center justify-center bg-background">未找到报告数据</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="error" title="未找到报告数据" description="请检查课程和学生信息是否正确" />
+      </div>
+    );
   }
 
   return (
@@ -65,20 +89,22 @@ export default function TeacherStudentReport() {
                 <span className="material-symbols-outlined text-xs transform rotate-180">chevron_right</span>
                 <span>返回学生列表</span>
               </div>
-              <h1 className="font-h1 text-h1 text-on-background">学情详尽报告 <span className="text-primary-container">· 李华</span></h1>
+              <h1 className="font-h1 text-h1 text-on-background">学情详尽报告 <span className="text-primary-container">· {report.student?.real_name || report.username || '学生报告'}</span></h1>
             </div>
             <div className="flex gap-3">
-              <button className="flex items-center px-4 py-2 bg-white border border-outline-variant rounded-xl font-label-sm text-label-sm text-on-surface-variant hover:bg-surface-container transition-all hover:-translate-y-0.5">
-                <span className="material-symbols-outlined mr-2">print</span> 导出报告
+              <button disabled className="flex items-center px-4 py-2 bg-slate-100 border border-outline-variant rounded-xl font-label-sm text-label-sm text-slate-400 cursor-not-allowed opacity-60">
+                <span className="material-symbols-outlined mr-2">print</span> 导出报告 (暂不可用)
               </button>
-              <button className="flex items-center px-4 py-2 bg-primary text-white rounded-xl font-label-sm text-label-sm font-bold shadow-md hover:opacity-90 active:scale-95 transition-all hover:-translate-y-0.5">
-                <span className="material-symbols-outlined mr-2">send</span> 发送反馈
+              <button disabled className="flex items-center px-4 py-2 bg-slate-200 text-slate-400 rounded-xl font-label-sm text-label-sm font-bold cursor-not-allowed opacity-60">
+                <span className="material-symbols-outlined mr-2">send</span> 发送反馈 (暂不可用)
               </button>
             </div>
           </div>
 
           {/* TOP SECTION: Profile and Analysis */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {useMock && (
+            <>
+              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {/* Profile Card */}
             <div className="lg:col-span-2 relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 hover:-translate-y-0.5 transition-transform duration-300">
               <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-10">
@@ -407,38 +433,172 @@ export default function TeacherStudentReport() {
               </div>
             </div>
 
-            {/* Resource Usage Distribution */}
-            <div className="col-span-12 lg:col-span-5 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col hover:-translate-y-0.5 transition-transform duration-300">
-              <h3 className="font-h3 text-h3 mb-md">资源反馈分布</h3>
-              <div className="flex-grow flex items-center justify-center relative min-h-[220px]">
-                <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#e5eeff" strokeWidth="3"></circle>
-                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#00d1ff" strokeDasharray="60 40" strokeDashoffset="25" strokeWidth="3"></circle>
-                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#00677f" strokeDasharray="25 75" strokeDashoffset="85" strokeWidth="3"></circle>
-                  <circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#aec4c7" strokeDasharray="15 85" strokeDashoffset="100" strokeWidth="3"></circle>
-                </svg>
-                <div className="absolute flex flex-col items-center">
-                  <span className="font-h2 text-h2 text-primary">{report.resource_distribution?.avg_score || 0}</span>
-                  <span className="font-label-sm text-label-sm text-outline">平均分</span>
+          </div>
+        </>
+      )}
+
+      {!useMock && (
+        <div className="space-y-8">
+          {/* Profile banner */}
+          <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm flex flex-col md:flex-row items-center gap-6">
+            <div className="w-20 h-20 rounded-full overflow-hidden bg-slate-100 flex-shrink-0">
+              <img alt="Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC07BOGJWseHN9894enM_L7lbL1vknF4bHPCaAyGzyUrT7QT9ojTqzKZd17pkUqgZxu_g1e-UUG6gk1UC_Z2aa-joN2oOlX8fqOWDwrDXOE4pUdrNbJ0EZGcKTA6lMEXTrjLnY2_q-kHPKiUSvs0oO2CTPzmQFrLJ_p4JMk9FPtJ-BgXnCfTEvyFHg7LihxKWSWyiW9jwSnp2xGWINNyUWGusGrFi9r4sy9ch386vd528d4f-kqTB4wQNzXiauJm_zQapOmDKlx49pt" />
+            </div>
+            <div className="flex-grow text-center md:text-left">
+              <h2 className="text-2xl font-bold text-on-surface mb-1">{report.student?.real_name || report.username || '学生'}</h2>
+              <p className="text-sm text-secondary">学号: {report.student?.student_id || report.student_id || '未知'} · 班级ID: {classId}</p>
+            </div>
+            <div className="bg-primary/5 border border-primary/20 rounded-xl px-6 py-4 flex flex-col items-center">
+              <span className="text-3xl font-black text-primary">{report.evaluation_summary?.overall_score || 0}</span>
+              <span className="text-[10px] text-secondary font-bold uppercase tracking-wider">综合评分</span>
+            </div>
+          </div>
+
+          {/* Metric Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Quiz Stats */}
+            <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
+                <span className="material-symbols-outlined text-primary text-xl">assessment</span>
+                在线测试统计 (Quiz Stats)
+              </h3>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-surface-container rounded p-3 text-center">
+                  <span className="text-xl font-bold text-on-surface block">{report.quiz_stats?.total_attempts || 0}</span>
+                  <span className="text-[10px] text-secondary">总测试</span>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-primary-container mr-2"></div>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">视频教程 ({report.resource_distribution?.video}%)</span>
+                <div className="bg-surface-container rounded p-3 text-center">
+                  <span className="text-xl font-bold text-on-surface block">{report.quiz_stats?.avg_score || 0}%</span>
+                  <span className="text-[10px] text-secondary">平均分</span>
                 </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-primary mr-2"></div>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">交互练习 ({report.resource_distribution?.interactive}%)</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-tertiary-container mr-2"></div>
-                  <span className="font-label-sm text-label-sm text-on-surface-variant">文档解析 ({report.resource_distribution?.document}%)</span>
+                <div className="bg-surface-container rounded p-3 text-center">
+                  <span className="text-xl font-bold text-on-surface block">{Math.round((report.quiz_stats?.avg_time_spent || 0) / 60)}m</span>
+                  <span className="text-[10px] text-secondary">均时</span>
                 </div>
               </div>
             </div>
 
+            {/* Path Progress */}
+            <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
+                <span className="material-symbols-outlined text-primary text-xl">account_tree</span>
+                学习路径进度 (Path Progress)
+              </h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-secondary mb-1">当前学习节点</p>
+                  <p className="text-base font-bold text-on-surface truncate max-w-[120px]">{report.path_progress?.current_node || '暂无活跃节点'}</p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xl font-black text-primary">
+                    {report.path_progress?.completed_nodes || 0} / {report.path_progress?.total_nodes || 0}
+                  </span>
+                  <span className="text-[10px] text-secondary">已完成节点</span>
+                </div>
+              </div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-primary h-full transition-all duration-300"
+                  style={{ width: `${((report.path_progress?.completed_nodes || 0) / (report.path_progress?.total_nodes || 1)) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+
+            {/* Modality Preference */}
+            <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
+                <span className="material-symbols-outlined text-primary text-xl">psychology</span>
+                模态偏好 (Modal Preference)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {report.profile_summary?.modal_preference && report.profile_summary.modal_preference.length > 0 ? (
+                  report.profile_summary.modal_preference.map((p, idx) => (
+                    <span key={idx} className="px-3 py-1.5 bg-cyan-50 text-cyan-700 text-xs font-bold rounded-lg border border-cyan-100 flex items-center gap-1">
+                      <span className="text-[10px] opacity-60">#{idx + 1}</span> {p}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-xs text-outline italic text-center py-4">暂无偏好数据</p>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Details Section */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            {/* Left Column: Weak Points & Mastered count */}
+            <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-6 flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-bold text-on-surface mb-2 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-orange-500">local_fire_department</span>
+                  薄弱知识点 (Weak Points)
+                </h3>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {report.weak_points && report.weak_points.length > 0 ? (
+                    report.weak_points.map((wp, idx) => (
+                      <span key={idx} className="px-3 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-xl border border-orange-100 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs">warning</span> {wp}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-xs text-outline italic">暂无薄弱知识点记录</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                  <span className="text-xl font-bold text-green-600 block">{report.profile_summary?.knowledge_mastered || 0}</span>
+                  <span className="text-[10px] text-secondary">已掌握知识点</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                  <span className="text-xl font-bold text-orange-600 block">{report.profile_summary?.knowledge_weak || 0}</span>
+                  <span className="text-[10px] text-secondary">薄弱知识点数</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Recent Activity */}
+            <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
+                <span className="material-symbols-outlined text-primary text-xl">timeline</span>
+                最近学习活动 (Recent Activity)
+              </h3>
+              <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2 scrollbar-thin">
+                {report.recent_activity && report.recent_activity.length > 0 ? (
+                  report.recent_activity.map((act, idx) => {
+                    let icon = 'school';
+                    let iconColor = 'text-primary bg-primary/10';
+                    if (act.type === 'quiz') {
+                      icon = 'quiz';
+                      iconColor = 'text-cyan-600 bg-cyan-50';
+                    } else if (act.type === 'resource') {
+                      icon = 'menu_book';
+                      iconColor = 'text-purple-600 bg-purple-50';
+                    } else if (act.type === 'tutoring') {
+                      icon = 'chat_bubble';
+                      iconColor = 'text-emerald-600 bg-emerald-50';
+                    }
+                    return (
+                      <div key={idx} className="flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+                          <span className="material-symbols-outlined text-sm">{icon}</span>
+                        </div>
+                        <div className="flex-grow">
+                          <p className="text-xs font-bold text-on-surface leading-tight">{act.title}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{act.created_at ? new Date(act.created_at).toLocaleString() : ''}</p>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-outline italic text-center py-8">暂无最近学习记录</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
         </div>
       </main>
     </div>

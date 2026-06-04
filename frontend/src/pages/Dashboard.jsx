@@ -1,55 +1,89 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TrainingReportModal from '../components/TrainingReportModal';
 import { learningService } from '../api/services/learning';
 import { useCourse } from '../context/CourseContext';
+import FeedbackStatus from '../components/FeedbackStatus';
 import Navbar from '../components/Navbar';
 
-const CATEGORIES = [
-  '全部',
-  '哈希表专题',
-  '冲突处理策略',
-  '负载因子优化',
-  '分布式哈希',
-  '习题集'
+const RESOURCE_TYPES = [
+  { value: '全部', label: '全部' },
+  { value: 'document', label: '文档' },
+  { value: 'mindmap', label: '思维导图' },
+  { value: 'reading', label: '阅读资料' },
+  { value: 'code', label: '代码' },
+  { value: 'video', label: '视频' }
 ];
+
+const TYPE_MAP = {
+  document: { label: '文档', icon: 'description', colorClass: 'text-blue-600 bg-blue-50 border-blue-100' },
+  mindmap: { label: '思维导图', icon: 'schema', colorClass: 'text-purple-600 bg-purple-50 border-purple-100' },
+  reading: { label: '阅读资料', icon: 'menu_book', colorClass: 'text-amber-600 bg-amber-50 border-amber-100' },
+  code: { label: '代码', icon: 'code', colorClass: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+  video: { label: '视频', icon: 'play_circle', colorClass: 'text-rose-600 bg-rose-50 border-rose-100' }
+};
+
+const getResourceTypeInfo = (type) => {
+  return TYPE_MAP[type] || { label: type || '其他', icon: 'draft', colorClass: 'text-gray-600 bg-gray-50 border-gray-100' };
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeCourseId } = useCourse();
+  const { activeCourseId, loading: courseLoading } = useCourse();
   const [searchTerm, setSearchTerm] = useState(location.state?.search ?? '');
-  const [selectedCategory, setSelectedCategory] = useState(location.state?.category ?? '全部');
+  const [selectedType, setSelectedType] = useState(location.state?.type ?? '全部');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [allResources, setAllResources] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchResources = useCallback(async () => {
+    if (!activeCourseId) return;
+    try {
+      setLoading(true);
+      setError(false);
+      const res = await learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 50 });
+      if (res.code === 200 && res.data) {
+        setAllResources(res.data.resources || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch resources:", err);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCourseId]);
 
   useEffect(() => {
-    const fetchResources = async () => {
-      if (!activeCourseId) return;
-      try {
-        setLoading(true);
-        const res = await learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 20 });
-        if (res.code === 200) {
-          setAllResources(res.data.resources || []);
-        }
-      } catch (error) {
-        console.error("Failed to fetch resources:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchResources();
-  }, [activeCourseId]);
+  }, [fetchResources]);
 
   // Filter logic
   const filteredResources = allResources.filter(resource => {
     const safeSearchTerm = (searchTerm || '').toLowerCase();
-    const matchesSearch = resource.title.toLowerCase().includes(safeSearchTerm) ||
+    const matchesSearch = (resource.title || '').toLowerCase().includes(safeSearchTerm) ||
                           (resource.description && resource.description.toLowerCase().includes(safeSearchTerm));
-    const matchesCategory = selectedCategory === '全部' || resource.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesType = selectedType === '全部' || resource.type === selectedType;
+    return matchesSearch && matchesType;
   });
+
+  if (courseLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="loading" title="加载课程中..." />
+      </div>
+    );
+  }
+
+  if (!activeCourseId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <FeedbackStatus status="empty" title="暂无课程" description="请先加入一门课程" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-on-background font-body-md antialiased overflow-x-hidden">
@@ -94,37 +128,37 @@ export default function Dashboard() {
           {/* Header Section */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-on-surface mb-2">资源库</h1>
-            <p className="text-secondary text-sm">获取最新的哈希表与冲突解析学习资料、思维导图和实操代码。</p>
+            <p className="text-secondary text-sm">获取最新的课程学习资料、思维导图和实操代码。</p>
           </div>
 
           {/* Categories Filter */}
           <div className="flex flex-wrap gap-3 mb-8">
-            {CATEGORIES.map(category => (
+            {RESOURCE_TYPES.map(typeObj => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-5 py-2.5 rounded-full font-medium transition-all active:scale-95 ${
-                  selectedCategory === category
+                key={typeObj.value}
+                onClick={() => setSelectedType(typeObj.value)}
+                className={`px-5 py-2.5 rounded-full font-medium transition-all active:scale-95 cursor-pointer ${
+                  selectedType === typeObj.value
                     ? 'bg-primary-container text-white shadow-md shadow-cyan-100'
                     : 'bg-white border border-outline-variant text-secondary hover:border-cyan-500 hover:text-cyan-600'
                 }`}
               >
-                {category === '全部' ? '全部专题' : category}
+                {typeObj.label}
               </button>
             ))}
           </div>
 
           {/* Filter Feedback */}
-          {(selectedCategory !== '全部' || searchTerm) && (
+          {(selectedType !== '全部' || searchTerm) && (
             <div className="mb-8 flex items-center gap-3 bg-surface-container-low p-4 rounded-xl border border-primary-container/30">
               <span className="material-symbols-outlined text-primary">filter_alt</span>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-on-surface-variant">当前筛选：</span>
                 
-                {selectedCategory !== '全部' && (
+                {selectedType !== '全部' && (
                   <span className="px-3 py-1 bg-primary text-white rounded-full text-xs font-medium flex items-center gap-1">
-                    分类: {selectedCategory}
-                    <button onClick={() => setSelectedCategory('全部')} className="hover:text-primary-container flex items-center justify-center cursor-pointer">
+                    类型: {getResourceTypeInfo(selectedType).label}
+                    <button onClick={() => setSelectedType('全部')} className="hover:text-primary-container flex items-center justify-center cursor-pointer">
                       <span className="material-symbols-outlined text-[14px]">close</span>
                     </button>
                   </span>
@@ -140,7 +174,7 @@ export default function Dashboard() {
                 )}
 
                 <button
-                  onClick={() => { setSelectedCategory('全部'); setSearchTerm(''); }}
+                  onClick={() => { setSelectedType('全部'); setSearchTerm(''); }}
                   className="text-primary hover:underline text-xs flex items-center ml-2 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-xs mr-1">delete</span> 清除全部
@@ -149,229 +183,71 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Two Column Grid Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-            {/* Left Column: Required Resources (8 columns) */}
-            <div className="lg:col-span-8 space-y-gutter">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-on-surface flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
-                  必修资源 (Required)
-                </h2>
-                <span className="text-xs text-secondary">
-                  {loading ? '加载中...' : `${filteredResources.filter(r => r.type === 'Required').length} 个核心资源`}
-                </span>
-              </div>
-
-              {/* Render Required Cards */}
-              <div className="space-y-gutter">
-                {loading ? (
-                  <div className="py-12 flex justify-center"><span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span></div>
-                ) : filteredResources.filter(r => r.type === 'Required').map(resource => {
-                  // Featured Card with Image
-                  if (resource.image) {
-                    return (
-                      <div key={resource.id} className="group relative overflow-hidden rounded-xl bg-white border border-outline-variant shadow-sm hover:shadow-xl hover:shadow-cyan-500/10 transition-all duration-300">
-                        <div className="aspect-[21/9] w-full overflow-hidden">
-                          <img
-                            alt={resource.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            src={resource.image}
-                          />
-                        </div>
-                        <div className="p-6">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="px-2 py-0.5 bg-primary text-white text-[10px] font-bold rounded flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px]" style={{ fontVariationSettings: "'FILL' 1" }}>bookmark</span> 必修
-                            </span>
-                            <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-[10px] font-bold rounded">{resource.badge}</span>
-                            <span className="text-[10px] text-gray-400">{resource.duration}</span>
-                          </div>
-                          <h3 className="text-lg font-bold text-on-surface mb-2">{resource.title}</h3>
-                          <p className="text-secondary text-sm mb-4 leading-relaxed">{resource.description}</p>
-                          <div className="flex items-center justify-between">
-                            <div className="flex -space-x-2">
-                              {(resource.tags || []).map((tag, i) => (
-                                <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-blue-100 flex items-center justify-center text-[10px] font-bold">
-                                  {tag}
-                                </div>
-                              ))}
-                            </div>
-                            <button
-                              onClick={() => navigate('/resource/detail')}
-                              className="text-cyan-600 font-bold flex items-center gap-1 hover:gap-2 transition-all cursor-pointer"
-                            >
-                              开始学习 <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Code Practice Card
-                  if (resource.codeCard) {
-                    return (
-                      <div key={resource.id} className="bg-slate-900 rounded-xl p-6 shadow-lg relative overflow-hidden group text-left">
-                        <div className="absolute inset-0 opacity-10 pointer-events-none">
-                          <svg fill="none" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M0 40H40V0M40 80H80V40M80 120H120V80" stroke="white" strokeWidth="0.5"></path>
-                          </svg>
-                        </div>
-                        <div className="relative z-10 flex flex-col h-full">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 bg-primary text-white text-[10px] font-bold rounded">必修</span>
-                              <div className={`w-10 h-10 ${resource.iconBg} rounded-lg flex items-center justify-center ${resource.iconColor}`}>
-                                <span className="material-symbols-outlined">{resource.icon}</span>
-                              </div>
-                            </div>
-                            <span className="text-cyan-400 font-mono text-xs">{resource.fileName}</span>
-                          </div>
-                          <span className="text-xs font-bold text-cyan-400/80 mb-2 block">代码实操</span>
-                          <h3 className="text-lg font-bold text-white mb-2">{resource.title}</h3>
-                          <p className="text-sm text-gray-400 mb-6 flex-1 leading-relaxed">{resource.description}</p>
-                          <button
-                            onClick={() => navigate('/quiz')}
-                            className="w-full bg-cyan-400 text-slate-900 py-2.5 rounded-lg font-bold hover:bg-cyan-300 transition-colors cursor-pointer"
-                          >
-                            进入 IDE
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Standard Metric Card
+          {/* Resources Grid */}
+          <div className="mb-8">
+            {loading ? (
+              <FeedbackStatus status="loading" title="加载资源中..." />
+            ) : error ? (
+              <FeedbackStatus status="error" title="加载失败" description="请检查网络连接或稍后重试" onRetry={fetchResources} />
+            ) : filteredResources.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredResources.map(resource => {
+                  const typeInfo = getResourceTypeInfo(resource.type);
                   return (
-                    <div key={resource.id} className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-200 transition-colors">
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="px-2 py-0.5 bg-primary text-white text-[10px] font-bold rounded flex items-center gap-0.5">
-                          <span className="material-symbols-outlined text-[10px]" style={{ fontVariationSettings: "'FILL' 1" }}>bookmark</span> 必修
-                        </span>
-                        <div className={`w-10 h-10 ${resource.iconBg} ${resource.iconColor} rounded-lg flex items-center justify-center`}>
-                          <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>{resource.icon}</span>
+                    <div key={resource.id} data-testid="resource-card" className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-4">
+                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${typeInfo.colorClass}`}>
+                            <span className="material-symbols-outlined text-[12px]">{typeInfo.icon}</span>
+                            {typeInfo.label}
+                          </span>
+                          {resource.chapter && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] rounded font-medium truncate max-w-[150px]">
+                              {resource.chapter}
+                            </span>
+                          )}
                         </div>
-                        <span className="text-xs font-bold text-purple-600 uppercase tracking-tighter">{resource.subText}</span>
-                      </div>
-                      <h3 className="text-lg font-bold mb-2">{resource.title}</h3>
-                      <p className="text-sm text-secondary mb-4 leading-relaxed">{resource.description}</p>
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        {(resource.metrics || []).map((metric, i) => (
-                          <div key={i} className="bg-surface-container rounded p-2 flex flex-col items-center">
-                            <span className="text-cyan-600 font-bold text-sm">{metric.value}</span>
-                            <span className="text-[10px] text-gray-500 uppercase">{metric.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => navigate('/resource/detail')}
-                        className="w-full border border-cyan-500 text-cyan-600 py-2 rounded-lg font-bold hover:bg-cyan-50 transition-colors cursor-pointer"
-                      >
-                        查看解析
-                      </button>
-                    </div>
-                  );
-                })}
-                {!loading && filteredResources.filter(r => r.type === 'Required').length === 0 && (
-                  <div className="text-center py-8 text-gray-400 text-sm">暂无匹配的必修资源</div>
-                )}
-              </div>
-            </div>
 
-            {/* Right Column: Elective/Recommended Resources (4 columns) */}
-            <div className="lg:col-span-4 space-y-gutter">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-on-surface flex items-center gap-2">
-                  <span className="material-symbols-outlined text-secondary">recommend</span>
-                  推荐资源
-                </h2>
-              </div>
+                        <h3 className="text-lg font-bold text-on-surface mb-2">{resource.title}</h3>
+                        <p className="text-secondary text-sm mb-4 leading-relaxed line-clamp-3">{resource.description || '暂无描述'}</p>
 
-              {/* Render Recommended Cards */}
-              <div className="space-y-gutter">
-                {loading ? (
-                  <div className="py-12 flex justify-center"><span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span></div>
-                ) : filteredResources.filter(r => r.type === 'Recommended').map(resource => {
-                  // Book Card
-                  if (resource.bookCard) {
-                    return (
-                      <div key={resource.id} className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-200 transition-colors">
-                        <div className="flex items-center gap-4 mb-4">
-                          <div className="w-16 h-20 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                            <img alt={resource.title} className="w-full h-full object-cover" src={resource.image} />
+                        {resource.knowledge_point && (
+                          <div className="flex items-center gap-1.5 mb-4">
+                            <span className="material-symbols-outlined text-xs text-primary">bookmark</span>
+                            <span className="text-xs text-primary font-medium">{resource.knowledge_point}</span>
                           </div>
-                          <div>
-                            <span className="text-xs font-bold text-secondary mb-1 block">拓展阅读</span>
-                            <h3 className="text-base font-bold leading-tight">{resource.title}</h3>
-                            <p className="text-xs text-gray-400 mt-1">作者: {resource.author}</p>
-                          </div>
-                        </div>
-                        <p className="text-sm text-secondary mb-4 leading-relaxed line-clamp-3">{resource.description}</p>
+                        )}
                       </div>
-                    );
-                  }
 
-                  // Exercise Card
-                  if (resource.meta) {
-                    return (
-                      <div key={resource.id} className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-200 transition-colors">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className={`w-12 h-12 ${resource.iconBg} rounded-lg flex items-center justify-center ${resource.iconColor}`}>
-                            <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>{resource.icon}</span>
-                          </div>
-                          <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded">推荐练习</span>
-                        </div>
-                        <span className="text-xs font-bold text-orange-500 mb-2 block">{resource.subText}</span>
-                        <h3 className="text-lg font-bold mb-2">{resource.title}</h3>
-                        <p className="text-sm text-secondary mb-4 leading-relaxed">{resource.description}</p>
-                        <div className="flex items-center gap-4 text-xs text-gray-500">
-                          {(resource.meta || []).map((meta, i) => (
-                            <span key={i} className="flex items-center gap-1">
-                              <span className="material-symbols-outlined text-sm">{meta.icon}</span> {meta.text}
+                      <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+                        <div className="flex flex-wrap gap-1">
+                          {(resource.tags || []).slice(0, 3).map((tag, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] rounded-full">
+                              {tag}
                             </span>
                           ))}
                         </div>
-                      </div>
-                    );
-                  }
-
-                  // Standard Recommended Card (e.g. Mind Map)
-                  return (
-                    <div key={resource.id} className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm flex flex-col hover:border-cyan-200 transition-colors">
-                      <div className={`w-12 h-12 ${resource.iconBg} rounded-lg flex items-center justify-center ${resource.iconColor} mb-4`}>
-                        <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>{resource.icon}</span>
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-xs font-bold text-cyan-600 mb-2 block">{resource.subText}</span>
-                        <h3 className="text-lg font-bold mb-2">{resource.title}</h3>
-                        <p className="text-sm text-secondary mb-4 leading-relaxed">{resource.description}</p>
-                      </div>
-                      <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <span className="text-xs text-gray-400">{resource.footer}</span>
-                        {resource.downloadable && (
-                          <button className="p-2 hover:bg-gray-50 rounded-full transition-colors cursor-pointer">
-                            <span className="material-symbols-outlined text-gray-400">download</span>
-                          </button>
-                        )}
+                        <div className="text-[10px] text-gray-400 font-medium">
+                          浏览 {resource.view_count || 0} 次
+                        </div>
                       </div>
                     </div>
                   );
                 })}
-                {!loading && filteredResources.filter(r => r.type === 'Recommended').length === 0 && (
-                  <div className="text-center py-8 text-gray-400 text-sm">暂无匹配的推荐资源</div>
-                )}
               </div>
-            </div>
+            ) : (
+              <div data-testid="resources-empty">
+                <FeedbackStatus status="empty" title="暂无资源" description="当前课程暂无学习资源" />
+              </div>
+            )}
           </div>
 
           {/* Load More */}
-          <div className="mt-12 flex flex-col items-center gap-4">
-            <button className="px-8 py-3 bg-white border border-outline-variant rounded-full text-secondary font-medium hover:bg-gray-50 transition-all active:scale-95 shadow-sm cursor-pointer">
-              加载更多哈希表资源
-            </button>
-            <p className="text-xs text-gray-400">已显示 {filteredResources.length} / 42 个专题资源</p>
-          </div>
+          {filteredResources.length > 0 && (
+            <div className="mt-12 flex flex-col items-center gap-4">
+              <p className="text-xs text-gray-400">已显示全部 {filteredResources.length} 个资源</p>
+            </div>
+          )}
         </div>
       </main>
 

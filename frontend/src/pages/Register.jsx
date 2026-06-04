@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../api/services/auth';
 
@@ -10,14 +10,36 @@ export default function Register() {
     gender: '男',
     grade: '大一 (Freshman)',
     email: '',
-    code: '',
+    captchaCode: '',
     password: '',
     confirmPassword: '',
     inviteCode: ''
   });
 
+  const [captchaQuestion, setCaptchaQuestion] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const fetchCaptcha = async () => {
+    try {
+      const response = await authService.getCaptcha();
+      if (response.code === 200) {
+        setCaptchaQuestion(response.data.captcha_question);
+        setCaptchaToken(response.data.captcha_token);
+      }
+    } catch (err) {
+      console.error('获取验证码失败:', err);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchCaptcha();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -39,15 +61,19 @@ export default function Register() {
         registration_code: formData.inviteCode,
         email: formData.email,
         password: formData.password,
-        username: formData.username
+        username: formData.username,
+        captcha_token: captchaToken,
+        captcha_code: formData.captchaCode
       });
       
-      if (response.code === 200) {
+      if (response.code === 201 || response.code === 200) {
         navigate('/success');
       } else {
         setError(response.message || '注册失败');
+        fetchCaptcha();
       }
     } catch (err) {
+      fetchCaptcha();
       if (err.response && err.response.data) {
         setError(err.response.data.message || '注册失败');
       } else {
@@ -216,36 +242,41 @@ export default function Register() {
 
                 <div className="space-y-xs">
                   <label className="text-label-sm text-secondary block font-medium text-xs">电子邮箱</label>
-                  <div className="flex space-x-sm">
-                    <input
-                      className="flex-grow px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
-                      placeholder="example@domain.com"
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                    />
-                    <button
-                      className="px-md bg-secondary-container text-on-secondary-container font-h3 text-sm rounded-lg hover:brightness-105 transition-all whitespace-nowrap"
-                      type="button"
-                    >
-                      获取验证码
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-xs">
-                  <label className="text-label-sm text-secondary block font-medium text-xs">邮箱验证码</label>
                   <input
                     className="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
-                    placeholder="6位数字验证码"
-                    type="text"
-                    name="code"
-                    value={formData.code}
+                    placeholder="example@domain.com"
+                    type="email"
+                    name="email"
+                    value={formData.email}
                     onChange={handleChange}
                     required
                   />
+                </div>
+
+                <div className="space-y-xs">
+                  <label className="text-label-sm text-secondary block font-medium text-xs">验证码 (Captcha)</label>
+                  <div className="flex space-x-sm">
+                    <div className="relative flex-grow">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">verified_user</span>
+                      <input
+                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
+                        placeholder="输入计算结果"
+                        type="text"
+                        name="captchaCode"
+                        value={formData.captchaCode || ''}
+                        onChange={handleChange}
+                        required
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchCaptcha}
+                      className="px-md bg-secondary-container text-on-secondary-container font-h3 text-sm rounded-lg hover:brightness-105 active:scale-95 transition-all whitespace-nowrap cursor-pointer flex items-center justify-center min-w-[120px]"
+                      title="点击刷新验证码"
+                    >
+                      {captchaQuestion || '加载中...'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-xs">

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import TrainingReportModal from '../components/TrainingReportModal';
 import { learningService } from '../api/services/learning';
+import { useCourse } from '../context/CourseContext';
+import Navbar from '../components/Navbar';
 
 const CATEGORIES = [
   '全部',
@@ -15,18 +17,19 @@ const CATEGORIES = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { activeCourseId } = useCourse();
   const [searchTerm, setSearchTerm] = useState(location.state?.search ?? '');
   const [selectedCategory, setSelectedCategory] = useState(location.state?.category ?? '全部');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [allResources, setAllResources] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchResources = async () => {
+      if (!activeCourseId) return;
       try {
         setLoading(true);
-        const res = await learningService.getResources({ course_id: 'default_course', page: 1, page_size: 20 });
+        const res = await learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 20 });
         if (res.code === 200) {
           setAllResources(res.data.resources || []);
         }
@@ -37,7 +40,7 @@ export default function Dashboard() {
       }
     };
     fetchResources();
-  }, []);
+  }, [activeCourseId]);
 
   // Filter logic
   const filteredResources = allResources.filter(resource => {
@@ -48,69 +51,10 @@ export default function Dashboard() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleLogout = () => {
-    navigate('/');
-  };
-
   return (
     <div className="min-h-screen bg-background text-on-background font-body-md antialiased overflow-x-hidden">
       {/* TopNavBar */}
-      <nav className="fixed top-0 w-full z-40 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans']">
-        <div className="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
-          <div className="text-xl font-bold tracking-tight text-cyan-600">数据结构智能助手</div>
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/profile" className="text-gray-600 hover:text-cyan-500 transition-colors">个人信息</Link>
-            <Link to="/learning-path" className="text-gray-600 hover:text-cyan-500 transition-colors">路径规划</Link>
-            <Link to="/dashboard" className="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1">资源库</Link>
-            <Link to="/ai-chat" className="text-gray-600 hover:text-cyan-500 transition-colors">AI答疑</Link>
-            <Link to="/learning-effects" className="text-gray-600 hover:text-cyan-500 transition-colors">学习效果</Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="relative hidden lg:block">
-              <input
-                className="w-64 pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-container transition-all"
-                placeholder="搜索资源..."
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <span className="material-symbols-outlined absolute left-3 top-2.5 text-gray-400 text-sm">search</span>
-            </div>
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
-              <span className="material-symbols-outlined text-gray-600">notifications</span>
-            </button>
-            
-            {/* User Profile Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant cursor-pointer focus:outline-none"
-              >
-                <img
-                  alt="用户头像"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIZ6HO5HA-odVe8eyF37yBdDVqfay9WuU9hiH5bUmPQ7FHVUvaaDZxx-umrUXutVljxyDA8RZg_DaakLk5239e-wEBGWbcvlz6m8ugJDjJkfWVXu3go6THqG3cG20AZz_Fo9e3nQQaFkyLTMljw6gQ7C9zzMSbkb9zWAcMi735c3jXolvzaKkf1ukO4JFCIGvZKAEYUotf7YS7Eh9YXEBhXk-zbyI3drYFjCejkZNYy2Xw_yQjYjF31dF20X5HAXjP5TdmPPzYQVXQ"
-                />
-              </button>
-
-              {showDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg py-2 z-50">
-                  <div className="px-4 py-2 border-b border-gray-50">
-                    <p className="text-sm font-bold text-on-surface">害虫杀手队</p>
-                    <p className="text-xs text-gray-400">example@domain.com</p>
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-sm">logout</span>
-                    退出登录
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar searchTerm={searchTerm} onSearch={setSearchTerm} />
 
       {/* SideNavBar */}
       <aside className="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden md:flex">

@@ -1,18 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { learningService } from '../api/services/learning';
 import Sidebar from '../components/Sidebar';
+import { useCourse } from '../context/CourseContext';
+import Navbar from '../components/Navbar';
 
 export default function LearningPath() {
   const navigate = useNavigate();
+  const { activeCourseId } = useCourse();
   const [learningPath, setLearningPath] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPath = async () => {
+      if (!activeCourseId) return;
       try {
         setLoading(true);
-        const res = await learningService.getLearningPath('default_course');
+        const res = await learningService.getLearningPath(activeCourseId);
         if (res.code === 200) {
           setLearningPath(res.data);
         }
@@ -23,7 +27,7 @@ export default function LearningPath() {
       }
     };
     fetchPath();
-  }, []);
+  }, [activeCourseId]);
 
   const getCategoryForNode = (nodeName) => {
     if (!nodeName) return '全部';
@@ -36,29 +40,7 @@ export default function LearningPath() {
   return (
     <div className="font-body-md bg-background min-h-screen text-on-background">
       {/* TopNavBar Implementation */}
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans'] antialiased">
-        <div className="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
-          <div className="text-xl font-bold tracking-tight text-cyan-600">数据结构智能助手</div>
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/profile" className="text-gray-600 hover:text-cyan-500 transition-colors">个人信息</Link>
-            <Link to="/learning-path" className="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1">路径规划</Link>
-            <Link to="/dashboard" className="text-gray-600 hover:text-cyan-500 transition-colors">资源库</Link>
-            <Link to="/ai-chat" className="text-gray-600 hover:text-cyan-500 transition-colors">AI答疑</Link>
-            <Link to="/learning-effects" className="text-gray-600 hover:text-cyan-500 transition-colors">学习效果</Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
-              <span className="material-symbols-outlined text-gray-600">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
-              <span className="material-symbols-outlined text-gray-600">settings</span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
-              <img alt="用户头像" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIZ6HO5HA-odVe8eyF37yBdDVqfay9WuU9hiH5bUmPQ7FHVUvaaDZxx-umrUXutVljxyDA8RZg_DaakLk5239e-wEBGWbcvlz6m8ugJDjJkfWVXu3go6THqG3cG20AZz_Fo9e3nQQaFkyLTMljw6gQ7C9zzMSbkb9zWAcMi735c3jXolvzaKkf1ukO4JFCIGvZKAEYUotf7YS7Eh9YXEBhXk-zbyI3drYFjCejkZNYy2Xw_yQjYjF31dF20X5HAXjP5TdmPPzYQVXQ" />
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* SideNavBar Component */}
       <Sidebar />

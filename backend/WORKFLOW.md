@@ -137,6 +137,14 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-04` `Quiz 空会话统计污染修复`
+  - **修复**：`GET /api/v1/quiz/result` 与 `GET /api/v1/quiz/history` 只统计至少存在一条未删除 `QuizAnswer` 的已提交练习，页面刷新产生的未提交 QuizSession 不再拉低平均分或污染历史。
+  - **语义**：`POST /api/v1/quiz/submit` 的 `answers=[]` 仍保持 200 响应，但该会话不计入练习历史和统计；`GET /quiz/questions` 仍创建并返回字符串 `quiz_id`，避免 Client API 契约漂移。
+  - **测试**：`tests/test_quiz_async.py` 新增未提交会话和空答案提交不进入 result/history 的回归断言，并将统计样本补齐为真实包含 QuizAnswer 的已完成练习。
+  - **验证**：`python tests/test_quiz_async.py`：`82 OK, 0 FAIL`；`python tests/test_api.py`：`56 PASSED, 0 FAILED`
+  - **覆盖率**：`pytest --cov=app --cov-report=term-missing`：`20 passed, 5 failed`，覆盖率 `51%`；失败仍为已知的顶层 `async def test()` pytest 收集问题。
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+
 - `2026-06-04` `Resource Webhook completed 结果校验收口`
   - **修复**：`POST /api/v1/webhooks/agent` 在更新任务状态和写入 Resource 前，严格校验 `task_type`、`status`、`result.resources` 数组及资源必填字段/类型。
   - **修复**：畸形 completed 回调不再被错误标记为 completed，也不会因非对象资源元素触发未处理异常；failed 回调缺少 `error_message` 时返回 400。
@@ -334,9 +342,9 @@ _（当前无占位接口）_
 - **高优先级：teaching 学习看板存在假数据/占位数据**
   - `GET /api/v1/teaching/classes/{class_id}/students/{student_id}/learning` 仍存在硬编码/空数组字段，不能作为真实学习看板结果使用
   - 该问题更偏前端接入阶段的数据真实性缺口，不属于当前 Backend-Agent 主链阻塞
-- **中优先级：`GET /api/v1/quiz/questions` 可能创建空 `QuizSession` 污染历史**
-  - 刷新或重复打开题目页可能产生空会话，影响 `/quiz/history` 与统计数据质量
-  - 当前不阻断主链，但应在 quiz 页面真实接入前收口
+- **中优先级：`GET /api/v1/quiz/questions` 仍会创建未提交 QuizSession**
+  - 因 Client API 要求返回字符串 `quiz_id`，当前保留取题即创建会话的行为
+  - result/history 已过滤无 QuizAnswer 的会话，不再污染统计；数据库中的未提交会话清理可后续作为运维治理处理
 
 ## 延期处理问题
 

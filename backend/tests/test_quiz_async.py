@@ -3,7 +3,8 @@
 Covers: submit scoring, background diagnosis write, Agent-failure resilience,
 QuizAnswer DB persistence, multi-choice scoring, edge cases (empty answers,
 invalid quiz_id, illegal question_id), stats computation, score_trend ordering,
-and current data-driven diagnosis shape while final diagnosis semantics remain pending.
+empty-session filtering, and current data-driven diagnosis shape while final
+diagnosis semantics remain pending.
 
 Agent calls mocked. Requires MySQL.
 
@@ -462,6 +463,38 @@ async def test():
             len(rdata["stats"]["score_trend"]) >= 2)
         chk("result -> latest_quiz present",
             rdata["latest_quiz"] is not None)
+        submitted_attempts_before_empty_sessions = rdata["stats"]["total_attempts"]
+
+        # =============================================
+        # 4A. unsubmitted/empty-answer sessions do not pollute result/history
+        # =============================================
+        print("\n-- 4A. empty session filtering --")
+        async with async_session_factory() as db:
+            unsubmitted_quiz = QuizSession(
+                user_id=stu_id,
+                course_id=course_id,
+                chapter="unsubmitted",
+                score=0,
+                total_count=4,
+            )
+            db.add(unsubmitted_quiz)
+            await db.commit()
+            unsubmitted_quiz_id = unsubmitted_quiz.id
+
+        r = await client.get(f"/api/v1/quiz/result?course_id={course_id}", headers=stu_headers)
+        result_after_empty_sessions = r.json()["data"]
+        chk("unsubmitted session -> excluded from result attempts",
+            result_after_empty_sessions["stats"]["total_attempts"] == submitted_attempts_before_empty_sessions)
+        chk("unsubmitted session -> excluded from latest_quiz",
+            result_after_empty_sessions["latest_quiz"]["quiz_id"] != unsubmitted_quiz_id)
+
+        r = await client.get(f"/api/v1/quiz/history?course_id={course_id}", headers=stu_headers)
+        history_after_empty_sessions = r.json()["data"]
+        history_ids = {record["quiz_id"] for record in history_after_empty_sessions["records"]}
+        chk("unsubmitted session -> excluded from history",
+            unsubmitted_quiz_id not in history_ids)
+        chk("empty-answer submit -> excluded from history",
+            quiz_d_id not in history_ids)
 
         # =============================================
         # 5. result null when no sessions
@@ -619,6 +652,14 @@ async def test():
             await db.commit()
 
         async with async_session_factory() as db:
+            stats_question = QuizQuestion(
+                course_id=stats_course_id, chapter="ch1",
+                knowledge_point="kp_stats", type="single_choice",
+                content="Stats question?", options=["A", "B"],
+                correct_answer="A",
+            )
+            db.add(stats_question)
+            await db.flush()
             for score_val, time_val in [(60, 30), (80, 60), (100, 90)]:
                 qs = QuizSession(
                     user_id=stu_id, course_id=stats_course_id, chapter="ch1",
@@ -626,6 +667,11 @@ async def test():
                     time_spent=time_val,
                 )
                 db.add(qs)
+                await db.flush()
+                db.add(QuizAnswer(
+                    quiz_id=qs.id, question_id=stats_question.id,
+                    user_answer="A", is_correct=True, correct_answer="A",
+                ))
             await db.commit()
 
         r = await client.get(f"/api/v1/quiz/result?course_id={stats_course_id}", headers=stu_headers)
@@ -651,6 +697,14 @@ async def test():
 
         base_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2)
         async with async_session_factory() as db:
+            trend_question = QuizQuestion(
+                course_id=trend_course_id, chapter="ch1",
+                knowledge_point="kp_trend", type="single_choice",
+                content="Trend question?", options=["A", "B"],
+                correct_answer="A",
+            )
+            db.add(trend_question)
+            await db.flush()
             for i in range(5):
                 qs = QuizSession(
                     user_id=stu_id, course_id=trend_course_id, chapter="ch1",
@@ -659,6 +713,11 @@ async def test():
                 )
                 qs.create_time = base_time + timedelta(minutes=i * 10)
                 db.add(qs)
+                await db.flush()
+                db.add(QuizAnswer(
+                    quiz_id=qs.id, question_id=trend_question.id,
+                    user_answer="A", is_correct=True, correct_answer="A",
+                ))
             await db.commit()
 
         r = await client.get(f"/api/v1/quiz/result?course_id={trend_course_id}",

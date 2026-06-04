@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
@@ -18,6 +18,19 @@ from app.services import quiz_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])
+
+
+def _submitted_quiz_sessions_query(user_id: str, course_id: str):
+    """返回至少包含一条有效 QuizAnswer 的已提交练习查询。"""
+    return select(QuizSession).where(
+        QuizSession.user_id == user_id,
+        QuizSession.course_id == course_id,
+        QuizSession.is_deleted == False,
+        exists().where(
+            QuizAnswer.quiz_id == QuizSession.id,
+            QuizAnswer.is_deleted == False,
+        ),
+    )
 
 
 @router.get("/questions")
@@ -178,22 +191,14 @@ async def get_result(
     db: AsyncSession = Depends(get_db),
 ):
     qr = await db.execute(
-        select(QuizSession)
-        .where(
-            QuizSession.user_id == current_user.id,
-            QuizSession.course_id == course_id,
-            QuizSession.is_deleted == False,
-        )
+        _submitted_quiz_sessions_query(current_user.id, course_id)
         .order_by(QuizSession.create_time.desc())
     )
     latest = qr.scalars().first()
 
     all_qr = await db.execute(
-        select(QuizSession).where(
-            QuizSession.user_id == current_user.id,
-            QuizSession.course_id == course_id,
-            QuizSession.is_deleted == False,
-        ).order_by(QuizSession.create_time.asc())
+        _submitted_quiz_sessions_query(current_user.id, course_id)
+        .order_by(QuizSession.create_time.asc())
     )
     all_quizzes = all_qr.scalars().all()
     total_attempts = len(all_quizzes)
@@ -318,11 +323,7 @@ async def get_history(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(QuizSession).where(
-        QuizSession.user_id == current_user.id,
-        QuizSession.course_id == course_id,
-        QuizSession.is_deleted == False,
-    )
+    query = _submitted_quiz_sessions_query(current_user.id, course_id)
 
     count_r = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_r.scalar() or 0

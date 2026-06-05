@@ -120,6 +120,13 @@
   - 事件 JSON 结构与前端 `chatService.streamChat` SSE 解析器兼容
   - spec #17 "运行时稳定性待验证" 降级：Agent 端协议已确认可用。剩余风险为 Backend 代理层 token 过期/网络中断，可通过前端错误重试兜底
   - 无代码变更，纯验证。
+- 2026-06-05：完成阶段二学生端数据契约审查文档：
+  - 审查范围：StudentProfile、Dashboard/ResourceDetail、LearningPath、Quiz/PracticeResult、AIChat，并标注教师端投影依赖。
+  - 已确认删除：认知成长曲线、建议学习时长、学习动力指数、班级覆盖率、重点关注学生、排名类指标。
+  - 待定：累计学习时长、阅读进度、AIChat 活动摘要、资源偏好分布。
+  - OpenAPI 未修改，无契约漂移。
+  - 审查文档：`docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`
+  - 下一步：用户审阅审查矩阵后，再决定 OpenAPI 更新候选和实现顺序。
 
 ## 本地联调注意事项
 
@@ -135,10 +142,24 @@
 
 AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 
+## 阶段二第二轮方向调整
+
+2026-06-05 经复盘确认：班级 AI 洞察不应直接从 TeacherConsole 现有 mock UI 倒推实现。教师端洞察本质上依赖学生端真实学习数据聚合，应先从学生端数据源和 Client API 契约审查开始，再决定教师端需要哪些聚合字段和 Agent 输出。
+
+下一轮优先输出：
+
+- 学生端数据源与 Client API 契约补全审查 spec，建议文件：`docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`
+- 覆盖 StudentProfile、Dashboard/ResourceDetail、LearningPath、Quiz/PracticeResult、AIChat 已验证项，以及教师端洞察可复用的学生数据基础。
+- 明确哪些页面字段保留、删除或降级；哪些字段需要更新 Client API；哪些字段由 Backend 聚合；哪些字段确需 Agent 生成。
+- 审查完成后再更新正式 `../docs/10-client-api/*`，随后进入 Backend/Agent/Frontend 实现计划。
+
 ## 下一步建议
 
 - 阶段一契约疑点已清理完毕。
-- 阶段二第一轮 mock 分支清理已完成。第二轮 P0：新增班级洞察端点、移除 TeacherConsole useMock && Insights 守卫。第二轮 P1：教师深度诊断字段扩展、ResourceDetail 页面改造、学习路径节点资源接入、Admin 用户状态/删除契约确认。
+- 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
+- 下一步不直接实现班级 AI 洞察；先做学生端数据源与 Client API 契约补全审查，再决定班级洞察最小可行版本。
+- 班级 AI 洞察仍是剩余 P0，但实现顺序调整为：学生端数据契约审查 → 更新 Client API 规范 → Backend/Agent 数据来源设计 → 前端移除 `useMock &&` 并接入真实数据。
+- 第二轮 P1：教师深度诊断字段扩展、ResourceDetail 页面改造、学习路径节点资源接入、Admin 用户状态/删除契约确认。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。
 - 完成契约审查后，再决定是否修改 Client API、Backend Schema 或 Agent API。

@@ -200,17 +200,15 @@ export default function AdminConsole() {
                       <div key={log.id} className="flex gap-4 hover:bg-white/5 p-1 rounded transition-colors group">
                         <span className="text-slate-500 flex-shrink-0 w-48">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
                         <span className={`font-bold flex-shrink-0 w-28 ${
-                          log.level === 'ERROR' ? 'text-red-400' :
-                          log.level === 'WARN' ? 'text-amber-400' :
-                          log.level === 'DEBUG' ? 'text-purple-400' : 'text-cyan-400'
+                          log.status === 'error' ? 'text-red-400' : 'text-cyan-400'
                         }`}>
-                          {log.level}
+                          {log.status?.toUpperCase() || 'INFO'}
                         </span>
-                        <span className="text-emerald-400 flex-shrink-0 w-36">[{log.agent}]</span>
+                        <span className="text-emerald-400 flex-shrink-0 w-36">[{log.agent_type || '—'}]</span>
                         <span className="flex-1 break-all text-slate-200">
-                          {log.message}
+                          {log.endpoint}{log.error_message ? ` — ${log.error_message}` : ''}
                           <span className="ml-2 text-xs text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                            (Lat: {log.metadata.latency}, Tokens: {log.metadata.tokens_used})
+                            (Lat: {log.latency_ms}ms, Tokens: {log.tokens_used})
                           </span>
                         </span>
                       </div>

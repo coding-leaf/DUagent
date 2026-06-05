@@ -1,7 +1,5 @@
 import apiClient from '../client';
 
-const useMock = import.meta.env.VITE_USE_MOCK === 'true';
-
 export const adminService = {
   // 获取全量用户列表
   getUsers: async (params) => {
@@ -25,9 +23,6 @@ export const adminService = {
 
   // 拉取系统基础日志
   getSystemLogs: async (params) => {
-    if (useMock) {
-      return apiClient.get('/admin/logs/system', { params });
-    }
     return apiClient.get('/admin/logs/operations', { params });
   }
 };

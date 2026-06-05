@@ -63,26 +63,6 @@ export default function AdminConsole() {
     fetchUsers();
   };
 
-  const toggleUserStatus = async (userId, currentStatus) => {
-    try {
-      await adminService.updateUser(userId, { status: currentStatus === 'active' ? 'banned' : 'active' });
-      // Optimitic update
-      setUsers(users.map(u => u.id === userId ? { ...u, status: currentStatus === 'active' ? 'banned' : 'active' } : u));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const deleteUser = async (userId) => {
-    if (!window.confirm('确认彻底删除该用户吗？')) return;
-    try {
-      await adminService.removeUser(userId);
-      setUsers(users.filter(u => u.id !== userId));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-body-md">
       {/* Top NavBar */}
@@ -161,16 +141,14 @@ export default function AdminConsole() {
                       <th className="px-6 py-4 font-medium">用户 ID</th>
                       <th className="px-6 py-4 font-medium">用户名 / 邮箱</th>
                       <th className="px-6 py-4 font-medium">角色</th>
-                      <th className="px-6 py-4 font-medium">状态</th>
                       <th className="px-6 py-4 font-medium">最后登录</th>
-                      <th className="px-6 py-4 font-medium text-right">操作</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {loadingUsers ? (
-                      <tr><td colSpan="6" className="text-center py-12 text-slate-400">加载中...</td></tr>
+                      <tr><td colSpan="4" className="text-center py-12 text-slate-400">加载中...</td></tr>
                     ) : users.length === 0 ? (
-                      <tr><td colSpan="6" className="text-center py-12 text-slate-400">暂无匹配用户</td></tr>
+                      <tr><td colSpan="4" className="text-center py-12 text-slate-400">暂无匹配用户</td></tr>
                     ) : (
                       users.map(u => (
                         <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
@@ -185,37 +163,7 @@ export default function AdminConsole() {
                               u.role === 'teacher' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
                             }`}>{u.role.toUpperCase()}</span>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`flex items-center gap-1.5 text-xs font-bold ${
-                              u.status === 'active' ? 'text-emerald-600' : 'text-red-500'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                              {u.status === 'active' ? '正常' : '已封禁'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-500 text-xs">
-                            {new Date(u.last_login).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-right space-x-2">
-                            {u.role !== 'admin' && (
-                              <>
-                                <button
-                                  onClick={() => toggleUserStatus(u.id, u.status)}
-                                  className={`px-3 py-1.5 rounded text-xs font-bold transition-colors cursor-pointer ${
-                                    u.status === 'active' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                                  }`}
-                                >
-                                  {u.status === 'active' ? '封禁' : '解封'}
-                                </button>
-                                <button
-                                  onClick={() => deleteUser(u.id)}
-                                  className="px-3 py-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                  删除
-                                </button>
-                              </>
-                            )}
-                          </td>
+                          <td className="px-6 py-4 text-slate-500 text-xs">N/A</td>
                         </tr>
                       ))
                     )}

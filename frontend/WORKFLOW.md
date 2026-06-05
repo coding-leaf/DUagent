@@ -6,10 +6,10 @@
 
 - 前端处于前后端联调阶段。
 - 阶段一前端主链路已在真实 Backend + Agent Service + `duagent_test` 种子数据环境下完成 E2E 验收。
-- 当前阶段可以进入阶段一验收结果归档与遗留契约疑点清理；阶段二仍需先做契约审查，不直接实现新增页面能力。
-- 当前前端目标已经超过现有 Client API 规范能够正确承载的范围。
-- 现有 `../docs/10-client-api/*` 仍是正式契约来源，但其字段、页面能力和数据来源不足以覆盖当前完整产品页面。
-- 在完成阶段二契约审查前，前端不应继续用硬编码字段、Mock 假数据、推测响应结构或临时页面状态补齐正式能力。
+- 阶段一遗留契约疑点已清理；阶段二学生端数据契约审查、P0 假展示清理、ResourceDetail 正文预览链路已完成。
+- 当前前端目标仍超过既有 Client API 的完整承载范围；新增能力必须先有契约审查或明确设计，再进入实现。
+- 现有 `../docs/10-client-api/*` 仍是正式契约来源。已确认进入契约的新增能力包括 `GET /api/v1/resources/{id}` 与 `ResourceDetailItem.content_preview`。
+- 未完成契约审查的页面能力不得继续用硬编码字段、Mock 假数据、推测响应结构或临时页面状态补齐正式能力。
 
 ## 阶段一目标
 
@@ -44,22 +44,21 @@
 - 本地静态检查已通过。
 - 真实 Backend `http://127.0.0.1:8001`、Agent Service `http://127.0.0.1:8002`、MySQL `duagent_test` 种子数据环境下，`npm run test:e2e` 已通过 3/3。
 
-仍需确认：
+阶段一后续注意：
 
 - 确认真实 API 返回空数组或空值时页面展示 Empty/Unknown，不回退到假数据。
-- 核对前端 service 中未出现在当前 OpenAPI 路径清单的调用是否为历史遗留、Mock 辅助或需要删除/补契约。
-
-当前已发现的契约疑点：
-
-- `src/api/services/auth.js` 中存在 `/auth/logout`、`/auth/refresh`、reset-password 相关调用，当前 `Client-API.openapi.json` 路径清单未声明。
-- `src/api/services/profile.js` 中存在 `PUT /profile` 调用，当前 `Client-API.openapi.json` 路径清单未声明。
-- `src/api/services/course.js` 中存在 `/course/{courseId}/students` 风格调用，当前正式教学学生列表路径为 `/teaching/classes/{class_id}/students`。
-
-这些疑点在阶段一验收前需要逐项确认；未确认前不作为正式 Client API 能力。
+- 前端 service 中曾存在的未声明调用已在 2026-06-05 清理；后续新增 service 方法必须先对齐 `../docs/10-client-api/Client-API.openapi.json`。
 
 ## 阶段二目标
 
 阶段二先做契约审查，再进入实现。目标是让前端完整页面目标、Client API、Backend SQL 和必要的 Agent 数据来源重新对齐。
+
+当前状态：
+
+- 学生端数据契约审查已完成，审查文档见 `docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`。
+- 已删除或降级：认知成长曲线、建议学习时长、学习动力指数、班级覆盖率、重点关注学生、排名类指标。
+- 已实现：ResourceDetail 文字资源正文预览，新增 `GET /api/v1/resources/{id}`，`document`/`reading` 返回 `content_preview`，其他类型返回 `null`。
+- 仍待设计或延期：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布。
 
 阶段二需要审查的能力包括：
 
@@ -123,10 +122,10 @@
 - 2026-06-05：完成阶段二学生端数据契约审查文档：
   - 审查范围：StudentProfile、Dashboard/ResourceDetail、LearningPath、Quiz/PracticeResult、AIChat，并标注教师端投影依赖。
   - 已确认删除：认知成长曲线、建议学习时长、学习动力指数、班级覆盖率、重点关注学生、排名类指标。
-  - 待定：累计学习时长、阅读进度、AIChat 活动摘要、资源偏好分布。
+  - 待定：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布。
   - OpenAPI 未修改，无契约漂移。
   - 审查文档：`docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`
-  - 下一步：用户审阅审查矩阵后，再决定 OpenAPI 更新候选和实现顺序。
+  - 后续已选择 ResourceDetail 正文预览作为首个 OpenAPI 更新候选并完成实现。
 - 2026-06-06：P0 前端假展示清理完成：
   - StudentProfile：删除学习动力指数、认知成长曲线；RadarChart 降级为占位；total_duration_hours 改为"待统计"
   - ResourceDetail：删除"建议用时 25m"静态展示
@@ -140,7 +139,7 @@
   - 将模态偏好占位文案的 `class` 改为 `className`，消除 React JSX 属性警告风险。
   - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
 - 2026-06-06：ResourceDetail 正文预览契约实现完成：
-  - Client API：新增 `GET /api/v1/resources/{id}` + `ResourceDetailItem` schema（`content_preview: string | null`）
+  - Client API：新增 `GET /api/v1/resources/{id}` + `ResourceDetailItem` schema（`content_preview` 为 nullable string）
   - Backend：新增详情路由 `@router.get("/{id}")`，`document`/`reading` 类型返回正文预览，其他 null
   - Frontend：`learningService.getResourceDetail(id)`；ResourceDetail.jsx 接入 API，删除阅读进度/时长占位
   - `npm run lint` / `npm run build` / Backend pytest 通过。
@@ -152,6 +151,9 @@
   - OpenAPI：`content_preview` 从 `"type": ["string", "null"]` 修正为 `"type": "string", "nullable": true`（OpenAPI 3.0 标准）
   - Backend 测试：27 条断言覆盖 401/404/403/document/reading/code/mindmap/video 各类型正确性
   - `npm run lint` / `npm run build` / Backend pytest 27/27 通过。
+- 2026-06-06：ResourceDetail 后端测试断言修正：
+  - `tests/test_resource_detail.py` 将最终 `return fail == 0` 改为 `assert fail == 0`，确保任一 `chk()` 失败都会让 pytest 报红。
+  - `pytest -s -vv tests/test_resource_detail.py` 通过，输出 `27 OK, 0 FAIL`。
 
 ## 本地联调注意事项
 
@@ -171,20 +173,21 @@ AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 
 2026-06-05 经复盘确认：班级 AI 洞察不应直接从 TeacherConsole 现有 mock UI 倒推实现。教师端洞察本质上依赖学生端真实学习数据聚合，应先从学生端数据源和 Client API 契约审查开始，再决定教师端需要哪些聚合字段和 Agent 输出。
 
-下一轮优先输出：
+当前进展：
 
-- 学生端数据源与 Client API 契约补全审查 spec，建议文件：`docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`
-- 覆盖 StudentProfile、Dashboard/ResourceDetail、LearningPath、Quiz/PracticeResult、AIChat 已验证项，以及教师端洞察可复用的学生数据基础。
-- 明确哪些页面字段保留、删除或降级；哪些字段需要更新 Client API；哪些字段由 Backend 聚合；哪些字段确需 Agent 生成。
-- 审查完成后再更新正式 `../docs/10-client-api/*`，随后进入 Backend/Agent/Frontend 实现计划。
+- 学生端数据源与 Client API 契约补全审查已完成。
+- ResourceDetail 正文预览已完成 OpenAPI、Backend、Frontend 三层实现。
+- 教师端洞察仍不能从旧 mock UI 倒推；应基于已确认学生端数据源继续拆分最小可行聚合。
 
 ## 下一步建议
 
 - 阶段一契约疑点已清理完毕。
 - 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
-- 下一步不直接实现班级 AI 洞察；先做学生端数据源与 Client API 契约补全审查，再决定班级洞察最小可行版本。
-- 班级 AI 洞察仍是剩余 P0，但实现顺序调整为：学生端数据契约审查 → 更新 Client API 规范 → Backend/Agent 数据来源设计 → 前端移除 `useMock &&` 并接入真实数据。
-- 第二轮 P1：教师深度诊断字段扩展、ResourceDetail 页面改造、学习路径节点资源接入、Admin 用户状态/删除契约确认。
+- ResourceDetail 正文预览已打通；建议先做一次轻量手工验收，确认 Dashboard → `/resource/:id` → 详情正文预览、非文字资源空预览、无权限 403 等闭环。
+- 下一步推荐优先处理“学习路径节点资源接入”设计，使学习路径与资源详情形成完整资源链路。
+- 班级 AI 洞察仍是剩余 P0，但不直接从旧 mock UI 实现；顺序为：基于学生端已确认数据源设计最小聚合 → 必要时更新 Client API → Backend/Agent 数据来源设计 → 前端移除 `useMock &&` 并接入真实数据。
+- 第二轮 P1：学习路径节点资源接入、教师深度诊断字段扩展、Admin 用户状态/删除契约确认。
+- 第二轮 P2：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。
-- 完成契约审查后，再决定是否修改 Client API、Backend Schema 或 Agent API。
+- 新增契约能力必须先走设计/审查；禁止用前端静态字段补齐未确认业务能力。

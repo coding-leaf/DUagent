@@ -104,9 +104,9 @@ export default function TeacherStudentReport() {
           {/* TOP SECTION: Profile and Analysis */}
           {useMock && (
             <>
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              <section className="mb-8">
             {/* Profile Card */}
-            <div className="lg:col-span-2 relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 hover:-translate-y-0.5 transition-transform duration-300">
+            <div className="relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 hover:-translate-y-0.5 transition-transform duration-300">
               <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-10">
                 <img alt="Abstract AI" className="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzMAEOheT0KjN_V4Fs50iduiqAbY41brWEWJxp4OTj7_UEp-xIaxcjCg_nD7gFlxpJA02J20-08588bHb0rXh9DPDwVliY11SE63OLe49p49EPdhdtV3tTmvxzYZDpegvuIRbUOt73p55PYcIPkbbpQ2m9zU1qHjuedH2kiKkGvLzCoqlaAVBdvhbk1k_bRiNJkR1nKy0pWxkiz8th0-NwNlCiS_m3BF-O5D1TV2PGqwwetrQvRYYY_qJql5n3DmySA98y7i-zv3sV" />
               </div>
@@ -123,38 +123,17 @@ export default function TeacherStudentReport() {
                 <p className="text-body-md text-secondary font-body-md mb-2">学号: {report.student_id} · {report.major}</p>
                 <div className="flex gap-2">
                   <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">{report.status}</span>
-                  <span className="px-3 py-1 bg-primary-container/10 text-primary-container rounded-full text-xs font-bold">{report.class_name}</span>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4 w-full pt-6 mt-4 border-t border-slate-100">
+                <div className="pt-6 mt-4 border-t border-slate-100">
                   <div>
                     <p className="text-2xl font-black text-slate-900">{report.score}</p>
                     <p className="text-[10px] text-slate-400 uppercase tracking-tighter">综合评分</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-slate-900">{report.total_duration_hours}h</p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">累计时长</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-slate-900">{report.rank}</p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">排位名次</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Stats Card */}
-            <div className="bg-cyan-600 rounded-2xl p-8 text-white relative overflow-hidden flex flex-col justify-between hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-              <div>
-                <p className="text-white/70 text-label-sm uppercase tracking-widest mb-1">学习动力指数</p>
-                <div className="text-6xl font-black">{report.motivation_index}<span className="text-2xl opacity-60 ml-1">%</span></div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/20 flex items-center justify-between">
-                <span className="text-sm font-medium text-white/80">领先 92% 的学习者</span>
-                <span className="material-symbols-outlined">trending_up</span>
-              </div>
-            </div>
           </section>
 
           {/* Bento Grid Top Section */}
@@ -284,55 +263,15 @@ export default function TeacherStudentReport() {
                     <span className="text-xs text-secondary font-bold">做题准确率</span>
                   </div>
                 </div>
-                <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
+                <div className="pt-4 border-t border-slate-50">
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
                     <span className="text-primary font-black text-lg">94%</span>
                     <p className="text-[10px] text-slate-400 uppercase font-bold">本周最高准度</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
-                    <span className="text-cyan-600 font-black text-lg">{report.total_duration_hours}h</span>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold">累计学习时长</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Activity Growth Card */}
-            <div className="lg:col-span-12 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden mb-12 hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="absolute inset-0 abstract-pattern opacity-5"></div>
-              <div className="relative z-10">
-                <div className="flex justify-between items-center mb-10">
-                  <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface font-bold">
-                    <span className="material-symbols-outlined text-cyan-500">timeline</span> 认知成长曲线
-                  </h3>
-                  <div className="flex p-1 bg-slate-100 rounded-xl">
-                    <button className="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-400">周</button>
-                    <button className="px-5 py-1.5 bg-white rounded-lg text-xs font-bold text-cyan-600 shadow-sm">月</button>
-                  </div>
-                </div>
-                <div className="h-64 flex items-end justify-between gap-4 px-2">
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[40%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[55%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[35%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[70%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[85%]"></div>
-                  <div className="flex-1 bg-cyan-500 rounded-t-2xl relative group h-[95%] shadow-lg shadow-cyan-200">
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
-                      当前峰值: 95
-                    </div>
-                  </div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[60%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[45%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[75%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[30%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[50%]"></div>
-                  <div className="flex-1 bg-slate-100/50 rounded-t-2xl transition-all hover:bg-cyan-100 h-[65%]"></div>
-                </div>
-                <div className="flex justify-between mt-6 px-2 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                  <span>1月</span><span>2月</span><span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span><span>8月</span><span>9月</span><span>10月</span><span>11月</span><span>12月</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Divider with Label */}
@@ -534,7 +473,7 @@ export default function TeacherStudentReport() {
                   薄弱知识点 (Weak Points)
                 </h3>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {/* weak_points — 不在正式 StudentLearning 契约中 */}
+                  {/* weak_points — 后端当前返回空数组，等待 Backend 聚合实现 */}
                   <p className="text-xs text-outline italic">正式接口暂未提供</p>
                 </div>
               </div>
@@ -558,7 +497,7 @@ export default function TeacherStudentReport() {
                 最近学习活动 (Recent Activity)
               </h3>
               <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2 scrollbar-thin">
-                {/* recent_activity — 不在正式 StudentLearning 契约中 */}
+                {/* recent_activity — 后端当前返回空数组，等待 Backend 聚合实现 */}
                 <p className="text-xs text-outline italic text-center py-8">正式接口暂未提供</p>
               </div>
             </div>

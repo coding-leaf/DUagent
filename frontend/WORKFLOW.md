@@ -94,6 +94,7 @@
   - `profileService.updateProfile`
   - `courseService.getCourseStudents`
   - 清理后 `npm run lint` / `npm run build` / `npm run test:e2e`（3/3）通过。
+  - `AdminConsole.jsx` 日志渲染适配真实 `AgentLogItem` 字段：`agent_type`、`endpoint`、`latency_ms`、`tokens_used`、`status`、`error_message`（替代 mock 字段 `level`/`agent`/`message`/`metadata.*`）。
 - 2026-06-05：阶段二第一轮联调断层收敛 — 清理 5 个 mock 分支 + AdminConsole 契约修正：
   - `teaching.js`：移除 getClasses / getClassStudents / getStudentReport 的 mock 路径
   - `admin.js`：移除 getAgentLogs / getSystemLogs 的 mock 路径，删除 useMock 声明

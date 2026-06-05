@@ -39,7 +39,7 @@
 
 | 端 | 端点 | 状态 |
 |----|------|------|
-| `POST /courses/join` | 学生加入课程（invite_code） | OpenAPI 已声明，Backend 已实现，`courseService.joinCourse` 已封装 |
+| `POST /courses/join` | 学生加入课程（course_code） | OpenAPI 已声明，Backend 已实现。`courseService.joinCourse` 当前传 `{ invite_code }` **需修正为 `{ course_code }`** |
 | `GET /users/me` | 当前用户信息 | 返回 `id, username, email, real_name, student_id, role, major, grade, guidance_level, created_at`。已在 AuthContext 的 `user` 对象中 |
 
 ---
@@ -76,7 +76,7 @@
 
 状态：
 - `open` — 弹窗是否可见
-- `inviteCode` — 输入值
+- `courseCode` — 输入值
 - `submitting` — 提交中（禁用按钮）
 - `error` — 错误信息
 - `success` — 成功提示
@@ -86,7 +86,7 @@
 点击 "+" 按钮 → open = true
 → 输入邀请码
 → 点击 "加入" → submitting = true, error = null
-→ courseService.joinCourse(inviteCode)
+→ courseService.joinCourse(courseCode)
   → 成功（res.code === 200）：success = '加入成功' → refreshCourses()
     → 若返回数据含新课程 ID，切换到新课程
     → 1.5s 后关闭弹窗
@@ -120,12 +120,19 @@
 <div className="flex flex-col">
   <span className="text-sm font-bold text-on-surface">{user?.real_name || user?.username || '教师'}</span>
   <span className="text-[10px] text-outline uppercase tracking-wider">
-    {user?.role === 'teacher' ? '教师' : user?.role || '教师'}
+    {roleLabelMap[user?.role] || '教师'}
   </span>
 </div>
 ```
 
 **需要 import：** `import { useAuth } from '../context/AuthContext';`，组件内 `const { user } = useAuth();`
+
+**角色映射：**
+```javascript
+const roleLabelMap = { teacher: '教师', admin: '管理员' };
+// 使用: roleLabelMap[user?.role] || '教师'
+```
+TeacherConsole 路由允许 `teacher` 和 `admin`，map 覆盖两者。不直接展示原始英文字段值。
 
 ---
 
@@ -134,12 +141,11 @@
 ### MS-05
 
 ```
-用户操作 → JoinCourseDialog 输入 inviteCode
-→ courseService.joinCourse(inviteCode)
+用户操作 → JoinCourseDialog 输入 courseCode
+→ courseService.joinCourse(courseCode)
 → Backend POST /courses/join
-→ 返回 { code, message, data? }
-→ 成功: refreshCourses() → 课程列表更新
-  → 若有新课程 ID: changeCourse(newCourseId)
+→ 返回 { code, message, data: { id, name, teacher_name } }
+→ 成功: await refreshCourses(); changeCourse(res.data.id)
 → Dialog 关闭
 ```
 
@@ -156,13 +162,12 @@ AuthContext.user（来自 GET /users/me）
 
 ## 6. 文件改动
 
-| 文件 | 操作 | 内容 |
-|------|------|------|
+| `src/api/services/course.js` | 修改 | `joinCourse` 请求体 `{ invite_code }` → `{ course_code }`（与 OpenAPI JoinCourseRequest 对齐） |
 | `src/components/Navbar.jsx` | 修改 | 课程选择区追加"+ 加入课程"按钮；无课程时展示按钮而非隐藏区域 |
-| `src/components/JoinCourseDialog.jsx` | **新建** | 邀请码输入弹窗（open/inviteCode/submitting/error/success） |
-| `src/context/CourseContext.jsx` | 修改 | 确认/新增 `refreshCourses` 公开方法 |
+| `src/components/JoinCourseDialog.jsx` | **新建** | 课程码输入弹窗（open/courseCode/submitting/error/success） |
+| `src/context/CourseContext.jsx` | 修改 | 使用已有 `refreshCourses` 方法 |
 | `src/pages/Dashboard.jsx` | 修改 | 无课程空状态追加"加入课程"按钮 |
-| `src/pages/TeacherConsole.jsx` | 修改 | 导入 useAuth，替换硬编码姓名/角色/头像 |
+| `src/pages/TeacherConsole.jsx` | 修改 | 导入 useAuth + roleLabelMap，替换硬编码姓名/角色/头像 |
 
 ---
 
@@ -181,8 +186,8 @@ AuthContext.user（来自 GET /users/me）
 
 | 风险 | 概率 | 缓解 |
 |------|------|------|
-| `CourseContext` 无公开 `refreshCourses` 方法 | 中 | 检查现有代码；若无，新增一个调用内部 `fetchCourses` 的公开方法（~3 行） |
-| `joinCourse` 返回不含新课程 ID | 中 | 不依赖返回值切换课程；成功后 `refreshCourses()` 再提示用户在下拉中选择 |
+| `refreshCourses` 不存在于 CourseContext | 低（已确认） | 当前 `CourseContext.jsx` 已导出 `refreshCourses: fetchCourses`，直接使用即可 |
+| `joinCourse` 返回不含新课程 ID | 低 | `POST /courses/join` 成功响应含 `data.id`，可直接 `changeCourse(res.data.id)` |
 | 教师账号 role 值不是 `teacher` | 低 | 角色映射兜底：`user.role \|\| '教师'`，不直接展示原始 role 值 |
 | 原生 select 难以在右侧放按钮 | 已确认 | 按钮放在 select 所在 `<div>` 内、select 之后，flexbox 即可 |
 

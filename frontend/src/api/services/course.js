@@ -11,7 +11,7 @@ export const courseService = {
   },
 
   // 加入课程 (学生端)
-  joinCourse(inviteCode) {
-    return apiClient.post('/courses/join', { invite_code: inviteCode });
+  joinCourse(courseCode) {
+    return apiClient.post('/courses/join', { course_code: courseCode });
   }
 };

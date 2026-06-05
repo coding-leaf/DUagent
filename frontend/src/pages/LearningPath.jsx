@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { learningService } from '../api/services/learning';
 import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 
 export default function LearningPath() {
-  const navigate = useNavigate();
   const { activeCourseId } = useCourse();
   const [learningPath, setLearningPath] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -103,18 +102,10 @@ export default function LearningPath() {
                             </div>
                             <div className="space-y-sm pt-sm border-t border-gray-50">
                               <div className="space-y-1">
-                                <p className="text-[11px] font-bold text-error">欠缺知识点推荐：</p>
-                                <div className="flex flex-wrap gap-1">
-                                  <span className="px-1.5 py-0.5 bg-error-container text-on-error-container text-[10px] rounded">尾递归优化</span>
-                                </div>
+                                <p className="text-[11px] text-error">知识点推荐将在路径节点接入真实数据后展示</p>
                               </div>
                               <div className="space-y-1">
-                                <p className="text-[11px] font-bold text-on-surface-variant">配套习题：</p>
-                                <div className="flex flex-col gap-1">
-                                  <Link to="/resource/detail" className="text-[10px] text-primary hover:underline flex items-center">
-                                    <span className="material-symbols-outlined text-[12px] mr-1">link</span>查看相关资料
-                                  </Link>
-                                </div>
+                                <p className="text-[11px] text-on-surface-variant">配套习题将在节点资源接入后展示</p>
                               </div>
                             </div>
                           </div>
@@ -133,7 +124,7 @@ export default function LearningPath() {
                             <div className="space-y-xs">
                               <div className="flex justify-between text-label-sm text-gray-500">
                                 <span>进度: {node.mastery}%</span>
-                                <span>关键缺失: 旋转平衡因子</span>
+                                <span>关键知识点诊断待 Backend 数据接入</span>
                               </div>
                               <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                                 <div className="h-full bg-cyan-500" style={{ width: `${node.mastery}%` }}></div>
@@ -141,8 +132,7 @@ export default function LearningPath() {
                             </div>
                             <div className="mt-md space-y-sm">
                               <div className="bg-surface-container rounded-lg p-sm border border-outline-variant">
-                                <p className="text-label-sm font-bold text-on-surface">智能体提示：</p>
-                                <p className="text-[12px] text-on-surface-variant leading-relaxed">检测到在此概念上的平均停留时间过长，建议通过下方的可视化课件巩固。</p>
+                                <p className="text-label-sm font-bold text-on-surface">智能体提示将在路径 Agent 输出接入后展示</p>
                               </div>
                               <Link to="/dashboard" state={{ search: node.name, category: getCategoryForNode(node.name) }} className="w-full py-2 bg-primary text-white rounded-lg text-label-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors">
                                 <span className="material-symbols-outlined text-sm">auto_stories</span>前往资源库继续闯关
@@ -187,19 +177,9 @@ export default function LearningPath() {
                 </div>
                 <h4 className="font-h3 text-body-md font-bold">知识导图推荐</h4>
               </div>
-              <div className="aspect-video rounded-xl bg-slate-50 border border-gray-100 mb-md overflow-hidden group relative">
-                <img alt="知识导图预览" className="w-full h-full object-cover transition-transform group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnDFl8Run1qwlA-CNLYbe6WNavCtCuJeF1d-9CRy94aVhRou-FrJZ-Wd8xapKIY4TuJ6WxmoJfWnZbTAJutPJj5PuEHx-K9N-3pb3trq0vYBWZhKq1Xt9UnorqQkmq_V5BQVyOMRVMCafz1T0wtS-M3nfH_hdGeyD__WzcZDG1C--NRkCmBtaQQ5aNeGNDMEWEiymmn5q7y5B5JdTMOojSom5ppFXUwEcrvCa5KP0Qe_pSj6BpcrpO83XkJCUNokBNxCVZywj1GyEQ" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+              <div className="aspect-video rounded-xl bg-slate-50 border border-gray-100 mb-md flex items-center justify-center">
+                <p className="text-[12px] text-gray-400 text-center px-md">知识导图推荐将在学习路径数据完善后展示</p>
               </div>
-              <ul className="space-y-sm">
-                <li className="flex items-start space-x-base p-sm hover:bg-gray-50 rounded-lg cursor-pointer">
-                  <span className="material-symbols-outlined text-sm text-cyan-500 mt-0.5">schema</span>
-                  <div>
-                    <p className="text-label-sm font-bold">非线性结构全景图</p>
-                    <p className="text-[11px] text-gray-400">覆盖树与图的所有基本变换</p>
-                  </div>
-                </li>
-              </ul>
             </div>
 
             {/* 2. Lecture document recommendations */}
@@ -210,27 +190,9 @@ export default function LearningPath() {
                 </div>
                 <h4 className="font-h3 text-body-md font-bold">课件讲义推荐</h4>
               </div>
-              <div className="space-y-sm">
-                <Link to="/resource/detail" className="p-sm bg-surface-container rounded-xl border border-outline-variant flex items-center space-x-sm group cursor-pointer block">
-                  <div className="w-12 h-14 bg-white rounded-md shadow-sm flex items-center justify-center text-cyan-600">
-                    <span className="material-symbols-outlined">description</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-label-sm font-bold group-hover:text-cyan-600">AVL树：旋转的艺术.pdf</p>
-                    <p className="text-[11px] text-gray-400">斯坦福大学 DS101 精选</p>
-                  </div>
-                </Link>
-                <div className="p-sm border border-gray-100 rounded-xl flex items-center space-x-sm group cursor-pointer hover:border-cyan-200">
-                  <div className="w-12 h-14 bg-gray-50 rounded-md flex items-center justify-center text-gray-400">
-                    <span className="material-symbols-outlined">description</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-label-sm font-bold">哈希冲突与红黑树.pptx</p>
-                    <p className="text-[11px] text-gray-400">高效查询机制专题</p>
-                  </div>
-                </div>
+              <div className="p-md text-center">
+                <p className="text-[12px] text-gray-400">课件讲义推荐将在节点资源接入后展示</p>
               </div>
-              <Link to="/dashboard" state={{ category: '全部' }} className="w-full mt-lg py-2 text-label-sm text-cyan-600 font-bold hover:bg-cyan-50 rounded-lg transition-colors inline-block text-center block">查看更多文档</Link>
             </div>
 
             {/* 3. Mixed exercise set recommendations */}
@@ -241,24 +203,8 @@ export default function LearningPath() {
                 </div>
                 <h4 className="font-h3 text-body-md font-bold">混合练习集推荐</h4>
               </div>
-              <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl p-md text-white mb-md relative overflow-hidden">
-                <div className="relative z-10">
-                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">智能体严选</p>
-                  <h5 className="text-body-lg font-bold mt-xs">中阶数据结构挑战赛</h5>
-                  <p className="text-[12px] opacity-90 mt-base leading-relaxed">包含AVL树、堆排序及图遍历的15道经典面试题。</p>
-                  <button onClick={() => navigate('/quiz')} className="mt-md bg-white text-cyan-600 px-md py-base rounded-lg text-label-sm font-bold shadow-lg active:scale-95 transition-all cursor-pointer">开始练习</button>
-                </div>
-                <span className="material-symbols-outlined absolute -bottom-4 -right-4 text-[120px] opacity-10 rotate-12">extension</span>
-              </div>
-              <div className="space-y-base">
-                <div className="flex items-center justify-between p-sm border-b border-gray-50">
-                  <span className="text-label-sm">每日算法打卡</span>
-                  <span className="text-[10px] font-bold text-cyan-500 bg-cyan-50 px-2 py-0.5 rounded">难度: 中等</span>
-                </div>
-                <div className="flex items-center justify-between p-sm border-b border-gray-50">
-                  <span className="text-label-sm">时间复杂度专项</span>
-                  <span className="text-[10px] font-bold text-tertiary bg-tertiary-container px-2 py-0.5 rounded">难度: 简单</span>
-                </div>
+              <div className="p-md text-center">
+                <p className="text-[12px] text-gray-400">混合练习集推荐将在学习路径与知识点数据对接后展示</p>
               </div>
             </div>
 

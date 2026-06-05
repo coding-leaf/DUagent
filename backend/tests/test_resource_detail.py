@@ -255,7 +255,8 @@ async def test():
 
     print(f"\n{'='*50}")
     print(f"  Total: {ok} OK, {fail} FAIL")
-    return fail == 0
+    assert fail == 0, f"{fail} check(s) FAIL"
+    return True
 
 
 if __name__ == "__main__":

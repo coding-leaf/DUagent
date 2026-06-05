@@ -78,7 +78,7 @@ export default function JoinCourseDialog({ open, onClose, onJoined }) {
       } else {
         setError(res.message || '加入失败，请检查课程码');
       }
-    } catch (err) {
+    } catch {
       setError('网络错误，请重试');
     } finally {
       setSubmitting(false);
@@ -260,8 +260,9 @@ import JoinCourseDialog from '../components/JoinCourseDialog';
 
 Check `useCourse` 导入，追加 `refreshCourses`：
 ```javascript
-const { courses, activeCourseId, changeCourse, refreshCourses } = useCourse();
+const { activeCourseId, loading: courseLoading, changeCourse, refreshCourses } = useCourse();
 ```
+（当前 Dashboard 已有 `activeCourseId` 和 `loading` 的解构；将 `loading` 重命名为 `courseLoading` 避免与资源加载 loading 冲突；追加 `changeCourse, refreshCourses`）
 
 追加 state（检查 `useState` 已 import）：
 ```javascript
@@ -288,10 +289,25 @@ const [showJoinDialog, setShowJoinDialog] = useState(false);
 </div>
 ```
 
-- [ ] **Step 3: JSX 末尾追加 Dialog**
+- [ ] **Step 3: 在无课程分支中用 Fragment 包裹 + Dialog**
 
-在 Dashboard 最外层 `</div>` 之前追加：
+Dashboard 无课程时直接 `return (...)` 一个居中布局，不走后续主页面 JSX。需用 Fragment 包裹现有内容 + Dialog：
+
+将无课程 `return` 分支的内容（包含 FeedbackStatus + 按钮）包裹在 `<>...</>` Fragment 中，并在末尾追加 Dialog：
+
 ```jsx
+    <>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+        <FeedbackStatus status="empty" title="暂无课程" description="请先加入一门课程" />
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={() => setShowJoinDialog(true)}
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors"
+          >
+            加入课程
+          </button>
+        </div>
+      </div>
       <JoinCourseDialog
         open={showJoinDialog}
         onClose={() => setShowJoinDialog(false)}
@@ -302,7 +318,10 @@ const [showJoinDialog, setShowJoinDialog] = useState(false);
           }
         }}
       />
+    </>
 ```
+
+**注意：** Step 2 的空状态按钮已合并进此处，不再需要独立的 Step 2 追加操作。
 
 - [ ] **Step 4: 验证 lint + build**
 

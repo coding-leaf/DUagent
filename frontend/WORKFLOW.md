@@ -144,6 +144,14 @@
   - Backend：新增详情路由 `@router.get("/{id}")`，`document`/`reading` 类型返回正文预览，其他 null
   - Frontend：`learningService.getResourceDetail(id)`；ResourceDetail.jsx 接入 API，删除阅读进度/时长占位
   - `npm run lint` / `npm run build` / Backend pytest 通过。
+- 2026-06-06：ResourceDetail 审核修复批：
+  - App.jsx：注册 `/resource/:id` 路由（student protected）
+  - Dashboard.jsx：资源卡片添加 `onClick` 跳转到 `/resource/:id`
+  - ResourceDetail.jsx：删除"更新于 2023.10.15"、DS 智能体建议卡片（含 85% 伪进度）、静态学习路径图
+  - Backend `resources.py`：新增课程访问权限校验（`teacher_id` 匹配 + `CourseEnrollment` 检查），403 无权限
+  - OpenAPI：`content_preview` 从 `"type": ["string", "null"]` 修正为 `"type": "string", "nullable": true`（OpenAPI 3.0 标准）
+  - Backend 测试：27 条断言覆盖 401/404/403/document/reading/code/mindmap/video 各类型正确性
+  - `npm run lint` / `npm run build` / Backend pytest 27/27 通过。
 
 ## 本地联调注意事项
 

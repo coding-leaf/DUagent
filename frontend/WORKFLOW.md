@@ -97,6 +97,6 @@
 
 ## 下一步建议
 
-- 阶段一已发现的真实 API service 契约疑点已清理完毕。当前已删除的 6 个方法均无调用方且不在 `Client-API.openapi.json` 中，保留的 service 方法均有对应 OpenAPI 路径声明。
+- 阶段一已发现的真实 API service 契约疑点已清理完毕。当前删除的 6 个方法均无运行时代码调用方且不在 `Client-API.openapi.json` 中；阶段一真实 API 调用路径未发现新增契约漂移。
 - 阶段二入口：以阶段二能力清单为输入，对照 `../docs/10-client-api/*` 逐项标注缺失字段、缺失接口和数据来源。
 - 完成契约审查后，再决定是否修改 Client API、Backend Schema 或 Agent API。

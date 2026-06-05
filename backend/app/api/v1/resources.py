@@ -61,6 +61,41 @@ async def list_resources(
     }
 
 
+@router.get("/{id}")
+async def get_resource_detail(
+    id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Resource).where(Resource.id == id, Resource.is_deleted == False)
+    )
+    resource = result.scalar_one_or_none()
+    if resource is None:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    preview = None
+    if resource.type in ("document", "reading") and resource.content:
+        preview = resource.content[:500]
+
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "id": resource.id,
+            "title": resource.title,
+            "type": resource.type,
+            "description": resource.description or "",
+            "tags": resource.tags or [],
+            "chapter": resource.chapter,
+            "knowledge_point": resource.knowledge_point,
+            "view_count": resource.view_count,
+            "created_at": resource.create_time.isoformat() if resource.create_time else "",
+            "content_preview": preview,
+        },
+    }
+
+
 def _webhook_url(request: Request) -> str:
     """构造 Backend webhook 回调地址。"""
     base = str(request.base_url).rstrip("/")

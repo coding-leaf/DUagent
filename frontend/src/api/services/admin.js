@@ -20,9 +20,6 @@ export const adminService = {
 
   // 拉取核心调度器与子智能体的运行日志
   getAgentLogs: async (params) => {
-    if (useMock) {
-      return apiClient.get('/admin/logs/agents', { params });
-    }
     return apiClient.get('/admin/logs/agent', { params });
   },
 

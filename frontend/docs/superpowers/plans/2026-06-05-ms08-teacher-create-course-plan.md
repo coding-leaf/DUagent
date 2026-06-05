@@ -64,9 +64,24 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
     onClose();
   };
 
-  const copyCode = () => {
-    if (result?.course_code) {
-      navigator.clipboard.writeText(result.course_code);
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = async () => {
+    if (!result?.course_code) return;
+    try {
+      await navigator.clipboard.writeText(result.course_code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select text for manual copy
+      const el = document.createElement('textarea');
+      el.value = result.course_code;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -94,7 +109,7 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
                 onClick={copyCode}
                 className="flex-1 px-4 py-2 text-sm font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors"
               >
-                复制课程码
+                {copied ? '已复制' : '复制课程码'}
               </button>
               <button
                 onClick={handleClose}
@@ -201,39 +216,56 @@ const [showCreateDialog, setShowCreateDialog] = useState(false);
             </button>
 ```
 
-- [ ] **Step 3: 在 return 之前追加 Dialog**
+- [ ] **Step 3: 将班级获取逻辑提为 refreshClasses callback**
+
+当前 TeacherConsole 在 `useEffect` 内调用 `teachingService.getClasses()`。需将获取逻辑抽成可回调的 `refreshClasses`。
+
+在组件体内（`useEffect` 之前）添加：
+```javascript
+  const refreshClasses = useCallback(async () => {
+    setClassesLoading(true);
+    try {
+      const res = await teachingService.getClasses();
+      if (res.code === 200) {
+        setClasses(res.data || []);
+        if (res.data?.length > 0 && !activeClass) {
+          setActiveClass(res.data[0].id);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setClassesLoading(false);
+    }
+  }, []);
+```
+注意：`useCallback` 需在现有 import `{ useState, useEffect }` 后追加。替换现有 `useEffect` 中的 fetch 逻辑为 `useEffect(() => { refreshClasses(); }, [refreshClasses])`。
+
+- [ ] **Step 4: 在 return 之前追加 Dialog（onCreated 调用 refreshClasses）**
 
 ```jsx
       <CreateCourseDialog
         open={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
         onCreated={async () => {
-          window.location.reload();
+          await refreshClasses();
         }}
       />
 ```
 
-**备选刷新方案：** 如果 TeacherConsole 的 `fetchClasses` 可提升为可回调函数，优先使用：
-```jsx
-        onCreated={async () => {
-          await refreshCourses(); // 如果导入 CourseContext
-        }}
-```
-实现时检查 TeacherConsole 已有的数据获取方式（`teachingService.getClasses` vs `CourseContext`），选择最简洁的刷新方式。
-
-- [ ] **Step 4: 验证 lint + build**
+- [ ] **Step 5: 验证 lint + build**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent/frontend && npm run lint && npm run build
 ```
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 6: 提交**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent
 git add frontend/src/pages/TeacherConsole.jsx
-git commit -m "TeacherConsole 加创建课程按钮和 CreateCourseDialog"
+git commit -m "TeacherConsole 加创建课程按钮和 refreshClasses 回调"
 ```
 
 ---
@@ -243,21 +275,50 @@ git commit -m "TeacherConsole 加创建课程按钮和 CreateCourseDialog"
 **Files:**
 - Modify: `src/pages/TeacherConsole.jsx`
 
-- [ ] **Step 1: 找无班级空状态位置**
+- [ ] **Step 1: 确认 showCreateDialog state 在 early return 之前定义**
 
-先 cat 读取 TeacherConsole.jsx，找到无班级时的空状态展示。
+Task 2 已追加 `const [showCreateDialog, setShowCreateDialog] = useState(false);`，需确保它在无班级的 `if (!classes || classes.length === 0)` early return 之前。React hooks 必须顶层调用，这点自然满足。
 
-- [ ] **Step 2: 加按钮**
+- [ ] **Step 2: 用 Fragment 包裹无班级 early return 并追加按钮 + Dialog**
 
-在空状态区域追加（复用 Task 2 的 `showCreateDialog` state 和 Dialog）：
+TeacherConsole 无班级时的 early return 大致结构：
 ```jsx
-<button
-  onClick={() => setShowCreateDialog(true)}
-  className="px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors"
->
-  创建第一门课程
-</button>
+  if (!classesLoading && classes.length === 0) {
+    return (
+      <div className="min-h-screen ...">
+        <空状态内容 />
+      </div>
+    );
+  }
 ```
+
+改为 Fragment 包裹，同时加入创建按钮和 Dialog：
+```jsx
+  if (!classesLoading && classes.length === 0) {
+    return (
+      <>
+        <div className="min-h-screen ...">
+          <空状态内容 />
+          <button
+            onClick={() => setShowCreateDialog(true)}
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors mt-4"
+          >
+            创建第一门课程
+          </button>
+        </div>
+        <CreateCourseDialog
+          open={showCreateDialog}
+          onClose={() => setShowCreateDialog(false)}
+          onCreated={async () => {
+            await refreshClasses();
+          }}
+        />
+      </>
+    );
+  }
+```
+
+**关键：** Dialog 必须放在 Fragment 内（与空状态 div 平级），否则在 early return 路径内 Dialog 不会渲染。`showCreateDialog` state 在 early return 上方已定义，两个分支均可访问。
 
 - [ ] **Step 3: 验证 lint + build**
 

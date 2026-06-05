@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 import FeedbackStatus from '../components/FeedbackStatus';
+import CreateCourseDialog from '../components/CreateCourseDialog';
 import { useAuth } from '../context/AuthContext';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
@@ -14,18 +15,34 @@ export default function TeacherConsole() {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [insights, setInsights] = useState(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [classesLoading, setClassesLoading] = useState(true);
   const [studentsLoading, setStudentsLoading] = useState(false);
 
   // 获取班级列表
-  useEffect(() => {
-    teachingService.getClasses().then(res => {
-      if (res.code === 200 && res.data.length > 0) {
-        setClasses(res.data);
-        setActiveClass(res.data[0].id);
+  const refreshClasses = useCallback(
+    async () => {
+      setClassesLoading(true);
+      try {
+        const res = await teachingService.getClasses();
+        if (res.code === 200) {
+          setClasses(res.data || []);
+          if (res.data?.length > 0 && !activeClass) {
+            setActiveClass(res.data[0].id);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setClassesLoading(false);
       }
-    }).catch(console.error).finally(() => setClassesLoading(false));
-  }, []);
+    },
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  useEffect(() => {
+    refreshClasses(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [refreshClasses]);
 
   // 当选择的班级改变时，获取学生列表和AI洞察
   useEffect(() => {
@@ -77,6 +94,14 @@ export default function TeacherConsole() {
               </span>
             </div>
           </div>
+          <div className="h-8 w-[1px] bg-outline-variant"></div>
+          <button
+            onClick={() => setShowCreateDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">add</span>
+            创建课程
+          </button>
           <div className="h-8 w-[1px] bg-outline-variant"></div>
           <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-error hover:bg-error-container/20 rounded-lg transition-colors" onClick={() => navigate('/')}>
             <span className="material-symbols-outlined text-sm">logout</span>
@@ -276,6 +301,14 @@ export default function TeacherConsole() {
 
         </div>
       </main>
+
+      <CreateCourseDialog
+        open={showCreateDialog}
+        onClose={() => setShowCreateDialog(false)}
+        onCreated={async () => {
+          await refreshClasses();
+        }}
+      />
     </div>
   );
 }

@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 import FeedbackStatus from '../components/FeedbackStatus';
+import { useAuth } from '../context/AuthContext';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export default function TeacherConsole() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const roleLabelMap = { teacher: '教师', admin: '管理员' };
   const [activeClass, setActiveClass] = useState(null);
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
@@ -64,12 +67,14 @@ export default function TeacherConsole() {
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-outline-variant">
-              <img alt="Teacher Profile" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEmN6iPeykBJM4g-FxZGQKujWsCGE-ECZSb2n7Om_izFEwlflhnVLi8aiRkOPALKmOqmYspwDxQXhjRwpKinCsHeX82NYknLqB_BawjcrrG_R6fLceDe8E-djpgDunaUfMKNUpTMvJLEglTno8tbrwrX-u5ZbtloceQzZNyT3tUP1_YmA6sL8f0Py7ra53pu1vfMKFX-rn8TRIvfzsTB_Q-Pgp0_gVgYl-Cff4Cg2VxJf1eYU35oScr-WfgA0scltfK38DvdpCbyzX" />
+            <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-600 flex items-center justify-center border border-cyan-500/30 font-bold text-sm">
+              {(user?.real_name || user?.username || '教').charAt(0)}
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-on-surface">Prof. Zhang</span>
-              <span className="text-[10px] text-outline uppercase tracking-wider">系统管理员</span>
+              <span className="text-sm font-bold text-on-surface">{user?.real_name || user?.username || '教师'}</span>
+              <span className="text-[10px] text-outline uppercase tracking-wider">
+                {roleLabelMap[user?.role] || '教师'}
+              </span>
             </div>
           </div>
           <div className="h-8 w-[1px] bg-outline-variant"></div>

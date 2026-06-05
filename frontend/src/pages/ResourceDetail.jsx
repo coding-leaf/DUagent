@@ -64,17 +64,10 @@ export default function ResourceDetail() {
           </div>
 
           {/* Time Metrics */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-white border border-outline-variant rounded-xl flex flex-col items-center text-center">
-              <span className="material-symbols-outlined text-primary mb-1">timer</span>
-              <span className="text-[10px] text-outline">当前阅读</span>
-              <span className="font-bold text-on-surface">12m</span>
-            </div>
-            <div className="p-3 bg-white border border-outline-variant rounded-xl flex flex-col items-center text-center">
-              <span className="material-symbols-outlined text-secondary mb-1">schedule</span>
-              <span className="text-[10px] text-outline">建议用时</span>
-              <span className="font-bold text-on-surface">25m</span>
-            </div>
+          <div className="p-3 bg-white border border-outline-variant rounded-xl flex flex-col items-center text-center">
+            <span className="material-symbols-outlined text-primary mb-1">timer</span>
+            <span className="text-[10px] text-outline">当前阅读</span>
+            <span className="font-bold text-on-surface">12m</span>
           </div>
 
           {/* Keywords */}

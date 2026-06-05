@@ -77,6 +77,22 @@
 
 ### 4.2 Dashboard / ResourceDetail
 
+#### 证据
+
+- `Dashboard` 调用 `learningService.getResources({ course_id, page, page_size })` -> `GET /resources`。
+- `ResourceDetail` 当前没有 API 调用，正文、阅读进度、当前阅读时长、建议用时、关键词、路径图均为静态展示。
+- 正式 `ResourceItem` 支持 `id`、`title`、`type`、`description`、`tags`、`chapter`、`knowledge_point`、`view_count`、`created_at`。
+
+#### 矩阵条目
+
+| 能力名称 | 涉及页面 | 当前前端来源 | OpenAPI 状态 | Backend 状态 | Agent 来源 | 真实数据可用性 | 假展示风险 | 教师端投影 | 建议处理 | 优先级 | 待确认问题 |
+|----------|----------|--------------|--------------|--------------|------------|----------------|------------|------------|----------|--------|------------|
+| 资源列表 | Dashboard | `GET /resources` | 已声明 | 已实现 | 资源生成 Agent 只参与生成 | 可用 | 无 | 可投影为资源访问基础 | 保留 | P1 | 需确认空列表展示 |
+| 文字资源正文预览 | ResourceDetail | 当前静态正文 | 未声明独立详情端点 | 未确认 | 不默认需要 | 不可用 | 静态内容 | 可作为资源阅读活动基础 | 补 Client API 字段 | P1 | 正文前几段来自资源表字段还是文件解析结果 |
+| 阅读进度 | ResourceDetail | 当前静态 65% | 未声明 | 未实现 | 不需要 | 不可用 | 静态内容 | 可投影为学习活动 | 延期讨论 | P2 | 是否需要行为记录表 |
+| 累计学习时长 | ResourceDetail / StudentProfile | 当前静态/默认值 | 未声明 | 未实现 | 不需要 | 待定 | 默认值兜底 | 待定 | 延期讨论 | P2 | 是否基于资源访问、练习、AIChat 统一计算 |
+| 建议学习时长 | ResourceDetail | 当前静态 25m | 未声明 | 无需实现 | 不需要 | 不可用 | 静态内容 | 不投影 | 前端删除 | P0 | 已确认删除 |
+
 ### 4.3 LearningPath
 
 ### 4.4 Quiz / PracticeResult

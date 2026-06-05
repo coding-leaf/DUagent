@@ -94,9 +94,23 @@
   - `profileService.updateProfile`
   - `courseService.getCourseStudents`
   - 清理后 `npm run lint` / `npm run build` / `npm run test:e2e`（3/3）通过。
+- 2026-06-05：阶段二第一轮联调断层收敛 — 清理 5 个 mock 分支 + AdminConsole 契约修正：
+  - `teaching.js`：移除 getClasses / getClassStudents / getStudentReport 的 mock 路径
+  - `admin.js`：移除 getAgentLogs / getSystemLogs 的 mock 路径，删除 useMock 声明
+  - `AdminConsole.jsx`：搜索参数 search → keyword；删除状态列、封禁按钮、删除按钮（DELETE 语义待契约确认）；last_login 改为 N/A
+  - 清理后 `npm run lint` / `npm run build` / `npm run test:e2e`（3/3）通过。
+
+## 标记：阶段二第二轮 P0 阻塞项
+
+以下为当前代码中保留的 mock/空实现，需在第二轮优先解决：
+
+- `teaching.js` `getConsoleInsights`：mock 分支调用 `/api/v1/course/{id}/insights`（不在 OpenAPI），真实分支返回 `data: null`（空实现）。需新增班级洞察端点（spec #5/#11）。
+- `TeacherConsole.jsx:214` `useMock &&`：守卫 Insights 区块，端点就绪后需移除。
+- 详见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`。
 
 ## 下一步建议
 
-- 阶段一已发现的真实 API service 契约疑点已清理完毕。当前删除的 6 个方法均无运行时代码调用方且不在 `Client-API.openapi.json` 中；阶段一真实 API 调用路径未发现新增契约漂移。
-- 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账，含三层对照矩阵、优先级排序和拆分任务建议）；实现前需先完成契约审查。
+- 阶段一契约疑点已清理完毕。
+- 阶段二第一轮 mock 分支清理已完成。第二轮 P0：新增班级洞察端点、移除 TeacherConsole useMock && Insights 守卫。第二轮 P1：教师深度诊断字段扩展、ResourceDetail 页面改造、学习路径节点资源接入、Admin 用户状态/删除契约确认。
+- 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 完成契约审查后，再决定是否修改 Client API、Backend Schema 或 Agent API。

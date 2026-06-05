@@ -23,9 +23,6 @@ export const teachingService = {
   
   // 获取某个课程的学生列表
   getClassStudents: async (courseId) => {
-    if (useMock) {
-      return client.get(`/api/v1/course/${courseId}/students`);
-    }
     const res = await client.get(`/teaching/classes/${courseId}/students`);
     if (res.code === 200 && res.data && res.data.students) {
       const adapted = res.data.students.map((s, i) => {

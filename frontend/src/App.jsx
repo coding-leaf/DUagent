@@ -13,6 +13,7 @@ import AIChat from './pages/AIChat';
 import LearningEffects from './pages/LearningEffects';
 import PracticeResult from './pages/PracticeResult';
 import AdminConsole from './pages/AdminConsole';
+import ResourceDetail from './pages/ResourceDetail';
 import { AuthProvider } from './context/AuthContext';
 import { CourseProvider } from './context/CourseContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -29,6 +30,7 @@ function App() {
             
             {/* Student routes */}
             <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
+            <Route path="/resource/:id" element={<ProtectedRoute allowedRoles={['student']}><ResourceDetail /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
             <Route path="/learning-path" element={<ProtectedRoute allowedRoles={['student']}><LearningPath /></ProtectedRoute>} />
 

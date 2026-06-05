@@ -90,17 +90,15 @@ export default function ResourceDetail() {
 
       {/* Main Content Canvas */}
       <main className="ml-0 lg:ml-64 min-h-screen pt-16">
-        <div className="max-w-[1280px] mx-auto px-6 py-10 grid grid-cols-12 gap-gutter">
-          
+        <div className="max-w-[960px] mx-auto px-6 py-10">
+
           {/* Document Display Section */}
-          <div className="col-span-12 lg:col-span-8 space-y-gutter">
-            <article className="bg-white p-10 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant hover:shadow-lg transition-shadow duration-300">
+          <article className="bg-white p-10 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant hover:shadow-lg transition-shadow duration-300">
               <header className="mb-8 border-b border-surface-container-highest pb-6">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs font-bold">深度解析</span>
                   {resource?.chapter && <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-xs">章节: {resource.chapter}</span>}
                   {resource?.knowledge_point && <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-xs">知识点: {resource.knowledge_point}</span>}
-                  <span className="text-outline text-label-sm">更新于 2023.10.15</span>
                 </div>
                 <h1 className="text-h1 font-h1 text-on-surface mb-4">{resource?.title || '加载中...'}</h1>
                 <p className="text-body-lg text-on-surface-variant leading-relaxed">
@@ -118,7 +116,7 @@ export default function ResourceDetail() {
                 <div className="flex items-center gap-4">
                   <button className="flex items-center gap-2 text-outline hover:text-primary transition-colors cursor-pointer">
                     <span className="material-symbols-outlined">thumb_up</span>
-                    <span className="text-label-sm">有用 (128)</span>
+                    <span className="text-label-sm">有用</span>
                   </button>
                   <button className="flex items-center gap-2 text-outline hover:text-primary transition-colors cursor-pointer">
                     <span className="material-symbols-outlined">share</span>
@@ -134,77 +132,7 @@ export default function ResourceDetail() {
                   </button>
                 </div>
               </footer>
-            </article>
-          </div>
-
-          {/* Interaction Panel / Quiz Trigger */}
-          <div className="col-span-12 lg:col-span-4 space-y-6">
-            {/* Learning Assistant Card */}
-            <div className="bg-white p-6 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant relative overflow-hidden hover:-translate-y-1 transition-transform duration-300">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-50 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-              <div className="relative z-10 flex flex-col items-center text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-white shadow-inner">
-                  <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
-                </div>
-                <div>
-                  <h3 className="text-h3 font-h3 text-on-surface">DS智能体建议</h3>
-                  <p className="text-label-sm text-on-surface-variant mt-2 px-4">
-                    您已完成 AVL 树理论部分的阅读。根据系统分析，现在是进行实践巩固的最佳时机。
-                  </p>
-                </div>
-                
-                <div className="w-full space-y-2 pt-4">
-                  <div className="flex justify-between items-center text-xs text-outline px-1">
-                    <span>预期掌握程度</span>
-                    <span className="text-primary font-bold">85%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-surface-container-highest rounded-full">
-                    <div className="w-[85%] h-full bg-primary-container rounded-full"></div>
-                  </div>
-                </div>
-
-                <Link to="/quiz" className="w-full py-4 bg-primary-container text-on-primary-container rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl shadow-primary-container/30 hover:scale-[1.02] active:scale-[0.98] transition-all group cursor-pointer">
-                  <span className="material-symbols-outlined group-hover:rotate-12 transition-transform">exercise</span>
-                  开始互动练习
-                </Link>
-              </div>
-            </div>
-
-            {/* Learning Path Map */}
-            <div className="bg-white p-6 rounded-xl border border-outline-variant hover:shadow-md transition-shadow duration-300">
-              <h4 className="text-label-sm font-bold text-outline mb-6 flex items-center justify-between">
-                学习路径图
-                <span className="material-symbols-outlined text-xs">open_in_new</span>
-              </h4>
-              <div className="space-y-4 relative">
-                <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-surface-container-highest"></div>
-                
-                <div className="flex items-center gap-4 relative">
-                  <div className="w-6 h-6 rounded-full bg-cyan-500 border-4 border-white shadow-sm flex items-center justify-center z-10">
-                    <span className="material-symbols-outlined text-[10px] text-white">check</span>
-                  </div>
-                  <div className="flex-1 text-sm text-outline">二叉搜索树 (BST) 基础</div>
-                </div>
-
-                <div className="flex items-center gap-4 relative">
-                  <div className="w-6 h-6 rounded-full bg-cyan-500 border-4 border-white shadow-sm flex items-center justify-center z-10">
-                    <span className="material-symbols-outlined text-[10px] text-white">check</span>
-                  </div>
-                  <div className="flex-1 text-sm text-on-surface font-semibold">AVL 树原理</div>
-                </div>
-
-                <div className="flex items-center gap-4 relative">
-                  <div className="w-6 h-6 rounded-full bg-white border-4 border-surface-container-highest shadow-sm z-10"></div>
-                  <div className="flex-1 text-sm text-outline">B-树与红黑树对比</div>
-                </div>
-
-                <div className="flex items-center gap-4 relative">
-                  <div className="w-6 h-6 rounded-full bg-white border-4 border-surface-container-highest shadow-sm z-10"></div>
-                  <div className="flex-1 text-sm text-outline">实际应用案例</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          </article>
 
         </div>
       </main>

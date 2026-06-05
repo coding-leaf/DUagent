@@ -216,7 +216,9 @@ export default function Dashboard() {
                 {filteredResources.map(resource => {
                   const typeInfo = getResourceTypeInfo(resource.type);
                   return (
-                    <div key={resource.id} data-testid="resource-card" className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between">
+                    <div key={resource.id} data-testid="resource-card"
+                      onClick={() => navigate(`/resource/${resource.id}`)}
+                      className="bg-white rounded-xl border border-outline-variant p-6 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between cursor-pointer">
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-4">
                           <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${typeInfo.colorClass}`}>

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
 from app.models.others import AsyncTask, Resource
+from app.models.course import Course, CourseEnrollment
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
@@ -73,6 +74,25 @@ async def get_resource_detail(
     resource = result.scalar_one_or_none()
     if resource is None:
         raise HTTPException(status_code=404, detail="Resource not found")
+
+    # 校验当前用户是否有该资源所属课程的访问权限
+    course_r = await db.execute(
+        select(Course).where(Course.id == resource.course_id, Course.is_deleted == False)
+    )
+    course = course_r.scalar_one_or_none()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    if course.teacher_id != current_user.id:
+        enrollment_r = await db.execute(
+            select(CourseEnrollment).where(
+                CourseEnrollment.course_id == course.id,
+                CourseEnrollment.student_id == current_user.id,
+                CourseEnrollment.is_deleted == False,
+            )
+        )
+        if enrollment_r.scalar_one_or_none() is None:
+            raise HTTPException(status_code=403, detail="No access to this course")
 
     preview = None
     if resource.type in ("document", "reading") and resource.content:

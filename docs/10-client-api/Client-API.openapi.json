@@ -1847,7 +1847,7 @@
             "type": "object",
             "properties": {
               "content_preview": {
-                "type": ["string", "null"],
+                "type": "string", "nullable": true,
                 "description": "文字资源正文预览，通常为正文前若干字符或段落。由 Backend 提供，具体来源是 Backend 实现细节。适用 document/reading 类型；其他类型返回 null。"
               }
             }

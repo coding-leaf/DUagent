@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { profileService } from '../api/services/profile';
-import RadarChart from '../components/RadarChart';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 
@@ -41,8 +40,8 @@ export default function StudentProfile() {
     );
   }
 
-  const { name, level, title, current_course, learning_motivation, motivation_percentile, system_suggestion, avatar } = profileData || {};
-  const { weekly_max_accuracy, total_duration_hours, knowledge_nodes, cognitive_growth } = effectsData || {};
+  const { name, level, title, current_course, system_suggestion, avatar } = profileData || {};
+  const { weekly_max_accuracy, total_duration_hours, knowledge_nodes } = effectsData || {};
 
   return (
     <div className="bg-background text-on-background font-body-md antialiased min-h-screen">
@@ -55,10 +54,8 @@ export default function StudentProfile() {
       {/* Main Content */}
       <main className="ml-0 lg:ml-64 pt-16">
         <div className="max-w-[1280px] mx-auto px-6 py-8">
-          {/* New Hero Card Layout */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Profile Card */}
-          <div className="lg:col-span-2 relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8">
+          <div className="relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 mb-8">
             <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-10">
               <img alt="Abstract AI" className="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzMAEOheT0KjN_V4Fs50iduiqAbY41brWEWJxp4OTj7_UEp-xIaxcjCg_nD7gFlxpJA02J20-08588bHb0rXh9DPDwVliY11SE63OLe49p49EPdhdtV3tTmvxzYZDpegvuIRbUOt73p55PYcIPkbbpQ2m9zU1qHjuedH2kiKkGvLzCoqlaAVBdvhbk1k_bRiNJkR1nKy0pWxkiz8th0-NwNlCiS_m3BF-O5D1TV2PGqwwetrQvRYYY_qJql5n3DmySA98y7i-zv3sV" />
             </div>
@@ -76,20 +73,6 @@ export default function StudentProfile() {
             </div>
           </div>
 
-          {/* Stats Card */}
-          <div className="bg-cyan-600 rounded-2xl p-8 text-white relative overflow-hidden flex flex-col justify-between">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-            <div>
-              <p className="text-white/70 text-label-sm uppercase tracking-widest mb-1">学习动力指数</p>
-              <div className="text-6xl font-black">{learning_motivation || 89}<span className="text-2xl opacity-60 ml-1">%</span></div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/20 flex items-center justify-between">
-              <span className="text-sm font-medium text-white/80">领先 {motivation_percentile || 92}% 的学习者</span>
-              <span className="material-symbols-outlined">trending_up</span>
-            </div>
-          </div>
-        </section>
-
         {/* Bento Grid Main Content */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
           {/* Modality Card */}
@@ -100,16 +83,7 @@ export default function StudentProfile() {
               </h3>
             </div>
             <div className="relative w-52 h-52 flex items-center justify-center p-2">
-              <RadarChart 
-                data={[
-                  { subject: '视觉化交互', value: 85 },
-                  { subject: '理论推导', value: 60 },
-                  { subject: '代码实操', value: 90 },
-                  { subject: '文字阅读', value: 45 },
-                  { subject: '讨论交流', value: 75 }
-                ]} 
-                size={200} 
-              />
+              <p className="text-sm text-secondary text-center">模态偏好数据待 Backend 返回</p>
             </div>
           </div>
 
@@ -226,44 +200,13 @@ export default function StudentProfile() {
                   <p className="text-[10px] text-slate-400 uppercase font-bold">本周最高准度</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
-                  <span className="text-cyan-600 font-black text-lg">{total_duration_hours || 12.5}h</span>
+                  <span className="text-cyan-600 font-black text-lg">{total_duration_hours ? total_duration_hours + 'h' : '待统计'}</span>
                   <p className="text-[10px] text-slate-400 uppercase font-bold">累计学习时长</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Activity Growth Card */}
-          <div className="lg:col-span-12 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
-            <div className="absolute inset-0 abstract-pattern opacity-5"></div>
-            <div className="relative z-10">
-              <div className="flex justify-between items-center mb-10">
-                <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface">
-                  <span className="material-symbols-outlined text-cyan-500">timeline</span> 认知成长曲线
-                </h3>
-                <div className="flex p-1 bg-slate-100 rounded-xl">
-                  <button className="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-400">周</button>
-                  <button className="px-5 py-1.5 bg-white rounded-lg text-xs font-bold text-cyan-600 shadow-sm">月</button>
-                </div>
-              </div>
-              <div className="h-64 flex items-end justify-between gap-4 px-2">
-                {cognitive_growth?.map((data, idx) => (
-                  <div key={idx} className={`flex-1 ${data.value >= 90 ? 'bg-cyan-500 shadow-lg shadow-cyan-200 relative group' : 'bg-slate-100/50 hover:bg-cyan-100'} rounded-t-2xl transition-all`} style={{ height: `${data.value}%` }}>
-                    {data.value >= 90 && (
-                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
-                        峰值: {data.value}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-6 px-2 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                {cognitive_growth?.map((data, idx) => (
-                  <span key={idx}>{data.month}</span>
-                ))}
-              </div>
-            </div>
-          </div>
           </div>
         </div>
       </main>

@@ -54,6 +54,12 @@
   --radius-xl: 0.75rem;
   --radius-full: 9999px;
 
+  --width-xs: 20rem;
+  --width-sm: 24rem;
+  --width-md: 28rem;
+  --width-lg: 32rem;
+  --width-xl: 36rem;
+
   --spacing-lg: 48px;
   --spacing-gutter: 24px;
   --spacing-base: 8px;

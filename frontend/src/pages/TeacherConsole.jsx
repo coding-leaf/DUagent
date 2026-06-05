@@ -269,46 +269,7 @@ export default function TeacherConsole() {
                       {insights?.overview || '加载中...'}
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 border border-outline-variant rounded-lg">
-                      <p className="text-xs text-outline mb-2">平均活跃时间</p>
-                      <p className="text-xl font-bold text-on-surface">{insights?.avg_duration || 0} <span className="text-xs text-outline font-normal">min/session</span></p>
-                    </div>
-                    <div className="p-3 border border-outline-variant rounded-lg">
-                      <p className="text-xs text-outline mb-2">知识点覆盖率</p>
-                      <p className="text-xl font-bold text-on-surface">{insights?.coverage_rate || 0}% <span className="text-xs text-green-500 font-normal">↑ 4%</span></p>
-                    </div>
-                  </div>
                 </div>
-              </div>
-
-              <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
-                <h4 className="font-bold text-on-surface text-sm mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-error text-lg">priority_high</span>
-                  需重点关注学生 (Special Students)
-                </h4>
-                <div className="space-y-3">
-                  {insights?.special_students?.map(ss => (
-                    <div
-                      key={ss.user_id}
-                      onClick={() => navigate(`/teacher/report?course_id=${activeClass}&student_id=${ss.user_id}`)}
-                      className={`flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border border-transparent ${ss.border_color}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${ss.avatar_color}`}>{ss.avatar_text}</div>
-                        <div>
-                          <p className="text-xs font-bold">{ss.username} ({ss.english_name})</p>
-                          <p className={`text-[10px] ${ss.avatar_color.split(' ')[1]}`}>{ss.issue}</p>
-                        </div>
-                      </div>
-                      <span className="material-symbols-outlined text-outline text-sm">chevron_right</span>
-                    </div>
-                  ))}
-                  {!insights?.special_students?.length && !studentsLoading && (
-                     <p className="text-xs text-outline text-center py-4">暂无需要特殊关注的学生</p>
-                  )}
-                </div>
-                <button className="w-full mt-6 py-2 border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors">生成完整班级报表</button>
               </div>
             </section>
           )}

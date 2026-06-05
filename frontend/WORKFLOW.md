@@ -89,8 +89,14 @@
 - 2026-06-05：运行 `npm run build`，通过；存在 Vite chunk size warning。
 - 2026-06-05：运行 `npm run lint`，通过。
 - 2026-06-05：运行 `npm run test:e2e`，通过 3/3；环境为 Backend 8001、Agent Service 8002、MySQL `duagent_test`。
+- 2026-06-05：清理阶段一遗留契约疑点 — 删除 `src/api/services/` 中 6 个未使用且不在 `Client-API.openapi.json` 声明中的方法：
+  - `authService.logout` / `refreshToken` / `sendResetPasswordCode` / `resetPassword`
+  - `profileService.updateProfile`
+  - `courseService.getCourseStudents`
+  - 清理后 `npm run lint` / `npm run build` / `npm run test:e2e`（3/3）通过。
 
 ## 下一步建议
 
-- 对当前已发现的前端 service 契约疑点逐项处理：删除未使用历史调用、降级为非正式能力，或在确认需要后进入契约审查。
-- 将阶段一验收结果归档后，再以阶段二能力清单为输入，对照 `../docs/10-client-api/*` 逐项标注缺失字段、缺失接口和数据来源。
+- 阶段一已发现的真实 API service 契约疑点已清理完毕。当前已删除的 6 个方法均无调用方且不在 `Client-API.openapi.json` 中，保留的 service 方法均有对应 OpenAPI 路径声明。
+- 阶段二入口：以阶段二能力清单为输入，对照 `../docs/10-client-api/*` 逐项标注缺失字段、缺失接口和数据来源。
+- 完成契约审查后，再决定是否修改 Client API、Backend Schema 或 Agent API。

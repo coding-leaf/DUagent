@@ -48,6 +48,33 @@
 
 ### 4.1 StudentProfile
 
+#### 证据
+
+- 前端调用：
+  - `profileService.getStudentProfile(activeCourseId)` -> `GET /profile`
+  - `profileService.getLearningEffects(activeCourseId)` -> `GET /evaluation`
+- 正式契约：
+  - `/profile` 支持 `modal_preference`、`guidance_level`、`knowledge_coordinates`、`cognitive_blindspots`、`drive_intent`、`discipline_badge`、`generated_at`。
+  - `/evaluation` 支持 `progress_table`、`mastery_table`、`resource_usage_table`、`summary_text`、`generated_at`。
+- 明确删除：
+  - `learning_motivation`
+  - `motivation_percentile`
+  - `cognitive_growth`
+  - 认知成长曲线
+- 待定：
+  - `total_duration_hours`，后续需明确行为采集来源。
+
+#### 矩阵条目
+
+| 能力名称 | 涉及页面 | 当前前端来源 | OpenAPI 状态 | Backend 状态 | Agent 来源 | 真实数据可用性 | 假展示风险 | 教师端投影 | 建议处理 | 优先级 | 待确认问题 |
+|----------|----------|--------------|--------------|--------------|------------|----------------|------------|------------|----------|--------|------------|
+| 模态偏好雷达图 | StudentProfile | 当前 UI 使用静态数组 | `/profile.modal_preference` 已声明 | 需核实真实返回 | Profile Agent 可生成 | 未验证 | 静态内容 | 可投影为学生画像摘要 | 补前端消费 | P1 | 需确认 modal_preference 对象如何映射雷达图维度 |
+| 引导粒度 | StudentProfile | 当前 UI 多为静态展示 | `/profile.guidance_level` 已声明 | 需核实真实返回 | Profile Agent 可生成 | 未验证 | 静态内容 | 可投影 | 补前端消费 | P1 | L1/L2/L3 文案是否沿用当前 UI |
+| 知识坐标/认知盲区 | StudentProfile | 当前读取 `knowledge_nodes`，非正式字段 | `/profile.knowledge_coordinates`、`cognitive_blindspots` 已声明 | 需核实真实返回 | Profile Agent 可生成 | 未验证 | 契约外字段 | 可投影为教师端薄弱点 | 补前端消费 | P1 | 需确认 status 到 UI 样式的映射 |
+| 认知成长曲线 | StudentProfile | `cognitive_growth` 契约外字段 | 未声明 | 无需实现 | 不需要 | 不可用 | 契约外字段 | 不投影 | 前端删除 | P0 | 已确认删除 |
+| 学习动力指数 | StudentProfile | 默认值兜底 | 未声明 | 无需实现 | 不需要 | 不可用 | 默认值兜底 | 不投影 | 前端删除 | P0 | 已确认删除 |
+| 累计学习时长 | StudentProfile | `total_duration_hours` 契约外字段 | 未声明 | 待定 | 不需要或聚合 | 待定 | 默认值兜底 | 待定 | 延期讨论 | P2 | 需确认行为采集方案 |
+
 ### 4.2 Dashboard / ResourceDetail
 
 ### 4.3 LearningPath

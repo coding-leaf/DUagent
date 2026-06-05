@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCourse } from '../context/CourseContext';
+import JoinCourseDialog from './JoinCourseDialog';
 
 export default function Navbar({ searchTerm, onSearch }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { courses, activeCourseId, changeCourse } = useCourse();
+  const { courses, activeCourseId, changeCourse, refreshCourses } = useCourse();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
 
   const isActive = (path) => location.pathname === path;
 
@@ -27,21 +29,33 @@ export default function Navbar({ searchTerm, onSearch }) {
             数据结构智能助手
           </Link>
           
-          {courses && courses.length > 0 && (
-            <div className="relative">
-              <select
-                value={activeCourseId || ''}
-                onChange={(e) => changeCourse(e.target.value)}
-                className="bg-cyan-50 border border-cyan-100 text-cyan-700 font-bold px-3 py-1 rounded-full text-xs outline-none cursor-pointer focus:ring-2 focus:ring-cyan-500 max-w-[180px] transition-all hover:bg-cyan-100"
-              >
-                {courses.map(c => (
-                  <option key={c.id} value={c.id} className="text-on-surface bg-white font-normal">
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            {courses && courses.length > 0 && (
+              <div className="relative">
+                <select
+                  value={activeCourseId || ''}
+                  onChange={(e) => changeCourse(e.target.value)}
+                  className="bg-cyan-50 border border-cyan-100 text-cyan-700 font-bold px-3 py-1 rounded-full text-xs outline-none cursor-pointer focus:ring-2 focus:ring-cyan-500 max-w-[180px] transition-all hover:bg-cyan-100"
+                >
+                  {courses.map(c => (
+                    <option key={c.id} value={c.id} className="text-on-surface bg-white font-normal">
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button
+              onClick={() => setShowJoinDialog(true)}
+              className={courses && courses.length > 0
+                ? "w-6 h-6 flex items-center justify-center rounded-full bg-cyan-50 text-cyan-600 hover:bg-cyan-100 text-sm font-bold transition-colors flex-shrink-0"
+                : "bg-cyan-50 border border-cyan-100 text-cyan-700 font-bold px-3 py-1 rounded-full text-xs hover:bg-cyan-100 transition-colors flex-shrink-0"
+              }
+              title="加入课程"
+            >
+              {courses && courses.length > 0 ? '+' : '+ 加入课程'}
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -130,6 +144,16 @@ export default function Navbar({ searchTerm, onSearch }) {
           </div>
         </div>
       </div>
+      <JoinCourseDialog
+        open={showJoinDialog}
+        onClose={() => setShowJoinDialog(false)}
+        onJoined={async (newCourse) => {
+          await refreshCourses();
+          if (newCourse?.id) {
+            changeCourse(newCourse.id);
+          }
+        }}
+      />
     </nav>
   );
 }

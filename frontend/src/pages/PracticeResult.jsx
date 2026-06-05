@@ -103,7 +103,6 @@ export default function PracticeResult() {
                   </svg>
                   <span className="text-h3 font-h3 text-on-surface">{accuracy}%</span>
                 </div>
-                <span className="mt-2 px-2 py-0.5 bg-error text-white text-[10px] font-bold rounded-full uppercase tracking-tighter shadow-sm">新纪录</span>
               </div>
               {/* Time & Rank */}
               <div className="col-span-8 grid grid-cols-2 gap-md">
@@ -114,15 +113,6 @@ export default function PracticeResult() {
                   <div>
                     <span className="block font-label-sm text-label-sm text-secondary">练习耗时</span>
                     <span className="font-h3 text-h3 text-on-surface">{resultData ? formatTime(resultData.time_spent) : '0:00'}</span>
-                  </div>
-                </div>
-                <div className="bg-white border border-outline-variant p-md rounded-xl flex items-center gap-md">
-                  <div className="h-12 w-12 bg-tertiary-container/20 rounded-full flex items-center justify-center text-tertiary">
-                    <span className="material-symbols-outlined">trending_up</span>
-                  </div>
-                  <div>
-                    <span className="block font-label-sm text-label-sm text-secondary">历史击败</span>
-                    <span className="font-h3 text-h3 text-on-surface">86% 用户</span>
                   </div>
                 </div>
                 {/* Comparison Chart Placeholder */}

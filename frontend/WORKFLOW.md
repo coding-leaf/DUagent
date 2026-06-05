@@ -127,6 +127,15 @@
   - OpenAPI 未修改，无契约漂移。
   - 审查文档：`docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`
   - 下一步：用户审阅审查矩阵后，再决定 OpenAPI 更新候选和实现顺序。
+- 2026-06-06：P0 前端假展示清理完成：
+  - StudentProfile：删除学习动力指数、认知成长曲线；RadarChart 降级为占位；total_duration_hours 改为"待统计"
+  - ResourceDetail：删除"建议用时 25m"静态展示
+  - PracticeResult：删除"新纪录""历史击败"展示
+  - LearningPath：降级静态个性化提示和推荐卡为通用占位文案
+  - TeacherConsole：删除 mock Insights 内平均活跃时间、覆盖率、重点关注学生等假展示
+  - TeacherStudentReport：删除 mock 分支 class_name/rank/motivation_index/total_duration_hours/认知曲线；修正 weak_points/recent_activity 注释（从"不在契约"改为"后端空数组"）
+  - JS bundle 534→520 KB（-14KB 假展示代码）
+  - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
 
 ## 本地联调注意事项
 

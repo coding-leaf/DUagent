@@ -131,6 +131,22 @@
 
 ### 4.5 AIChat
 
+#### 证据
+
+- 前端调用 `GET /tutoring/conversations`、`GET /tutoring/conversations/{id}` 和 `POST /tutoring/chat`。
+- `chatService.streamChat` 使用 `fetch` 解析 SSE。
+- Mock 分支由 `VITE_USE_MOCK` 控制，属于开发辅助，不是正式路径。
+- `WORKFLOW.md` 已记录真实 SSE 流 smoke 验证通过。
+
+#### 矩阵条目
+
+| 能力名称 | 涉及页面 | 当前前端来源 | OpenAPI 状态 | Backend 状态 | Agent 来源 | 真实数据可用性 | 假展示风险 | 教师端投影 | 建议处理 | 优先级 | 待确认问题 |
+|----------|----------|--------------|--------------|--------------|------------|----------------|------------|------------|----------|--------|------------|
+| SSE 答疑 | AIChat | `POST /tutoring/chat` fetch stream | 已声明 | 已实现 | Tutoring Agent | 已 smoke 验证 | Mock 开发辅助 | 不投影完整内容 | 保留 | P1 | token 过期/网络中断错误处理 |
+| 会话列表 | AIChat | `GET /tutoring/conversations` | 已声明 | 已实现 | Backend 存储 | 需验证 | 无 | 可聚合为最近活动 | 保留 | P1 | 最近活动是否只显示摘要 |
+| 会话详情 | AIChat | `GET /tutoring/conversations/{id}` | 已声明 | 已实现 | Backend 存储 | 需验证 | 无 | 不投影完整内容 | 保留 | P1 | 隐私边界 |
+| AIChat 活动摘要 | TeacherStudentReport | 当前未实现 | 未声明为教师投影字段 | 未实现聚合 | 不需要 Agent 原文 | 不可用 | 无 | 可投影摘要 | 延期讨论 | P2 | 只统计次数/时间，不展示聊天内容 |
+
 ## 5. 教师端投影依赖
 
 ## 6. OpenAPI 更新候选

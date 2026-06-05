@@ -8,6 +8,26 @@
 
 本文件用于记录学生端页面字段、正式 Client API、Backend 实现、Agent 来源和教师端投影之间的对齐情况。本轮不修改 OpenAPI，不修改前端或后端代码。
 
+### 契约证据摘要
+
+- 正式学生端数据路径：
+  - `GET /profile`
+  - `GET /evaluation`
+  - `GET /resources`
+  - `GET /learning-path`
+  - `GET /learning-path/nodes/{node_id}/resources`
+  - `GET /quiz/questions`
+  - `POST /quiz/submit`
+  - `GET /quiz/result`
+  - `POST /tutoring/chat`
+  - `GET /tutoring/conversations`
+  - `GET /tutoring/conversations/{id}`
+- 教师端投影目标：
+  - `GET /teaching/classes/{class_id}/students`
+  - `GET /teaching/classes/{class_id}/students/{student_id}/learning`
+- 已确认删除能力：
+  - 认知成长曲线、建议学习时长、学习动力指数、班级覆盖率、重点关注学生、排名类指标。
+
 ## 2. 固定决策
 
 - 认知成长曲线：删除，不设计历史快照表。

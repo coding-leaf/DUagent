@@ -5,9 +5,6 @@ const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 export const teachingService = {
   // 获取教师名下的班级/课程列表
   getClasses: async () => {
-    if (useMock) {
-      return client.get('/api/v1/teacher/classes');
-    }
     const res = await client.get('/courses');
     if (res.code === 200 && res.data && res.data.courses) {
       return {

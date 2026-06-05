@@ -18,7 +18,7 @@ export default function AdminConsole() {
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
-      const res = await adminService.getUsers({ search: searchQuery });
+      const res = await adminService.getUsers({ keyword: searchQuery });
       if (res.code === 200) {
         setUsers(res.data.users);
       }

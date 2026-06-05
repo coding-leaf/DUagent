@@ -82,7 +82,7 @@
 
 ## 当前接口实现情况总览
 
-更新日期：`2026-06-04`
+更新日期：`2026-06-05`
 
 ### 真实完成
 
@@ -136,6 +136,15 @@ _（当前无占位接口）_
 - `POST /api/v1/auth/send-reset-code`
 
 ## 最近状态变更
+
+- `2026-06-05` `阶段一 E2E 种子数据修复与真实联调验收`
+  - **修复**：`UserProfile` ORM 与 `schema.sql` 补齐 `knowledge_mastered`、`knowledge_weak` 两个内部画像统计字段，用于承载 E2E 种子脚本中的画像统计数据。
+  - **迁移**：新增 `backend/migrations/2026-06-05-add-user-profile-knowledge-counters.sql`，用于既有 MySQL 库幂等补列；新部署仍由 `schema.sql` 直接创建这两个字段。
+  - **修复**：`backend/scripts/seed_e2e_data.py` 移除历史字段 `QuizSession.status` 写入，避免向当前 ORM 写入不存在字段；Quiz 提交统计仍按现有 QuizSession/QuizAnswer 语义处理，不新增对外状态枚举。
+  - **测试库维护**：已对当前 `duagent_test.user_profiles` 执行补列；新建测试库会由更新后的 ORM/schema 创建对应字段。
+  - **种子数据**：`PYTHONPATH=. ALLOW_E2E_SEED=true DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/duagent_test?charset=utf8mb4' python scripts/seed_e2e_data.py`：通过；写入 2 用户、2 课程、2 选课、10 资源、6 题、2 画像、2 评估、1 QuizSession。
+  - **阶段一 E2E**：`npm run test:e2e`：3/3 passed；Backend 8001、Agent Service 8002、MySQL `duagent_test` 均在线。
+  - **契约**：Client API 契约改变：`否` / Agent API 契约改变：`否`。本次仅补 SQL/ORM 内部字段与测试数据脚本，不新增前端可见字段、路径、参数或 Agent 协议字段。
 
 - `2026-06-05` `前端阶段边界与后续 Client API 扩展审查`
   - **阶段一边界**：当前只收口现有 `docs/10-client-api/*` 能承接的基础主链，包括鉴权、课程切换、资源列表、学习路径、Quiz、AI Chat、教师学生列表与基础学情报告；以真实环境 E2E 验收为完成条件，不继续混入新增页面能力。

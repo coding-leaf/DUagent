@@ -79,6 +79,8 @@ class UserProfile(Base):
     modal_preference: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     guidance_level_current: Mapped[str] = mapped_column(String(5), default="L2")
     guidance_level_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    knowledge_mastered: Mapped[int] = mapped_column(Integer, default=0)
+    knowledge_weak: Mapped[int] = mapped_column(Integer, default=0)
     knowledge_coordinates: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     cognitive_blindspots: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     drive_intent: Mapped[dict | None] = mapped_column(JSON, nullable=True)

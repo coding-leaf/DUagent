@@ -330,6 +330,8 @@ CREATE TABLE user_profiles (
     modal_preference        JSON          DEFAULT NULL COMMENT '模态偏好五维数据',
     guidance_level_current  VARCHAR(5)    NOT NULL DEFAULT 'L2' COMMENT '当前引导粒度',
     guidance_level_updated_at DATETIME    DEFAULT NULL   COMMENT '引导粒度更新时间',
+    knowledge_mastered      INT           NOT NULL DEFAULT 0 COMMENT '已掌握知识点数量',
+    knowledge_weak          INT           NOT NULL DEFAULT 0 COMMENT '薄弱知识点数量',
     knowledge_coordinates   JSON          DEFAULT NULL COMMENT '知识坐标',
     cognitive_blindspots    JSON          DEFAULT NULL COMMENT '认知盲区',
     drive_intent            JSON          DEFAULT NULL COMMENT '驱动意图',

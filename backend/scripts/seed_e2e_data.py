@@ -138,7 +138,7 @@ async def seed_student_data(session, student, course1, course2):
     await upsert(session, QuizSession,
         {"user_id": student.id, "course_id": course1.id, "score": 85.0},
         {"correct_count": 8, "total_count": 10, "time_spent": 600,
-         "chapter": "第1章", "status": "submitted",
+         "chapter": "第1章",
          "diagnosis_json": {"suggestions": ["Review trees", "Practice graphs"]}})
 
 

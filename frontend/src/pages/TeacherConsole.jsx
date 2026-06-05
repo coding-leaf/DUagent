@@ -68,9 +68,24 @@ export default function TeacherConsole() {
 
   if (!classesLoading && classes.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <FeedbackStatus status="empty" title="暂无班级" description="您目前没有管理任何班级" />
-      </div>
+      <>
+        <div className="min-h-screen flex items-center justify-center bg-background flex-col gap-4">
+          <FeedbackStatus status="empty" title="暂无班级" description="您目前没有管理任何班级" />
+          <button
+            onClick={() => setShowCreateDialog(true)}
+            className="mt-4 px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors"
+          >
+            创建第一门课程
+          </button>
+        </div>
+        <CreateCourseDialog
+          open={showCreateDialog}
+          onClose={() => setShowCreateDialog(false)}
+          onCreated={async () => {
+            await refreshClasses();
+          }}
+        />
+      </>
     );
   }
 

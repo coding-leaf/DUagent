@@ -112,6 +112,23 @@
 
 ### 4.4 Quiz / PracticeResult
 
+#### 证据
+
+- `Quiz` 调用 `GET /quiz/questions` 和 `POST /quiz/submit`。
+- `PracticeResult` 优先使用 `location.state.result`，刷新时调用 `GET /quiz/result`。
+- 刷新路径当前手动构造 `total_count: 10`、`correct_count` 和空 `per_question_results`。
+- 页面未完整消费 `diagnosis.summary`、`diagnosis.weak_points`、`diagnosis.suggestions`。
+
+#### 矩阵条目
+
+| 能力名称 | 涉及页面 | 当前前端来源 | OpenAPI 状态 | Backend 状态 | Agent 来源 | 真实数据可用性 | 假展示风险 | 教师端投影 | 建议处理 | 优先级 | 待确认问题 |
+|----------|----------|--------------|--------------|--------------|------------|----------------|------------|------------|----------|--------|------------|
+| 取题 | Quiz | `GET /quiz/questions` | 已声明 | 已实现 | Assessment Agent 可生成题目 | 可用 | 无 | 不直接投影 | 保留 | P1 | chapter 参数是否固定为 tree |
+| 提交结果逐题复盘 | Quiz / PracticeResult | `POST /quiz/submit` state | `per_question_results` 已声明 | 已实现 | Assessment Agent 诊断异步参与 | 可用性需验证 | 无 | 可投影为薄弱点来源 | 保留 | P1 | 刷新后是否还能拿到逐题结果 |
+| 刷新后的结果页 | PracticeResult | `GET /quiz/result` 后手动构造 | `diagnosis` 已声明 | 已实现 | Assessment Agent suggestions | 部分可用 | 手动构造字段 | 补前端消费 | P1 | 是否需要后端补 latest_quiz 的题数/正确数 |
+| AI 诊断建议 | PracticeResult | 当前文案基于 accuracy 静态判断 | `diagnosis.summary/suggestions/weak_points` 已声明 | 已实现 | Assessment Agent | 可用性需验证 | 静态内容 | 可投影为教师端行动建议 | 补前端消费 | P1 | suggestions 展示位置 |
+| 历史击败/新纪录/排名 | PracticeResult | 静态展示 | 未声明 | 无需实现 | 不需要 | 不可用 | 静态内容 | 不投影 | 前端删除 | P0 | 已确认删除 |
+
 ### 4.5 AIChat
 
 ## 5. 教师端投影依赖

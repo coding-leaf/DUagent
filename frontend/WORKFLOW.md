@@ -115,6 +115,11 @@
   - `JoinCourseDialog` / `CreateCourseDialog`：弹窗卡片宽度从 `max-w-sm` 改为 `w-[min(92vw,24rem)] min-w-[18rem]`；按钮/标题加 `whitespace-nowrap`
   - `Dashboard` / `TeacherConsole`：空状态父容器加 `w-full px-4`；按钮加 `whitespace-nowrap min-w-fit`
   - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
+- 2026-06-05：AI Chat SSE 真实流 smoke 验证通过：
+  - Agent `POST /agent/v1/tutoring/chat` 直接调用返回完整 SSE 流：chunk（文本）、diagram（Mermaid）、knowledge_points、suggestion、done 五种事件类型均正常产出
+  - 事件 JSON 结构与前端 `chatService.streamChat` SSE 解析器兼容
+  - spec #17 "运行时稳定性待验证" 降级：Agent 端协议已确认可用。剩余风险为 Backend 代理层 token 过期/网络中断，可通过前端错误重试兜底
+  - 无代码变更，纯验证。
 
 ## 本地联调注意事项
 
@@ -127,6 +132,8 @@
 - `teaching.js` `getConsoleInsights`：mock 分支调用 `/api/v1/course/{id}/insights`（不在 OpenAPI），真实分支返回 `data: null`（空实现）。需新增班级洞察端点（spec #5/#11）。
 - `TeacherConsole.jsx:214` `useMock &&`：守卫 Insights 区块，端点就绪后需移除。
 - 详见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`。
+
+AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 
 ## 下一步建议
 

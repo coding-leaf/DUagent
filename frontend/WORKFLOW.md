@@ -98,5 +98,5 @@
 ## 下一步建议
 
 - 阶段一已发现的真实 API service 契约疑点已清理完毕。当前删除的 6 个方法均无运行时代码调用方且不在 `Client-API.openapi.json` 中；阶段一真实 API 调用路径未发现新增契约漂移。
-- 阶段二入口：以阶段二能力清单为输入，对照 `../docs/10-client-api/*` 逐项标注缺失字段、缺失接口和数据来源。
+- 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账，含三层对照矩阵、优先级排序和拆分任务建议）；实现前需先完成契约审查。
 - 完成契约审查后，再决定是否修改 Client API、Backend Schema 或 Agent API。

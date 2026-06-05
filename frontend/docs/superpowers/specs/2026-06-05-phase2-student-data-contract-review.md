@@ -95,6 +95,21 @@
 
 ### 4.3 LearningPath
 
+#### 证据
+
+- 前端调用 `learningService.getLearningPath(activeCourseId)` -> `GET /learning-path`。
+- `learningService` 未封装 `GET /learning-path/nodes/{node_id}/resources`。
+- 页面中"欠缺知识点推荐""关键缺失""智能体提示""配套习题""推荐资源卡"存在静态内容。
+
+#### 矩阵条目
+
+| 能力名称 | 涉及页面 | 当前前端来源 | OpenAPI 状态 | Backend 状态 | Agent 来源 | 真实数据可用性 | 假展示风险 | 教师端投影 | 建议处理 | 优先级 | 待确认问题 |
+|----------|----------|--------------|--------------|--------------|------------|----------------|------------|------------|----------|--------|------------|
+| 学习路径基础节点 | LearningPath | `GET /learning-path` | 已声明 | 已实现 | LearningPath Agent 可生成 | 可用性需验证 | 无 | 可投影为学习进度 | 保留 | P1 | 节点 status/mastery 语义是否稳定 |
+| 节点资源 | LearningPath | 当前未调用正式端点 | `/learning-path/nodes/{node_id}/resources` 已声明 | 已实现 | 资源/题目来源混合 | 未接入 | 静态内容 | 可投影为个体诊断资源 | 补前端消费 | P1 | 节点展开还是跳转时加载 |
+| 智能体提示 | LearningPath | 静态文案 | 未声明 | 未实现 | 可能需要 Agent | 不可用 | 静态内容 | 不投影 | 前端降级 | P2 | 是否保留为通用说明而非个性化提示 |
+| 推荐资源卡 | LearningPath | 静态卡片 | 已有节点资源端点可替代 | 已实现端点 | 不需要新增 | 未接入 | 静态内容 | 可投影 | 补前端消费 | P1 | 使用 NodeResources 哪些数组展示 |
+
 ### 4.4 Quiz / PracticeResult
 
 ### 4.5 AIChat

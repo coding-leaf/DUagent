@@ -89,16 +89,16 @@
 | # | 页面/能力 | 前端需要 | OpenAPI 状态 | Backend 状态 | Agent 状态 | 缺口类型 | 来源类型 | 优先级 | 建议处理 |
 |---|----------|---------|-------------|-------------|-----------|---------|---------|--------|---------|
 | 15 | StudentProfile — 学生画像知识统计展示 | Backend 已补 `knowledge_mastered`、`knowledge_weak` 两个 SQL 字段（`others.py:82-83`）。`TeacherStudentReport.jsx` 真实分支已使用 `profile_summary.knowledge_mastered`/`knowledge_weak`。`StudentProfile.jsx` 是否展示这些统计待核实 | `GET /profile` 已声明，OpenAPI 响应 schema 是否含这两个字段待核对 | Backend 模型层已有 | Agent：`POST /profile/generate` | `字段缺失` | 已有真实 API 字段不足 | P1 | 补字段：如 OpenAPI schema 未声明则补；如已声明但 StudentProfile.jsx 未展示则改前端 |
-| 16 | PracticeResult — Quiz 结果复盘字段覆盖度 | 当前 `quizService.getResult(courseId)` → `GET /quiz/result`。`PracticeResult.jsx` 需展示逐题复盘、薄弱点诊断。`GET /quiz/result` 返回 `diagnosis_json`（含 `suggestions[]`） | `GET /quiz/result` 已声明 | Backend 已实现（`quiz.py:187`） | Agent：`POST /assessment/evaluate` | `字段缺失` | 已有真实 API 字段不足 | P2 | 补字段：核查 `/quiz/result` 返回的 `diagnosis_json` 是否足以支撑逐题复盘；不足则需补 Agent 产出结构 |
+| 16 | PracticeResult — Quiz 结果复盘字段覆盖度 | 当前 `quizService.getResult(courseId)` → `GET /quiz/result`。`PracticeResult.jsx` 需展示逐题复盘、薄弱点诊断。OpenAPI 已声明 `diagnosis.suggestions`/`weak_points`，Backend 也会融合 Agent suggestions，但 **`GET /quiz/result` 不提供逐题结果（每题正确/错误/用时），且前端未消费已有诊断字段** | `GET /quiz/result` 已声明，含 `diagnosis.suggestions`/`weak_points` | Backend 已实现（`quiz.py:187`），但无逐题结果字段 | Agent：`POST /assessment/evaluate` | `前端适配缺失` + `逐题复盘字段缺失` | 已有真实 API 字段不足 | P2 | 补字段 + 改前端：`GET /quiz/result` 需新增逐题结果字段；前端 `PracticeResult.jsx` 需消费已有 `diagnosis` 字段展示薄弱点和建议 |
 | 17 | AIChat — SSE 流式对话稳定性 + Agent 联调 | `chatService.streamChat` 有完整 mock 分支（`setInterval` 模拟 SSE），真实分支使用原生 `fetch` + `ReadableStream` 对接 `POST /tutoring/chat`。**mock 分支是 `VITE_USE_MOCK` 控制的开发辅助，与 admin/teaching 的路径级 mock 不同** | `POST /tutoring/chat` 已声明（但可能是 SSE 语义，需确认 OpenAPI 描述） | Backend 已实现（`tutoring.py:89`） | Agent：`POST /tutoring`（SSE 流式对话） | `协议适配风险` + `运行时稳定性待验证` | 已有真实 API 字段不足 | P0 | 联调验证：确认真实 SSE 流在网络中断、token 过期、并发消息等场景下的稳定性。mock 分支可保留为开发辅助（由 `VITE_USE_MOCK` 控制），但不应作为正式路径 |
-| 18 | AdminConsole — 管理员用户管控前端对接 | **已确认**：`AdminConsole.jsx` 已通过 `adminService.updateUser(userId, { status })` 执行封禁/激活操作，通过 `adminService.removeUser(userId)` 删除用户。`adminService.getUsers({ search })` 已获取列表 | 均已声明 | Backend 均已实现（`admin.py:14,62,112`） | `—` | `已对齐` | 已有真实 API 字段不足 | P1 | 联调验证：确认封禁/删除操作在真实 Backend 下功能正确 |
+| 18 | AdminConsole — 管理员用户管控前端对接 | **发现三处不对齐**：① 搜索参数：前端 `adminService.getUsers({ search })` 传 `search`，但 OpenAPI/Backend 参数为 `keyword`（`AdminConsole.jsx:21`）；② 返回字段：页面读取 `u.status`/`u.last_login`，但 Backend `AdminUserItem` 响应无这些字段（`AdminConsole.jsx:188`）；③ 封禁动作：页面调用 `PUT /admin/users/{id}` 传 `{ status }`，但 OpenAPI `AdminUpdateUserRequest` 和 Backend 均不支持 `status` 字段（`AdminConsole.jsx:68`） | `GET/PUT/DELETE /admin/users` 路径已声明，但请求参数 schema（keyword vs search）和响应字段（status/last_login）不对齐 | Backend 路由已实现，但参数名/字段名与前端预期不一致 | `—` | `契约/前端适配缺口` | 已有真实 API 字段不足 | P1 | 契约审查：逐项对齐搜索参数名、用户列表返回字段、封禁/激活语义与请求 schema；前端按 OpenAPI 修改参数名和字段名 |
 | 19 | 资源生成异步任务链路 | `learningService.triggerResourceGeneration(params)` → `POST /resources/generate`，`learningService.getTaskStatus(taskId)` → `GET /tasks/{task_id}`。两个端点均已在前端 service 中封装，但**暂无页面调用这两个方法** | `POST /resources/generate`、`GET /tasks/{task_id}` 均已声明 | Backend 均已实现（`resources.py:70`、`tasks.py:12`） | Agent：`POST /resources/generate` | `字段缺失` + `前端适配缺失` | 已有真实 API 字段不足 | P1 | 补字段 + 改前端：核查任务完成后返回的结果字段；在前端页面中对接任务发起→轮询状态→展示结果的完整流程 |
 
 ---
 
 ## 4. 优先级排序
 
-### P0 — 阻塞联调（3 条）
+### P0 — 阻塞联调（矩阵 3 条，合并为 2 个任务）
 
 必须在阶段二实现前解决：
 
@@ -123,14 +123,14 @@
 | 13 | admin getAgentLogs mock 清理 | 真实端点已对接 |
 | 14 | admin getSystemLogs mock 清理 | 需同时接入 AdminConsole 展示 |
 | 15 | 学生画像知识统计前端展示 | 字段已补到 Backend，TSTeport 已用，需确认 SProfile 也展示 |
-| 18 | AdminConsole 管控动作联调验证 | 前端已对接 `updateUser`/`removeUser`，需真实环境验证 |
+| 18 | AdminConsole 管控动作契约审查 | 三处不对齐：搜索参数名（search vs keyword）、返回字段（status/last_login 不存在）、封禁语义（PUT 传 status 不被支持） |
 | 19 | 资源生成异步任务链路 | 端点已存在但暂无页面调用 |
 
 ### P2 — 可降级或暂缓（1 条）
 
 | # | 条目 | 理由 |
 |---|------|------|
-| 16 | Quiz 结果复盘字段覆盖度 | 基础 Quiz（出题→提交→得分）已在阶段一 E2E 通过 |
+| 16 | Quiz 结果复盘字段 + 前端适配 | 基础 Quiz 已在阶段一 E2E 通过，复盘增强属锦上添花。`GET /quiz/result` 不提供逐题结果，前端未消费已有 `diagnosis` 字段 |
 
 ---
 
@@ -168,8 +168,12 @@
 
 12. 路径节点资源端点前端封装 + LearningPath.jsx 接入（#4/8）
 13. 学生画像知识统计 StudentProfile 前端展示（#15）
-14. AdminConsole 管控动作联调验证（#18）
+14. AdminConsole 管控动作契约审查（#18）：逐项对齐搜索参数名、用户列表返回字段、封禁/激活语义
 15. 资源生成异步任务链路前端对接（#19）
+
+### P2 暂缓项（阶段二结束后按需决定）
+
+16. Quiz 复盘：逐题结果字段补全 + 前端消费已有 diagnosis 字段（#16）
 
 ### 每轮完成后的验证
 

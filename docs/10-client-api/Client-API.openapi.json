@@ -973,6 +973,44 @@
         }
       }
     },
+
+  "/resources/{id}": {
+    "get": {
+      "tags": ["Resources"],
+      "summary": "获取资源详情",
+      "operationId": "getResourceDetail",
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string" },
+          "description": "资源 ID"
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "资源详情",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["code", "message", "data"],
+                "properties": {
+                  "code": { "type": "integer", "example": 200 },
+                  "message": { "type": "string", "example": "success" },
+                  "data": { "$ref": "#/components/schemas/ResourceDetailItem" }
+                }
+              }
+            }
+          }
+        },
+        "401": { "description": "未登录" },
+        "403": { "description": "无课程访问权限" },
+        "404": { "description": "资源不存在" }
+      }
+    }
+  },
     "/resources/generate": {
       "post": {
         "tags": ["Resources"],
@@ -1799,6 +1837,22 @@
           "view_count": { "type": "integer", "description": "浏览次数" },
           "created_at": { "type": "string", "format": "date-time", "description": "创建时间" }
         }
+      },
+      "ResourceDetailItem": {
+        "type": "object",
+        "description": "ResourceItem 全部字段 + content_preview",
+        "allOf": [
+          { "$ref": "#/components/schemas/ResourceItem" },
+          {
+            "type": "object",
+            "properties": {
+              "content_preview": {
+                "type": ["string", "null"],
+                "description": "文字资源正文预览，通常为正文前若干字符或段落。由 Backend 提供，具体来源是 Backend 实现细节。适用 document/reading 类型；其他类型返回 null。"
+              }
+            }
+          }
+        ]
       },
       "ChatRequest": {
         "type": "object",

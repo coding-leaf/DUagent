@@ -136,6 +136,9 @@
   - TeacherStudentReport：删除 mock 分支 class_name/rank/motivation_index/total_duration_hours/认知曲线；修正 weak_points/recent_activity 注释（从"不在契约"改为"后端空数组"）
   - JS bundle 534→520 KB（-14KB 假展示代码）
   - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
+- 2026-06-06：修正 P0 补刀审查遗留的 `TeacherStudentReport.jsx` JSX 属性名：
+  - 将模态偏好占位文案的 `class` 改为 `className`，消除 React JSX 属性警告风险。
+  - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
 
 ## 本地联调注意事项
 

@@ -146,7 +146,7 @@ export default function TeacherStudentReport() {
                 </h3>
               </div>
               <div className="relative w-52 h-52 flex items-center justify-center p-2">
-                <p class="text-sm text-slate-400 text-center">模态偏好数据待 Backend 返回</p>
+                <p className="text-sm text-slate-400 text-center">模态偏好数据待 Backend 返回</p>
               </div>
               <p className="text-xs text-slate-500 mt-4 leading-relaxed w-full text-left">
                 <span className="font-bold text-primary">AI诊断：</span> {report.ai_diagnosis}

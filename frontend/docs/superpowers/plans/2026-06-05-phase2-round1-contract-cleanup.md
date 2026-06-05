@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 清除前端 service 中的 6 个 mock 分支路径，修正 AdminConsole 与 OpenAPI/Backend 之间的 3 处契约不对齐，为阶段二联调建立干净的接口边界。
+**Goal:** 清除前端 service 中 5 个 mock 分支路径，保留并标记 1 个阶段二 P0 阻塞 mock 分支（getConsoleInsights），修正 AdminConsole 与 OpenAPI/Backend 之间的契约不对齐，为阶段二联调建立干净的接口边界。
 
 **Architecture:** 仅做前端删除与参数/字段适配，不涉及 Backend、Agent 或新增 API 端点。每个 task 改变一个独立关注点，可单独 lint/build 验证、单独提交。`chat.js` mock 分支保留（`VITE_USE_MOCK` 开发辅助）。
 
@@ -21,7 +21,7 @@
 ```markdown
 ## 第一轮清理范围
 
-### 删除 6 个 mock 分支（仅前端，不碰 Backend/Agent）
+### 删除 5 个 mock 分支（仅前端，不碰 Backend/Agent）
 
 | 文件 | mock 路径 | 真实端点 | Spec # |
 |------|----------|---------|--------|
@@ -31,20 +31,20 @@
 | admin.js:23-25 | /admin/logs/agents | GET /admin/logs/agent | #13 |
 | admin.js:31-33 | /admin/logs/system | GET /admin/logs/operations | #14 |
 
-### 特殊处理（不直接删除 mock，做计划层面标记）
+### 保留并标记（本轮不改代码，仅记录到 WORKFLOW.md）
 
 | 位置 | 问题 | 处理 |
 |------|------|------|
-| teaching.js:61-68 getConsoleInsights | mock + 真实 data:null | 保留 mock + 加 TODO 注释标注为阶段二阻塞 |
-| TeacherConsole.jsx:214 useMock && | 守卫 Insights 区块 | 加 TODO 注释标注需在补接口后移除 |
+| teaching.js:61-68 getConsoleInsights | mock + 真实 data:null | 本轮不改代码，仅记录到 WORKFLOW.md |
+| TeacherConsole.jsx:214 useMock && | 守卫 Insights 区块 | 本轮不改代码，仅记录到 WORKFLOW.md |
 
 ### AdminConsole 契约修正（3 处前端适配）
 
 | 位置 | 问题 | 处理 |
 |------|------|------|
 | AdminConsole.jsx:21 | { search } → OpenAPI 参数是 keyword | 改参数名 |
-| AdminConsole.jsx:188-198 | u.status / u.last_login → Backend 不返回 | 删 status 列 + toggleUserStatus；last_login 改 N/A |
-| AdminConsole.jsx:66-68 | PUT { status } → Backend 不支持 status 字段 | 删除 toggleUserStatus 函数和按钮 |
+| AdminConsole.jsx:188-198 | u.status / u.last_login → Backend 不返回 | 删 status 列 + 封禁按钮；last_login 改 N/A |
+| AdminConsole.jsx:66-74,199-218 | 封禁（PUT { status }）+ 删除（DELETE）→ 后端 DELETE 是软删除（is_active=False），列表查询按 is_deleted 过滤，不返回 status/is_active。语义未对齐 | 删封禁按钮（Backend 不支持 status 字段）；暂停/移除删除按钮（DELETE 语义待契约确认：软删除/停用/封禁） |
 
 ### 不在此轮处理
 
@@ -179,46 +179,7 @@ git commit -m "清理 teaching getClassStudents mock 分支"
 
 ---
 
-### Task 3: 标记 teaching.js getConsoleInsights 为阶段二阻塞（保留 mock，不删除）
-
-**Files:**
-- Modify: `src/api/services/teaching.js`
-
-**背景：** `getConsoleInsights` 的 mock 分支调用 `/api/v1/course/{id}/insights`（不在 OpenAPI），真实分支返回 `data: null`（空实现）。新增班级洞察端点是阶段二 P0 任务（spec #5/#11），本轮只做标记，不补端点。
-
-- [ ] **Step 1: 在方法上方添加 TODO 注释**
-
-在 `getConsoleInsights` 方法前添加注释块：
-
-```javascript
-  // TODO(phase2-round2): 班级洞察端点待新增（spec #5/#11）
-  // 当前 mock 分支和 data:null 空实现均为占位，真实端点就绪后需：
-  //   1. 替换为真实 Client API 调用
-  //   2. 移除 TeacherConsole.jsx:214 的 useMock && 守卫
-  //   3. Spec 差异见 docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md
-  getConsoleInsights: (courseId) => {
-```
-
-**不删除** mock 分支本身 — 保留当前代码行为不变。
-
-- [ ] **Step 2: 验证 lint**
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent/frontend && npm run lint
-```
-Expected: PASS
-
-- [ ] **Step 3: 提交**
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent
-git add frontend/src/api/services/teaching.js
-git commit -m "标记 getConsoleInsights 为阶段二阻塞,保留 mock 待端点就绪"
-```
-
----
-
-### Task 4: 清理 teaching.js getStudentReport mock 分支
+### Task 3: 清理 teaching.js getStudentReport mock 分支
 
 **Files:**
 - Modify: `src/api/services/teaching.js`
@@ -262,7 +223,7 @@ git commit -m "清理 teaching getStudentReport mock 分支"
 
 ---
 
-### Task 5: 清理 admin.js getAgentLogs mock 分支
+### Task 4: 清理 admin.js getAgentLogs mock 分支
 
 **Files:**
 - Modify: `src/api/services/admin.js`
@@ -297,7 +258,7 @@ git commit -m "清理 admin getAgentLogs mock 分支"
 
 ---
 
-### Task 6: 清理 admin.js getSystemLogs mock 分支 + 移除 useMock 声明
+### Task 5: 清理 admin.js getSystemLogs mock 分支 + 移除 useMock 声明
 
 **Files:**
 - Modify: `src/api/services/admin.js`
@@ -341,7 +302,7 @@ git commit -m "清理 admin getSystemLogs mock 分支,移除 useMock 声明"
 
 ---
 
-### Task 7: 修正 AdminConsole 搜索参数 search → keyword
+### Task 6: 修正 AdminConsole 搜索参数 search → keyword
 
 **Files:**
 - Modify: `src/pages/AdminConsole.jsx`
@@ -378,114 +339,72 @@ git commit -m "修正 AdminConsole 搜索参数 search 改为 keyword"
 
 ---
 
-### Task 8: 处理 AdminConsole 用户状态字段/封禁动作契约不对齐
+### Task 7: 处理 AdminConsole 用户状态字段/封禁与删除动作契约不对齐
 
 **Files:**
 - Modify: `src/pages/AdminConsole.jsx`
 
-**背景：** Spec #18 第②③项：Backend 不返回 `status`/`last_login` 字段，不支持 `PUT { status }` 封禁语义。本轮不涉及 Backend 改动，需从 UI 层面移除依赖不存在字段的元素。
+**背景：** Spec #18 第②③项 + 契约审查发现：
+
+1. **封禁（toggleUserStatus）**：`PUT /admin/users/{id}` 传 `{ status }`，但 OpenAPI `AdminUpdateUserRequest` 和 Backend 均不支持 `status` 字段。**本轮删除封禁按钮。**
+
+2. **删除（deleteUser）**：`DELETE /admin/users/{id}` 实际执行 `target.is_active = False`（软删除），但用户列表查询按 `is_deleted == False` 过滤，不返回 `is_active`/`status` 字段。这意味着：删除后本地乐观移除，但重新拉列表仍会出现。**DELETE 的语义（软删除/停用/封禁）尚未契约明确，本轮一并移除删除按钮，待契约确认后再恢复。**
+
+3. **status 列 + last_login 列**：Backend 不返回这两个字段。**本轮删除 status 列，last_login 改为 N/A。**
 
 **处理方案：**
-- 删除 `u.status` 列和 `toggleUserStatus` 函数（Backend 不支持）
-- `u.last_login` 改为 `N/A`（Backend 不返回此字段）
-- `deleteUser`（DELETE）保留 — Backend 支持
+- 删除 `u.status` 列（表头 + 渲染）
+- 删除 `toggleUserStatus` 函数和封禁/解封按钮
+- 删除 `deleteUser` 函数和删除按钮（DELETE 语义待确认）
+- `u.last_login` 改为 `N/A`
 - 保留 `u.role` — Backend 返回此字段
-- 表格 colSpan 从 6 改为 5
+- 表格 colSpan 从 6 改为 4（删除状态列 + 操作列无按钮时保留操作列头但内容为空，或一并删除操作列）
 
-- [ ] **Step 1: 删除 toggleUserStatus 函数（第 66-74 行）**
+- [ ] **Step 1: 删除 toggleUserStatus 函数（第 66-74 行）和 deleteUser 函数（第 76-84 行）**
 
-删除整个函数块。
+删除两个函数块。
 
-- [ ] **Step 2: 删除表头"状态"列（第 164 行）**
+- [ ] **Step 2: 删除表头"状态"列和"操作"列**
 
 删除：
 ```jsx
 <th className="px-6 py-4 font-medium">状态</th>
+<th className="px-6 py-4 font-medium text-right">操作</th>
 ```
 
-- [ ] **Step 3: 删除表格行中"状态"列的渲染（第 188-195 行）**
+- [ ] **Step 3: 删除表格行中"状态"列和"操作"列的渲染**
 
-删除整个 `<td>` 状态列渲染块。
+删除 `<td>` 状态列（第 188-195 行）和 `<td>` 操作列（第 199-218 行）。
 
-- [ ] **Step 4: 修改"最后登录"列为 N/A（第 196-198 行）**
+- [ ] **Step 4: 修改"最后登录"列为 N/A**
 
 改为：
 ```jsx
 <td className="px-6 py-4 text-slate-500 text-xs">N/A</td>
 ```
 
-- [ ] **Step 5: 删除封禁/解封按钮（第 202-209 行），仅保留删除按钮**
+- [ ] **Step 5: 更新 colSpan**
 
-修改操作列为：
-```jsx
-<td className="px-6 py-4 text-right space-x-2">
-  {u.role !== 'admin' && (
-    <button
-      onClick={() => deleteUser(u.id)}
-      className="px-3 py-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 text-xs font-bold transition-colors cursor-pointer"
-    >删除</button>
-  )}
-</td>
-```
+将两处 `colSpan="6"`（第 171、173 行）改为 `colSpan="4"`（删除了状态列和操作列）。
 
-- [ ] **Step 6: 更新 colSpan**
-
-将两处 `colSpan="6"`（第 171、173 行）改为 `colSpan="5"`（删除了状态列）。
-
-- [ ] **Step 7: 验证 lint + build**
+- [ ] **Step 6: 验证 lint + build**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent/frontend && npm run lint && npm run build
 ```
 Expected: PASS
 
-- [ ] **Step 8: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent
 git add frontend/src/pages/AdminConsole.jsx
-git commit -m "适配 AdminConsole 用户状态和封禁动作为契约对齐,删除不存在的 status 字段引用"
+git commit -m "暂停 AdminConsole 封禁和删除动作,待 Admin 用户状态契约确认"
 ```
 
 ---
 
-### Task 9: 标记 TeacherConsole useMock && Insights 守卫为阶段二阻塞
-
-**Files:**
-- Modify: `src/pages/TeacherConsole.jsx`
-
-**背景：** Spec #5/#11：`TeacherConsole.jsx:214` 的 `useMock &&` 守卫阻止真实数据渲染 Insights 区块。本轮只在代码中加注释标记。
-
-- [ ] **Step 1: 在 Insights 区块上方添加 TODO 注释**
-
-在第 213 行（`{/* AI Insights Section */}` 注释）之前插入：
-
-```jsx
-{/* TODO(phase2-round2): 移除 useMock && 守卫（spec #5/#11）
-    班级洞察端点待新增。端点就绪后删除 useMock && 条件，
-    使真实 API 返回的 insights 数据可渲染此区块。 */}
-```
-
-**不改动** `useMock &&` 守卫本身。
-
-- [ ] **Step 2: 验证 lint**
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent/frontend && npm run lint
-```
-Expected: PASS
-
-- [ ] **Step 3: 提交**
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent
-git add frontend/src/pages/TeacherConsole.jsx
-git commit -m "标记 TeacherConsole Insights useMock 守卫为阶段二阻塞"
-```
-
----
-
-### Task 10: 全量验证 — lint / build / E2E
+### Task 8: 全量验证 — lint / build / E2E
 
 **Files:** 无修改（仅验证，不产生提交）
 
@@ -512,7 +431,7 @@ Expected: 3/3 passed（需 Backend + Agent + MySQL duagent_test 在线）
 
 ---
 
-### Task 11: 更新 WORKFLOW.md
+### Task 9: 更新 WORKFLOW.md
 
 **Files:**
 - Modify: `frontend/WORKFLOW.md`
@@ -522,11 +441,11 @@ Expected: 3/3 passed（需 Backend + Agent + MySQL duagent_test 在线）
 在最后一条验证记录之后追加：
 
 ```markdown
-- 2026-06-05：阶段二第一轮联调断层收敛 — 清理 6 个 mock 分支 + AdminConsole 契约修正：
-  - `teaching.js`：移除 getClasses / getClassStudents / getStudentReport 的 mock 路径；getConsoleInsights 标注为阶段二阻塞
+- 2026-06-05：阶段二第一轮联调断层收敛 — 清理 5 个 mock 分支 + AdminConsole 契约修正：
+  - `teaching.js`：移除 getClasses / getClassStudents / getStudentReport 的 mock 路径
   - `admin.js`：移除 getAgentLogs / getSystemLogs 的 mock 路径，删除 useMock 声明
-  - `AdminConsole.jsx`：搜索参数 search → keyword；删除状态列/封禁按钮（Backend 不支持 status 字段）；last_login 改为 N/A
-  - `TeacherConsole.jsx`：useMock && Insights 守卫标注为阶段二阻塞
+  - `AdminConsole.jsx`：搜索参数 search → keyword；删除状态列、封禁按钮、删除按钮（DELETE 语义待契约确认）；last_login 改为 N/A
+  - 标记为第二轮 P0：`getConsoleInsights` mock + data:null 空实现、`TeacherConsole.jsx` useMock && Insights 守卫
   - 清理后 `npm run lint` / `npm run build` 通过。
 ```
 
@@ -535,7 +454,7 @@ Expected: 3/3 passed（需 Backend + Agent + MySQL duagent_test 在线）
 追加方向建议：
 
 ```markdown
-- 阶段二第一轮 mock 分支清理已完成。第二轮方向：新增班级洞察端点（P0）、教师深度诊断字段扩展、ResourceDetail 页面改造、学习路径节点资源接入。
+- 阶段二第一轮 mock 分支清理已完成。第二轮 P0：新增班级洞察端点（getConsoleInsights 空实现）、移除 TeacherConsole useMock && Insights 守卫。第二轮 P1：教师深度诊断字段扩展、ResourceDetail 页面改造、学习路径节点资源接入、Admin 用户状态/封禁/删除契约确认。
 ```
 
 - [ ] **Step 3: 提交**
@@ -550,7 +469,7 @@ git commit -m "记录阶段二第一轮 mock 分支清理和契约修正结果"
 
 ## 自审清单
 
-**1. Spec 覆盖：** ✅ 覆盖 spec 组 2 全部 6 条（#9-#14）+ #18 全部 3 处不对齐。未覆盖条目（#1-#8, #15-#17, #19）属于后续轮次。
+**1. Spec 覆盖：** ✅ 覆盖 spec 组 2 全部 5 条 mock 清理（#9-#10, #12-#14）+ #18 全部 3 处不对齐。未覆盖条目（#1-#8, #11, #15-#17, #19）属于后续轮次。#11（getConsoleInsights mock）本轮保留并记录到 WORKFLOW.md。
 
 **2. 无占位符：** ✅ 所有步骤有完整代码、确切命令与预期输出。
 
@@ -561,5 +480,5 @@ git commit -m "记录阶段二第一轮 mock 分支清理和契约修正结果"
 | 风险 | 概率 | 缓解 |
 |------|------|------|
 | 删除 mock 分支后 E2E 失败 | 低 | E2E 运行在真实环境（`VITE_USE_MOCK !== 'true'`），不依赖 mock 路径 |
-| AdminConsole 删除状态列后 colSpan 未同步 | 低 | Task 8 Step 6 明确要求将 colSpan 从 6 改为 5 |
+| AdminConsole 删除状态列+操作列后 colSpan 未同步 | 低 | Task 7 Step 5 明确要求将 colSpan 从 6 改为 4 |
 | TeacherConsole 的 useMock 变量在清理后仍被引用 | 已确认 | `useMock` 在 TeacherConsole.jsx 中独立定义，不受 teaching.js 清理影响 |

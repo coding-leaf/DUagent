@@ -71,10 +71,6 @@ export const teachingService = {
       actualClassId = localStorage.getItem('course_id') || 'default_course';
     }
 
-    if (useMock) {
-      return client.get(`/api/v1/teacher/students/${actualStudentId}/report`);
-    }
-
     return client.get(`/teaching/classes/${actualClassId}/students/${actualStudentId}/learning`);
   }
 };

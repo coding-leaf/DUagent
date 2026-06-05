@@ -40,8 +40,8 @@ export default function JoinCourseDialog({ open, onClose, onJoined }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
-        <h2 className="text-lg font-bold text-slate-900 mb-1">加入课程</h2>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-[min(92vw,24rem)] min-w-[18rem] box-border mx-4">
+        <h2 className="text-lg font-bold text-slate-900 mb-1 whitespace-nowrap">加入课程</h2>
         <p className="text-sm text-slate-500 mb-4">输入教师提供的课程码加入课程</p>
 
         {success ? (
@@ -70,14 +70,14 @@ export default function JoinCourseDialog({ open, onClose, onJoined }) {
                 disabled={submitting}
                 className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
-                取消
+                <span className="whitespace-nowrap">取消</span>
               </button>
               <button
                 type="submit"
                 disabled={submitting || !courseCode.trim()}
                 className="px-4 py-2 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? '加入中...' : '加入'}
+                <span className="whitespace-nowrap">{submitting ? '加入中...' : '加入'}</span>
               </button>
             </div>
           </form>

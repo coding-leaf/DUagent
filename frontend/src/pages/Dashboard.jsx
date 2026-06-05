@@ -82,12 +82,12 @@ export default function Dashboard() {
   if (!activeCourseId) {
     return (
       <>
-        <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+        <div className="min-h-screen w-full px-4 flex flex-col items-center justify-center bg-background">
           <FeedbackStatus status="empty" title="暂无课程" description="请先加入一门课程" />
           <div className="flex justify-center mt-4">
             <button
               onClick={() => setShowJoinDialog(true)}
-              className="px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors"
+              className="px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors whitespace-nowrap min-w-fit"
             >
               加入课程
             </button>

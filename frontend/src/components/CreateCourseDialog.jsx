@@ -66,8 +66,8 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
-        <h2 className="text-lg font-bold text-slate-900 mb-1">创建课程</h2>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-[min(92vw,24rem)] min-w-[18rem] box-border mx-4">
+        <h2 className="text-lg font-bold text-slate-900 mb-1 whitespace-nowrap">创建课程</h2>
         <p className="text-sm text-slate-500 mb-4">开设一个新课程并获取课程码</p>
 
         {result ? (
@@ -86,13 +86,13 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
                 onClick={copyCode}
                 className="flex-1 px-4 py-2 text-sm font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors"
               >
-                {copied ? '已复制' : '复制课程码'}
+                <span className="whitespace-nowrap">{copied ? '已复制' : '复制课程码'}</span>
               </button>
               <button
                 onClick={handleClose}
                 className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors"
               >
-                完成
+                <span className="whitespace-nowrap">完成</span>
               </button>
             </div>
           </div>
@@ -127,14 +127,14 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
                 disabled={submitting}
                 className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
-                取消
+                <span className="whitespace-nowrap">取消</span>
               </button>
               <button
                 type="submit"
                 disabled={submitting || !name.trim()}
                 className="px-4 py-2 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? '创建中...' : '创建'}
+                <span className="whitespace-nowrap">{submitting ? '创建中...' : '创建'}</span>
               </button>
             </div>
           </form>

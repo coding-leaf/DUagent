@@ -18,5 +18,8 @@ export const learningService = {
   },
   getTaskStatus(taskId) {
     return apiClient.get(`/tasks/${taskId}`);
+  },
+  getResourceDetail(id) {
+    return apiClient.get(`/resources/${id}`);
   }
 };

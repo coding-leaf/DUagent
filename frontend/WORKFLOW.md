@@ -139,6 +139,11 @@
 - 2026-06-06：修正 P0 补刀审查遗留的 `TeacherStudentReport.jsx` JSX 属性名：
   - 将模态偏好占位文案的 `class` 改为 `className`，消除 React JSX 属性警告风险。
   - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
+- 2026-06-06：ResourceDetail 正文预览契约实现完成：
+  - Client API：新增 `GET /api/v1/resources/{id}` + `ResourceDetailItem` schema（`content_preview: string | null`）
+  - Backend：新增详情路由 `@router.get("/{id}")`，`document`/`reading` 类型返回正文预览，其他 null
+  - Frontend：`learningService.getResourceDetail(id)`；ResourceDetail.jsx 接入 API，删除阅读进度/时长占位
+  - `npm run lint` / `npm run build` / Backend pytest 通过。
 
 ## 本地联调注意事项
 

@@ -20,25 +20,26 @@ export default function TeacherConsole() {
   const [studentsLoading, setStudentsLoading] = useState(false);
 
   // 获取班级列表
-  const refreshClasses = useCallback(
-    async () => {
-      setClassesLoading(true);
-      try {
-        const res = await teachingService.getClasses();
-        if (res.code === 200) {
-          setClasses(res.data || []);
-          if (res.data?.length > 0 && !activeClass) {
-            setActiveClass(res.data[0].id);
+  const refreshClasses = useCallback(async (silent = false) => {
+    if (!silent) setClassesLoading(true);
+    try {
+      const res = await teachingService.getClasses();
+      if (res.code === 200) {
+        const newClasses = res.data || [];
+        setClasses(newClasses);
+        setActiveClass(prev => {
+          if (newClasses.length > 0 && !newClasses.find(c => c.id === prev)) {
+            return newClasses[0].id;
           }
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setClassesLoading(false);
+          return prev;
+        });
       }
-    },
-    [] // eslint-disable-line react-hooks/exhaustive-deps
-  );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      if (!silent) setClassesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     refreshClasses(); // eslint-disable-line react-hooks/set-state-in-effect
@@ -80,10 +81,8 @@ export default function TeacherConsole() {
         </div>
         <CreateCourseDialog
           open={showCreateDialog}
-          onClose={() => setShowCreateDialog(false)}
-          onCreated={async () => {
-            await refreshClasses();
-          }}
+          onClose={() => { setShowCreateDialog(false); refreshClasses(); }}
+          onCreated={() => {}}
         />
       </>
     );
@@ -319,10 +318,8 @@ export default function TeacherConsole() {
 
       <CreateCourseDialog
         open={showCreateDialog}
-        onClose={() => setShowCreateDialog(false)}
-        onCreated={async () => {
-          await refreshClasses();
-        }}
+        onClose={() => { setShowCreateDialog(false); refreshClasses(); }}
+        onCreated={() => {}}
       />
     </div>
   );

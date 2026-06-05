@@ -5,6 +5,7 @@ import { learningService } from '../api/services/learning';
 import { useCourse } from '../context/CourseContext';
 import FeedbackStatus from '../components/FeedbackStatus';
 import Navbar from '../components/Navbar';
+import JoinCourseDialog from '../components/JoinCourseDialog';
 
 const RESOURCE_TYPES = [
   { value: '全部', label: '全部' },
@@ -30,13 +31,14 @@ const getResourceTypeInfo = (type) => {
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeCourseId, loading: courseLoading } = useCourse();
+  const { activeCourseId, loading: courseLoading, changeCourse, refreshCourses } = useCourse();
   const [searchTerm, setSearchTerm] = useState(location.state?.search ?? '');
   const [selectedType, setSelectedType] = useState(location.state?.type ?? '全部');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [allResources, setAllResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
 
   const fetchResources = useCallback(async () => {
     if (!activeCourseId) return;
@@ -79,9 +81,29 @@ export default function Dashboard() {
 
   if (!activeCourseId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <FeedbackStatus status="empty" title="暂无课程" description="请先加入一门课程" />
-      </div>
+      <>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+          <FeedbackStatus status="empty" title="暂无课程" description="请先加入一门课程" />
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => setShowJoinDialog(true)}
+              className="px-5 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-full transition-colors"
+            >
+              加入课程
+            </button>
+          </div>
+        </div>
+        <JoinCourseDialog
+          open={showJoinDialog}
+          onClose={() => setShowJoinDialog(false)}
+          onJoined={async (newCourse) => {
+            await refreshCourses();
+            if (newCourse?.id) {
+              changeCourse(newCourse.id);
+            }
+          }}
+        />
+      </>
     );
   }
 

@@ -1,8 +1,33 @@
 
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { learningService } from '../api/services/learning';
 
 export default function ResourceDetail() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const [resource, setResource] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) {
+      learningService.getResourceDetail(id).then(res => {
+        if (res.code === 200) setResource(res.data);
+      }).catch(() => setResource(null))
+      .finally(() => setLoading(false));
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="bg-background text-on-background font-body-md min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-outline">加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-background text-on-background font-body-md min-h-screen">
@@ -51,32 +76,13 @@ export default function ResourceDetail() {
             </div>
           </div>
 
-          {/* Reading Progress Card */}
-          <div className="p-4 rounded-xl bg-surface-container-low space-y-3">
-            <h4 className="text-label-sm text-outline uppercase font-bold">阅读进度</h4>
-            <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
-              <div className="bg-primary-container h-full w-[65%]"></div>
-            </div>
-            <div className="flex justify-between text-label-sm">
-              <span>已完成 65%</span>
-              <span>3.2k 字 / 4.8k 字</span>
-            </div>
-          </div>
-
-          {/* Time Metrics */}
-          <div className="p-3 bg-white border border-outline-variant rounded-xl flex flex-col items-center text-center">
-            <span className="material-symbols-outlined text-primary mb-1">timer</span>
-            <span className="text-[10px] text-outline">当前阅读</span>
-            <span className="font-bold text-on-surface">12m</span>
-          </div>
-
           {/* Keywords */}
           <div className="space-y-2">
             <h4 className="text-label-sm text-outline uppercase font-bold px-2">核心关键词</h4>
             <div className="flex flex-wrap gap-2 px-2">
-              <span className="px-2 py-1 bg-surface-container-high text-on-surface-variant rounded text-xs border border-outline-variant">二叉平衡树</span>
-              <span className="px-2 py-1 bg-surface-container-high text-on-surface-variant rounded text-xs border border-outline-variant">AVL旋转</span>
-              <span className="px-2 py-1 bg-surface-container-high text-on-surface-variant rounded text-xs border border-outline-variant">递归遍历</span>
+              {resource?.tags?.map((tag, idx) => (
+                <span key={idx} className="px-2 py-1 bg-surface-container-high text-on-surface-variant rounded text-xs border border-outline-variant">{tag}</span>
+              ))}
             </div>
           </div>
         </div>
@@ -90,56 +96,22 @@ export default function ResourceDetail() {
           <div className="col-span-12 lg:col-span-8 space-y-gutter">
             <article className="bg-white p-10 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant hover:shadow-lg transition-shadow duration-300">
               <header className="mb-8 border-b border-surface-container-highest pb-6">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs font-bold">深度解析</span>
+                  {resource?.chapter && <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-xs">章节: {resource.chapter}</span>}
+                  {resource?.knowledge_point && <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-xs">知识点: {resource.knowledge_point}</span>}
                   <span className="text-outline text-label-sm">更新于 2023.10.15</span>
                 </div>
-                <h1 className="text-h1 font-h1 text-on-surface mb-4">深入理解 AVL 树：平衡二叉搜索树的原理与实现</h1>
+                <h1 className="text-h1 font-h1 text-on-surface mb-4">{resource?.title || '加载中...'}</h1>
                 <p className="text-body-lg text-on-surface-variant leading-relaxed">
-                  在数据结构中，平衡性是保证查找效率的关键。AVL 树作为最早被发明的自平衡二叉搜索树，通过引入“平衡因子”概念，在每次插入或删除后通过旋转操作维持树的高度平衡。
+                  {resource?.description || ''}
                 </p>
               </header>
 
-              <section className="prose prose-slate max-w-none space-y-6 text-on-surface-variant">
-                <h2 className="text-h2 font-h2 text-primary border-l-4 border-primary pl-4">1. 什么是平衡因子？</h2>
-                <p className="text-body-md">
-                  AVL 树中任何节点的两个子树的高度最大差别为 1，因此它也被称为高度平衡树。增加和删除可能需要通过一次或多次树旋转来重新平衡这个树。
+              <section className="prose prose-slate max-w-none text-on-surface-variant">
+                <p className="text-body-md whitespace-pre-wrap">
+                  {resource?.content_preview || '暂无正文预览'}
                 </p>
-
-                {/* Dynamic Visual Component */}
-                <div className="my-8 rounded-xl overflow-hidden border border-outline-variant bg-surface-container-lowest p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-label-sm font-bold text-primary">结构可视化：AVL 树右旋 (LL)</span>
-                    <span className="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors">zoom_in</span>
-                  </div>
-                  <div className="aspect-video relative rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center">
-                    <img 
-                      className="object-cover w-full h-full opacity-90 transition-transform duration-500 hover:scale-105" 
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuAobrmGpOJaUR7Xe-fGbU5--OxvqrMMlbfKm2tdmbCWvOV2VFROdDd_lF7iAABdX8a2nxp4-hLzA5kSbh2lzL78aMofbL06hCM2YafuaxCFCxy0rLZoq-HaYrrZ6aYv5PpTO0NzuKLeGhaTsOp1FqO3uGGfHHGz8fgoPDiWl_JfOiDFkMNsP0TxMpTRBuS2F88jzByrvvqMdytllO5wGq0tvhpLGH74i_lVJMf6qg56ygiUUHL5skrFsrBls2THC4zxH3zAORzI6NoV"
-                      alt="AVL Tree Visualization"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
-                    <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded text-xs font-mono shadow-sm">
-                      Agent ID: DS-042 | Rendering Status: Optimized
-                    </div>
-                  </div>
-                </div>
-
-                <h2 className="text-h2 font-h2 text-primary border-l-4 border-primary pl-4">2. 旋转机制详解</h2>
-                <p className="text-body-md">
-                  当树失去平衡时，AVL 树执行四种旋转操作之一：左旋、右旋、左右双旋和右左双旋。这些操作不仅维持了二叉搜索树的性质（左小右大），还压缩了树的高度，确保了 O(log n) 的最坏情况查找时间。
-                </p>
-
-                <div className="grid grid-cols-2 gap-4 my-6">
-                  <div className="p-4 bg-surface-container-low rounded-lg border-l-4 border-on-tertiary-container hover:bg-surface-container-high transition-colors">
-                    <h4 className="font-bold text-on-tertiary-container mb-1">左旋 (RR)</h4>
-                    <p className="text-xs">当右子树的右侧插入节点导致失衡时触发。</p>
-                  </div>
-                  <div className="p-4 bg-surface-container-low rounded-lg border-l-4 border-on-tertiary-container hover:bg-surface-container-high transition-colors">
-                    <h4 className="font-bold text-on-tertiary-container mb-1">右旋 (LL)</h4>
-                    <p className="text-xs">当左子树的左侧插入节点导致失衡时触发。</p>
-                  </div>
-                </div>
               </section>
 
               <footer className="mt-12 pt-8 border-t border-surface-container-highest flex justify-between items-center">

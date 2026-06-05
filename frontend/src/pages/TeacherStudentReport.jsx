@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 import FeedbackStatus from '../components/FeedbackStatus';
-import RadarChart from '../components/RadarChart';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -118,16 +117,16 @@ export default function TeacherStudentReport() {
               <div className="flex-1">
                 <div className="flex items-center gap-4 mb-2">
                   <h1 className="font-h1 text-3xl text-on-surface">{report.username}</h1>
-                  <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{report.level}</span>
+                  <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">学生</span>
                 </div>
                 <p className="text-body-md text-secondary font-body-md mb-2">学号: {report.student_id} · {report.major}</p>
                 <div className="flex gap-2">
-                  <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">{report.status}</span>
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">在读</span>
                 </div>
                 
                 <div className="pt-6 mt-4 border-t border-slate-100">
                   <div>
-                    <p className="text-2xl font-black text-slate-900">{report.score}</p>
+                    <p className="text-2xl font-black text-slate-900">—</p>
                     <p className="text-[10px] text-slate-400 uppercase tracking-tighter">综合评分</p>
                   </div>
                 </div>
@@ -147,16 +146,7 @@ export default function TeacherStudentReport() {
                 </h3>
               </div>
               <div className="relative w-52 h-52 flex items-center justify-center p-2">
-                <RadarChart 
-                  data={[
-                    { subject: '视觉化交互', value: 85 },
-                    { subject: '理论推导', value: 60 },
-                    { subject: '代码实操', value: 90 },
-                    { subject: '文字阅读', value: 45 },
-                    { subject: '讨论交流', value: 75 }
-                  ]} 
-                  size={200} 
-                />
+                <p class="text-sm text-slate-400 text-center">模态偏好数据待 Backend 返回</p>
               </div>
               <p className="text-xs text-slate-500 mt-4 leading-relaxed w-full text-left">
                 <span className="font-bold text-primary">AI诊断：</span> {report.ai_diagnosis}
@@ -265,7 +255,7 @@ export default function TeacherStudentReport() {
                 </div>
                 <div className="pt-4 border-t border-slate-50">
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
-                    <span className="text-primary font-black text-lg">94%</span>
+                    <span className="text-primary font-black text-lg">待统计</span>
                     <p className="text-[10px] text-slate-400 uppercase font-bold">本周最高准度</p>
                   </div>
                 </div>

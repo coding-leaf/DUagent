@@ -40,7 +40,7 @@ export default function StudentProfile() {
     );
   }
 
-  const { name, level, title, current_course, system_suggestion, avatar } = profileData || {};
+  const { name, level, title, current_course, system_suggestion } = profileData || {};
   const { weekly_max_accuracy, total_duration_hours, knowledge_nodes } = effectsData || {};
 
   return (
@@ -61,15 +61,17 @@ export default function StudentProfile() {
             </div>
             <div className="relative">
               <div className="relative w-32 h-32 rounded-full border-4 border-slate-100 overflow-hidden bg-slate-100">
-                <img alt={name || "Elara Vance"} className="w-full h-full object-cover" src={avatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuBTg47lCOZc44Rlbp-24EwwN1J7sw9qUGrEClZifNn2yEyMt3okEbKNeNk18UX3gnhRFnUqxiymGyo3rL5MABT0fuopo662xIbp65CFju53RoA6l2pZXVgSgjBxCPT4X4lU-o1LuDtdBELLv78_N-q2mEKlbxJRmmCL9Y2K4b9uTOGdt--9KeTRfuTkr6rxCoUCoNPgytsazeMrZQJrccuvaETuIbMLP5YXtAHczyNNTuNHoL46_YW7s34lyn78eafbottYcLIRSeWv"} />
+                <div className="w-full h-full rounded-full bg-cyan-500/20 text-cyan-600 flex items-center justify-center font-bold text-xl">
+                  {(name || "学").charAt(0)}
+                </div>
               </div>
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-4 mb-2">
-                <h1 className="font-h1 text-3xl text-on-surface">{name || "Elara Vance"}</h1>
-                <span className="bg-primary-container text-on-primary-container text-xs px-4 py-1 rounded-full font-bold uppercase tracking-wider">Lvl {level || 14} {title || "Architect"}</span>
+                <h1 className="font-h1 text-3xl text-on-surface">{name || "学生"}</h1>
+                <span className="bg-primary-container text-on-primary-container text-xs px-4 py-1 rounded-full font-bold uppercase tracking-wider">{level && title ? `Lvl ${level} ${title}` : '学生'}</span>
               </div>
-              <p className="text-body-md text-secondary">当前进修课程：<span className="text-primary font-bold">{current_course || "数据结构与算法分析"}</span></p>
+              <p className="text-body-md text-secondary">当前进修课程：<span className="text-primary font-bold">{current_course || '未选择'}</span></p>
             </div>
           </div>
 
@@ -126,7 +128,7 @@ export default function StudentProfile() {
             <div className="mt-8 bg-cyan-50 p-5 rounded-xl flex items-start gap-4 border border-cyan-100">
               <span className="material-symbols-outlined text-cyan-600 mt-0.5">verified</span>
               <p className="text-sm text-cyan-700 leading-relaxed">
-                <span className="font-bold">系统建议：</span>{system_suggestion || '检测到当前任务为“红黑树”，建议保持 L2 以确保认知留存，有助于理解平衡旋转逻辑。'}
+                <span className="font-bold">系统建议：</span>{system_suggestion || '暂无系统建议'}
               </p>
             </div>
           </div>
@@ -196,7 +198,7 @@ export default function StudentProfile() {
               </div>
               <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
-                  <span className="text-primary font-black text-lg">{weekly_max_accuracy || 94}%</span>
+                  <span className="text-primary font-black text-lg">{weekly_max_accuracy ? weekly_max_accuracy + '%' : '待统计'}</span>
                   <p className="text-[10px] text-slate-400 uppercase font-bold">本周最高准度</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">

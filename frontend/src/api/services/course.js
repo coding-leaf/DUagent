@@ -4,10 +4,6 @@ export const courseService = {
   getMyCourses() {
     return apiClient.get('/courses');
   },
-  
-  getCourseStudents(courseId) {
-    return apiClient.get(`/course/${courseId}/students`);
-  },
 
   // 创建课程 / 开班 (教师端)
   createCourse(data) {

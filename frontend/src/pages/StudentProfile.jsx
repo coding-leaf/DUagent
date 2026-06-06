@@ -14,6 +14,9 @@ const { user, refreshUser } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [guidanceSubmitting, setGuidanceSubmitting] = useState(false);
   const [profileError, setProfileError] = useState(null);
+  const [localGuidanceLevel, setLocalGuidanceLevel] = useState(
+    user?.guidance_level || 'L2'
+  );
   const [loading, setLoading] = useState(true);
   // eslint-disable-next-line react-hooks/purity -- relative time display needs current timestamp
   const [now, setNow] = useState(Date.now());
@@ -28,6 +31,15 @@ const { user, refreshUser } = useAuth();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(Date.now());
   }, [profileData]);
+
+  // 从全局用户数据同步引导粒度（非课程画像）
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (user?.guidance_level) {
+      setLocalGuidanceLevel(user.guidance_level);
+    }
+  }, [user?.guidance_level]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const fetchProfile = useCallback(async () => {
     if (!activeCourseId) {
@@ -144,16 +156,22 @@ const { user, refreshUser } = useAuth();
     : null;
 
   const handleGuidanceChange = async (level) => {
-    if (guidanceSubmitting) return;
+    if (guidanceSubmitting || localGuidanceLevel === level) return;
+
+    const previousLevel = localGuidanceLevel;
+    setLocalGuidanceLevel(level); // 乐观更新：立即切换 UI
     setGuidanceSubmitting(true);
+
     try {
       const res = await authService.updateMyInfo({ guidance_level: level });
       if (res.code === 200) {
-        await refreshUser();
-        fetchProfile();
+        refreshUser(); // 静默同步全局用户数据
+      } else {
+        setLocalGuidanceLevel(previousLevel); // 失败回滚
       }
     } catch (err) {
       console.error('更新引导粒度失败:', err);
+      setLocalGuidanceLevel(previousLevel); // 失败回滚
     } finally {
       setGuidanceSubmitting(false);
     }
@@ -237,15 +255,15 @@ const { user, refreshUser } = useAuth();
               </h3>
               <p className="text-body-md text-secondary">根据当前任务难度与心流状态，动态调整智能体的介入深度。</p>
               <p className="text-sm text-cyan-600 font-bold mt-2">
-                当前等级：{['L1', 'L2', 'L3'].includes(guidance_level.current) ? guidance_level.current : '未知'}
+                当前等级：{['L1', 'L2', 'L3'].includes(localGuidanceLevel) ? localGuidanceLevel : '未知'}
               </p>
             </div>
             <div className="relative px-6 py-12 flex-1">
               <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden relative">
-                <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-600" style={{ width: `${
-                  guidance_level.current === 'L1' ? '33%' :
-                  guidance_level.current === 'L2' ? '66%' :
-                  guidance_level.current === 'L3' ? '100%' : '50%'
+                <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-600 transition-all duration-500 ease-out" style={{ width: `${
+                  localGuidanceLevel === 'L1' ? '0%' :
+                  localGuidanceLevel === 'L2' ? '50%' :
+                  localGuidanceLevel === 'L3' ? '100%' : '50%'
                 }` }}></div>
               </div>
               <div className="flex justify-between items-center absolute w-full left-0 top-0 mt-[38px] px-4">
@@ -254,13 +272,13 @@ const { user, refreshUser } = useAuth();
                   onClick={() => handleGuidanceChange('L1')}
                   disabled={guidanceSubmitting}
                 >
-                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 transition-colors ${
-                    guidance_level.current === 'L1'
+                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 transition-colors duration-300 ${
+                    localGuidanceLevel === 'L1'
                       ? 'bg-cyan-500 border-white shadow-cyan-200'
                       : 'bg-white border-slate-200 hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-6 text-center">
-                    <p className={`text-label-sm font-bold ${guidance_level.current === 'L1' ? 'text-cyan-600' : 'text-slate-400'}`}>L1: 启发点拨</p>
+                    <p className={`text-label-sm font-bold transition-colors duration-300 ${localGuidanceLevel === 'L1' ? 'text-cyan-600' : 'text-slate-400'}`}>L1: 启发点拨</p>
                     <p className="text-[10px] text-slate-400 mt-1">核心思路提示</p>
                   </div>
                 </button>
@@ -269,14 +287,14 @@ const { user, refreshUser } = useAuth();
                   onClick={() => handleGuidanceChange('L2')}
                   disabled={guidanceSubmitting}
                 >
-                  <div className={`w-10 h-10 rounded-full border-[6px] shadow-xl z-20 transition-colors ${
-                    guidance_level.current === 'L2'
+                  <div className={`w-10 h-10 rounded-full border-[6px] shadow-xl z-20 transition-colors duration-300 ${
+                    localGuidanceLevel === 'L2'
                       ? 'bg-cyan-500 border-white shadow-cyan-200'
                       : 'bg-white border-slate-200 shadow-sm hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-4 text-center">
-                    <p className={`text-label-sm font-bold ${guidance_level.current === 'L2' ? 'text-cyan-600' : 'text-slate-400'}`}>L2: 伴学拆解</p>
-                    <p className={`text-[10px] ${guidance_level.current === 'L2' ? 'text-cyan-400' : 'text-slate-400'} mt-1`}>分步引导学习</p>
+                    <p className={`text-label-sm font-bold transition-colors duration-300 ${localGuidanceLevel === 'L2' ? 'text-cyan-600' : 'text-slate-400'}`}>L2: 伴学拆解</p>
+                    <p className={`text-[10px] transition-colors duration-300 ${localGuidanceLevel === 'L2' ? 'text-cyan-400' : 'text-slate-400'} mt-1`}>分步引导学习</p>
                   </div>
                 </button>
                 <button
@@ -284,13 +302,13 @@ const { user, refreshUser } = useAuth();
                   onClick={() => handleGuidanceChange('L3')}
                   disabled={guidanceSubmitting}
                 >
-                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 transition-colors ${
-                    guidance_level.current === 'L3'
+                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 transition-colors duration-300 ${
+                    localGuidanceLevel === 'L3'
                       ? 'bg-cyan-500 border-white shadow-cyan-200'
                       : 'bg-white border-slate-200 hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-6 text-center">
-                    <p className={`text-label-sm font-bold ${guidance_level.current === 'L3' ? 'text-cyan-600' : 'text-slate-400'}`}>L3: 保姆生成</p>
+                    <p className={`text-label-sm font-bold transition-colors duration-300 ${localGuidanceLevel === 'L3' ? 'text-cyan-600' : 'text-slate-400'}`}>L3: 保姆生成</p>
                     <p className="text-[10px] text-slate-400 mt-1">全自动代码生成</p>
                   </div>
                 </button>

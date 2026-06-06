@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { profileService } from '../api/services/profile';
@@ -11,6 +11,7 @@ export default function StudentProfile() {
   const { activeCourseId, courses } = useCourse();
 const { user } = useAuth();
   const [profileData, setProfileData] = useState(null);
+  const [profileError, setProfileError] = useState(null);
   const [loading, setLoading] = useState(true);
   // eslint-disable-next-line react-hooks/purity -- relative time display needs current timestamp
   const [now, setNow] = useState(Date.now());
@@ -20,24 +21,33 @@ const { user } = useAuth();
     setNow(Date.now());
   }, [profileData]);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!activeCourseId) {
-        setLoading(false);
-        return;
+  const fetchProfile = useCallback(async () => {
+    if (!activeCourseId) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setProfileData(null);
+      setProfileError(null);
+      const res = await profileService.getStudentProfile(activeCourseId);
+      if (res.code === 200) {
+        setProfileData(res.data);
+      } else {
+        setProfileError(res.message || '加载失败，请重试');
       }
-      try {
-        setLoading(true);
-        const res = await profileService.getStudentProfile(activeCourseId);
-        if (res.code === 200) setProfileData(res.data);
-      } catch (error) {
-        console.error("Failed to fetch profile data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
+    } catch (error) {
+      console.error("Failed to fetch profile data:", error);
+      setProfileError('加载失败，请重试');
+    } finally {
+      setLoading(false);
+    }
   }, [activeCourseId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: fetch on mount / course change
+    fetchProfile();
+  }, [fetchProfile]);
 
   if (!activeCourseId) {
     return (
@@ -67,6 +77,27 @@ const { user } = useAuth();
     return (
       <div className="bg-background min-h-screen flex items-center justify-center">
         <span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span>
+      </div>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <div className="bg-background text-on-background font-body-md antialiased min-h-screen">
+        <Navbar />
+        <Sidebar />
+        <main className="ml-0 lg:ml-64 pt-16">
+          <div className="max-w-[1280px] mx-auto px-6 py-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
+            <span className="material-symbols-outlined text-6xl text-slate-300 mb-6">error_outline</span>
+            <h2 className="font-h1 text-2xl text-on-surface mb-3">{profileError}</h2>
+            <button
+              onClick={fetchProfile}
+              className="px-6 py-2.5 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 transition-colors cursor-pointer"
+            >
+              重试
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -177,12 +208,16 @@ const { user } = useAuth();
                 <span className="material-symbols-outlined text-cyan-500">tune</span> 引导粒度
               </h3>
               <p className="text-body-md text-secondary">根据当前任务难度与心流状态，动态调整智能体的介入深度。</p>
+              <p className="text-sm text-cyan-600 font-bold mt-2">
+                当前等级：{['L1', 'L2', 'L3'].includes(guidance_level.current) ? guidance_level.current : '未知'}
+              </p>
             </div>
             <div className="relative px-6 py-12 flex-1">
               <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden relative">
                 <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-600" style={{ width: `${
                   guidance_level.current === 'L1' ? '33%' :
-                  guidance_level.current === 'L3' ? '100%' : '66%'
+                  guidance_level.current === 'L2' ? '66%' :
+                  guidance_level.current === 'L3' ? '100%' : '50%'
                 }` }}></div>
               </div>
               <div className="flex justify-between items-center absolute w-full left-0 top-0 mt-[38px] px-4">
@@ -241,19 +276,24 @@ const { user } = useAuth();
                 <div className="flex flex-wrap gap-3">
                   {knowledge_coordinates.map((node, i) => {
                     const isMastered = node.status === 'mastered';
+                    const isLearning = node.status === 'learning';
+                    const colorClass = isMastered
+                      ? 'bg-green-50 text-green-700 border-green-100'
+                      : isLearning
+                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                        : 'bg-slate-100 text-slate-400 border-slate-200';
+                    const icon = isMastered ? 'check_circle' : isLearning ? 'sync' : 'help';
+                    const label = isMastered ? '已掌握' : isLearning ? '学习中' : '未知';
                     return (
                       <span
                         key={i}
-                        className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 ${
-                          isMastered
-                            ? 'bg-green-50 text-green-700 border-green-100'
-                            : 'bg-amber-50 text-amber-700 border-amber-100'
-                        }`}
+                        className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 ${colorClass}`}
                       >
                         <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: '"FILL" 1' }}>
-                          {isMastered ? 'check_circle' : 'sync'}
+                          {icon}
                         </span>
                         {node.name}
+                        <span className="text-xs font-normal opacity-60">{label}</span>
                         {isMastered && node.mastered_at && (
                           <span className="text-green-400 text-xs font-normal ml-1">
                             · {daysAgoText(node.mastered_at, '掌握')}
@@ -280,7 +320,7 @@ const { user } = useAuth();
                       low: 'bg-slate-100 text-slate-500 border-slate-200',
                     };
                     const severityLabels = { high: '高', medium: '中', low: '低' };
-                    const colorClass = severityColors[item.severity] || severityColors.low;
+                    const colorClass = severityColors[item.severity] || 'bg-slate-100 text-slate-500 border-slate-200';
                     const label = severityLabels[item.severity] || item.severity;
                     return (
                       <div key={i} className="flex items-center gap-3">

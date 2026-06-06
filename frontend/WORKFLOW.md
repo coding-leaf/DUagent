@@ -214,7 +214,8 @@
 - 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
 - ResourceDetail 正文预览、LearningPath 节点资源、教师端学生报告个体聚合已完成并完成轻量手工验收。
 - TeacherConsole 班级 Insights 最小 SQL 聚合已完成（2026-06-06）：OpenAPI 契约（ClassInsights/ClassWeakPoint/PathNodeProgress）、Backend `GET /teaching/classes/{class_id}/insights` 聚合端点（39 项集成测试全通过）、Frontend 接入。`useMock &&` 守卫已移除，真实模式展示班级平均练习分（一位小数）、练习次数、薄弱知识点 Top 5（含错题数/答题总次数/错误率）、路径节点分布。Students 和 Insights 独立错误处理已闭环。
-- StudentProfile 真实字段展示补齐已完成（2026-06-06）：5 张卡片全部重接 GET /profile 契约字段（modal_preference 进度条、guidance_level 动态 L1-L3、knowledge_coordinates 双色列表 + cognitive_blindspots 严重度标签、drive_intent 类型/强度 + discipline_badge 勋章展示）。7 个幽灵字段全量删除（name/level/title/current_course/system_suggestion/knowledge_nodes/weekly_max_accuracy/total_duration_hours）。effectsData state/请求/Promise.all 分支全量清理。`!activeCourseId` 无限 loading bug 已修复为空态页面（标题+说明+去课程页按钮）。Backend/OpenAPI/Agent 零改动。
+- StudentProfile 真实字段展示补齐已完成（2026-06-06）：5 张卡片全部重接 GET /profile 契约字段。7 个幽灵字段全量删除。effectsData state/请求/Promise.all 分支全量清理。`!activeCourseId` 无限 loading bug 已修复为空态页面。
+- StudentProfile 实现 bug 修复已完成（2026-06-06）：切课脏读（useEffect 开头清空旧 profileData）、失败态与默认画像分离（profileError state + 错误 banner + 重试按钮）、枚举未知值兜底（guidance_level.current / knowledge_coordinates.status / cognitive_blindspots.severity 非预期值时显示"未知"）。
 - 第二轮 P1 剩余：TeacherStudentReport 深度诊断字段扩展、AdminConsole 契约对齐补完、资源生成异步任务链路接入。
 - 第二轮 P2：累计学习时长、阅读进度/阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。

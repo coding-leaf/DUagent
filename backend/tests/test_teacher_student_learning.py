@@ -206,6 +206,20 @@ async def test():
         st2_wp = st2_data.get("weak_points", [])
         chk("all-correct -> weak_points empty", st2_wp == [])
 
+        # ===== 4b. non-enrolled student -> 404 =====
+        print("\n-- 4b. non-enrolled student -> 404 --")
+        stu3_code = f"stu_{uuid.uuid4().hex[:8]}"
+        async with async_session_factory() as db:
+            db.add(RegistrationCode(code=stu3_code, role="student"))
+            await db.commit()
+        stu3_headers, stu3_id = await _register_and_login(
+            client, stu3_code, f"stu3_{uuid.uuid4().hex[:8]}@test.com", f"stu3_{uuid.uuid4().hex[:8]}")
+        # stu3 is registered but NOT enrolled
+        r = await client.get(
+            f"/api/v1/teaching/classes/{course_id}/students/{stu3_id}/learning",
+            headers=tea1_headers)
+        chk("non-enrolled student -> 404", r.status_code == 404)
+
         # ===== 5. recent_activity max 5 + created_at DESC ordering =====
         print("\n-- 5. recent_activity max 5 --")
         async with async_session_factory() as db:

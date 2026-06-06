@@ -121,6 +121,20 @@ async def get_student_learning(
 ):
     await _verify_teacher(class_id, current_user, db)
 
+    # Verify student is enrolled in this course
+    enrollment_check = await db.execute(
+        select(CourseEnrollment).where(
+            CourseEnrollment.student_id == student_id,
+            CourseEnrollment.course_id == class_id,
+            CourseEnrollment.is_deleted == False,
+        )
+    )
+    if not enrollment_check.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40400, "message": "学生未入班", "data": None},
+        )
+
     # Student info
     r = await db.execute(select(User).where(User.id == student_id))
     u = r.scalar_one_or_none()

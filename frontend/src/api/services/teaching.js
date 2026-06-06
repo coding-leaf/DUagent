@@ -1,7 +1,5 @@
 import client from '../client';
 
-const useMock = import.meta.env.VITE_USE_MOCK === 'true';
-
 export const teachingService = {
   // 获取教师名下的班级/课程列表
   getClasses: async () => {
@@ -52,14 +50,7 @@ export const teachingService = {
 
   // 获取教师控制台的AI洞察及需重点关注学生
   getConsoleInsights: (courseId) => {
-    if (useMock) {
-      return client.get(`/api/v1/course/${courseId}/insights`);
-    }
-    return Promise.resolve({
-      code: 200,
-      message: 'success',
-      data: null
-    });
+    return client.get(`/teaching/classes/${courseId}/insights`);
   },
 
   // 获取特定学生的详细学情报告

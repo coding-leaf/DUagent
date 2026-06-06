@@ -144,6 +144,30 @@ async def test():
         chk("200 teacher access", r.status_code == 200)
         data = r.json()["data"]
 
+        ev_sum = data.get("evaluation_summary")
+        if ev_sum is not None:
+            chk("evaluation_summary has summary_text key", "summary_text" in ev_sum)
+
+        pf_sum = data.get("profile_summary")
+        if pf_sum is not None:
+            chk("profile_summary has knowledge_coordinates key", "knowledge_coordinates" in pf_sum)
+            kc = pf_sum.get("knowledge_coordinates") or []
+            chk("knowledge_coordinates is list", isinstance(kc, list))
+
+        qs_data = data.get("quiz_stats") or {}
+        chk("quiz_stats has mastery_breakdown key", "mastery_breakdown" in qs_data)
+        mb = qs_data.get("mastery_breakdown") or []
+        chk("mastery_breakdown is list", isinstance(mb, list))
+        avl_mb = [m for m in mb if m.get("knowledge_point") == "AVL树旋转"]
+        chk("AVL树旋转 has mastery_breakdown entry", len(avl_mb) > 0)
+        if len(avl_mb) > 0:
+            chk("mastery_breakdown has accuracy", "accuracy" in avl_mb[0])
+            chk("AVL accuracy = 50.0", avl_mb[0]["accuracy"] == 50.0)
+        hash_mb = [m for m in mb if m.get("knowledge_point") == "散列冲突"]
+        chk("散列冲突 has mastery_breakdown entry", len(hash_mb) > 0)
+        if len(hash_mb) > 0:
+            chk("散列冲突 accuracy = 0.0", hash_mb[0]["accuracy"] == 0.0)
+
         wp = data.get("weak_points", [])
         chk("weak_points non-empty", len(wp) > 0)
         if len(wp) > 0:

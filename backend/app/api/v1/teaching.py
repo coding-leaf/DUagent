@@ -154,6 +154,7 @@ async def get_student_learning(
         evaluation_summary = {
             "overall_score": 75.0,
             "generated_at": ev.generated_at.isoformat() if ev.generated_at else None,
+            "summary_text": ev.summary_text or None,
         }
 
     # Profile
@@ -170,6 +171,7 @@ async def get_student_learning(
             "knowledge_mastered": mastered,
             "knowledge_weak": weak,
             "modal_preference": list(pf.modal_preference.keys()) if pf.modal_preference else [],
+            "knowledge_coordinates": pf.knowledge_coordinates if pf.knowledge_coordinates else [],
         }
 
     # Path
@@ -195,6 +197,35 @@ async def get_student_learning(
         )
     )
     quiz_sessions = qs_result.scalars().all()
+
+    # mastery_breakdown: 按知识点拆正确率
+    mastery_breakdown = []
+    mb_result = await db.execute(
+        select(
+            QuizQuestion.knowledge_point,
+            func.count(QuizAnswer.id).label("total"),
+            func.sum(case((QuizAnswer.is_correct == True, 1), else_=0)).label("correct"),
+        )
+        .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
+        .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
+        .where(
+            QuizSession.user_id == student_id,
+            QuizSession.course_id == class_id,
+            QuizSession.is_deleted == False,
+            QuizAnswer.is_deleted == False,
+            QuizQuestion.is_deleted == False,
+            QuizQuestion.knowledge_point != "",
+        )
+        .group_by(QuizQuestion.knowledge_point)
+    )
+    for row in mb_result:
+        total = row.total or 0
+        correct = row.correct or 0
+        mastery_breakdown.append({
+            "knowledge_point": row.knowledge_point,
+            "accuracy": round(correct / total * 100, 1) if total > 0 else 0,
+        })
+
     quiz_stats = None
     if quiz_sessions:
         total_attempts = len(quiz_sessions)
@@ -204,6 +235,7 @@ async def get_student_learning(
             "total_attempts": total_attempts,
             "avg_score": round(avg_score, 1),
             "avg_time_spent": int(avg_time),
+            "mastery_breakdown": mastery_breakdown,
         }
 
     # weak_points: 按知识点聚合错题 top 5（条件聚合 + 过滤空知识点 + HAVING error_count > 0）

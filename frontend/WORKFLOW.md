@@ -154,6 +154,15 @@
 - 2026-06-06：ResourceDetail 后端测试断言修正：
   - `tests/test_resource_detail.py` 将最终 `return fail == 0` 改为 `assert fail == 0`，确保任一 `chk()` 失败都会让 pytest 报红。
   - `pytest -s -vv tests/test_resource_detail.py` 通过，输出 `27 OK, 0 FAIL`。
+- 2026-06-06：LearningPath 节点资源接入完成：
+  - OpenAPI：NodeResources schema 补充 `weak_point_tutorials[].id`、`chapter_materials[].id`，`content` 标注为摘要
+  - Backend：`get_node_resources` 补充 `id` 字段，`weak_point_tutorials[].content` 截断为 160 字符
+  - Backend 测试：`test_node_resources.py` 24 条断言覆盖 403 / id 字段 / content 160 截断 / 空资源
+  - Frontend：`learningService.getNodeResources`；LearningPath.jsx 底部动态资源面板替换 3 张静态占位卡
+  - 节点点击：completed/in_progress/recommended 可点，pending 不可点；默认选中 current_node
+  - 新增 recommended 节点分支（星标图标，可点击）
+  - 删除 completed/in_progress 节点内资源/习题占位文案，保留 Agent 提示占位
+  - `npm run lint` / `npm run build` / Backend pytest 51/51 通过。
 
 ## 本地联调注意事项
 

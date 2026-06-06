@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { learningService } from '../api/services/learning';
 import Sidebar from '../components/Sidebar';
@@ -9,6 +9,10 @@ export default function LearningPath() {
   const { activeCourseId } = useCourse();
   const [learningPath, setLearningPath] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [nodeResources, setNodeResources] = useState(null);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [showFullExercises, setShowFullExercises] = useState(false);
 
   useEffect(() => {
     const fetchPath = async () => {
@@ -27,6 +31,46 @@ export default function LearningPath() {
     };
     fetchPath();
   }, [activeCourseId]);
+
+  const fetchNodeResources = useCallback(async (nodeId) => {
+    if (!nodeId || !activeCourseId) return;
+    try {
+      setResourcesLoading(true);
+      const res = await learningService.getNodeResources(nodeId, activeCourseId);
+      if (res.code === 200) {
+        setNodeResources(res.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch node resources:", error);
+      setNodeResources(null);
+    } finally {
+      setResourcesLoading(false);
+    }
+  }, [activeCourseId]);
+
+  // Default selected node (after learningPath loads)
+  useEffect(() => {
+    if (!learningPath?.nodes?.length) return;
+    const cpId = learningPath.current_position?.node_id;
+    if (cpId) {
+      setSelectedNodeId(cpId);
+      return;
+    }
+    const ip = learningPath.nodes.find(n => n.status === 'in_progress');
+    if (ip) { setSelectedNodeId(ip.id); return; }
+    const rec = learningPath.nodes.find(n => n.status === 'recommended');
+    if (rec) { setSelectedNodeId(rec.id); return; }
+    const first = learningPath.nodes.find(n => n.status !== 'pending');
+    if (first) { setSelectedNodeId(first.id); return; }
+  }, [learningPath]);
+
+  // Fetch resources when selectedNodeId changes
+  useEffect(() => {
+    if (selectedNodeId) {
+      fetchNodeResources(selectedNodeId);
+      setShowFullExercises(false);
+    }
+  }, [selectedNodeId, fetchNodeResources]);
 
   const getCategoryForNode = (nodeName) => {
     if (!nodeName) return '全部';
@@ -90,7 +134,9 @@ export default function LearningPath() {
                   {learningPath?.nodes.map((node, index) => {
                     if (node.status === 'completed') {
                       return (
-                        <div key={node.id} className="relative z-10 flex-shrink-0 px-sm flex flex-col items-center group w-80">
+                        <div key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          className={`relative z-10 flex-shrink-0 px-sm flex flex-col items-center group w-80 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-12 h-12 rounded-full bg-cyan-500 flex items-center justify-center text-white mb-sm shadow-lg shadow-cyan-500/20 ring-4 ring-white">
                             <span className="material-symbols-outlined">check</span>
                           </div>
@@ -113,7 +159,9 @@ export default function LearningPath() {
                       );
                     } else if (node.status === 'in_progress') {
                       return (
-                        <div key={node.id} className="relative z-10 flex-shrink-0 w-80 px-sm flex flex-col items-center group">
+                        <div key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          className={`relative z-10 flex-shrink-0 w-80 px-sm flex flex-col items-center group cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-16 h-16 rounded-full bg-white border-4 border-cyan-500 flex items-center justify-center text-cyan-600 mb-sm shadow-xl ring-4 ring-white animate-pulse">
                             <span className="material-symbols-outlined text-3xl">play_arrow</span>
                           </div>
@@ -138,6 +186,24 @@ export default function LearningPath() {
                                 <span className="material-symbols-outlined text-sm">auto_stories</span>前往资源库继续闯关
                               </Link>
                             </div>
+                          </div>
+                        </div>
+                      );
+                    } else if (node.status === 'recommended') {
+                      return (
+                        <div key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          className={`relative z-10 flex-shrink-0 w-72 px-sm flex flex-col items-center group cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
+                          <div className="w-12 h-12 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 mb-sm border-2 border-cyan-200">
+                            <span className="material-symbols-outlined">auto_awesome</span>
+                          </div>
+                          <div className="bg-white p-sm rounded-xl border border-cyan-200 shadow-sm w-full">
+                            <span className="text-label-sm text-cyan-600 font-bold mb-xs block">阶段 {node.order}</span>
+                            <p className="text-body-md font-bold mb-xs">{node.name}</p>
+                            <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden mb-sm">
+                              <div className="h-full bg-cyan-300 w-0"></div>
+                            </div>
+                            <p className="text-[11px] text-cyan-500">推荐预习节点</p>
                           </div>
                         </div>
                       );
@@ -166,49 +232,161 @@ export default function LearningPath() {
             </div>
           </section>
 
-          {/* Bottom Modules: Recommendations */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-            
-            {/* 1. Mind Map recommendations */}
-            <div className="bg-white rounded-xl border border-gray-100 p-md shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-sm mb-md">
-                <div className="p-base bg-cyan-50 rounded-lg text-cyan-600">
-                  <span className="material-symbols-outlined">hub</span>
-                </div>
-                <h4 className="font-h3 text-body-md font-bold">知识导图推荐</h4>
-              </div>
-              <div className="aspect-video rounded-xl bg-slate-50 border border-gray-100 mb-md flex items-center justify-center">
-                <p className="text-[12px] text-gray-400 text-center px-md">知识导图推荐将在学习路径数据完善后展示</p>
-              </div>
-            </div>
+          {/* Node Resources Panel */}
+          {selectedNodeId && (
+            <section className="mt-8 space-y-6">
+              <h3 className="font-h3 text-h3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-cyan-600">library_books</span>
+                当前节点资源
+                {nodeResources?.node_name && (
+                  <span className="text-body-md text-secondary font-normal">— {nodeResources.node_name}</span>
+                )}
+              </h3>
 
-            {/* 2. Lecture document recommendations */}
-            <div className="bg-white rounded-xl border border-gray-100 p-md shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-sm mb-md">
-                <div className="p-base bg-cyan-50 rounded-lg text-cyan-600">
-                  <span className="material-symbols-outlined">menu_book</span>
+              {resourcesLoading ? (
+                <div className="flex justify-center py-12">
+                  <span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span>
                 </div>
-                <h4 className="font-h3 text-body-md font-bold">课件讲义推荐</h4>
-              </div>
-              <div className="p-md text-center">
-                <p className="text-[12px] text-gray-400">课件讲义推荐将在节点资源接入后展示</p>
-              </div>
-            </div>
+              ) : nodeResources ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* 1. 薄弱点讲解 */}
+                  <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-2 bg-orange-50 rounded-lg text-orange-600">
+                        <span className="material-symbols-outlined">lightbulb</span>
+                      </div>
+                      <h4 className="font-bold text-on-surface">薄弱点讲解</h4>
+                    </div>
+                    {nodeResources.weak_point_tutorials?.length > 0 ? (
+                      <div className="space-y-3">
+                        {nodeResources.weak_point_tutorials.map((item, i) => (
+                          <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
+                            <p className="text-sm font-bold text-on-surface mb-1">{item.title}</p>
+                            <p className="text-xs text-secondary line-clamp-2 mb-2">{item.content || ''}</p>
+                            {item.id ? (
+                              <Link to={`/resource/${item.id}`} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1">
+                                查看资源 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-gray-400">暂无详情</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-4 text-center">该节点暂无薄弱点讲解</p>
+                    )}
+                  </div>
 
-            {/* 3. Mixed exercise set recommendations */}
-            <div className="bg-white rounded-xl border border-gray-100 p-md shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-sm mb-md">
-                <div className="p-base bg-cyan-50 rounded-lg text-cyan-600">
-                  <span className="material-symbols-outlined">task_alt</span>
+                  {/* 2. 节点练习 */}
+                  <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                        <span className="material-symbols-outlined">quiz</span>
+                      </div>
+                      <h4 className="font-bold text-on-surface">节点练习</h4>
+                    </div>
+                    {nodeResources.exercises?.length > 0 ? (
+                      <div className="space-y-3">
+                        {nodeResources.exercises.map((item, i) => (
+                          <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
+                                {item.type === 'single_choice' ? '单选' : item.type === 'multi_choice' ? '多选' : item.type}
+                              </span>
+                            </div>
+                            <p className="text-xs text-secondary line-clamp-2">{item.content || ''}</p>
+                          </div>
+                        ))}
+                        <Link to="/quiz" className="w-full block text-center py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
+                          进入练习
+                        </Link>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-4 text-center">该节点暂无练习</p>
+                    )}
+                  </div>
+
+                  {/* 3. 章节资料 */}
+                  <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                        <span className="material-symbols-outlined">menu_book</span>
+                      </div>
+                      <h4 className="font-bold text-on-surface">章节资料</h4>
+                    </div>
+                    {nodeResources.chapter_materials?.length > 0 ? (
+                      <div className="space-y-3">
+                        {nodeResources.chapter_materials.map((item, i) => (
+                          <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] rounded font-bold">
+                                {item.type || '资料'}
+                              </span>
+                              <p className="text-sm font-bold text-on-surface">{item.title}</p>
+                            </div>
+                            {item.id ? (
+                              <Link to={`/resource/${item.id}`} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1 mt-1">
+                                查看资源 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-gray-400">暂无详情</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-4 text-center">该节点暂无章节资料</p>
+                    )}
+                  </div>
                 </div>
-                <h4 className="font-h3 text-body-md font-bold">混合练习集推荐</h4>
-              </div>
-              <div className="p-md text-center">
-                <p className="text-[12px] text-gray-400">混合练习集推荐将在学习路径与知识点数据对接后展示</p>
-              </div>
-            </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
+                  <p className="text-sm text-gray-400">无法加载节点资源</p>
+                </div>
+              )}
 
-          </div>
+              {/* 4. 全部练习集（折叠） */}
+              {nodeResources?.full_exercise_set?.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+                  <button
+                    onClick={() => setShowFullExercises(!showFullExercises)}
+                    className="w-full flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                        <span className="material-symbols-outlined">list_alt</span>
+                      </div>
+                      <h4 className="font-bold text-on-surface text-left">
+                        全部练习集
+                        <span className="text-xs text-secondary font-normal ml-2">共 {nodeResources.full_exercise_set.length} 题</span>
+                      </h4>
+                    </div>
+                    <span className={`material-symbols-outlined text-gray-400 transition-transform ${showFullExercises ? 'rotate-180' : ''}`}>
+                      expand_more
+                    </span>
+                  </button>
+                  {showFullExercises && (
+                    <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
+                      {nodeResources.full_exercise_set.slice(0, 10).map((item, i) => (
+                        <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] rounded font-bold">
+                              {item.type === 'single_choice' ? '单选' : item.type === 'multi_choice' ? '多选' : item.type}
+                            </span>
+                          </div>
+                          <p className="text-xs text-secondary line-clamp-2">{item.content || ''}</p>
+                        </div>
+                      ))}
+                      {nodeResources.full_exercise_set.length > 10 && (
+                        <p className="text-xs text-gray-400 text-center pt-2">查看更多请进入练习</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </main>
 

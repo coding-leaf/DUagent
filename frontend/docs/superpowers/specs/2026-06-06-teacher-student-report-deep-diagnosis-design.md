@@ -1,6 +1,6 @@
 # TeacherStudentReport 深度诊断字段扩展设计
 
-> Backend 扩展 StudentLearning API 补 4 个已有数据字段，前端消除 useMock 布局分叉。Agent 零改动。
+> Backend 扩展 StudentLearning API 补 3 个已有数据字段，前端消除 useMock 布局分叉。Agent 零改动。
 
 **最后更新：** 2026-06-06
 
@@ -8,7 +8,7 @@
 
 ## 1. 目标
 
-消除 `TeacherStudentReport.jsx` 的 `useMock` 布局分叉（mock 分支 20+ fields vs 真实分支 ~10 fields），将 mock 分支中教学场景必须的 4 个能力补入真实契约，删除无契约支撑的假展示。
+消除 `TeacherStudentReport.jsx` 的 `useMock` 布局分叉（mock 分支 20+ fields vs 真实分支 ~10 fields），将 mock 分支中教学场景必须的 3 个能力补入真实契约，删除无契约支撑的假展示。
 
 ---
 
@@ -16,8 +16,8 @@
 
 **在范围：**
 
-- OpenAPI `StudentLearning` schema 补 4 个字段
-- Backend `get_student_learning` 补 4 个数据对象
+- OpenAPI `StudentLearning` schema 补 3 个字段
+- Backend `get_student_learning` 补 3 个数据对象
 - Backend 新增 `mastery_breakdown` SQL 聚合（按知识点拆练习正确率）
 - 前端 `TeacherStudentReport.jsx` 删除 useMock 分叉，真实分支接入新字段
 - 前端顶部教师身份改为真实 useAuth 数据
@@ -40,7 +40,7 @@
 | Backend | 读取 `ev.summary_text`（Evaluation 表已有），无数据时 `null` |
 | Frontend | 替换 mock 分支的 `ai_insight`（AI 分析）和 `ai_diagnosis`（模态偏好卡底部 AI 诊断） |
 
-**同时修正：** `overall_score` 当前硬编码 `75.0`，改为从 Evaluation 表实际数据计算或留 `null`。
+> **延后：** `overall_score` 当前硬编码 `75.0`，且 OpenAPI 契约中 `overall_score: number`（非 nullable）。修正方案（计算来源、nullable 语义）需独立契约审查，不纳入本轮范围。
 
 ### 3.2 `profile_summary.knowledge_coordinates`（知识坐标数组）
 
@@ -100,8 +100,8 @@ Header（真实课程名 + useAuth 真实教师身份 + 返回按钮）
 
 | 文件 | 层 | 改动 |
 |------|-----|------|
-| `docs/10-client-api/Client-API.openapi.json` | OpenAPI | StudentLearning schema 补 4 字段 |
-| `backend/app/api/v1/teaching.py` | Backend | `get_student_learning` 补 4 数据对象 + mastery_breakdown SQL |
+| `docs/10-client-api/Client-API.openapi.json` | OpenAPI | StudentLearning schema 补 3 字段 |
+| `backend/app/api/v1/teaching.py` | Backend | `get_student_learning` 补 3 数据对象 + mastery_breakdown SQL |
 | `backend/tests/test_teacher_student_learning.py` | Backend 测试 | 补齐新字段断言 |
 | `frontend/src/pages/TeacherStudentReport.jsx` | Frontend | 删除 useMock 分叉 + 接入新字段 + 顶部身份/课程名修正 + 引入 useAuth/useCourse |
 
@@ -122,4 +122,4 @@ Header（真实课程名 + useAuth 真实教师身份 + 返回按钮）
 1. **无占位符：** ✓
 2. **范围：** ✓ OpenAPI + Backend + Frontend 三层对齐，不动 Agent。path_progress 保留纯计数不展开节点明细。
 3. **硬编码清理：** ✓ 教师身份 + 课程标题（`数据结构 (Data Structures)`）均纳入范围
-4. **数据可达：** ✓ knowledge_coordinates/summary_text 后端数据已存在，mastery_breakdown 复用现有聚合模式，overall_score 修正硬编码 75.0
+4. **数据可达：** ✓ knowledge_coordinates/summary_text 后端数据已存在，mastery_breakdown 复用现有聚合模式。overall_score 硬编码 75.0 延后为独立契约审查。

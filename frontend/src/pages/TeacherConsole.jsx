@@ -18,6 +18,9 @@ export default function TeacherConsole() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [classesLoading, setClassesLoading] = useState(true);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsError, setStudentsError] = useState(null); // eslint-disable-line no-unused-vars
+  const [insightsLoading, setInsightsLoading] = useState(false); // eslint-disable-line no-unused-vars
+  const [insightsError, setInsightsError] = useState(null); // eslint-disable-line no-unused-vars
 
   // 获取班级列表
   const refreshClasses = useCallback(async (silent = false) => {
@@ -47,16 +50,31 @@ export default function TeacherConsole() {
 
   // 当选择的班级改变时，获取学生列表和AI洞察
   useEffect(() => {
-    if (activeClass) {
-      setTimeout(() => setStudentsLoading(true), 0);
-      Promise.all([
-        teachingService.getClassStudents(activeClass),
-        teachingService.getConsoleInsights(activeClass)
-      ]).then(([studentsRes, insightsRes]) => {
-        if (studentsRes.code === 200) setStudents(studentsRes.data);
-        if (insightsRes.code === 200) setInsights(insightsRes.data);
-      }).catch(console.error).finally(() => setStudentsLoading(false));
-    }
+    if (!activeClass) return;
+
+    setStudentsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+    setStudentsError(null);
+    teachingService.getClassStudents(activeClass)
+      .then((res) => {
+        if (res.code === 200) setStudents(res.data);
+      })
+      .catch((err) => {
+        console.error('students fetch error', err);
+        setStudentsError('学生列表加载失败');
+      })
+      .finally(() => setStudentsLoading(false));
+
+    setInsightsLoading(true);
+    setInsightsError(null);
+    teachingService.getConsoleInsights(activeClass)
+      .then((res) => {
+        if (res.code === 200) setInsights(res.data);
+      })
+      .catch((err) => {
+        console.error('insights fetch error', err);
+        setInsightsError('班级统计加载失败，请稍后重试。');
+      })
+      .finally(() => setInsightsLoading(false));
   }, [activeClass]);
 
   if (classesLoading) {

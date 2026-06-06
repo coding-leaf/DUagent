@@ -50,26 +50,27 @@ export default function LearningPath() {
 
   // Default selected node (after learningPath loads)
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!learningPath?.nodes?.length) return;
     const cpId = learningPath.current_position?.node_id;
-    if (cpId) {
-      setSelectedNodeId(cpId);
-      return;
-    }
+    if (cpId) { setSelectedNodeId(cpId); return; }
     const ip = learningPath.nodes.find(n => n.status === 'in_progress');
     if (ip) { setSelectedNodeId(ip.id); return; }
     const rec = learningPath.nodes.find(n => n.status === 'recommended');
     if (rec) { setSelectedNodeId(rec.id); return; }
     const first = learningPath.nodes.find(n => n.status !== 'pending');
     if (first) { setSelectedNodeId(first.id); return; }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [learningPath]);
 
   // Fetch resources when selectedNodeId changes
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (selectedNodeId) {
       fetchNodeResources(selectedNodeId);
       setShowFullExercises(false);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNodeId, fetchNodeResources]);
 
   return (

@@ -107,6 +107,8 @@ async def test():
         node_id = "node_001"
         node_name = "AVL树旋转"
         long_content = "X" * 300  # 300 chars, >160
+        weak_resource_id = f"res_wp_{uuid.uuid4().hex[:8]}"
+        chapter_resource_id = f"res_cm_{uuid.uuid4().hex[:8]}"
 
         async with async_session_factory() as db:
             lp = LearningPath(
@@ -119,10 +121,10 @@ async def test():
             )
             db.add(lp)
             # Resource for weak_point_tutorials (matched by knowledge_point == node_name)
-            db.add(Resource(id="res_wp", course_id=course_id, title="弱项讲解", type="document",
+            db.add(Resource(id=weak_resource_id, course_id=course_id, title="弱项讲解", type="document",
                             knowledge_point=node_name, chapter="ch1", content=long_content))
             # Resource for chapter_materials (matched by chapter from KG)
-            db.add(Resource(id="res_cm", course_id=course_id, title="章节资料", type="reading",
+            db.add(Resource(id=chapter_resource_id, course_id=course_id, title="章节资料", type="reading",
                             knowledge_point="other", chapter="ch1", content="章节内容"))
             # Knowledge graph for chapter lookup
             db.add(CourseKnowledgeGraph(
@@ -157,7 +159,7 @@ async def test():
         wp = data.get("weak_point_tutorials", [])
         chk("weak_point_tutorials non-empty", len(wp) > 0)
         if len(wp) > 0:
-            chk("weak_point_tutorials[0].id present", wp[0].get("id") == "res_wp")
+            chk("weak_point_tutorials[0].id present", wp[0].get("id") == weak_resource_id)
             chk("weak_point_tutorials[0].title present", wp[0].get("title") == "弱项讲解")
             chk("weak_point_tutorials[0].content is str", isinstance(wp[0].get("content"), str))
             chk("weak_point_tutorials[0].content truncated to 160",
@@ -175,8 +177,8 @@ async def test():
             # both resources (weak_point and chapter_material) share the same chapter,
             # so both appear. Verify res_cm is among them.
             cm_ids = {r.get("id") for r in cm}
-            chk("chapter_materials include res_cm", "res_cm" in cm_ids)
-            chk("chapter_materials include res_wp", "res_wp" in cm_ids)
+            chk("chapter_materials include chapter resource", chapter_resource_id in cm_ids)
+            chk("chapter_materials include weak resource", weak_resource_id in cm_ids)
 
         # exercises
         ex = data.get("exercises", [])

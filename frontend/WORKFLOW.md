@@ -163,6 +163,10 @@
   - 新增 recommended 节点分支（星标图标，可点击）
   - 删除 completed/in_progress 节点内资源/习题占位文案，保留 Agent 提示占位
   - `npm run lint` / `npm run build` / Backend pytest 51/51 通过。
+- 2026-06-06：LearningPath 节点资源接入审查补修：
+  - `test_node_resources.py` 资源 fixture ID 改为动态值，避免默认 SQLite 测试库复跑时因 `resources.id` 唯一约束失败。
+  - OpenAPI：`GET /learning-path/nodes/{node_id}/resources` 补充 `401`、`403` 错误响应描述，对齐后端认证和课程权限行为。
+  - 运行时业务逻辑未变；本次补修用于测试可重复性和错误响应契约完整性。
 
 ## 本地联调注意事项
 
@@ -193,9 +197,9 @@ AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 - 阶段一契约疑点已清理完毕。
 - 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
 - ResourceDetail 正文预览已打通；建议先做一次轻量手工验收，确认 Dashboard → `/resource/:id` → 详情正文预览、非文字资源空预览、无权限 403 等闭环。
-- 下一步推荐优先处理“学习路径节点资源接入”设计，使学习路径与资源详情形成完整资源链路。
+- 学习路径节点资源接入已完成；下一步建议做一次轻量手工验收，确认 LearningPath 节点选择 → 底部资源面板 → `/resource/:id` 详情跳转闭环。
 - 班级 AI 洞察仍是剩余 P0，但不直接从旧 mock UI 实现；顺序为：基于学生端已确认数据源设计最小聚合 → 必要时更新 Client API → Backend/Agent 数据来源设计 → 前端移除 `useMock &&` 并接入真实数据。
-- 第二轮 P1：学习路径节点资源接入、教师深度诊断字段扩展、Admin 用户状态/删除契约确认。
+- 第二轮 P1：教师深度诊断字段扩展、Admin 用户状态/删除契约确认。
 - 第二轮 P2：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。

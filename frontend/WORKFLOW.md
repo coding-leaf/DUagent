@@ -222,8 +222,7 @@ AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 - 阶段一契约疑点已清理完毕。
 - 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
 - ResourceDetail 正文预览、LearningPath 节点资源、教师端学生报告个体聚合已完成并完成轻量手工验收。
-- 下一步建议进入 TeacherConsole 班级 Insights 最小聚合设计：班级平均练习分、练习次数、薄弱知识点 Top、路径节点完成分布；暂不做 Agent 总结和复杂“重点关注学生”。
-- 班级 AI 洞察仍是剩余 P0，但不直接从旧 mock UI 实现；顺序为：设计班级级 SQL 聚合契约 → 必要时更新 Client API → Backend 聚合实现 → 前端移除 `useMock &&` 并接入真实数据。
+- TeacherConsole 班级 Insights 最小 SQL 聚合已完成（2026-06-06）：OpenAPI 契约（ClassInsights/ClassWeakPoint/PathNodeProgress）、Backend `GET /teaching/classes/{class_id}/insights` 聚合端点（39 项集成测试全通过）、Frontend 接入。`useMock &&` 守卫已移除，真实模式展示班级平均练习分（一位小数）、练习次数、薄弱知识点 Top 5（含错题数/答题总次数/错误率）、路径节点分布。Students 和 Insights 独立错误处理已闭环。
 - 第二轮 P1：教师深度诊断字段扩展、Admin 用户状态/删除契约确认。
 - 第二轮 P2：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。

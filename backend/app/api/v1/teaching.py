@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.models.course import Course, CourseEnrollment
 from app.models.others import Evaluation, LearningPath, UserProfile
-from app.models.quiz import QuizSession
+from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/teaching", tags=["teaching"])
@@ -192,6 +192,68 @@ async def get_student_learning(
             "avg_time_spent": int(avg_time),
         }
 
+    # weak_points: 按知识点聚合错题 top 5（条件聚合 + 过滤空知识点 + HAVING error_count > 0）
+    error_count_expr = func.sum(case((QuizAnswer.is_correct == False, 1), else_=0))
+    total_attempts_expr = func.count(QuizAnswer.id)
+
+    weak_points = []
+    wp_result = await db.execute(
+        select(
+            QuizQuestion.knowledge_point,
+            total_attempts_expr.label("total_attempts"),
+            error_count_expr.label("error_count"),
+        )
+        .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
+        .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
+        .where(
+            QuizSession.user_id == student_id,
+            QuizSession.course_id == class_id,
+            QuizSession.is_deleted == False,
+            QuizAnswer.is_deleted == False,
+            QuizQuestion.is_deleted == False,
+            QuizQuestion.knowledge_point != "",
+        )
+        .group_by(QuizQuestion.knowledge_point)
+        .having(error_count_expr > 0)
+        .order_by(
+            (error_count_expr / total_attempts_expr).desc(),
+            error_count_expr.desc(),
+        )
+        .limit(5)
+    )
+    for row in wp_result:
+        total = row.total_attempts
+        errors = row.error_count or 0
+        weak_points.append({
+            "knowledge_point": row.knowledge_point,
+            "error_count": errors,
+            "total_attempts": total,
+            "error_rate": round(errors / total, 2) if total > 0 else 0,
+        })
+
+    # recent_activity: 最近 5 次 QuizSession
+    recent_activity = []
+    ra_result = await db.execute(
+        select(QuizSession)
+        .where(
+            QuizSession.user_id == student_id,
+            QuizSession.course_id == class_id,
+            QuizSession.is_deleted == False,
+        )
+        .order_by(QuizSession.create_time.desc())
+        .limit(5)
+    )
+    for qs in ra_result.scalars().all():
+        recent_activity.append({
+            "quiz_id": qs.id,
+            "chapter": qs.chapter or "",
+            "score": qs.score,
+            "correct_count": qs.correct_count,
+            "total_count": qs.total_count,
+            "time_spent": qs.time_spent,
+            "created_at": qs.create_time.isoformat() if qs.create_time else "",
+        })
+
     return {
         "code": 200,
         "message": "success",
@@ -201,7 +263,7 @@ async def get_student_learning(
             "profile_summary": profile_summary,
             "path_progress": path_progress,
             "quiz_stats": quiz_stats,
-            "weak_points": [],
-            "recent_activity": [],
+            "weak_points": weak_points,
+            "recent_activity": recent_activity,
         },
     }

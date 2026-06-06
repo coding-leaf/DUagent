@@ -4,7 +4,7 @@
 
 **Goal:** 在 `get_student_learning` 端点补齐 `weak_points`（错题聚合 top 5）和 `recent_activity`（最近 5 次练习），替换 TeacherStudentReport 硬编码空数组。
 
-**Architecture:** 5 个 task，TDD 顺序：Backend 测试（红灯）→ Backend 实现（绿灯）→ OpenAPI → Frontend → 验证收口。单端点增强，不新增表/端点/Agent 调用。
+**Architecture:** 4 个 task，TDD 顺序：Backend 测试+实现（red→green，单 commit）→ OpenAPI → Frontend → 验证收口。单端点增强，不新增表/端点/Agent 调用。
 
 **Tech Stack:** OpenAPI JSON, FastAPI (Python), React (JavaScript), Vite
 
@@ -248,6 +248,11 @@ async def test():
         chk("more sessions -> 200", r.status_code == 200)
         ra_all = r.json()["data"].get("recent_activity", [])
         chk("recent_activity max 5", len(ra_all) == 5)
+        # Verify create_time DESC ordering
+        if len(ra_all) >= 2:
+            dates = [ra["created_at"] for ra in ra_all]
+            ordered = all(dates[i] >= dates[i + 1] for i in range(len(dates) - 1))
+            chk("recent_activity ordered by created_at DESC", ordered)
 
     print(f"\n{'='*50}")
     print(f"  Total: {ok} OK, {fail} FAIL")
@@ -266,15 +271,7 @@ if __name__ == "__main__":
 cd /home/yezisama/workspace/workflow/EDUagent/backend
 python -m pytest tests/test_teacher_student_learning.py -v -s
 ```
-Expected: weak_points/recent_activity 相关断言 FAIL（当前返回 `[]`），403 相关断言可能 PASS。
-
-- [ ] **Step 3: 提交**
-
-```bash
-cd /home/yezisama/workspace/workflow/EDUagent
-git add backend/tests/test_teacher_student_learning.py
-git commit -m "测试: 教师端学生 weak_points 和 recent_activity 聚合（当前红灯）"
-```
+Expected: weak_points/recent_activity 相关断言 FAIL（当前返回 `[]`）。**确认红灯后进入 Task 2，不提交。**
 
 ---
 
@@ -395,17 +392,17 @@ python -m pytest tests/test_teacher_student_learning.py -v -s
 ```
 Expected: all OK, 0 FAIL, PASSED.
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 5: 提交（test_teacher_student_learning.py + teaching.py 一起提交）**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent
-git add backend/app/api/v1/teaching.py
+git add backend/tests/test_teacher_student_learning.py backend/app/api/v1/teaching.py
 git commit -m "Backend get_student_learning 补齐 weak_points 和 recent_activity 聚合"
 ```
 
 ---
 
-### Task 3: OpenAPI — 更新 StudentLearning schema
+### Task 2: OpenAPI — 更新 StudentLearning schema
 
 **Files:**
 - Modify: `docs/10-client-api/Client-API.openapi.json` (weak_points 约第 1406 行，recent_activity 约第 1411 行)
@@ -485,7 +482,7 @@ git commit -m "OpenAPI StudentLearning 补齐 weak_points 和 recent_activity �
 
 ---
 
-### Task 4: Frontend — TeacherStudentReport.jsx 消费真实数据
+### Task 3: Frontend — TeacherStudentReport.jsx 消费真实数据
 
 **Files:**
 - Modify: `frontend/src/pages/TeacherStudentReport.jsx`
@@ -572,7 +569,7 @@ git commit -m "TeacherStudentReport 消费真实 weak_points 和 recent_activity
 
 ---
 
-### Task 5: 全量验证 + WORKFLOW 收口
+### Task 4: 全量验证 + WORKFLOW 收口
 
 **Files:**
 - Modify: `frontend/WORKFLOW.md`
@@ -625,7 +622,7 @@ git commit -m "docs: 记录教师端学生 weak_points 和 recent_activity 聚�
 
 ## 自审清单
 
-**1. Spec 覆盖：** ✅ Task 1-5 覆盖 Backend 测试/Backend 实现/OpenAPI/Frontend/收口。TDD 顺序（测试先于实现）。
+**1. Spec 覆盖：** ✅ Task 1-4 覆盖 Backend 测试+实现（TDD red→green 单 commit）/OpenAPI/Frontend/收口。
 
 **2. 无占位符：** ✅ 所有步骤含完整代码。
 

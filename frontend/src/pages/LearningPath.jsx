@@ -13,6 +13,9 @@ export default function LearningPath() {
   const [nodeResources, setNodeResources] = useState(null);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [showFullExercises, setShowFullExercises] = useState(false);
+  const [showAllTutorials, setShowAllTutorials] = useState(false);
+  const [showAllExercises, setShowAllExercises] = useState(false);
+  const [showAllMaterials, setShowAllMaterials] = useState(false);
 
   useEffect(() => {
     const fetchPath = async () => {
@@ -69,6 +72,9 @@ export default function LearningPath() {
     if (selectedNodeId) {
       fetchNodeResources(selectedNodeId);
       setShowFullExercises(false);
+      setShowAllTutorials(false);
+      setShowAllExercises(false);
+      setShowAllMaterials(false);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNodeId, fetchNodeResources]);
@@ -242,8 +248,8 @@ export default function LearningPath() {
                       <h4 className="font-bold text-on-surface">薄弱点讲解</h4>
                     </div>
                     {nodeResources.weak_point_tutorials?.length > 0 ? (
-                      <div className="space-y-3">
-                        {nodeResources.weak_point_tutorials.map((item, i) => (
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {(showAllTutorials ? nodeResources.weak_point_tutorials : nodeResources.weak_point_tutorials.slice(0, 5)).map((item, i) => (
                           <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
                             <p className="text-sm font-bold text-on-surface mb-1">{item.title}</p>
                             <p className="text-xs text-secondary line-clamp-2 mb-2">{item.content || ''}</p>
@@ -256,6 +262,12 @@ export default function LearningPath() {
                             )}
                           </div>
                         ))}
+                        {nodeResources.weak_point_tutorials.length > 5 && (
+                          <button onClick={() => setShowAllTutorials(!showAllTutorials)}
+                            className="text-xs text-cyan-600 hover:text-cyan-700 font-medium w-full text-center py-1">
+                            {showAllTutorials ? '收起' : `展开全部 (${nodeResources.weak_point_tutorials.length} 条)`}
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <p className="text-xs text-gray-400 py-4 text-center">该节点暂无薄弱点讲解</p>
@@ -271,8 +283,8 @@ export default function LearningPath() {
                       <h4 className="font-bold text-on-surface">节点练习</h4>
                     </div>
                     {nodeResources.exercises?.length > 0 ? (
-                      <div className="space-y-3">
-                        {nodeResources.exercises.map((item, i) => (
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {(showAllExercises ? nodeResources.exercises : nodeResources.exercises.slice(0, 5)).map((item, i) => (
                           <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
@@ -282,6 +294,12 @@ export default function LearningPath() {
                             <p className="text-xs text-secondary line-clamp-2">{item.content || ''}</p>
                           </div>
                         ))}
+                        {nodeResources.exercises.length > 5 && (
+                          <button onClick={() => setShowAllExercises(!showAllExercises)}
+                            className="text-xs text-cyan-600 hover:text-cyan-700 font-medium w-full text-center py-1">
+                            {showAllExercises ? '收起' : `展开全部 (${nodeResources.exercises.length} 条)`}
+                          </button>
+                        )}
                         <Link to="/quiz" className="w-full block text-center py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
                           进入练习
                         </Link>
@@ -300,8 +318,8 @@ export default function LearningPath() {
                       <h4 className="font-bold text-on-surface">章节资料</h4>
                     </div>
                     {nodeResources.chapter_materials?.length > 0 ? (
-                      <div className="space-y-3">
-                        {nodeResources.chapter_materials.map((item, i) => (
+                      <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {(showAllMaterials ? nodeResources.chapter_materials : nodeResources.chapter_materials.slice(0, 5)).map((item, i) => (
                           <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] rounded font-bold">
@@ -318,6 +336,12 @@ export default function LearningPath() {
                             )}
                           </div>
                         ))}
+                        {nodeResources.chapter_materials.length > 5 && (
+                          <button onClick={() => setShowAllMaterials(!showAllMaterials)}
+                            className="text-xs text-cyan-600 hover:text-cyan-700 font-medium w-full text-center py-1">
+                            {showAllMaterials ? '收起' : `展开全部 (${nodeResources.chapter_materials.length} 条)`}
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <p className="text-xs text-gray-400 py-4 text-center">该节点暂无章节资料</p>

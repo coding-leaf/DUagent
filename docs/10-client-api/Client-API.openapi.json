@@ -1405,18 +1405,30 @@
           },
           "weak_points": {
             "type": "array",
-            "items": { "type": "string" },
-            "description": "薄弱知识点列表"
-          },
-          "recent_activity": {
-            "type": "array",
-            "description": "最近学习活动",
+            "description": "按知识点聚合的错题 top 5，按 error_rate DESC, error_count DESC 排序；无错题时为空数组",
             "items": {
               "type": "object",
               "properties": {
-                "type": { "type": "string", "description": "活动类型：quiz / resource / tutoring / path" },
-                "title": { "type": "string", "description": "活动标题" },
-                "created_at": { "type": "string", "format": "date-time", "description": "发生时间" }
+                "knowledge_point": { "type": "string", "description": "知识点名称" },
+                "error_count": { "type": "integer", "description": "错误次数" },
+                "total_attempts": { "type": "integer", "description": "该知识点答题总数" },
+                "error_rate": { "type": "number", "description": "错误率 0-1" }
+              }
+            }
+          },
+          "recent_activity": {
+            "type": "array",
+            "description": "最近 5 次 QuizSession，按 create_time DESC 排序；无记录时为空数组",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quiz_id": { "type": "string", "description": "练习 ID" },
+                "chapter": { "type": "string", "description": "章节" },
+                "score": { "type": "number", "description": "得分（百分比）" },
+                "correct_count": { "type": "integer", "description": "正确数" },
+                "total_count": { "type": "integer", "description": "总题数" },
+                "time_spent": { "type": "integer", "description": "耗时（秒）" },
+                "created_at": { "type": "string", "format": "date-time", "description": "练习时间" }
               }
             }
           }

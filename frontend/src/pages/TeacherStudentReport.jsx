@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
+import { useCourse } from '../context/CourseContext';
+import { useAuth } from '../context/AuthContext';
 import FeedbackStatus from '../components/FeedbackStatus';
-
-const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 
 export default function TeacherStudentReport() {
   const navigate = useNavigate();
@@ -12,6 +12,9 @@ export default function TeacherStudentReport() {
   const queryParams = new URLSearchParams(location.search);
   const classId = queryParams.get('course_id');
   const studentId = queryParams.get('student_id');
+  const { courses } = useCourse();
+  const { user } = useAuth();
+  const courseName = courses.find(c => c.id === classId)?.name || '学生报告';
 
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(!!classId && !!studentId);
@@ -56,17 +59,19 @@ export default function TeacherStudentReport() {
       {/* Top Header */}
       <header className="fixed top-0 w-full z-50 flex justify-between items-center px-gutter h-20 bg-white border-b border-outline-variant shadow-sm font-['Public_Sans'] antialiased">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold tracking-tight text-on-surface">数据结构 (Data Structures)</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-on-surface">{courseName}</h1>
           <span className="px-2 py-1 bg-surface-container-high text-primary font-bold text-xs rounded uppercase">教学控制台</span>
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-outline-variant">
-              <img alt="Teacher Profile" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEmN6iPeykBJM4g-FxZGQKujWsCGE-ECZSb2n7Om_izFEwlflhnVLi8aiRkOPALKmOqmYspwDxQXhjRwpKinCsHeX82NYknLqB_BawjcrrG_R6fLceDe8E-djpgDunaUfMKNUpTMvJLEglTno8tbrwrX-u5ZbtloceQzZNyT3tUP1_YmA6sL8f0Py7ra53pu1vfMKFX-rn8TRIvfzsTB_Q-Pgp0_gVgYl-Cff4Cg2VxJf1eYU35oScr-WfgA0scltfK38DvdpCbyzX" />
+            <div className="w-10 h-10 rounded-full bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-500/30 font-bold text-sm">
+              {(user?.real_name || user?.username || '教').charAt(0)}
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-on-surface">Prof. Zhang</span>
-              <span className="text-[10px] text-outline uppercase tracking-wider">系统管理员</span>
+              <span className="text-sm font-bold text-on-surface">{user?.real_name || user?.username || '教师'}</span>
+              <span className="text-[10px] text-outline uppercase tracking-wider">
+                {{ teacher: '教师', admin: '管理员' }[user?.role] || '教师'}
+              </span>
             </div>
           </div>
           <div className="h-8 w-[1px] bg-outline-variant"></div>
@@ -100,273 +105,6 @@ export default function TeacherStudentReport() {
             </div>
           </div>
 
-          {/* TOP SECTION: Profile and Analysis */}
-          {useMock && (
-            <>
-              <section className="mb-8">
-            {/* Profile Card */}
-            <div className="relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-10">
-                <img alt="Abstract AI" className="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzMAEOheT0KjN_V4Fs50iduiqAbY41brWEWJxp4OTj7_UEp-xIaxcjCg_nD7gFlxpJA02J20-08588bHb0rXh9DPDwVliY11SE63OLe49p49EPdhdtV3tTmvxzYZDpegvuIRbUOt73p55PYcIPkbbpQ2m9zU1qHjuedH2kiKkGvLzCoqlaAVBdvhbk1k_bRiNJkR1nKy0pWxkiz8th0-NwNlCiS_m3BF-O5D1TV2PGqwwetrQvRYYY_qJql5n3DmySA98y7i-zv3sV" />
-              </div>
-              <div className="relative">
-                <div className="relative w-32 h-32 rounded-full border-4 border-slate-100 overflow-hidden bg-slate-100">
-                  <img alt="李华 Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC07BOGJWseHN9894enM_L7lbL1vknF4bHPCaAyGzyUrT7QT9ojTqzKZd17pkUqgZxu_g1e-UUG6gk1UC_Z2aa-joN2oOlX8fqOWDwrDXOE4pUdrNbJ0EZGcKTA6lMEXTrjLnY2_q-kHPKiUSvs0oO2CTPzmQFrLJ_p4JMk9FPtJ-BgXnCfTEvyFHg7LihxKWSWyiW9jwSnp2xGWINNyUWGusGrFi9r4sy9ch386vd528d4f-kqTB4wQNzXiauJm_zQapOmDKlx49pt" />
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-4 mb-2">
-                  <h1 className="font-h1 text-3xl text-on-surface">{report.username}</h1>
-                  <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">学生</span>
-                </div>
-                <p className="text-body-md text-secondary font-body-md mb-2">学号: {report.student_id} · {report.major}</p>
-                <div className="flex gap-2">
-                  <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">在读</span>
-                </div>
-                
-                <div className="pt-6 mt-4 border-t border-slate-100">
-                  <div>
-                    <p className="text-2xl font-black text-slate-900">—</p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-tighter">综合评分</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </section>
-
-          {/* Bento Grid Top Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 mb-12">
-            
-            {/* Modality Card */}
-            <div className="lg:col-span-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col items-center hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="w-full flex justify-between items-center mb-6">
-                <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface font-bold">
-                  <span className="material-symbols-outlined text-cyan-500">pie_chart</span> 模态偏好
-                </h3>
-              </div>
-              <div className="relative w-52 h-52 flex items-center justify-center p-2">
-                <p className="text-sm text-slate-400 text-center">模态偏好数据待 Backend 返回</p>
-              </div>
-              <p className="text-xs text-slate-500 mt-4 leading-relaxed w-full text-left">
-                <span className="font-bold text-primary">AI诊断：</span> {report.ai_diagnosis}
-              </p>
-            </div>
-
-            {/* Granularity Card */}
-            <div className="lg:col-span-8 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="mb-8">
-                <h3 className="font-h3 text-xl mb-4 flex items-center gap-2 text-on-surface font-bold">
-                  <span className="material-symbols-outlined text-cyan-500">tune</span> 引导粒度
-                </h3>
-                <p className="text-body-md text-secondary">根据当前任务难度与心流状态，动态调整智能体的介入深度。</p>
-              </div>
-              <div className="relative px-6 py-12 flex-1">
-                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden relative">
-                  <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-600" style={{ width: '50%' }}></div>
-                </div>
-                <div className="flex justify-between items-center absolute w-full left-0 top-0 mt-[38px] px-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-6 h-6 rounded-full bg-white border-4 border-slate-200 shadow-sm z-10"></div>
-                    <div className="mt-6 text-center">
-                      <p className="text-label-sm font-bold text-slate-400">L1: 启发点拨</p>
-                      <p className="text-[10px] text-slate-400 mt-1">核心思路提示</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <div className="w-10 h-10 rounded-full bg-cyan-500 border-[6px] border-white shadow-xl shadow-cyan-200 z-20"></div>
-                    <div className="mt-4 text-center">
-                      <p className="text-label-sm font-bold text-cyan-600">L2: 伴学拆解</p>
-                      <p className="text-[10px] text-cyan-400 mt-1">分步引导学习</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <div className="w-6 h-6 rounded-full bg-white border-4 border-slate-200 shadow-sm z-10"></div>
-                    <div className="mt-6 text-center">
-                      <p className="text-label-sm font-bold text-slate-400">L3: 保姆生成</p>
-                      <p className="text-[10px] text-slate-400 mt-1">全自动代码生成</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-8 bg-cyan-50 p-5 rounded-xl flex items-start gap-4 border border-cyan-100">
-                <span className="material-symbols-outlined text-cyan-600 mt-0.5">verified</span>
-                <p className="text-sm text-cyan-700 leading-relaxed">
-                  <span className="font-bold">系统建议：</span>{report.guidance_suggestion}
-                </p>
-              </div>
-            </div>
-
-            {/* Knowledge Map */}
-            <div className="lg:col-span-7 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="absolute top-0 right-0 p-4 opacity-5">
-                <span className="material-symbols-outlined text-9xl">hub</span>
-              </div>
-              <h3 className="font-h3 text-xl mb-8 flex items-center gap-2 text-on-surface font-bold">
-                <span className="material-symbols-outlined text-cyan-500">grid_view</span> 知识坐标 &amp; 认知盲区
-              </h3>
-              <div className="flex flex-wrap gap-4 relative">
-                {report.knowledge_coordinates?.map((kc, i) => {
-                  let style;
-                  let icon;
-                  if (kc.type === 'mastered') {
-                    style = 'bg-green-50 text-green-700 border-green-100';
-                    icon = 'check_circle';
-                  } else if (kc.type === 'learning') {
-                    style = 'bg-blue-50 text-blue-700 border-blue-100';
-                    icon = 'check_circle';
-                  } else {
-                    style = 'bg-orange-50 text-orange-700 border-orange-200 shadow-md shadow-orange-100';
-                    icon = 'local_fire_department';
-                  }
-                  return (
-                    <span key={i} className={`px-5 py-3 rounded-xl border font-bold flex items-center gap-2 text-sm transition-all hover:scale-105 ${style}`}>
-                      <span className="material-symbols-outlined text-base" style={kc.type === 'weak' ? { fontVariationSettings: '"FILL" 1' } : {}}>{icon}</span> {kc.name}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Learning Heat and Accuracy Card */}
-            <div className="lg:col-span-5 bg-white p-8 rounded-2xl border border-gray-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col hover:-translate-y-0.5 transition-transform duration-300">
-              <h3 className="font-h3 text-xl mb-6 flex items-center gap-2 text-on-surface font-bold">
-                <span className="material-symbols-outlined text-cyan-500">analytics</span> 学习热度与准度
-              </h3>
-              <div className="flex-1 flex flex-col space-y-4">
-                <div className="h-32 w-full relative flex items-end justify-between px-2">
-                  <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-                    <path d="M0,60 Q10,50 20,40 T40,45 T60,30 T80,35 T100,20" fill="none" stroke="#00677f" strokeWidth="2"></path>
-                    <path d="M0,80 Q10,75 20,60 T40,65 T60,55 T80,45 T100,40" fill="none" stroke="#00d1ff" strokeDasharray="2 1" strokeWidth="2"></path>
-                  </svg>
-                  <div className="absolute bottom-0 w-full flex justify-between text-[8px] text-slate-400 font-bold px-1">
-                    <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-1 bg-cyan-400"></div>
-                    <span className="text-xs text-secondary font-bold">近期学习频度</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-1 bg-primary"></div>
-                    <span className="text-xs text-secondary font-bold">做题准确率</span>
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-slate-50">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
-                    <span className="text-primary font-black text-lg">待统计</span>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold">本周最高准度</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Divider with Label */}
-          <div className="relative flex items-center py-4 mb-8">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-4 text-slate-400 font-bold text-xs uppercase tracking-[0.2em]">Learning Outcomes &amp; AI Analysis</span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
-
-          {/* BOTTOM SECTION: Learning Results */}
-          <div className="grid grid-cols-12 gap-gutter pb-12">
-            
-            {/* AI Insight Card */}
-            <div className="col-span-12 lg:col-span-8 glass-panel rounded-xl p-md flex flex-col md:flex-row gap-md items-start shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 transition-transform duration-300">
-              <div className="flex-shrink-0 w-16 h-16 bg-primary-container/20 rounded-full flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
-              </div>
-              <div>
-                <h3 className="font-h3 text-h3 mb-2 flex items-center">
-                  AI 智能分析报告
-                  <span className="ml-3 px-2 py-0.5 bg-cyan-100 text-cyan-700 text-[10px] rounded-full font-bold">实时分析</span>
-                </h3>
-                <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
-                  {report.ai_insight}
-                </p>
-                <div className="p-4 mt-4 bg-slate-50 rounded-lg border-l-4 border-primary-container">
-                  <h4 className="text-xs font-bold text-primary uppercase mb-2">下一阶段行动建议</h4>
-                  <ul className="text-sm text-slate-700 space-y-2 list-disc pl-4">
-                    {report.action_suggestions?.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Exercise/Test Mastery Chart */}
-            <div className="col-span-12 lg:col-span-4 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 transition-transform duration-300">
-              <h3 className="font-h3 text-h3 mb-sm flex items-center">
-                <span className="material-symbols-outlined mr-2 text-primary">assessment</span> 练习掌握度
-              </h3>
-              <div className="flex flex-col gap-4 mt-6">
-                {report.mastery_stats?.map((stat, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex justify-between text-label-sm font-label-sm">
-                      <span>{stat.name}</span>
-                      <span className="text-primary">{stat.percent}%</span>
-                    </div>
-                    <div className="h-2 bg-surface-container rounded-full overflow-hidden">
-                      <div className="h-full bg-primary-container" style={{ width: `${stat.percent}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Path Progression Table */}
-            <div className="col-span-12 lg:col-span-7 glass-panel rounded-xl p-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5 transition-transform duration-300">
-              <h3 className="font-h3 text-h3 mb-md">学习路径进度</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="pb-3 font-label-sm text-label-sm text-outline">模块名称</th>
-                      <th className="pb-3 font-label-sm text-label-sm text-outline">当前状态</th>
-                      <th className="pb-3 font-label-sm text-label-sm text-outline">平均耗时</th>
-                      <th className="pb-3 font-label-sm text-label-sm text-outline">达成率</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {report.learning_path_progress?.map((path, i) => {
-                      let statusStyle;
-                      let textStyle;
-                      if (path.status === '已过关') {
-                        statusStyle = 'bg-green-50 text-green-600';
-                        textStyle = 'text-green-600';
-                      } else if (path.status === '进行中') {
-                        statusStyle = 'bg-cyan-50 text-cyan-600';
-                        textStyle = 'text-primary';
-                      } else {
-                        statusStyle = 'bg-gray-100 text-gray-500';
-                        textStyle = 'text-outline';
-                      }
-                      
-                      return (
-                        <tr key={i} className="group hover:bg-surface-container-low transition-colors">
-                          <td className="py-4 font-body-md text-body-md">{path.module}</td>
-                          <td className="py-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusStyle}`}>{path.status}</span>
-                          </td>
-                          <td className="py-4 font-body-md text-body-md text-on-surface-variant">{path.time}</td>
-                          <td className={`py-4 font-bold ${textStyle}`}>{path.completion}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        </>
-      )}
-
-      {!useMock && (
         <div className="space-y-8">
           {/* Profile banner */}
           <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm flex flex-col md:flex-row items-center gap-6">
@@ -382,6 +120,13 @@ export default function TeacherStudentReport() {
               <span className="text-[10px] text-secondary font-bold uppercase tracking-wider">综合评分</span>
             </div>
           </div>
+
+          {report.evaluation_summary?.summary_text && (
+            <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <p className="text-xs text-slate-500 font-bold uppercase mb-1">AI 分析</p>
+              <p className="text-sm text-slate-600 leading-relaxed">{report.evaluation_summary.summary_text}</p>
+            </div>
+          )}
 
           {/* Metric Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -455,6 +200,61 @@ export default function TeacherStudentReport() {
 
           {/* Details Section */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            {/* Knowledge Coordinates */}
+            <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
+                <span className="material-symbols-outlined text-cyan-500">grid_view</span>
+                知识坐标 (Knowledge Coordinates)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {report.profile_summary?.knowledge_coordinates?.length > 0 ? (
+                  report.profile_summary.knowledge_coordinates.map((kc, i) => {
+                    const isMastered = kc.status === 'mastered';
+                    const isLearning = kc.status === 'learning';
+                    return (
+                      <span key={i} className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${
+                        isMastered ? 'bg-green-50 text-green-700 border-green-100' :
+                        isLearning ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                        'bg-slate-100 text-slate-400 border-slate-200'
+                      }`}>
+                        <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>
+                          {isMastered ? 'check_circle' : isLearning ? 'sync' : 'help'}
+                        </span>
+                        {kc.name}
+                      </span>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-outline italic text-center py-4">暂无知识坐标数据</p>
+                )}
+              </div>
+            </div>
+
+            {/* Mastery Breakdown */}
+            <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
+              <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
+                <span className="material-symbols-outlined text-primary text-xl">assessment</span>
+                练习掌握度 (Mastery Breakdown)
+              </h3>
+              {report.quiz_stats?.mastery_breakdown?.length > 0 ? (
+                <div className="space-y-3">
+                  {report.quiz_stats.mastery_breakdown.map((item, i) => (
+                    <div key={i} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium text-on-surface">{item.knowledge_point}</span>
+                        <span className="font-bold text-primary">{item.accuracy}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${item.accuracy}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-outline italic text-center py-4">暂无练习数据</p>
+              )}
+            </div>
+
             {/* Left Column: Weak Points & Mastered count */}
             <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-6 flex flex-col justify-between">
               <div>
@@ -522,7 +322,6 @@ export default function TeacherStudentReport() {
             </div>
           </div>
         </div>
-      )}
         </div>
       </main>
     </div>

@@ -461,13 +461,20 @@ git commit -m "learningService 新增 getNodeResources"
   const [showFullExercises, setShowFullExercises] = useState(false);
 ```
 
-- [ ] **Step 2: 新增 fetchNodeResources 函数 + 默认选中 effect**
+- [ ] **Step 2: 更新 import，新增 fetchNodeResources 函数 + 默认选中 effect**
 
-在 `useEffect` 获取 learningPath 之后，新增：
+先将文件顶部 React import 从：
+```javascript
+import { useState, useEffect } from 'react';
+```
+改为：
+```javascript
+import { useState, useEffect, useCallback } from 'react';
+```
+
+然后在 `useEffect` 获取 learningPath 之后，新增：
 
 ```javascript
-  import { useCallback } from 'react';  // 补充到文件顶部 import
-
   // 获取节点资源
   const fetchNodeResources = useCallback(async (nodeId) => {
     if (!nodeId || !activeCourseId) return;
@@ -553,6 +560,8 @@ git commit -m "learningService 新增 getNodeResources"
                           </div>
                         </div>
                       );
+                    }
+```
 
 - [ ] **Step 4: 底部面板 — 替换 3 张静态占位卡**
 

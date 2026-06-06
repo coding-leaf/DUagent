@@ -21,5 +21,10 @@ export const learningService = {
   },
   getResourceDetail(id) {
     return apiClient.get(`/resources/${id}`);
+  },
+  getNodeResources(nodeId, courseId) {
+    return apiClient.get(`/learning-path/nodes/${nodeId}/resources`, {
+      params: { course_id: courseId }
+    });
   }
 };

@@ -184,6 +184,12 @@
   - Frontend：`TeacherStudentReport.jsx` 去掉硬编码 `[]`，渲染真实数据 + 空态
   - 不新增端点、不调 Agent、不改 TeacherConsole Insights
   - `npm run lint` / `npm run build` / Backend pytest 77/77 通过。
+- 2026-06-06：阶段二轻量手工验收记录：
+  - ResourceDetail / LearningPath 链路可用：路径规划下可正常展示节点资源内容，并可进入资源详情。
+  - 暂未发现前端存在容易进入无权限资源详情的入口；资源权限仍以后端 403 校验兜底。
+  - 教师端学生报告可看到部分真实数据，`weak_points` / `recent_activity` 最小聚合方向成立。
+  - 已知但非本轮重点：资源内容质量偏低，归入后续资源生成/资源库质量专项；学生侧“学习”状态和进度流转仍不完整，归入后续行为采集/学习状态设计。
+  - 本轮不扩大到资源质量、行为采集、累计学习时长或阅读进度。
 
 ## 本地联调注意事项
 
@@ -207,17 +213,20 @@ AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 
 - 学生端数据源与 Client API 契约补全审查已完成。
 - ResourceDetail 正文预览已完成 OpenAPI、Backend、Frontend 三层实现。
-- 教师端洞察仍不能从旧 mock UI 倒推；应基于已确认学生端数据源继续拆分最小可行聚合。
+- LearningPath 节点资源接入已完成，并通过轻量手工验收确认主链路可用。
+- 教师端学生报告已补齐 `weak_points` / `recent_activity` 个体聚合，班级级 TeacherConsole Insights 仍待设计。
+- 教师端洞察仍不能从旧 mock UI 倒推；下一步应基于已确认学生端数据源设计班级级最小 SQL 聚合。
 
 ## 下一步建议
 
 - 阶段一契约疑点已清理完毕。
 - 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
-- ResourceDetail 正文预览已打通；建议先做一次轻量手工验收，确认 Dashboard → `/resource/:id` → 详情正文预览、非文字资源空预览、无权限 403 等闭环。
-- 学习路径节点资源接入已完成，且 E2E seed 已补齐最小节点数据；下一步可用 `s@t.com / Abc12345` 登录测试库环境，验收 LearningPath 节点选择 → 底部资源面板 → `/resource/:id` 详情跳转闭环。
-- 班级 AI 洞察仍是剩余 P0，但不直接从旧 mock UI 实现；顺序为：基于学生端已确认数据源设计最小聚合 → 必要时更新 Client API → Backend/Agent 数据来源设计 → 前端移除 `useMock &&` 并接入真实数据。
+- ResourceDetail 正文预览、LearningPath 节点资源、教师端学生报告个体聚合已完成并完成轻量手工验收。
+- 下一步建议进入 TeacherConsole 班级 Insights 最小聚合设计：班级平均练习分、练习次数、薄弱知识点 Top、路径节点完成分布；暂不做 Agent 总结和复杂“重点关注学生”。
+- 班级 AI 洞察仍是剩余 P0，但不直接从旧 mock UI 实现；顺序为：设计班级级 SQL 聚合契约 → 必要时更新 Client API → Backend 聚合实现 → 前端移除 `useMock &&` 并接入真实数据。
 - 第二轮 P1：教师深度诊断字段扩展、Admin 用户状态/删除契约确认。
-- 第二轮 P2：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
+- 第二轮 P2：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
+- 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。
 - 新增契约能力必须先走设计/审查；禁止用前端静态字段补齐未确认业务能力。

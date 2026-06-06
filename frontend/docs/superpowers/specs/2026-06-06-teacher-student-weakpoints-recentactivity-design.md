@@ -17,7 +17,7 @@
 
 - Backend `get_student_learning`：`weak_points` 从 `[]` → 按知识点聚合错题 top 5
 - Backend `get_student_learning`：`recent_activity` 从 `[]` → 最近 5 次 QuizSession
-- OpenAPI `StudentLearningReport` schema：补 `weak_points[]`、`recent_activity[]` 字段定义
+- OpenAPI `StudentLearning` schema：补 `weak_points[]`、`recent_activity[]` 字段定义
 - Frontend `TeacherStudentReport.jsx`：去掉硬编码 `[]`，消费接口真实数据或展示空态
 - Backend 测试：403、有错题聚合、无错题空数组、recent_activity 最多 5 条
 
@@ -100,28 +100,34 @@ GET /api/v1/teaching/classes/{class_id}/students/{student_id}/learning
 在现有 quiz_stats 和 return 之间插入：
 
 ```python
-    # weak_points: 按知识点聚合错题 top 5（条件聚合 + 过滤空知识点）
+    from sqlalchemy import case
+
+    # weak_points: 按知识点聚合错题 top 5（条件聚合 + 过滤空知识点 + HAVING error_count > 0）
+    error_count_expr = func.sum(case((QuizAnswer.is_correct == False, 1), else_=0))
+    total_attempts_expr = func.count(QuizAnswer.id)
+
     weak_points = []
     wp_result = await db.execute(
         select(
             QuizQuestion.knowledge_point,
-            func.count().label("total_attempts"),
-            func.sum(
-                func.if_(QuizAnswer.is_correct == False, 1, 0)
-            ).label("error_count"),
+            total_attempts_expr.label("total_attempts"),
+            error_count_expr.label("error_count"),
         )
         .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
         .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
         .where(
             QuizSession.user_id == student_id,
             QuizSession.course_id == class_id,
-            QuizQuestion.knowledge_point != "",
+            QuizSession.is_deleted == False,
             QuizAnswer.is_deleted == False,
+            QuizQuestion.is_deleted == False,
+            QuizQuestion.knowledge_point != "",
         )
         .group_by(QuizQuestion.knowledge_point)
+        .having(error_count_expr > 0)
         .order_by(
-            (func.sum(func.if_(QuizAnswer.is_correct == False, 1, 0)) / func.count()).desc(),
-            func.sum(func.if_(QuizAnswer.is_correct == False, 1, 0)).desc(),
+            (error_count_expr / total_attempts_expr).desc(),
+            error_count_expr.desc(),
         )
         .limit(5)
     )

@@ -7,7 +7,12 @@ Usage:
 import asyncio
 import os
 import sys
+from pathlib import Path
 from urllib.parse import urlparse
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 # ---- guards ----
 if os.environ.get("ALLOW_E2E_SEED") != "true":
@@ -29,10 +34,10 @@ from app.core.security import hash_password
 from app.models.user import User
 from app.models.course import Course, CourseEnrollment
 from app.models.quiz import QuizQuestion, QuizSession
-from app.models.others import Resource, UserProfile, Evaluation
+from app.models.others import Resource, UserProfile, Evaluation, LearningPath, CourseKnowledgeGraph
 
 
-async def upsert(session, model, lookup: dict, defaults: dict):
+async def upsert(session, model, lookup: dict, defaults: dict, update_existing: bool = False):
     """Insert or skip — return existing or new instance."""
     stmt = select(model)
     for k, v in lookup.items():
@@ -45,7 +50,13 @@ async def upsert(session, model, lookup: dict, defaults: dict):
         await session.flush()
         print(f"  Created {model.__name__}: {lookup}")
     else:
-        print(f"  Skipped {model.__name__}: {lookup} (exists)")
+        if update_existing:
+            for key, value in defaults.items():
+                setattr(instance, key, value)
+            await session.flush()
+            print(f"  Updated {model.__name__}: {lookup}")
+        else:
+            print(f"  Skipped {model.__name__}: {lookup} (exists)")
     return instance
 
 
@@ -119,6 +130,81 @@ async def seed_quiz_questions(session, course1, course2):
                  "explanation": f"Because {i}+{i}={i+i}"})
 
 
+async def seed_learning_path_data(session, student, course1):
+    """Create minimal LearningPath data for LearningPath → ResourceDetail smoke checks."""
+    print("\n-- LearningPath --")
+    nodes = [
+        {"id": "e2e-node-array", "name": "数组基础", "status": "completed", "mastery": 92, "order": 1},
+        {"id": "e2e-node-tree", "name": "二叉树遍历", "status": "in_progress", "mastery": 56, "order": 2},
+        {"id": "e2e-node-graph", "name": "图的遍历", "status": "recommended", "mastery": 0, "order": 3},
+    ]
+    edges = [
+        {"from": "e2e-node-array", "to": "e2e-node-tree"},
+        {"from": "e2e-node-tree", "to": "e2e-node-graph"},
+    ]
+    kg_nodes = [
+        {"id": "e2e-node-array", "name": "数组基础", "chapter": "第1章"},
+        {"id": "e2e-node-tree", "name": "二叉树遍历", "chapter": "第2章"},
+        {"id": "e2e-node-graph", "name": "图的遍历", "chapter": "第3章"},
+    ]
+
+    await upsert(
+        session,
+        LearningPath,
+        {"user_id": student.id, "course_id": course1.id},
+        {
+            "nodes": nodes,
+            "edges": edges,
+            "current_node_id": "e2e-node-tree",
+            "current_node_name": "二叉树遍历",
+        },
+        update_existing=True,
+    )
+    await upsert(
+        session,
+        CourseKnowledgeGraph,
+        {"course_id": course1.id},
+        {"nodes": kg_nodes, "edges": edges},
+        update_existing=True,
+    )
+
+    for node in nodes:
+        chapter = next(k["chapter"] for k in kg_nodes if k["id"] == node["id"])
+        await upsert(
+            session,
+            Resource,
+            {"course_id": course1.id, "title": f"E2E {node['name']}讲解"},
+            {
+                "type": "reading",
+                "description": f"{node['name']}验收用正文预览资料",
+                "chapter": chapter,
+                "knowledge_point": node["name"],
+                "tags": ["e2e", "learning-path"],
+                "content": f"{node['name']}是学习路径验收数据。这里提供可在节点资源面板展示的正文摘要，并可跳转到资源详情页。",
+                "url": "",
+                "view_count": 0,
+            },
+        )
+        await upsert(
+            session,
+            QuizQuestion,
+            {"course_id": course1.id, "content": f"E2E {node['name']}节点练习：选择正确描述"},
+            {
+                "type": "single_choice",
+                "chapter": chapter,
+                "knowledge_point": node["name"],
+                "correct_answer": "A",
+                "options": [
+                    {"key": "A", "text": f"{node['name']}相关概念"},
+                    {"key": "B", "text": "无关概念"},
+                    {"key": "C", "text": "占位错误项"},
+                    {"key": "D", "text": "占位错误项"},
+                ],
+                "explanation": f"该题用于验证 {node['name']} 节点练习展示。",
+            },
+        )
+
+
 async def seed_student_data(session, student, course1, course2):
     """Create student profiles, evaluations, and quiz sessions."""
     print("\n-- StudentData --")
@@ -150,6 +236,7 @@ async def main():
             course1, course2 = await seed_courses(session, teacher, student)
             await seed_resources(session, course1, course2)
             await seed_quiz_questions(session, course1, course2)
+            await seed_learning_path_data(session, student, course1)
             await seed_student_data(session, student, course1, course2)
     print("\nSeed complete.")
 

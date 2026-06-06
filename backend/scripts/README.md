@@ -32,3 +32,19 @@ cd ../frontend && npm run test:e2e
 |-------|----------|------|
 | s@t.com | Abc12345 | student |
 | t@t.com | Abc12345 | teacher |
+
+### LearningPath Smoke Data
+
+The seed also creates LearningPath smoke data for the student account in course `CS101-E2E`:
+
+- 3 nodes: `completed` / `in_progress` / `recommended`
+- current node: `e2e-node-tree`
+- matching `CourseKnowledgeGraph` nodes
+- one resource and one quiz question per node
+
+This allows manual verification of:
+
+1. LearningPath node rendering
+2. node selection
+3. bottom node-resource panel
+4. resource link navigation to `/resource/:id`

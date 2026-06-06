@@ -164,14 +164,15 @@ async def get_student_learning(
     )
     pf = pf_result.scalar_one_or_none()
     profile_summary = None
-    if pf and pf.knowledge_coordinates:
-        mastered = sum(1 for kc in pf.knowledge_coordinates if kc.get("status") == "mastered")
-        weak = len(pf.knowledge_coordinates) - mastered
+    if pf:
+        kcs = pf.knowledge_coordinates if pf.knowledge_coordinates else []
+        mastered = sum(1 for kc in kcs if kc.get("status") == "mastered")
+        weak = len(kcs) - mastered
         profile_summary = {
             "knowledge_mastered": mastered,
             "knowledge_weak": weak,
             "modal_preference": list(pf.modal_preference.keys()) if pf.modal_preference else [],
-            "knowledge_coordinates": pf.knowledge_coordinates if pf.knowledge_coordinates else [],
+            "knowledge_coordinates": kcs,
         }
 
     # Path

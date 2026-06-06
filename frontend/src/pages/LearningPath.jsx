@@ -72,14 +72,6 @@ export default function LearningPath() {
     }
   }, [selectedNodeId, fetchNodeResources]);
 
-  const getCategoryForNode = (nodeName) => {
-    if (!nodeName) return '全部';
-    if (nodeName.includes('Hash') || nodeName.includes('散列') || nodeName.includes('哈希')) return '哈希表专题';
-    if (nodeName.includes('冲突')) return '冲突处理策略';
-    if (nodeName.includes('习题') || nodeName.includes('练习')) return '习题集';
-    return '全部';
-  };
-
   return (
     <div className="font-body-md bg-background min-h-screen text-on-background">
       {/* TopNavBar Implementation */}
@@ -146,14 +138,6 @@ export default function LearningPath() {
                             <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden mb-sm">
                               <div className="h-full bg-cyan-500 w-full"></div>
                             </div>
-                            <div className="space-y-sm pt-sm border-t border-gray-50">
-                              <div className="space-y-1">
-                                <p className="text-[11px] text-error">知识点推荐将在路径节点接入真实数据后展示</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[11px] text-on-surface-variant">配套习题将在节点资源接入后展示</p>
-                              </div>
-                            </div>
                           </div>
                         </div>
                       );
@@ -172,7 +156,6 @@ export default function LearningPath() {
                             <div className="space-y-xs">
                               <div className="flex justify-between text-label-sm text-gray-500">
                                 <span>进度: {node.mastery}%</span>
-                                <span>关键知识点诊断待 Backend 数据接入</span>
                               </div>
                               <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                                 <div className="h-full bg-cyan-500" style={{ width: `${node.mastery}%` }}></div>
@@ -182,7 +165,7 @@ export default function LearningPath() {
                               <div className="bg-surface-container rounded-lg p-sm border border-outline-variant">
                                 <p className="text-label-sm font-bold text-on-surface">智能体提示将在路径 Agent 输出接入后展示</p>
                               </div>
-                              <Link to="/dashboard" state={{ search: node.name, category: getCategoryForNode(node.name) }} className="w-full py-2 bg-primary text-white rounded-lg text-label-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors">
+                              <Link to="/dashboard" state={{ search: node.name }} className="w-full py-2 bg-primary text-white rounded-lg text-label-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors">
                                 <span className="material-symbols-outlined text-sm">auto_stories</span>前往资源库继续闯关
                               </Link>
                             </div>

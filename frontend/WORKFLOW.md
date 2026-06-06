@@ -172,6 +172,11 @@
   - 同步写入 `CourseKnowledgeGraph`、每节点 1 条资源、每节点 1 条练习题，使 LearningPath 节点选择 → 底部资源面板 → `/resource/:id` 跳转具备可验收数据。
   - 修正 seed 脚本直接运行时的 `app` 模块导入问题；仍保留 `ALLOW_E2E_SEED=true` 和测试库名安全检查。
   - `/tmp` SQLite 验证：首次 seed 后 `learning_paths=1`、`node_count=3`、资源=3、题目=3；复跑后数量不膨胀。
+- 2026-06-06：LearningPath 资源面板 UI 收口：
+  - weak_point_tutorials、exercises、chapter_materials 每组默认展示前 5 条，超出折叠 + "展开全部 (N 条)" 按钮
+  - 每组 `max-h-80 overflow-y-auto` 防止面板过长
+  - 节点切换时自动重置折叠状态
+  - `npm run lint` / `npm run build` 通过。
 
 ## 本地联调注意事项
 

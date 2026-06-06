@@ -281,3 +281,125 @@ async def get_student_learning(
             "recent_activity": recent_activity,
         },
     }
+
+
+@router.get("/classes/{class_id}/insights")
+async def get_class_insights(
+    class_id: str,
+    current_user: User = Depends(require_role("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_teacher(class_id, current_user, db)
+
+    # 1. Get enrolled student IDs
+    enrolled_result = await db.execute(
+        select(CourseEnrollment.student_id).where(
+            CourseEnrollment.course_id == class_id,
+            CourseEnrollment.is_deleted == False,
+        )
+    )
+    student_ids = [row[0] for row in enrolled_result.all()]
+
+    if not student_ids:
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "avg_quiz_score": None,
+                "total_quiz_attempts": 0,
+                "weak_points_top": [],
+                "path_node_progress": {
+                    "completed": 0,
+                    "in_progress": 0,
+                    "recommended": 0,
+                    "pending": 0,
+                    "total_nodes": 0,
+                },
+            },
+        }
+
+    # 2. avg_quiz_score & total_quiz_attempts
+    quiz_result = await db.execute(
+        select(
+            func.avg(QuizSession.score).label("avg_score"),
+            func.count(QuizSession.id).label("total_attempts"),
+        ).where(
+            QuizSession.course_id == class_id,
+            QuizSession.user_id.in_(student_ids),
+            QuizSession.is_deleted == False,
+        )
+    )
+    quiz_row = quiz_result.one()
+    avg_quiz_score = round(quiz_row.avg_score, 1) if quiz_row.avg_score is not None else None
+    total_quiz_attempts = quiz_row.total_attempts or 0
+
+    # 3. weak_points_top
+    error_count_expr = func.sum(case((QuizAnswer.is_correct == False, 1), else_=0))
+    total_attempts_expr = func.count(QuizAnswer.id)
+
+    wp_result = await db.execute(
+        select(
+            QuizQuestion.knowledge_point,
+            total_attempts_expr.label("total_attempts"),
+            error_count_expr.label("error_count"),
+        )
+        .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
+        .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
+        .where(
+            QuizSession.course_id == class_id,
+            QuizSession.user_id.in_(student_ids),
+            QuizSession.is_deleted == False,
+            QuizAnswer.is_deleted == False,
+            QuizQuestion.is_deleted == False,
+            QuizQuestion.knowledge_point != "",
+        )
+        .group_by(QuizQuestion.knowledge_point)
+        .having(error_count_expr > 0)
+        .order_by(
+            (error_count_expr / total_attempts_expr).desc(),
+            error_count_expr.desc(),
+        )
+        .limit(5)
+    )
+
+    weak_points_top = []
+    for row in wp_result:
+        total = row.total_attempts
+        errors = row.error_count or 0
+        weak_points_top.append({
+            "knowledge_point": row.knowledge_point,
+            "error_count": errors,
+            "total_attempts": total,
+            "error_rate": round(errors / total, 2) if total > 0 else 0,
+        })
+
+    # 4. path_node_progress
+    lp_result = await db.execute(
+        select(LearningPath).where(
+            LearningPath.course_id == class_id,
+            LearningPath.user_id.in_(student_ids),
+            LearningPath.is_deleted == False,
+        )
+    )
+    known_statuses = {"completed", "in_progress", "recommended", "pending"}
+    progress = {s: 0 for s in known_statuses}
+    for lp in lp_result.scalars().all():
+        nodes = lp.nodes if isinstance(lp.nodes, list) else []
+        for node in nodes:
+            st = node.get("status")
+            if st in known_statuses:
+                progress[st] += 1
+
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "avg_quiz_score": avg_quiz_score,
+            "total_quiz_attempts": total_quiz_attempts,
+            "weak_points_top": weak_points_top,
+            "path_node_progress": {
+                **progress,
+                "total_nodes": sum(progress.values()),
+            },
+        },
+    }

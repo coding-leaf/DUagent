@@ -177,6 +177,13 @@
   - 每组 `max-h-80 overflow-y-auto` 防止面板过长
   - 节点切换时自动重置折叠状态
   - `npm run lint` / `npm run build` 通过。
+- 2026-06-06：教师端学生 weak_points + recent_activity 聚合完成：
+  - Backend 测试（TDD）：`test_teacher_student_learning.py` 26 条断言覆盖 403/weak_points 聚合/全对空数组/recent_activity max 5 + 排序
+  - Backend：`get_student_learning` 补齐 `weak_points`（case() 条件聚合 + HAVING error_count > 0 + 过滤空 KP + top 5）和 `recent_activity`（最近 5 次 QuizSession，create_time DESC）
+  - OpenAPI：`StudentLearning` schema 补齐字段定义
+  - Frontend：`TeacherStudentReport.jsx` 去掉硬编码 `[]`，渲染真实数据 + 空态
+  - 不新增端点、不调 Agent、不改 TeacherConsole Insights
+  - `npm run lint` / `npm run build` / Backend pytest 77/77 通过。
 
 ## 本地联调注意事项
 

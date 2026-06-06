@@ -463,8 +463,18 @@ export default function TeacherStudentReport() {
                   薄弱知识点 (Weak Points)
                 </h3>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {/* weak_points — 后端当前返回空数组，等待 Backend 聚合实现 */}
-                  <p className="text-xs text-outline italic">正式接口暂未提供</p>
+                  {report.weak_points?.length > 0 ? (
+                    report.weak_points.map((wp, i) => (
+                      <div key={i} className="px-3 py-2 bg-orange-50 rounded-lg border border-orange-100 text-xs">
+                        <span className="font-bold text-orange-700">{wp.knowledge_point}</span>
+                        <span className="text-orange-500 ml-2">
+                          {wp.error_count}/{wp.total_attempts} 错 ({Math.round(wp.error_rate * 100)}%)
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-outline italic">暂无薄弱点</p>
+                  )}
                 </div>
               </div>
 
@@ -487,8 +497,27 @@ export default function TeacherStudentReport() {
                 最近学习活动 (Recent Activity)
               </h3>
               <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2 scrollbar-thin">
-                {/* recent_activity — 后端当前返回空数组，等待 Backend 聚合实现 */}
-                <p className="text-xs text-outline italic text-center py-8">正式接口暂未提供</p>
+                {report.recent_activity?.length > 0 ? (
+                  report.recent_activity.map((ra, i) => (
+                    <div key={i} className="flex items-center gap-3 pb-3 border-b border-slate-50 last:border-0">
+                      <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center flex-shrink-0">
+                        <span className="material-symbols-outlined text-cyan-600 text-sm">exercise</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-on-surface truncate">{ra.chapter || '练习'}</p>
+                        <p className="text-[10px] text-outline">
+                          {ra.created_at ? new Date(ra.created_at).toLocaleDateString('zh-CN') : ''}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-sm font-bold text-primary">{Math.round(ra.score)}%</span>
+                        <p className="text-[10px] text-outline">{ra.correct_count}/{ra.total_count} 正确</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-outline italic text-center py-8">暂无近期活动</p>
+                )}
               </div>
             </div>
           </div>

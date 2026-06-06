@@ -1624,8 +1624,9 @@
             "items": {
               "type": "object",
               "properties": {
+                "id": { "type": "string", "description": "资源 ID，可跳转到 /resource/:id" },
                 "title": { "type": "string" },
-                "content": { "type": "string" }
+                "content": { "type": "string", "description": "正文摘要/预览，非完整正文（Backend 截断为前约 160 字符）" }
               }
             }
           },
@@ -1638,6 +1639,7 @@
             "items": {
               "type": "object",
               "properties": {
+                "id": { "type": "string", "description": "资源 ID，可跳转到 /resource/:id" },
                 "title": { "type": "string" },
                 "type": { "type": "string", "description": "document / mindmap / reading / code" },
                 "url": { "type": "string" }

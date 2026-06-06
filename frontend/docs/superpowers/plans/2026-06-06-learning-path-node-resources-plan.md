@@ -205,7 +205,7 @@ async def _register_and_login(client, code, email, username):
         "captcha_token": ct_token, "captcha_code": ct_ans,
     })
     assert "token" in r.json().get("data", {}), f"Login failed: {r.json()}"
-    return {"Authorization": f"Bearer {r.json()['data']['token']}"}
+    return {"Authorization": f"Bearer {r.json()['data']['token']}"}, r.json()["data"]["user_id"]
 
 
 @pytest.mark.asyncio
@@ -237,11 +237,11 @@ async def test():
             student2_code = codes[1].code
             teacher_code = codes[2].code
 
-        stu_headers = await _register_and_login(
+        stu_headers, stu_id = await _register_and_login(
             client, student_code, f"stu_{uuid.uuid4().hex[:8]}@test.com", f"stu_{uuid.uuid4().hex[:8]}")
-        stu2_headers = await _register_and_login(
+        stu2_headers, stu2_id = await _register_and_login(
             client, student2_code, f"stu2_{uuid.uuid4().hex[:8]}@test.com", f"stu2_{uuid.uuid4().hex[:8]}")
-        tea_headers = await _register_and_login(
+        tea_headers, tea_id = await _register_and_login(
             client, teacher_code, f"tea_{uuid.uuid4().hex[:8]}@test.com", f"tea_{uuid.uuid4().hex[:8]}")
 
         # ===== Create course =====
@@ -261,7 +261,7 @@ async def test():
 
         async with async_session_factory() as db:
             lp = LearningPath(
-                user_id=stu_headers["Authorization"].split()[-1][:32],
+                user_id=stu_id,
                 course_id=course_id,
                 nodes=[{"id": node_id, "name": node_name, "status": "in_progress", "mastery": 50, "order": 1}],
                 edges=[],
@@ -449,7 +449,7 @@ git commit -m "learningService 新增 getNodeResources"
 **Files:**
 - Modify: `src/pages/LearningPath.jsx`
 
-**注意：** Task 5 和 Task 6 操作同一文件。Task 5 专注于新增功能（状态、点击、面板），Task 6 专注于删除旧内容（占位卡、占位文案）。这样每个 task 的 diff 可独立理解。
+**注意：** Task 5 和 Task 6 操作同一文件。Task 5 专注于新增功能（状态、点击、面板），Task 6 专注于清理旧内容（节点卡片内占位文案 + 未使用函数）。Task 5 的底部面板替换已覆盖了 3 张静态占位卡的删除；Task 6 不需再确认静态卡，直接处理节点卡片内占位即可。
 
 - [ ] **Step 1: 新增 state**
 
@@ -466,8 +466,10 @@ git commit -m "learningService 新增 getNodeResources"
 在 `useEffect` 获取 learningPath 之后，新增：
 
 ```javascript
+  import { useCallback } from 'react';  // 补充到文件顶部 import
+
   // 获取节点资源
-  const fetchNodeResources = async (nodeId) => {
+  const fetchNodeResources = useCallback(async (nodeId) => {
     if (!nodeId || !activeCourseId) return;
     try {
       setResourcesLoading(true);
@@ -481,7 +483,7 @@ git commit -m "learningService 新增 getNodeResources"
     } finally {
       setResourcesLoading(false);
     }
-  };
+  }, [activeCourseId]);
 
   // 默认选中节点（learningPath 加载完成后）
   useEffect(() => {
@@ -509,7 +511,7 @@ git commit -m "learningService 新增 getNodeResources"
       fetchNodeResources(selectedNodeId);
       setShowFullExercises(false);
     }
-  }, [selectedNodeId, activeCourseId]);
+  }, [selectedNodeId, fetchNodeResources]);
 ```
 
 - [ ] **Step 3: 节点卡片加 onClick 和高亮**
@@ -528,9 +530,29 @@ git commit -m "learningService 新增 getNodeResources"
   className={`relative z-10 flex-shrink-0 w-80 px-sm flex flex-col items-center group cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
 ```
 
-**pending 节点**（现有 else 分支，约第 145 行）不加 onClick，保持现有样式。
+**pending 节点**（现有 else 分支，约第 145 行）不加 onClick，保持现有样式（锁图标 + 灰显）。
 
-**recommended 节点**：如果当前代码中 `recommended` 没有独立渲染分支（落在 pending 分支），需新增一个 `recommended` 分支，带 onClick + 可点样式（无锁图标）。如果已有独立分支，直接加 onClick。
+**recommended 节点**：当前代码没有 recommended 独立分支——它落在 `else`（pending/locked 样式）分支。需要为 recommended 新增独立分支，放在 `in_progress` 分支之后、`else` 之前：
+
+```javascript
+                    } else if (node.status === 'recommended') {
+                      return (
+                        <div key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          className={`relative z-10 flex-shrink-0 w-72 px-sm flex flex-col items-center group cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
+                          <div className="w-12 h-12 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 mb-sm border-2 border-cyan-200">
+                            <span className="material-symbols-outlined">auto_awesome</span>
+                          </div>
+                          <div className="bg-white p-sm rounded-xl border border-cyan-200 shadow-sm w-full">
+                            <span className="text-label-sm text-cyan-600 font-bold mb-xs block">阶段 {node.order}</span>
+                            <p className="text-body-md font-bold mb-xs">{node.name}</p>
+                            <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden mb-sm">
+                              <div className="h-full bg-cyan-300 w-0"></div>
+                            </div>
+                            <p className="text-[11px] text-cyan-500">推荐预习节点</p>
+                          </div>
+                        </div>
+                      );
 
 - [ ] **Step 4: 底部面板 — 替换 3 张静态占位卡**
 
@@ -717,11 +739,7 @@ git commit -m "LearningPath 节点点击和底部资源面板接入"
 **Files:**
 - Modify: `src/pages/LearningPath.jsx`
 
-- [ ] **Step 1: 确认 Task 5 面板已替换旧卡片**
-
-检查 LearningPath.jsx 中不再包含"知识导图推荐"、"课件讲义推荐"、"混合练习集推荐"字符串。如果 Task 5 替换成功，这些字符串应已不存在。
-
-- [ ] **Step 2: 删除 completed 节点内的资源/习题占位**
+- [ ] **Step 1: 删除 completed 节点内的资源/习题占位**
 
 删除约第 103-109 行的整块 div：
 ```javascript
@@ -735,7 +753,7 @@ git commit -m "LearningPath 节点点击和底部资源面板接入"
                             </div>
 ```
 
-- [ ] **Step 3: in_progress 节点内删除习题占位（保留 Agent 提示）**
+- [ ] **Step 2: in_progress 节点内删除习题占位（保留 Agent 提示）**
 
 将：
 ```javascript
@@ -749,23 +767,23 @@ git commit -m "LearningPath 节点点击和底部资源面板接入"
 
 Agent 提示（`智能体提示将在路径 Agent 输出接入后展示`）保留不动。
 
-- [ ] **Step 4: 清理未使用的 getCategoryForNode**
+- [ ] **Step 3: 清理未使用的 getCategoryForNode**
 
 如果 `getCategoryForNode` 函数（约第 31-37 行）不再被引用，删除它。
 
-- [ ] **Step 5: 验证 lint + build**
+- [ ] **Step 4: 验证 lint + build**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent/frontend && npm run lint && npm run build
 ```
 Expected: lint PASS, build PASS.
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
 cd /home/yezisama/workspace/workflow/EDUagent
 git add frontend/src/pages/LearningPath.jsx
-git commit -m "LearningPath 删除底部静态占位卡和节点资源/习题占位文案"
+git commit -m "LearningPath 删除节点卡片内资源/习题占位文案"
 ```
 
 ---

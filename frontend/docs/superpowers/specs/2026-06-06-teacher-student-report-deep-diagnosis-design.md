@@ -20,7 +20,8 @@
 - Backend `get_student_learning` 补 4 个数据对象
 - Backend 新增 `mastery_breakdown` SQL 聚合（按知识点拆练习正确率）
 - 前端 `TeacherStudentReport.jsx` 删除 useMock 分叉，真实分支接入新字段
-- 前端顶部教师身份改为真实 useAuth 数据（MS-06 同类问题）
+- 前端顶部教师身份改为真实 useAuth 数据
+- 前端顶部课程标题改为真实课程名（从 useCourse 按 classId 查找，替换硬编码 `数据结构 (Data Structures)`）
 
 **非目标：**
 - 不新增 Agent 端点或 Agent 数据
@@ -51,17 +52,7 @@
 
 当前 `profile_summary` 已有 `knowledge_mastered` / `knowledge_weak` counts，保留不变。
 
-### 3.3 `path_progress.nodes`（学习路径节点详情）
-
-| 层 | 改动 |
-|----|------|
-| OpenAPI | `path_progress` 新增 `nodes: array<{name, status, order}>` |
-| Backend | 从 `lp.nodes` JSON 提取 `[{name, status, order}]`，空时 `[]` |
-| Frontend | 替换 mock 分支的 `report.learning_path_progress` 表格 |
-
-当前 `path_progress` 已有 `current_node` / `completed_nodes` / `total_nodes`，保留不变。mock 中的 `time`（耗时）和 `completion`（达成率）不补入契约（无对应数据）。
-
-### 3.4 `quiz_stats.mastery_breakdown`（按知识点练习掌握度）
+### 3.3 `quiz_stats.mastery_breakdown`（按知识点练习掌握度）
 
 | 层 | 改动 |
 |----|------|
@@ -83,6 +74,7 @@
 | `report.action_suggestions[]` | 不在契约，Agent 无对应输出 |
 | 静态 SVG 折线图卡片 | 假数据，整卡删除 |
 | `Prof. Zhang` / `系统管理员` | 改为 `useAuth()` 真实数据 |
+| `数据结构 (Data Structures)` | 改为从 `useCourse().courses` 按 classId 查找真实课程名 |
 | `useMock` 守卫 | 整行删除 |
 
 ---
@@ -90,16 +82,15 @@
 ## 5. 前端最终布局（消除分叉后）
 
 ```
-Header（useAuth 真实数据 + 返回按钮）
+Header（真实课程名 + useAuth 真实教师身份 + 返回按钮）
 ├── Profile Banner（student + evaluation_summary.overall_score + summary_text 摘要）
 ├── Metric Grid（3 列）
 │   ├── Quiz Stats（total_attempts / avg_score / avg_time_spent）
-│   ├── Path Progress（current_node + completed/total + 进度条）
+│   ├── Path Progress（current_node + completed/total + 进度条，保留纯计数，不展开节点明细）
 │   └── Modal Preference（profile_summary.modal_preference 标签）
 ├── Details
 │   ├── Mastery Breakdown（mastery_breakdown 进度条列表）
 │   ├── Knowledge Coordinates（knowledge_coordinates 双色标签）
-│   ├── Path Nodes（nodes 表格：节点名 + 状态）
 │   └── Weak Points + Recent Activity（已有，保留）
 ```
 
@@ -112,7 +103,7 @@ Header（useAuth 真实数据 + 返回按钮）
 | `docs/10-client-api/Client-API.openapi.json` | OpenAPI | StudentLearning schema 补 4 字段 |
 | `backend/app/api/v1/teaching.py` | Backend | `get_student_learning` 补 4 数据对象 + mastery_breakdown SQL |
 | `backend/tests/test_teacher_student_learning.py` | Backend 测试 | 补齐新字段断言 |
-| `frontend/src/pages/TeacherStudentReport.jsx` | Frontend | 删除 useMock 分叉 + 接入新字段 + 顶部身份修正 |
+| `frontend/src/pages/TeacherStudentReport.jsx` | Frontend | 删除 useMock 分叉 + 接入新字段 + 顶部身份/课程名修正 + 引入 useAuth/useCourse |
 
 ---
 
@@ -129,6 +120,6 @@ Header（useAuth 真实数据 + 返回按钮）
 ## 自审
 
 1. **无占位符：** ✓
-2. **范围：** ✓ OpenAPI + Backend + Frontend 三层对齐，不动 Agent
-3. **删除明确：** ✓ 每个 mock 字段有删除理由
-4. **数据可达：** ✓ knowledge_coordinates/summary_text/nodes 后端数据已存在，mastery_breakdown 复用现有聚合模式
+2. **范围：** ✓ OpenAPI + Backend + Frontend 三层对齐，不动 Agent。path_progress 保留纯计数不展开节点明细。
+3. **硬编码清理：** ✓ 教师身份 + 课程标题（`数据结构 (Data Structures)`）均纳入范围
+4. **数据可达：** ✓ knowledge_coordinates/summary_text 后端数据已存在，mastery_breakdown 复用现有聚合模式，overall_score 修正硬编码 75.0

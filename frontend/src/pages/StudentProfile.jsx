@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { profileService } from '../api/services/profile';
+import { authService } from '../api/services/auth';
 import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
@@ -9,8 +10,9 @@ import Navbar from '../components/Navbar';
 export default function StudentProfile() {
   const navigate = useNavigate();
   const { activeCourseId, courses } = useCourse();
-const { user } = useAuth();
+const { user, refreshUser } = useAuth();
   const [profileData, setProfileData] = useState(null);
+  const [guidanceSubmitting, setGuidanceSubmitting] = useState(false);
   const [profileError, setProfileError] = useState(null);
   const [loading, setLoading] = useState(true);
   // eslint-disable-next-line react-hooks/purity -- relative time display needs current timestamp
@@ -141,6 +143,22 @@ const { user } = useAuth();
     ? daysAgoText(guidance_level.updated_at, '')
     : null;
 
+  const handleGuidanceChange = async (level) => {
+    if (guidanceSubmitting) return;
+    setGuidanceSubmitting(true);
+    try {
+      const res = await authService.updateMyInfo({ guidance_level: level });
+      if (res.code === 200) {
+        await refreshUser();
+        fetchProfile();
+      }
+    } catch (err) {
+      console.error('更新引导粒度失败:', err);
+    } finally {
+      setGuidanceSubmitting(false);
+    }
+  };
+
   return (
     <div className="bg-background text-on-background font-body-md antialiased min-h-screen">
       {/* TopNavBar */}
@@ -231,39 +249,51 @@ const { user } = useAuth();
                 }` }}></div>
               </div>
               <div className="flex justify-between items-center absolute w-full left-0 top-0 mt-[38px] px-4">
-                <div className="flex flex-col items-center">
-                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 ${
+                <button
+                  className="flex flex-col items-center cursor-pointer disabled:opacity-50 bg-transparent border-0 p-0"
+                  onClick={() => handleGuidanceChange('L1')}
+                  disabled={guidanceSubmitting}
+                >
+                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 transition-colors ${
                     guidance_level.current === 'L1'
                       ? 'bg-cyan-500 border-white shadow-cyan-200'
-                      : 'bg-white border-slate-200'
+                      : 'bg-white border-slate-200 hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-6 text-center">
                     <p className={`text-label-sm font-bold ${guidance_level.current === 'L1' ? 'text-cyan-600' : 'text-slate-400'}`}>L1: 启发点拨</p>
                     <p className="text-[10px] text-slate-400 mt-1">核心思路提示</p>
                   </div>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className={`w-10 h-10 rounded-full border-[6px] shadow-xl z-20 ${
+                </button>
+                <button
+                  className="flex flex-col items-center cursor-pointer disabled:opacity-50 bg-transparent border-0 p-0"
+                  onClick={() => handleGuidanceChange('L2')}
+                  disabled={guidanceSubmitting}
+                >
+                  <div className={`w-10 h-10 rounded-full border-[6px] shadow-xl z-20 transition-colors ${
                     guidance_level.current === 'L2'
                       ? 'bg-cyan-500 border-white shadow-cyan-200'
-                      : 'bg-white border-slate-200 shadow-sm'
+                      : 'bg-white border-slate-200 shadow-sm hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-4 text-center">
                     <p className={`text-label-sm font-bold ${guidance_level.current === 'L2' ? 'text-cyan-600' : 'text-slate-400'}`}>L2: 伴学拆解</p>
                     <p className={`text-[10px] ${guidance_level.current === 'L2' ? 'text-cyan-400' : 'text-slate-400'} mt-1`}>分步引导学习</p>
                   </div>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 ${
+                </button>
+                <button
+                  className="flex flex-col items-center cursor-pointer disabled:opacity-50 bg-transparent border-0 p-0"
+                  onClick={() => handleGuidanceChange('L3')}
+                  disabled={guidanceSubmitting}
+                >
+                  <div className={`w-6 h-6 rounded-full border-4 shadow-sm z-10 transition-colors ${
                     guidance_level.current === 'L3'
                       ? 'bg-cyan-500 border-white shadow-cyan-200'
-                      : 'bg-white border-slate-200'
+                      : 'bg-white border-slate-200 hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-6 text-center">
                     <p className={`text-label-sm font-bold ${guidance_level.current === 'L3' ? 'text-cyan-600' : 'text-slate-400'}`}>L3: 保姆生成</p>
                     <p className="text-[10px] text-slate-400 mt-1">全自动代码生成</p>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
             {guidanceUpdatedText && (

@@ -4,6 +4,9 @@ export const authService = {
   getCurrentUser() {
     return apiClient.get('/users/me');
   },
+  updateMyInfo(data) {
+    return apiClient.put('/users/me', data);
+  },
   getCaptcha() {
     return apiClient.get('/auth/captcha');
   },

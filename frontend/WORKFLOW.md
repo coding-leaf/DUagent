@@ -190,32 +190,23 @@
   - 教师端学生报告可看到部分真实数据，`weak_points` / `recent_activity` 最小聚合方向成立。
   - 已知但非本轮重点：资源内容质量偏低，归入后续资源生成/资源库质量专项；学生侧“学习”状态和进度流转仍不完整，归入后续行为采集/学习状态设计。
   - 本轮不扩大到资源质量、行为采集、累计学习时长或阅读进度。
+- 2026-06-06：阶段二文档收口完成：
+  - `WORKFLOW.md` 已清理 TeacherConsole Insights 过期 P0 阻塞描述，当前统一口径为：阶段二 P0 已完成，转入 P1 收尾。
+  - `../docs/10-client-api/API_前端接口规范.md` 已补齐 `/resources/{id}`、`/learning-path/nodes/{node_id}/resources`、`/teaching/classes/{class_id}/students/{student_id}/learning`、`/teaching/classes/{class_id}/insights` 的联调说明与空态语义。
+  - 本轮未修改运行时代码、OpenAPI JSON 或后端实现；当前无新的 OpenAPI / 契约漂移。
+  - 已运行 `git diff --check` 完成基础文档一致性检查。
 
 ## 本地联调注意事项
 
 - 2026-06-05：验证码接口 `GET /auth/captcha` 使用 `curl` 正常，但浏览器前端报 `net::ERR_FAILED 200 (OK)` / Axios `Network Error` 时，优先检查 CORS origin。Backend 当前 CORS 默认允许 `http://localhost:5173`，不包含 `http://127.0.0.1:5173`；本地验证前端需统一使用 `http://localhost:5173`，并以 `VITE_USE_MOCK=false VITE_API_BASE_URL=http://localhost:8001/api/v1 npm run dev` 启动。长期可考虑在 Backend CORS 配置中补充 `http://127.0.0.1:5173`。
 
-## 标记：阶段二第二轮 P0 阻塞项
+## 阶段二当前结论
 
-以下为当前代码中保留的 mock/空实现，需在第二轮优先解决：
-
-- `teaching.js` `getConsoleInsights`：mock 分支调用 `/api/v1/course/{id}/insights`（不在 OpenAPI），真实分支返回 `data: null`（空实现）。需新增班级洞察端点（spec #5/#11）。
-- `TeacherConsole.jsx:214` `useMock &&`：守卫 Insights 区块，端点就绪后需移除。
-- 详见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`。
-
-AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
-
-## 阶段二第二轮方向调整
-
-2026-06-05 经复盘确认：班级 AI 洞察不应直接从 TeacherConsole 现有 mock UI 倒推实现。教师端洞察本质上依赖学生端真实学习数据聚合，应先从学生端数据源和 Client API 契约审查开始，再决定教师端需要哪些聚合字段和 Agent 输出。
-
-当前进展：
-
-- 学生端数据源与 Client API 契约补全审查已完成。
-- ResourceDetail 正文预览已完成 OpenAPI、Backend、Frontend 三层实现。
-- LearningPath 节点资源接入已完成，并通过轻量手工验收确认主链路可用。
-- 教师端学生报告已补齐 `weak_points` / `recent_activity` 个体聚合，班级级 TeacherConsole Insights 仍待设计。
-- 教师端洞察仍不能从旧 mock UI 倒推；下一步应基于已确认学生端数据源设计班级级最小 SQL 聚合。
+- 阶段二 P0 已完成，不再存在 TeacherConsole Insights 的当前阻塞项。
+- TeacherConsole 班级 Insights 最小 SQL 聚合已完成，OpenAPI / Backend / Frontend 三层已对齐。
+- `students` / `insights` 独立错误处理已闭环，真实模式下不再依赖旧 mock 守卫。
+- AI Chat SSE 真实流已验证通过（2026-06-05），不作为当前阻塞。
+- `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md` 继续作为剩余事项台账来源，但其中已关闭的 P0 项不再视为当前状态。
 
 ## 下一步建议
 
@@ -223,8 +214,9 @@ AI Chat SSE 真实流已验证通过（2026-06-05），spec #17 P0 已降级。
 - 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
 - ResourceDetail 正文预览、LearningPath 节点资源、教师端学生报告个体聚合已完成并完成轻量手工验收。
 - TeacherConsole 班级 Insights 最小 SQL 聚合已完成（2026-06-06）：OpenAPI 契约（ClassInsights/ClassWeakPoint/PathNodeProgress）、Backend `GET /teaching/classes/{class_id}/insights` 聚合端点（39 项集成测试全通过）、Frontend 接入。`useMock &&` 守卫已移除，真实模式展示班级平均练习分（一位小数）、练习次数、薄弱知识点 Top 5（含错题数/答题总次数/错误率）、路径节点分布。Students 和 Insights 独立错误处理已闭环。
-- 第二轮 P1：教师深度诊断字段扩展、Admin 用户状态/删除契约确认。
-- 第二轮 P2：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
+- StudentProfile 真实字段展示补齐已完成（2026-06-06）：5 张卡片全部重接 GET /profile 契约字段（modal_preference 进度条、guidance_level 动态 L1-L3、knowledge_coordinates 双色列表 + cognitive_blindspots 严重度标签、drive_intent 类型/强度 + discipline_badge 勋章展示）。7 个幽灵字段全量删除（name/level/title/current_course/system_suggestion/knowledge_nodes/weekly_max_accuracy/total_duration_hours）。effectsData state/请求/Promise.all 分支全量清理。`!activeCourseId` 无限 loading bug 已修复为空态页面（标题+说明+去课程页按钮）。Backend/OpenAPI/Agent 零改动。
+- 第二轮 P1 剩余：TeacherStudentReport 深度诊断字段扩展、AdminConsole 契约对齐补完、资源生成异步任务链路接入。
+- 第二轮 P2：累计学习时长、阅读进度/阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。

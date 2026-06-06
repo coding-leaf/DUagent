@@ -137,14 +137,15 @@ getNodeResources(nodeId, courseId) {
 - 新增 `nodeResources` state
 - 新增 `resourcesLoading` state
 
-**默认选中节点（优先级）：**
+**默认选中节点（优先从可点击节点中选择）：**
 1. `learningPath.current_position.node_id`
 2. 第一个 `status === 'in_progress'` 的节点
 3. 第一个 `status === 'recommended'` 的节点
-4. 第一个节点（nodes[0]）
+4. 第一个节点（`nodes[0]`，仅当非 `pending` 时）
 
 **节点点击：**
-- 所有有 `node.id` 的节点均可点击，不仅限 `completed`/`in_progress`
+- `completed`、`in_progress`、`recommended` 节点可点击
+- `pending` 节点不可点击（保持现有锁样式）
 - 点击后 `setSelectedNodeId(node.id)`，触发 `fetchNodeResources`
 - 当前选中节点高亮（如边框色变化）
 
@@ -169,18 +170,22 @@ getNodeResources(nodeId, courseId) {
 
 4. **全部练习集**（`full_exercise_set`）
    - 默认折叠，首屏只显示数量（如"共 12 题"）+ "展开"按钮
-   - 展开后列表渲染，每项展示类型 + 摘要
-   - 不一次渲染超过可见区域的内容
+   - 展开后最多展示前 10 条，每项展示类型 + 摘要
+   - 超过 10 条时底部显示"查看更多请进入练习"
+   - 本轮不做分页
    - 空态：不展示此 section
 
 **删除：**
 - 原底部 3 张静态占位卡片（知识导图推荐、课件讲义推荐、混合练习集推荐）
-- 各节点卡片内的静态占位文案（"知识点推荐将在..."、"配套习题将在..."等）
+- `completed` 节点卡片内资源/习题占位文案（"知识点推荐将在..."、"配套习题将在..."）
+- `in_progress` 节点卡片内资源/习题占位文案（"配套习题将在节点资源接入后展示"）
+
+**保留：**
+- `in_progress` 节点卡片内的 Agent 提示文案（"智能体提示将在路径 Agent 输出接入后展示"）——本轮只消费已落库资源，Agent 提示不在本轮范围
 
 ### 5.3 节点卡片微调
 
-- `completed` 和 `in_progress` 节点卡片内删除静态占位文案
-- 底部区域改为简短提示："点击查看节点资源"
+- `completed` 和 `in_progress` 节点卡片内删除资源/习题相关静态占位文案
 - `locked` 节点保持现有样式（不可点击）
 
 ## 6. 验证

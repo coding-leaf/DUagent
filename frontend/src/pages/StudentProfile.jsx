@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { profileService } from '../api/services/profile';
@@ -16,6 +16,12 @@ const { user } = useAuth();
   // eslint-disable-next-line react-hooks/purity -- relative time display needs current timestamp
   const [now, setNow] = useState(Date.now());
 
+  // 追踪当前活跃的 courseId，用于竞态防护
+  const activeCourseRef = useRef(activeCourseId);
+  useEffect(() => {
+    activeCourseRef.current = activeCourseId;
+  }, [activeCourseId]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(Date.now());
@@ -31,16 +37,20 @@ const { user } = useAuth();
       setProfileData(null);
       setProfileError(null);
       const res = await profileService.getStudentProfile(activeCourseId);
+      // 竞态防护：请求返回时 courseId 已变化，丢弃过期响应
+      if (activeCourseRef.current !== activeCourseId) return;
       if (res.code === 200) {
         setProfileData(res.data);
       } else {
         setProfileError(res.message || '加载失败，请重试');
       }
     } catch (error) {
+      // 竞态防护：请求返回时 courseId 已变化，丢弃过期响应
+      if (activeCourseRef.current !== activeCourseId) return;
       console.error("Failed to fetch profile data:", error);
       setProfileError('加载失败，请重试');
     } finally {
-      setLoading(false);
+      if (activeCourseRef.current === activeCourseId) setLoading(false);
     }
   }, [activeCourseId]);
 

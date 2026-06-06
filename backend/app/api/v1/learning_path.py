@@ -378,8 +378,9 @@ async def get_node_resources(
     )
     for r in res_result.scalars().all():
         weak_point_tutorials.append({
+            "id": r.id,
             "title": r.title,
-            "content": r.content or "",
+            "content": (r.content or "")[:160],
         })
 
     # 4. exercises: QuizQuestion 按 knowledge_point 匹配
@@ -412,6 +413,7 @@ async def get_node_resources(
         )
         for r in ch_result.scalars().all():
             chapter_materials.append({
+                "id": r.id,
                 "title": r.title,
                 "type": r.type,
                 "url": r.url or "",

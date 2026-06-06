@@ -18,9 +18,9 @@ export default function TeacherConsole() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [classesLoading, setClassesLoading] = useState(true);
   const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentsError, setStudentsError] = useState(null); // eslint-disable-line no-unused-vars
-  const [insightsLoading, setInsightsLoading] = useState(false); // eslint-disable-line no-unused-vars
-  const [insightsError, setInsightsError] = useState(null); // eslint-disable-line no-unused-vars
+  const [studentsError, setStudentsError] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState(null);
 
   // 获取班级列表
   const refreshClasses = useCallback(async (silent = false) => {
@@ -203,6 +203,14 @@ export default function TeacherConsole() {
                     <div className="col-span-1 lg:col-span-2 py-8 flex justify-center">
                       <FeedbackStatus status="loading" title="加载学生列表..." />
                     </div>
+                  ) : studentsError ? (
+                    <div className="col-span-1 lg:col-span-2 py-8 flex justify-center">
+                      <FeedbackStatus status="error" title={studentsError} />
+                    </div>
+                  ) : students.length === 0 ? (
+                    <div className="col-span-1 lg:col-span-2 py-8 flex justify-center">
+                      <FeedbackStatus status="empty" title="该班级暂无学生" />
+                    </div>
                   ) : (
                     students.map(student => (
                       <div
@@ -251,11 +259,6 @@ export default function TeacherConsole() {
                       </div>
                     ))
                   )}
-                  {!studentsLoading && students.length === 0 && (
-                    <div className="col-span-1 lg:col-span-2 py-8">
-                      <FeedbackStatus status="empty" title="暂无学生" description="当前班级暂无学生数据" />
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -272,25 +275,99 @@ export default function TeacherConsole() {
             </div>
           </section>
 
-          {/* AI Insights Section */}
-          {useMock && (
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-              <div className="md:col-span-2 bg-white rounded-xl border border-outline-variant shadow-sm p-md">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="material-symbols-outlined text-primary">psychology</span>
-                  <h3 className="font-h3 text-xl text-on-surface">AI 洞察 (AI Insights)</h3>
-                </div>
-                <div className="space-y-4">
-                  <div className="p-4 bg-surface-container-low rounded-lg border-l-4 border-primary">
-                    <p className="font-bold text-on-surface text-sm mb-1">本周课程状态概览</p>
-                    <p className="text-sm text-on-surface-variant leading-relaxed">
-                      {insights?.overview || '加载中...'}
-                    </p>
-                  </div>
-                </div>
+          {/* Class Statistics Section */}
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter mb-margin">
+            {insightsLoading ? (
+              <div className="col-span-full py-8 flex justify-center">
+                <FeedbackStatus status="loading" title="加载班级统计..." />
               </div>
-            </section>
-          )}
+            ) : insightsError ? (
+              <div className="col-span-full py-8 flex justify-center">
+                <FeedbackStatus status="error" title={insightsError} />
+              </div>
+            ) : !insights ? (
+              <div className="col-span-full py-8 flex justify-center">
+                <FeedbackStatus status="empty" title="暂无班级统计数据" />
+              </div>
+            ) : (
+              <>
+                {/* Avg Quiz Score */}
+                <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-primary text-xl">quiz</span>
+                    <span className="text-sm font-semibold text-outline">平均练习分</span>
+                  </div>
+                  <p className="text-3xl font-bold text-on-surface">
+                    {insights.avg_quiz_score != null
+                      ? insights.avg_quiz_score.toFixed(1)
+                      : '暂无数据'}
+                  </p>
+                </div>
+
+                {/* Total Quiz Attempts */}
+                <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-primary text-xl">assignment</span>
+                    <span className="text-sm font-semibold text-outline">练习次数</span>
+                  </div>
+                  <p className="text-3xl font-bold text-on-surface">
+                    {insights.total_quiz_attempts}
+                  </p>
+                </div>
+
+                {/* Weak Points Top */}
+                <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md md:col-span-2 lg:col-span-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-error text-xl">warning</span>
+                    <span className="text-sm font-semibold text-outline">薄弱知识点</span>
+                  </div>
+                  {insights.weak_points_top.length === 0 ? (
+                    <p className="text-sm text-outline">暂无薄弱知识点</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {insights.weak_points_top.map((wp) => (
+                        <li key={wp.knowledge_point} className="text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-on-surface truncate max-w-[60%]">{wp.knowledge_point}</span>
+                            <span className="text-error font-semibold">{Math.round(wp.error_rate * 100)}%</span>
+                          </div>
+                          <span className="text-xs text-outline">
+                            错 {wp.error_count} / 共 {wp.total_attempts} 次
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Path Node Progress */}
+                <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-primary text-xl">route</span>
+                    <span className="text-sm font-semibold text-outline">路径节点分布</span>
+                  </div>
+                  {insights.path_node_progress.total_nodes === 0 ? (
+                    <p className="text-sm text-outline">暂无学习路径数据</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {[
+                        { label: '已完成', key: 'completed', color: 'bg-green-500' },
+                        { label: '进行中', key: 'in_progress', color: 'bg-blue-500' },
+                        { label: '推荐', key: 'recommended', color: 'bg-amber-500' },
+                        { label: '待开始', key: 'pending', color: 'bg-gray-400' },
+                      ].map(({ label, key, color }) => (
+                        <div key={key} className="flex items-center gap-2 text-sm">
+                          <div className={`w-2.5 h-2.5 rounded-full ${color}`} />
+                          <span className="text-on-surface-variant w-14">{label}</span>
+                          <span className="font-semibold text-on-surface">{insights.path_node_progress[key]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
 
         </div>
       </main>

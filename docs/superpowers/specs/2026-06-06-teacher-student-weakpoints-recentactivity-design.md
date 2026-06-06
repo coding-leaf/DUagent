@@ -99,9 +99,9 @@ GET /api/v1/teaching/classes/{class_id}/students/{student_id}/learning
 
 在现有 quiz_stats 和 return 之间插入：
 
-```python
-    from sqlalchemy import case
+**注意：** `case` 应加到 `teaching.py` 顶部 import（`from sqlalchemy import case, func, select`），不在函数内临时 import。
 
+```python
     # weak_points: 按知识点聚合错题 top 5（条件聚合 + 过滤空知识点 + HAVING error_count > 0）
     error_count_expr = func.sum(case((QuizAnswer.is_correct == False, 1), else_=0))
     total_attempts_expr = func.count(QuizAnswer.id)

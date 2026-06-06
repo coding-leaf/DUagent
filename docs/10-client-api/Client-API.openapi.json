@@ -3637,6 +3637,11 @@
                 "type": "string",
                 "format": "date-time",
                 "description": "评估生成时间"
+              },
+              "summary_text": {
+                "type": "string",
+                "nullable": true,
+                "description": "AI 评估摘要文本，由 Agent 生成"
               }
             }
           },
@@ -3657,6 +3662,29 @@
                   "type": "string"
                 },
                 "description": "模态偏好排行"
+              },
+              "knowledge_coordinates": {
+                "type": "array",
+                "description": "知识坐标列表，来自用户画像",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "知识点名称"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "掌握状态：mastered / learning"
+                    },
+                    "mastered_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "掌握时间"
+                    }
+                  }
+                }
               }
             }
           },
@@ -3691,6 +3719,23 @@
               "avg_time_spent": {
                 "type": "integer",
                 "description": "平均耗时（秒）"
+              },
+              "mastery_breakdown": {
+                "type": "array",
+                "description": "按知识点拆分的练习正确率",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "knowledge_point": {
+                      "type": "string",
+                      "description": "知识点名称"
+                    },
+                    "accuracy": {
+                      "type": "number",
+                      "description": "正确率 0-100"
+                    }
+                  }
+                }
               }
             }
           },

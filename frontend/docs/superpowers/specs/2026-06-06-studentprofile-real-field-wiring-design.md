@@ -21,6 +21,7 @@ StudentProfile.jsx 当前读取的字段几乎全部不在契约中（`name`、`
 - StudentProfile.jsx：5 张卡片重新接线到真实数据
 - 引入 `useAuth()` 获取真实姓名/角色
 - 从 `useCourse()` 获取当前课程名（已有方法）
+- 修复 `!activeCourseId` 时无限 loading 的已有 bug，替换为空态页面
 - 删除当前 7 个幽灵字段的解构和使用
 - 删除"学习热度与准度"整张卡片（完全建立在静态 SVG + 不存在字段上）
 
@@ -38,7 +39,7 @@ StudentProfile.jsx 当前读取的字段几乎全部不在契约中（`name`、`
 
 | 层次 | 文件/端点 | 关键字段 |
 |------|----------|---------|
-| Auth | `GET /users/me`（useAuth().user） | `real_name`, `role` |
+| Auth | `GET /users/me`（useAuth().user） | `real_name`, `username`, `role` — 姓名按 `real_name \|\| username` 优先级取值 |
 | Course | `useCourse()` | `courses[]`（每项含 `id`, `name`），`activeCourseId` |
 | Profile | `GET /profile?course_id=` | `modal_preference`, `guidance_level`, `knowledge_coordinates[]`, `cognitive_blindspots[]`, `drive_intent`, `discipline_badge`, `generated_at` |
 | Evaluation | `GET /evaluation?course_id=` | `progress_table`, `mastery_table`, `resource_usage_table`, `summary_text`, `generated_at`（**当前页面不消费；实施后检查是否可移除调用**） |
@@ -55,8 +56,8 @@ StudentProfile.jsx 当前读取的字段几乎全部不在契约中（`name`、`
 
 | 展示内容 | 数据源 | 兜底 |
 |---------|--------|------|
-| 头像首字 | `useAuth().user.real_name?.charAt(0)` | `"学"` |
-| 姓名 | `useAuth().user.real_name` | `"学生"` |
+| 头像首字 | `useAuth().user` 按 `real_name \|\| username \|\| "学"` 取首字 | `"学"` |
+| 姓名 | `useAuth().user` 按 `real_name \|\| username \|\| "学生"` 取值 | `"学生"` |
 | 当前课程 | `useCourse().courses` 按 `activeCourseId` 查找 `name` | `"未选择"` |
 | 勋章等级 | `profile.discipline_badge.level` | `"—"` |
 | 擅长学科 | `profile.discipline_badge.subject` | `"—"` |
@@ -151,18 +152,20 @@ status 只有两种值：`mastered`（绿色标签"已掌握"）和 `learning`�
 
 ```
 useEffect(activeCourseId)
+├── !activeCourseId → 渲染空态页面（标题 + 说明 + "去课程页"按钮），停止 loading
 ├── GET /profile?course_id= → profile（卡片 2、3、4、5）
-├── useAuth().user          → real_name、role（卡片 1）
+├── useAuth().user          → real_name || username || 兜底（卡片 1）
 └── useCourse()             → courses、activeCourseId（卡片 1 课程名）
 ```
 
 **关于 GET /evaluation：**
 
-当前代码在 `useEffect` 中并行调用 `getLearningEffects(activeCourseId)` → `GET /evaluation`，并将返回数据解构为 `effectsData`。实施完成后，检查 StudentProfile.jsx 的 JSX 中是否还引用 `effectsData` 的任何字段：
+当前代码在 `useEffect` 中并行调用 `getLearningEffects(activeCourseId)` → `GET /evaluation`，并将返回数据解构为 `effectsData`。实施完成后，检查 StudentProfile 组件是否在任何地方消费 evaluation 的返回值：
 
-- 若 5 张卡片均不再依赖 evaluation 的任何字段 → 删除该 API 调用及相关解构代码
-- 若卡片 4（knowledge_coordinates 回退展示等）间接使用 → 保留调用
-- 判定标准：以 JSX 中实际引用的 evaluation 字段为准，不预先假设
+- 检查范围包括 `effectsData` 的 state 声明、`useEffect` 中的 `Promise.all`、解构赋值、JSX 引用、以及因不再需要而可能残留的 error/loading 分支
+- 若 5 张卡片均不再依赖 evaluation 的任何字段 → 删除该 API 调用、effectsData state、解构代码及相关分支
+- 若 evaluation 数据被任何卡片（如 knowledge_coordinates 回退展示）间接使用 → 保留调用
+- 判定标准：以**组件是否还在任何地方消费 evaluation 返回值**为准（不仅仅是 JSX），不预先假设
 
 ---
 
@@ -176,12 +179,40 @@ useEffect(activeCourseId)
 
 ---
 
-## 7. 空态处理
+## 7. 无课程空态页面
+
+当前代码在 `!activeCourseId` 时 `useEffect` 直接 `return`（不执行 API 调用），但 `loading` 保持 `true`（初始值），导致页面永久显示 spinner。这是一个已有 bug。
+
+### 修复方式
+
+`useEffect` 中：`!activeCourseId` 时显式 `setLoading(false)` 后 `return`。
+
+组件渲染：在 `loading` 检查之前，先判断 `!activeCourseId`，渲染空态页面。
+
+### 空态内容
+
+- **标题：** "还没有可查看的课程画像"
+- **说明：** "加入一门课程后，这里会展示你的模态偏好、引导粒度、知识坐标和学习状态。"
+- **操作按钮：** "去课程页"（`navigate('/dashboard')`），单个按钮，不再加"去加入课程"（加入入口已在 Dashboard 页面内）
+
+### 渲染顺序
+
+```
+activeCourseId 不存在？
+  → 是：渲染空态页面（标题 + 说明 + 按钮）
+  → 否，loading？
+    → 是：渲染 spinner
+    → 否：渲染 5 张卡片
+```
+
+---
+
+## 8. 空态处理
 
 | 场景 | 处理 |
 |------|------|
-| `!activeCourseId` | 保持当前 loading spinner（已有） |
-| `profile === null`（API 失败） | 所有卡片显示兜底文案，不崩溃 |
+| `!activeCourseId` | 渲染空态页面替代 loading spinner：标题"还没有可查看的课程画像"，说明"加入一门课程后，这里会展示你的模态偏好、引导粒度、知识坐标和学习状态。"，操作按钮"去课程页"（跳转 `/dashboard`）。`useEffect` 中 `!activeCourseId` 时直接 `setLoading(false)` 后 return，避免无限加载。 |
+| `activeCourseId` 存在但 `profile === null`（API 失败） | 所有卡片显示兜底文案，不崩溃 |
 | `modal_preference` 所有维度 = 默认 50 | 正常展示（默认值来自后端 `_default_profile`） |
 | `knowledge_coordinates` 空数组 `[]` | 知识坐标区显示空态文案"暂无知识坐标数据" |
 | `cognitive_blindspots` 空数组 `[]` | 盲区显示空态文案"暂无认知盲区记录" |
@@ -191,18 +222,19 @@ useEffect(activeCourseId)
 
 ---
 
-## 8. 验证方式
+## 9. 验证方式
 
 | 方式 | 内容 |
 |------|------|
 | `npm run lint` | 零错误 |
 | `npm run build` | 通过（允许已有 chunk size warning） |
-| 手工 smoke | 学生登录 → 选择课程 → Profile 页面：5 张卡片展示真实数据，无占位文字、无硬编码 50%、无静态 SVG 图 |
+| 手工 smoke：无课程 | 学生登录但未加入任何课程 → Profile 页面：展示空态（标题+说明+按钮），不无限转圈 |
+| 手工 smoke：有课程 | 学生登录 → 选择课程 → Profile 页面：5 张卡片展示真实数据，无占位文字、无硬编码 50%、无静态 SVG 图 |
 | 手工 smoke：空 profile | 新用户（无 profile 行时 Backend 返回默认值）：所有卡片展示默认值或空态文案，不崩溃 |
 
 ---
 
-## 9. 风险与降级
+## 10. 风险与降级
 
 | 风险 | 概率 | 缓解 |
 |------|------|------|
@@ -222,4 +254,6 @@ useEffect(activeCourseId)
 2. **范围控制：** ✓ 仅改 `StudentProfile.jsx`，不碰 API/Backend/Agent/OpenAPI
 3. **歧义：** ✓ 每张卡片的数据源、展示形式、空态均已明确
 4. **语义限定：** ✓ discipline_badge 仅作学科勋章，不包装为通用等级体系
-5. **evaluation 调用：** ✓ 不预先判定移除，作为实施检查项
+5. **evaluation 调用：** ✓ 不预先判定移除，检查范围为组件任何地方是否消费 evaluation 返回值
+6. **无课程空态：** ✓ `!activeCourseId` 改为空态页面（标题+说明+按钮），消除无限 loading bug
+7. **姓名兜底：** ✓ 优先级 `real_name || username || "学生"`，头像首字同步

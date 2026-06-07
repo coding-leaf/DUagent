@@ -29,6 +29,7 @@ async def load_course_knowledge_chunks(
     *,
     reader: AgentScopeReader | None = None,
     ingested_files: set[str] | None = None,
+    course_id: str | None = None,
 ) -> list[CourseKnowledgeChunk]:
     """读取课程资料目录或单个课程文件，输入路径，输出可写入课程知识库的切片。
 
@@ -38,7 +39,7 @@ async def load_course_knowledge_chunks(
     if not root.exists():
         raise ValueError(f"course path does not exist: {root}")
 
-    course_id = root.stem if root.is_file() else root.name
+    resolved_course_id = course_id or (root.stem if root.is_file() else root.name)
     source_root = root.parent if root.is_file() else root
     skipped_files = ingested_files or set()
     chunks: list[CourseKnowledgeChunk] = []
@@ -52,7 +53,7 @@ async def load_course_knowledge_chunks(
         documents = await file_reader(str(source_path))
         chunks.extend(
             _documents_to_chunks(
-                course_id=course_id,
+                course_id=resolved_course_id,
                 root=source_root,
                 source_path=source_path,
                 documents=documents,

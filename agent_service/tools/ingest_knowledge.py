@@ -7,6 +7,7 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from inspect import signature
 from pathlib import Path
 
 from agent_service.core.ai import EmbeddingProvider, get_ai_providers
@@ -33,6 +34,7 @@ _EMBEDDING_BATCH_SIZE = 64
 async def ingest_course_knowledge(
     course_dir: Path | str,
     *,
+    course_id: str | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     store: QdrantCourseKnowledgeStore | None = None,
     chunk_loader: ChunkLoader | None = None,
@@ -43,18 +45,23 @@ async def ingest_course_knowledge(
     """
     start_time = time.time()
     root = Path(course_dir)
-    course_id = root.stem if root.suffix else root.name
+    resolved_course_id = course_id or (root.stem if root.suffix else root.name)
     target_store = store or QdrantCourseKnowledgeStore()
     
-    logger.debug(f"Checking previously ingested files for course_id: {course_id}")
-    ingested_files = await target_store.list_ingested_source_files(course_id)
+    logger.debug(f"Checking previously ingested files for course_id: {resolved_course_id}")
+    ingested_files = await target_store.list_ingested_source_files(resolved_course_id)
     
     loader = chunk_loader or load_course_knowledge_chunks
     logger.debug(f"Loading chunks from: {root}")
-    chunks = await loader(root, ingested_files=ingested_files)
+    chunks = await _load_chunks_with_course_id(
+        loader,
+        root,
+        ingested_files=ingested_files,
+        course_id=resolved_course_id,
+    )
     if not chunks:
         duration = time.time() - start_time
-        return KnowledgeIngestionResult(course_id=course_id, chunk_count=0, duration_seconds=duration)
+        return KnowledgeIngestionResult(course_id=resolved_course_id, chunk_count=0, duration_seconds=duration)
 
     provider = embedding_provider or get_ai_providers().embedding
     logger.debug(f"Embedding {len(chunks)} chunks in batches of {_EMBEDDING_BATCH_SIZE}")
@@ -68,7 +75,20 @@ async def ingest_course_knowledge(
     await target_store.upsert_chunks(chunks=chunks, vectors=vectors)
     
     duration = time.time() - start_time
-    return KnowledgeIngestionResult(course_id=course_id, chunk_count=len(chunks), duration_seconds=duration)
+    return KnowledgeIngestionResult(course_id=resolved_course_id, chunk_count=len(chunks), duration_seconds=duration)
+
+
+async def _load_chunks_with_course_id(
+    loader: ChunkLoader,
+    root: Path,
+    *,
+    ingested_files: set[str],
+    course_id: str,
+) -> list[CourseKnowledgeChunk]:
+    """调用课程资料切片 loader，输入路径和课程 ID，输出可入库切片。"""
+    if "course_id" in signature(loader).parameters:
+        return await loader(root, ingested_files=ingested_files, course_id=course_id)
+    return await loader(root, ingested_files=ingested_files)
 
 
 async def _embed_texts_in_batches(

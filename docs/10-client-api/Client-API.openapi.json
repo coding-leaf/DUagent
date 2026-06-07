@@ -2206,6 +2206,237 @@
           }
         ]
       }
+    },
+    "/admin/course-catalogs": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员课程资源库列表",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员创建课程资源库",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseCatalogCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已创建",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员课程资源库详情",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}/materials": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "课程资源库资料列表",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogMaterialsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "登记课程资源库资料",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseCatalogMaterialCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已创建",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogMaterialResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}/knowledge-status": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "课程资源库知识库状态",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogKnowledgeStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/course-catalogs": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "可绑定课程资源库列表",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "ready"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogReadyListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2576,6 +2807,14 @@
             "type": "string",
             "format": "date-time",
             "description": "创建时间"
+          },
+          "catalog_id": {
+            "type": "string",
+            "description": "绑定的共享课程资源库 ID；旧课程为空字符串"
+          },
+          "catalog_title": {
+            "type": "string",
+            "description": "绑定的共享课程资源库名称；旧课程为空字符串"
           }
         }
       },
@@ -2593,6 +2832,14 @@
           "course_code": {
             "type": "string",
             "description": "系统自动生成的唯一课程码"
+          },
+          "catalog_id": {
+            "type": "string",
+            "description": "绑定的共享课程资源库 ID；旧课程为空字符串"
+          },
+          "catalog_title": {
+            "type": "string",
+            "description": "绑定的共享课程资源库名称；旧课程为空字符串"
           }
         }
       },
@@ -2609,6 +2856,10 @@
           "description": {
             "type": "string",
             "description": "课程描述"
+          },
+          "catalog_id": {
+            "type": "string",
+            "description": "新教学班绑定的共享课程资源库 ID；Phase A 中可选，旧 courses 兼容路径可不传"
           }
         }
       },
@@ -4051,6 +4302,232 @@
           "error_message": {
             "type": "string",
             "description": "错误信息（failed 时必填）"
+          }
+        }
+      },
+      "CourseCatalogCreateRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "CourseCatalogItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "ingesting",
+              "ready",
+              "failed"
+            ]
+          },
+          "knowledge_status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "ingesting",
+              "ready",
+              "failed"
+            ]
+          },
+          "material_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CourseCatalogResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CourseCatalogItem"
+          }
+        }
+      },
+      "CourseCatalogListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "catalogs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CourseCatalogItem"
+                }
+              },
+              "total": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "page_size": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "CourseCatalogReadyListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "catalogs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CourseCatalogItem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CourseCatalogMaterialCreateRequest": {
+        "type": "object",
+        "required": [
+          "filename",
+          "source_type"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "storage_uri": {
+            "type": "string"
+          }
+        }
+      },
+      "CourseCatalogMaterialItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "catalog_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CourseCatalogMaterialResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CourseCatalogMaterialItem"
+          }
+        }
+      },
+      "CourseCatalogMaterialsResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "materials": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CourseCatalogMaterialItem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CourseCatalogKnowledgeStatusResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "catalog_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "knowledge_status": {
+                "type": "string"
+              },
+              "material_count": {
+                "type": "integer"
+              }
+            }
           }
         }
       }

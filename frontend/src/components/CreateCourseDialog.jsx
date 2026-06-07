@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { courseService } from '../api/services/course';
 
+const getCourseDialogErrorMessage = (err, fallback) => (
+  err.response?.data?.detail?.message
+    || err.response?.data?.message
+    || fallback
+);
+
 export default function CreateCourseDialog({ open, onClose, onCreated }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -34,7 +40,7 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
           console.error('course catalogs fetch error', err);
           setCatalogs([]);
           setCatalogId('');
-          setError('课程资源库加载失败，请联系管理员');
+          setError(getCourseDialogErrorMessage(err, '课程资源库加载失败，请联系管理员'));
         })
         .finally(() => {
           if (!cancelled) setCatalogsLoading(false);
@@ -68,11 +74,7 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
         setError(res.message || '创建失败');
       }
     } catch (err) {
-      setError(
-        err.response?.data?.detail?.message
-          || err.response?.data?.message
-          || '网络错误，请重试'
-      );
+      setError(getCourseDialogErrorMessage(err, '网络错误，请重试'));
     } finally {
       setSubmitting(false);
     }

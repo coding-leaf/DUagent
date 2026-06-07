@@ -52,29 +52,40 @@ export default function TeacherConsole() {
   useEffect(() => {
     if (!activeClass) return;
 
+    let cancelled = false;
     setStudentsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     setStudentsError(null);
     teachingService.getClassStudents(activeClass)
       .then((res) => {
-        if (res.code === 200) setStudents(res.data);
+        if (!cancelled && res.code === 200) setStudents(res.data);
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error('students fetch error', err);
         setStudentsError('学生列表加载失败');
       })
-      .finally(() => setStudentsLoading(false));
+      .finally(() => {
+        if (!cancelled) setStudentsLoading(false);
+      });
 
     setInsightsLoading(true);
     setInsightsError(null);
     teachingService.getConsoleInsights(activeClass)
       .then((res) => {
-        if (res.code === 200) setInsights(res.data);
+        if (!cancelled && res.code === 200) setInsights(res.data);
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error('insights fetch error', err);
         setInsightsError('班级统计加载失败，请稍后重试。');
       })
-      .finally(() => setInsightsLoading(false));
+      .finally(() => {
+        if (!cancelled) setInsightsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeClass]);
 
   if (classesLoading) {

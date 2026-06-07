@@ -3,7 +3,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import asyncio
+import re
+import uuid
+
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+
+from app.db.session import async_session_factory, init_db
+from app.main import app
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
+from app.models.user import RegistrationCode
 from app.schemas.catalog import CourseCatalogCreateRequest, CourseOfferingCreateRequest
 
 
@@ -38,3 +48,77 @@ def test_catalog_models_and_schemas_importable():
     assert offering.catalog_id == "cat001"
     assert req.title == "数据结构"
     assert class_req.catalog_id == "cat001"
+
+
+def _captcha_answer(question: str) -> str:
+    nums = re.findall(r"\d+", question)
+    if "+" in question:
+        return str(int(nums[0]) + int(nums[1]))
+    return str(int(nums[0]) - int(nums[1]))
+
+
+async def _register_and_login(client: AsyncClient, role: str):
+    code = f"{role}_{uuid.uuid4().hex[:8]}"
+    async with async_session_factory() as db:
+        db.add(RegistrationCode(code=code, role=role))
+        await db.commit()
+
+    email = f"{role}_{uuid.uuid4().hex[:8]}@test.com"
+    username = f"{role}_{uuid.uuid4().hex[:8]}"
+    captcha = await client.get("/api/v1/auth/captcha")
+    captcha_data = captcha.json()["data"]
+    register = await client.post("/api/v1/auth/register", json={
+        "registration_code": code,
+        "email": email,
+        "password": "Abc12345",
+        "username": username,
+        "captcha_token": captcha_data["captcha_token"],
+        "captcha_code": _captcha_answer(captcha_data["captcha_question"]),
+    })
+    assert register.status_code == 201, register.text
+
+    captcha = await client.get("/api/v1/auth/captcha")
+    captcha_data = captcha.json()["data"]
+    login = await client.post("/api/v1/auth/login", json={
+        "email": email,
+        "password": "Abc12345",
+        "captcha_token": captcha_data["captcha_token"],
+        "captcha_code": _captcha_answer(captcha_data["captcha_question"]),
+    })
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['data']['token']}"}
+
+
+async def _api_test_admin_catalog_crud():
+    await init_db()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        admin_headers = await _register_and_login(client, "admin")
+        teacher_headers = await _register_and_login(client, "teacher")
+
+        create = await client.post("/api/v1/admin/course-catalogs", json={
+            "title": "数据结构",
+            "description": "平台共享数据结构资源库",
+        }, headers=admin_headers)
+        assert create.status_code == 201, create.text
+        data = create.json()["data"]
+        assert data["title"] == "数据结构"
+        assert data["status"] == "draft"
+        catalog_id = data["id"]
+
+        listing = await client.get("/api/v1/admin/course-catalogs", headers=admin_headers)
+        assert listing.status_code == 200, listing.text
+        assert any(item["id"] == catalog_id for item in listing.json()["data"]["catalogs"])
+
+        detail = await client.get(f"/api/v1/admin/course-catalogs/{catalog_id}", headers=admin_headers)
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["data"]["id"] == catalog_id
+
+        forbidden = await client.post("/api/v1/admin/course-catalogs", json={
+            "title": "非管理员创建",
+        }, headers=teacher_headers)
+        assert forbidden.status_code == 403, forbidden.text
+
+
+def test_admin_catalog_crud():
+    asyncio.run(_api_test_admin_catalog_crud())

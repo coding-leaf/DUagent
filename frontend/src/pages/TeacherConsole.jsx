@@ -1,15 +1,35 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
+import { learningService } from '../api/services/learning';
 import FeedbackStatus from '../components/FeedbackStatus';
 import CreateCourseDialog from '../components/CreateCourseDialog';
 import { useAuth } from '../context/AuthContext';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
+const RESOURCE_TYPE_OPTIONS = [
+  { value: 'document', label: '文档' },
+  { value: 'mindmap', label: '思维导图' },
+  { value: 'reading', label: '阅读材料' },
+  { value: 'code', label: '代码示例' },
+];
+
+const RESOURCE_TYPE_LABELS = RESOURCE_TYPE_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, {});
+
+const getErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail?.message) return detail.message;
+  return error?.response?.data?.message || error?.message || fallback;
+};
 
 export default function TeacherConsole() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const resourcePollTimerRef = useRef(null);
   const roleLabelMap = { teacher: '教师', admin: '管理员' };
   const [activeClass, setActiveClass] = useState(null);
   const [classes, setClasses] = useState([]);
@@ -21,6 +41,22 @@ export default function TeacherConsole() {
   const [studentsError, setStudentsError] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState(null);
+  const [resourceChapter, setResourceChapter] = useState('');
+  const [resourceKnowledgePoint, setResourceKnowledgePoint] = useState('');
+  const [selectedResourceTypes, setSelectedResourceTypes] = useState(() => RESOURCE_TYPE_OPTIONS.map(option => option.value));
+  const [resourceTask, setResourceTask] = useState(null);
+  const [resourceGenerating, setResourceGenerating] = useState(false);
+  const [resourceGenerationError, setResourceGenerationError] = useState('');
+  const [generatedResources, setGeneratedResources] = useState([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourcesError, setResourcesError] = useState('');
+
+  const clearResourcePoll = useCallback(() => {
+    if (resourcePollTimerRef.current) {
+      clearTimeout(resourcePollTimerRef.current);
+      resourcePollTimerRef.current = null;
+    }
+  }, []);
 
   // 获取班级列表
   const refreshClasses = useCallback(async (silent = false) => {
@@ -44,9 +80,136 @@ export default function TeacherConsole() {
     }
   }, []);
 
+  const fetchGeneratedResources = useCallback(async (courseId) => {
+    if (!courseId) return;
+    setResourcesLoading(true);
+    setResourcesError('');
+    try {
+      const res = await learningService.getResources({ course_id: courseId, page: 1, page_size: 20 });
+      if (res.code !== 200) {
+        throw new Error(res.message || '资源列表加载失败');
+      }
+      setGeneratedResources(res.data?.resources || []);
+    } catch (error) {
+      console.error('generated resources fetch error', error);
+      setResourcesError(getErrorMessage(error, '资源列表加载失败'));
+    } finally {
+      setResourcesLoading(false);
+    }
+  }, []);
+
+  const pollResourceTask = useCallback((taskId, courseId) => {
+    clearResourcePoll();
+
+    const poll = async () => {
+      try {
+        const res = await learningService.getTaskStatus(taskId);
+        if (res.code !== 200) {
+          throw new Error(res.message || '任务状态查询失败');
+        }
+
+        const task = res.data;
+        setResourceTask(task);
+
+        if (task.status === 'completed') {
+          setResourceGenerating(false);
+          clearResourcePoll();
+          await fetchGeneratedResources(courseId);
+          return;
+        }
+
+        if (task.status === 'failed') {
+          setResourceGenerating(false);
+          setResourceGenerationError(task.error_message || '资源生成失败');
+          clearResourcePoll();
+          return;
+        }
+
+        resourcePollTimerRef.current = setTimeout(poll, 2000);
+      } catch (error) {
+        console.error('resource task poll error', error);
+        setResourceGenerating(false);
+        setResourceGenerationError(getErrorMessage(error, '任务状态查询失败'));
+        clearResourcePoll();
+      }
+    };
+
+    poll();
+  }, [clearResourcePoll, fetchGeneratedResources]);
+
+  const toggleResourceType = (type) => {
+    setSelectedResourceTypes(prev => (
+      prev.includes(type)
+        ? prev.filter(item => item !== type)
+        : [...prev, type]
+    ));
+  };
+
+  const handleGenerateResources = async () => {
+    if (!activeClass) {
+      setResourceGenerationError('请先选择课程');
+      return;
+    }
+    if (selectedResourceTypes.length === 0) {
+      setResourceGenerationError('请至少选择一种资源类型');
+      return;
+    }
+
+    clearResourcePoll();
+    setResourceGenerating(true);
+    setResourceGenerationError('');
+    setResourceTask(null);
+
+    const payload = {
+      course_id: activeClass,
+      resource_types: selectedResourceTypes,
+    };
+    const chapter = resourceChapter.trim();
+    const knowledgePoint = resourceKnowledgePoint.trim();
+    if (chapter) payload.chapter = chapter;
+    if (knowledgePoint) payload.knowledge_point = knowledgePoint;
+
+    try {
+      const res = await learningService.triggerResourceGeneration(payload);
+      if (res.code !== 202 && res.code !== 200) {
+        throw new Error(res.message || '资源生成任务创建失败');
+      }
+
+      const taskId = res.data?.task_id;
+      if (!taskId) {
+        throw new Error('资源生成任务缺少 task_id');
+      }
+
+      setResourceTask({
+        task_id: taskId,
+        task_type: 'resource_generation',
+        status: 'processing',
+        progress: 0,
+      });
+      pollResourceTask(taskId, activeClass);
+    } catch (error) {
+      console.error('resource generation error', error);
+      setResourceGenerating(false);
+      setResourceGenerationError(getErrorMessage(error, '资源生成任务创建失败'));
+    }
+  };
+
   useEffect(() => {
     refreshClasses(); // eslint-disable-line react-hooks/set-state-in-effect
   }, [refreshClasses]);
+
+  useEffect(() => {
+    clearResourcePoll();
+    const timer = setTimeout(() => {
+      setResourceTask(null);
+      setResourceGenerating(false);
+      setResourceGenerationError('');
+      fetchGeneratedResources(activeClass);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeClass, clearResourcePoll, fetchGeneratedResources]);
+
+  useEffect(() => clearResourcePoll, [clearResourcePoll]);
 
   // 当选择的班级改变时，获取学生列表和AI洞察
   useEffect(() => {
@@ -105,6 +268,9 @@ export default function TeacherConsole() {
       </>
     );
   }
+
+  const activeClassInfo = classes.find((cls) => cls.id === activeClass);
+  const activeClassLabel = activeClassInfo?.name || activeClass || '未选择课程';
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-on-background font-body-md">
@@ -175,6 +341,191 @@ export default function TeacherConsole() {
                   <p className="text-sm text-outline">{cls.students} 名学生</p>
                 </button>
               ))}
+            </div>
+          </section>
+
+          {/* Resource Generation */}
+          <section className="mb-margin">
+            <div className="bg-white rounded-xl border border-outline-variant shadow-sm overflow-hidden">
+              <div className="px-md py-4 border-b border-outline-variant flex flex-col gap-1 bg-surface-container-lowest">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">auto_awesome</span>
+                  <h3 className="font-h3 text-xl text-on-surface">课程资源生成</h3>
+                </div>
+                <p className="text-sm text-outline">
+                  当前课程：{activeClassLabel}
+                  {activeClass && <span className="ml-2 font-mono text-xs">ID: {activeClass}</span>}
+                </p>
+              </div>
+              <div className="p-md grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="flex flex-col gap-2">
+                      <span className="text-sm font-semibold text-on-surface">章节</span>
+                      <input
+                        value={resourceChapter}
+                        onChange={(event) => setResourceChapter(event.target.value)}
+                        className="w-full rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                        placeholder="例如：树与二叉树"
+                        type="text"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2">
+                      <span className="text-sm font-semibold text-on-surface">知识点</span>
+                      <input
+                        value={resourceKnowledgePoint}
+                        onChange={(event) => setResourceKnowledgePoint(event.target.value)}
+                        className="w-full rounded-lg border border-outline-variant bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                        placeholder="例如：二叉树遍历"
+                        type="text"
+                      />
+                    </label>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-on-surface block mb-2">资源类型</span>
+                    <div className="flex flex-wrap gap-2">
+                      {RESOURCE_TYPE_OPTIONS.map((option) => {
+                        const selected = selectedResourceTypes.includes(option.value);
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => toggleResourceType(option.value)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                              selected
+                                ? 'border-primary bg-primary text-white'
+                                : 'border-outline-variant bg-white text-on-surface hover:bg-surface-container-low'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">
+                              {selected ? 'check_circle' : 'radio_button_unchecked'}
+                            </span>
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="lg:w-72 flex flex-col justify-between gap-4">
+                  <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-4 min-h-[132px]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-on-surface">任务状态</span>
+                      {resourceTask?.status && (
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${
+                          resourceTask.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : resourceTask.status === 'failed'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {resourceTask.status}
+                        </span>
+                      )}
+                    </div>
+                    {resourceGenerationError ? (
+                      <p className="text-sm text-error">{resourceGenerationError}</p>
+                    ) : resourceTask ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-mono text-outline break-all">{resourceTask.task_id}</p>
+                        <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${resourceTask.status === 'completed' ? 100 : (resourceTask.progress || 0)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-outline">
+                          进度 {resourceTask.status === 'completed' ? 100 : (resourceTask.progress || 0)}%
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-outline">暂无任务</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateResources}
+                    disabled={resourceGenerating}
+                    className={`w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition-colors ${
+                      resourceGenerating
+                        ? 'cursor-not-allowed bg-surface-container-high text-outline'
+                        : 'bg-cyan-600 text-white hover:bg-cyan-700'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {resourceGenerating ? 'hourglass_top' : 'play_arrow'}
+                    </span>
+                    {resourceGenerating ? '生成中' : '生成资源'}
+                  </button>
+                </div>
+              </div>
+              <div className="border-t border-outline-variant bg-surface-container-lowest px-md py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-primary text-xl flex-shrink-0">folder_open</span>
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-on-surface">当前课程资源</h4>
+                      <p className="text-xs text-outline truncate">
+                        {activeClassLabel}
+                        {activeClass && <span className="ml-2 font-mono">ID: {activeClass}</span>}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fetchGeneratedResources(activeClass)}
+                    disabled={resourcesLoading}
+                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-cyan-600 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:text-outline"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">refresh</span>
+                    刷新
+                  </button>
+                </div>
+                {resourcesLoading ? (
+                  <div className="py-4">
+                    <FeedbackStatus status="loading" title="加载资源列表..." />
+                  </div>
+                ) : resourcesError ? (
+                  <div className="py-4">
+                    <FeedbackStatus status="error" title={resourcesError} onRetry={() => fetchGeneratedResources(activeClass)} />
+                  </div>
+                ) : generatedResources.length === 0 ? (
+                  <div className="py-4">
+                    <FeedbackStatus status="empty" title="暂无资源" description="当前课程尚未生成学习资源" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    {generatedResources.slice(0, 8).map((resource) => (
+                      <button
+                        key={resource.id}
+                        type="button"
+                        data-testid="teacher-resource-card"
+                        onClick={() => navigate(`/resource/${resource.id}`)}
+                        className="rounded-lg border border-outline-variant bg-white p-3 text-left transition-all hover:border-cyan-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 text-[10px] font-bold">
+                            {RESOURCE_TYPE_LABELS[resource.type] || resource.type || '资源'}
+                          </span>
+                          <span className="text-[10px] text-outline truncate max-w-[120px]">
+                            {resource.chapter || '未标章节'}
+                          </span>
+                        </div>
+                        <p className="font-semibold text-sm text-on-surface line-clamp-2 mb-1">{resource.title}</p>
+                        <p className="text-xs text-outline line-clamp-2 mb-2">{resource.description || '暂无描述'}</p>
+                        <div className="flex items-center gap-1 text-[10px] text-primary">
+                          <span className="material-symbols-outlined text-[12px]">bookmark</span>
+                          <span className="truncate">{resource.knowledge_point || '未标知识点'}</span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-end gap-1 text-[10px] font-semibold text-cyan-600">
+                          查看详情
+                          <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 

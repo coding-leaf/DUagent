@@ -30,7 +30,7 @@ function App() {
             
             {/* Student routes */}
             <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
-            <Route path="/resource/:id" element={<ProtectedRoute allowedRoles={['student']}><ResourceDetail /></ProtectedRoute>} />
+            <Route path="/resource/:id" element={<ProtectedRoute allowedRoles={['student', 'teacher']}><ResourceDetail /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
             <Route path="/learning-path" element={<ProtectedRoute allowedRoles={['student']}><LearningPath /></ProtectedRoute>} />
 

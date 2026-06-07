@@ -209,8 +209,8 @@ async def _api_test_catalog_material_and_status():
             )
             assert ready_status_res.status_code == 200, ready_status_res.text
             ready_status_data = ready_status_res.json()["data"]
-            assert ready_status_data["status"] == "draft"
-            assert ready_status_data["knowledge_status"] == "draft"
+            assert ready_status_data["status"] == "ready"
+            assert ready_status_data["knowledge_status"] == "dirty"
 
             ingesting_create = await client.post("/api/v1/admin/course-catalogs", json={
                 "title": "Ingesting Python 程序设计",

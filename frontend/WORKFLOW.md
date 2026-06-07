@@ -206,6 +206,54 @@
   - 学生个人画像页个人信息卡新增展示 `student_id`、`major`、`grade`、`guidance_level`，数据来自 `/users/me` 的全局用户资料。
   - 不新增接口、不修改 OpenAPI；资源库 Dashboard 保持资源页职责，不承载完整个人资料。
   - `npm run lint` / `npm run build` 通过，仍有既有 Vite chunk size warning；本轮文件 `git diff --check` 通过。
+- 2026-06-07：AdminConsole 既有 Client API 契约对齐补齐：
+  - 用户表“最后登录”改为展示 `created_at` 创建时间；新增当前管理员自保护的“停用”按钮，调用既有 `DELETE /admin/users/{user_id}` 并成功后刷新用户列表。
+  - 日志页同时消费 `GET /admin/logs/agent` 与 `GET /admin/logs/operations`，新增 Agent 日志 / 系统日志切换；两类日志为空时展示空态，不回退 mock 数据。
+  - `adminService.removeUser` 注释同步为软删除/停用语义；请求路径和方法未变。
+  - `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+  - 本轮文件 `git diff --check -- src/pages/AdminConsole.jsx src/api/services/admin.js WORKFLOW.md` 通过；全量 `git diff --check` 仍受既有未触碰的 `../.gitignore:73` 末尾空行影响失败。
+  - 契约状态：未修改 OpenAPI；未新增 Client API 或 Agent API；无 OpenAPI / Agent API 漂移。
+- 2026-06-07：本地管理员账号与登录跳转修复：
+  - 当前 MySQL `duagent.users` / `duagent_test.users` 缺少 `admin@admin.com`，已补入本地管理员账号并确认 `role=admin`、`is_active=1`、`is_deleted=0`。
+  - 修正登录成功后的角色分流：`admin` 跳转 `/admin`，`teacher` 跳转 `/teacher`，学生跳转 `/dashboard`。
+  - 旧 `schema.sql` 中的示例 bcrypt hash 经当前后端 `verify_password` 校验不匹配 `Admin123456`；本地账号使用当前后端 `hash_password("Admin123456")` 生成的可验证 hash。
+  - `POST /api/v1/auth/login` 管理员登录 smoke 通过：`admin@admin.com` / `Admin123456` 返回 `role=admin`。
+  - `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；本轮文件 `git diff --check -- src/pages/Login.jsx WORKFLOW.md` 通过。
+  - 契约状态：未修改 OpenAPI；未新增接口；无 OpenAPI / Agent API 漂移。
+- 2026-06-07：管理员路由兜底修复：
+  - 修正 `ProtectedRoute` 无权限兜底：`admin` 访问非授权页面时回到 `/admin`，不再被重定向到 `/teacher`。
+  - AdminConsole 顶部“返回前台”改为“管理首页”，目标 `/admin`，避免管理员点击后进入学生 `/dashboard` 再被守卫兜底。
+  - `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；本轮文件 `git diff --check -- src/components/ProtectedRoute.jsx src/pages/AdminConsole.jsx WORKFLOW.md` 通过。
+  - 契约状态：前端路由修复，不涉及 OpenAPI / Agent API。
+- 2026-06-07：AdminConsole 停用按钮状态修复：
+  - 当前管理员自保护从单一 `id` 比较增强为 `id/email` 双重判断，避免登录态与列表字段不一致时仍显示可停用。
+  - 停用用户成功后在当前页面记录已停用用户 ID，刷新列表后按钮显示“已停用”并禁用。
+  - 说明：现有 `GET /admin/users` 契约未返回 `is_active/status`，跨页面刷新后的持久状态展示需要后续契约扩展；本轮不修改 OpenAPI。
+  - `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；本轮文件 `git diff --check -- src/pages/AdminConsole.jsx WORKFLOW.md` 通过。
+  - 契约状态：未修改 OpenAPI；无 OpenAPI / Agent API 漂移。
+- 2026-06-07：开发重心调整：
+  - 管理员页已完成当前既有 Client API 能承载的基础对接；停用状态跨页面持久展示、管理员初始化 SQL 固化、AdminConsole 文案/细节交互等暂列后续收尾，不继续阻塞当前主线。
+  - 当前优先级调整为继续对接其余功能，优先推进“资源生成异步任务链路接入”等仍未闭环的主能力。
+  - 若后续要完整展示用户停用状态，需要先扩展 Admin 用户列表契约，返回 `is_active` 或状态字段，再同步后端、前端和 OpenAPI。
+  - 本条为进度与优先级记录，无代码变更；未运行测试。
+- 2026-06-07：TeacherConsole 资源生成异步任务前端接入：
+  - 教师端新增“课程资源生成”面板，使用当前选中课程 `activeClass` 作为 `course_id`，支持填写 `chapter`、`knowledge_point`，选择 `document` / `mindmap` / `reading` / `code` 资源类型。
+  - 接入既有 `learningService.triggerResourceGeneration()` 与 `learningService.getTaskStatus()`，完成 `POST /resources/generate` -> `GET /tasks/{task_id}` 轮询闭环。
+  - 页面展示 `processing` / `completed` / `failed` 任务状态、`task_id`、进度和失败 `error_message`；切换课程或卸载页面时清理轮询定时器。
+  - 当前课程资源列表按 `activeClass` 调用 `GET /resources?course_id=...` 拉取，面板展示课程名与课程 ID，任务完成后自动刷新资源列表。
+  - 教师端资源卡片可点击进入 `/resource/{id}`；`/resource/:id` 前端路由放开 `teacher` 角色。后端详情接口已有课程教师权限校验，非所属课程仍由后端 403 拦截。
+  - 不新增 Client API，不直连 Agent Service，不新增 mock 数据；真实资源入库仍依赖 Backend -> Agent -> Webhook 配置。
+  - `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；`git diff --check -- src/App.jsx src/pages/TeacherConsole.jsx WORKFLOW.md` 通过。
+  - 契约状态：未修改 OpenAPI；无 Client API / Agent API 漂移。
+- 2026-06-07：ResourceDetail 资源内容展示补齐：
+  - `GET /resources/{id}` 后端响应新增 `content`，保留 `content_preview` 作为文字资源预览字段；`code` / `mindmap` 等类型不再只能得到空预览。
+  - ResourceDetail 按资源类型渲染：`code` 使用代码块，`mindmap` 使用内容面板，`document` / `reading` 使用正文段落；无内容时展示类型化空态。
+  - Backend 测试 `test_resource_detail.py` 补充 `content` 字段和 code 内容断言。
+  - Client API OpenAPI 与接口说明已同步补充 `ResourceDetailItem.content`；本轮按真实资源详情能力扩展契约，不修改 Agent API。
+- 2026-06-07：ResourceDetail 思维导图 Mermaid 渲染接入：
+  - 新增前端依赖 `mermaid`，`mindmap` 类型资源详情会将 `content` 作为 Mermaid 源渲染为 SVG。
+  - 支持去除常见 ```mermaid 代码围栏；渲染失败时保留原始内容并展示失败提示，页面不崩溃。
+  - Mermaid 使用 `securityLevel: strict`，仅前端展示层变化；Backend、Client API、Agent API 均未新增字段。
 
 ## 本地联调注意事项
 
@@ -237,11 +285,11 @@
   - `profile_summary` 已按 `UserProfile` 存在返回，`knowledge_coordinates=[]` 时仍保留 `modal_preference`；已补集成回归测试。
   - `overall_score` 真实计算口径仍待独立契约审查；前端综合评分卡显示“待定”，不再展示后端当前硬编码数值。
   - OpenAPI 无新增漂移；本轮未新增字段、未改 Agent。
-- 第二轮 P1 剩余：AdminConsole 契约对齐补完、资源生成异步任务链路接入。
+- 第二轮 P1 剩余：资源生成异步任务真实联调验收；教师端已补完成后资源列表刷新和详情跳转。AdminConsole 既有契约对齐已完成，剩余停用状态持久展示和初始化账号固化等细节暂缓，不作为当前阻塞。后续执行流程见 `docs/superpowers/plans/2026-06-07-next-agent-field-integration-flow.md`。
 - 第二轮 P2：累计学习时长、阅读进度/阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。
 - 新增契约能力必须先走设计/审查；禁止用前端静态字段补齐未确认业务能力。
 - **AGENTS.md 约束检查（2026-06-06）：** 本轮 StudentProfile 连续改动中，代码修改前审查步骤（问题分析→修改方案→用户确认→动手）和增量开发第 2 步（写/补测试）被跳过。后续每次修改代码前必须先通过审查步骤，禁止直接动手；涉及接口变更时必须补集成/E2E 测试。
-- **下一步建议：** 按 AGENTS.md 增量开发流程推进 P1 剩余项。优先在 AdminConsole 契约对齐和资源生成异步任务链路中二选一；`overall_score` 真实计算口径单独作为后续契约审查项。
+- **下一步建议：** 按 AGENTS.md 增量开发流程推进 P1 剩余项，优先用真实 Backend + Agent Service 验收资源生成异步任务是否稳定从 `processing` 到 `completed`；`overall_score` 真实计算口径、AdminConsole 停用状态持久展示和管理员初始化固化均单独作为后续契约/收尾项。

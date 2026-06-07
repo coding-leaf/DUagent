@@ -44,7 +44,7 @@ async def create_knowledge_ingestion(
                 KnowledgeIngestionMaterialResult(
                     storage_uri=material.storage_uri,
                     status="failed",
-                    message="material does not exist",
+                    error="material does not exist",
                 )
             )
             continue
@@ -53,11 +53,21 @@ async def create_knowledge_ingestion(
                 KnowledgeIngestionMaterialResult(
                     storage_uri=material.storage_uri,
                     status="failed",
-                    message=f"unsupported file type: {source_path.suffix}",
+                    error=f"unsupported file type: {source_path.suffix}",
                 )
             )
             continue
-        result = await ingest_course_knowledge(source_path, course_id=request.catalog_id)
+        try:
+            result = await ingest_course_knowledge(source_path, course_id=request.catalog_id)
+        except Exception as exc:
+            material_results.append(
+                KnowledgeIngestionMaterialResult(
+                    storage_uri=material.storage_uri,
+                    status="failed",
+                    error=str(exc),
+                )
+            )
+            continue
         material_results.append(
             KnowledgeIngestionMaterialResult(
                 storage_uri=material.storage_uri,
@@ -95,7 +105,10 @@ def _resolve_material_path(storage_uri: str, storage_root: Path) -> Path:
 
 
 def _validate_relative_storage_uri(storage_uri: str) -> PurePosixPath:
-    path = PurePosixPath(storage_uri)
+    stripped_uri = storage_uri.strip()
+    if not stripped_uri:
+        raise ValueError("storage_uri must not be empty")
+    path = PurePosixPath(stripped_uri)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError("storage_uri must be a safe relative path")
     return path

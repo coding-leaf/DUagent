@@ -238,3 +238,54 @@ async def _api_test_catalog_material_and_status():
 
 def test_catalog_material_and_status():
     asyncio.run(_api_test_catalog_material_and_status())
+
+
+async def _api_test_teacher_class_binding_ready_catalog():
+    await init_db()
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            admin_headers = await _register_and_login(client, "admin")
+            teacher_headers = await _register_and_login(client, "teacher")
+
+            create_catalog = await client.post("/api/v1/admin/course-catalogs", json={
+                "title": "线性代数",
+                "description": "共享线代资源库",
+            }, headers=admin_headers)
+            catalog_id = create_catalog.json()["data"]["id"]
+
+            fail_create = await client.post("/api/v1/courses", json={
+                "name": "2026 春 线代 1 班",
+                "catalog_id": catalog_id,
+            }, headers=teacher_headers)
+            assert fail_create.status_code == 409, fail_create.text
+            assert fail_create.json()["detail"]["message"] == "课程资源库未就绪"
+
+            await _set_catalog_status(catalog_id, "ready", "ready")
+
+            ready_catalogs = await client.get("/api/v1/course-catalogs?status=ready", headers=teacher_headers)
+            assert ready_catalogs.status_code == 200, ready_catalogs.text
+            assert any(c["id"] == catalog_id for c in ready_catalogs.json()["data"]["catalogs"])
+
+            created = await client.post("/api/v1/courses", json={
+                "name": "2026 春 线代 1 班",
+                "description": "教学班",
+                "catalog_id": catalog_id,
+            }, headers=teacher_headers)
+            assert created.status_code == 201, created.text
+            class_data = created.json()["data"]
+            assert class_data["catalog_id"] == catalog_id
+            assert class_data["catalog_title"] == "线性代数"
+            assert class_data["course_code"]
+
+            listing = await client.get("/api/v1/courses", headers=teacher_headers)
+            assert listing.status_code == 200, listing.text
+            listed = [c for c in listing.json()["data"]["courses"] if c["id"] == class_data["id"]][0]
+            assert listed["catalog_id"] == catalog_id
+            assert listed["catalog_title"] == "线性代数"
+    finally:
+        await engine.dispose()
+
+
+def test_teacher_class_binding_ready_catalog():
+    asyncio.run(_api_test_teacher_class_binding_ready_catalog())

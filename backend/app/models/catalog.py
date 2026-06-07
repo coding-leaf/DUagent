@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -20,6 +20,10 @@ class CourseCatalog(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     knowledge_status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     material_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_ingestion_task_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_ingestion_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -36,6 +40,10 @@ class CourseCatalogMaterial(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(30), nullable=False)
     storage_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_size: Mapped[int] = mapped_column(BigInteger, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ingested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="uploaded")
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)

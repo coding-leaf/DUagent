@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # Agent service (internal)
     AGENT_SERVICE_URL: str = "http://localhost:8002"
 
+    # CourseCatalog local material storage
+    COURSE_CATALOG_STORAGE_ROOT: str = "storage/course_catalogs"
+    COURSE_CATALOG_MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
+
     # Captcha
     CAPTCHA_EXPIRE_SECONDS: int = 300
 

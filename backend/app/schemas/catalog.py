@@ -15,6 +15,10 @@ class CourseCatalogItem(BaseModel):
     status: str
     knowledge_status: str
     material_count: int
+    last_ingestion_task_id: Optional[str] = None
+    last_ingestion_status: Optional[str] = None
+    chunk_count: int = 0
+    last_error: Optional[str] = None
     created_at: str
 
 
@@ -29,8 +33,18 @@ class CourseCatalogMaterialItem(BaseModel):
     catalog_id: str
     filename: str
     source_type: str
+    file_size: int = 0
     status: str
+    chunk_count: int = 0
+    last_error: Optional[str] = None
+    ingested_at: Optional[str] = None
     created_at: str
+
+
+class CourseCatalogIngestionAccepted(BaseModel):
+    task_id: str
+    catalog_id: str
+    status: str
 
 
 class CourseOfferingCreateRequest(BaseModel):

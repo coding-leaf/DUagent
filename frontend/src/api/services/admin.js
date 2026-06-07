@@ -11,7 +11,7 @@ export const adminService = {
     return apiClient.put(`/admin/users/${userId}`, data);
   },
 
-  // 移除/封禁用户
+  // 移除用户（软删除/停用）
   removeUser: async (userId) => {
     return apiClient.delete(`/admin/users/${userId}`);
   },

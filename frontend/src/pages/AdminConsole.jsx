@@ -1,29 +1,54 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminService } from '../api/services/admin';
+import { useAuth } from '../context/AuthContext';
+
+const getErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail?.message) return detail.message;
+  return error?.response?.data?.message || error?.message || fallback;
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
+
+const getLogRows = (data) => data?.logs || data || [];
 
 export default function AdminConsole() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
   
   // User Data State
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [userActionError, setUserActionError] = useState('');
+  const [removingUserId, setRemovingUserId] = useState(null);
+  const [disabledUserIds, setDisabledUserIds] = useState(() => new Set());
   
   // Log Data State
   const [agentLogs, setAgentLogs] = useState([]);
+  const [operationLogs, setOperationLogs] = useState([]);
+  const [activeLogType, setActiveLogType] = useState('agent');
   const [loadingLogs, setLoadingLogs] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
+    setUserActionError('');
     try {
       const res = await adminService.getUsers({ keyword: searchQuery });
       if (res.code === 200) {
-        setUsers(res.data.users);
+        setUsers(res.data.users || []);
       }
     } catch (e) {
       console.error(e);
+      setUserActionError(getErrorMessage(e, '用户列表加载失败'));
     } finally {
       setLoadingUsers(false);
     }
@@ -32,13 +57,15 @@ export default function AdminConsole() {
   const fetchLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
-      const [agentRes] = await Promise.all([
+      const [agentRes, systemRes] = await Promise.all([
         adminService.getAgentLogs(),
         adminService.getSystemLogs()
       ]);
       if (agentRes.code === 200) {
-        // Handle database array structure or direct mock list structure
-        setAgentLogs(agentRes.data.logs || agentRes.data);
+        setAgentLogs(getLogRows(agentRes.data));
+      }
+      if (systemRes.code === 200) {
+        setOperationLogs(getLogRows(systemRes.data));
       }
     } catch (e) {
       console.error(e);
@@ -63,6 +90,32 @@ export default function AdminConsole() {
     fetchUsers();
   };
 
+  const handleRemoveUser = async (targetUser) => {
+    const isCurrentUser = targetUser.id === user?.id || targetUser.email === user?.email;
+    if (isCurrentUser || disabledUserIds.has(targetUser.id)) return;
+    const confirmed = window.confirm(`确认停用用户 ${targetUser.username || targetUser.email || targetUser.id}？`);
+    if (!confirmed) return;
+
+    setRemovingUserId(targetUser.id);
+    setUserActionError('');
+    try {
+      const res = await adminService.removeUser(targetUser.id);
+      if (res.code === 200) {
+        setDisabledUserIds((prev) => new Set(prev).add(targetUser.id));
+        await fetchUsers();
+      } else {
+        setUserActionError(res.message || '停用用户失败');
+      }
+    } catch (e) {
+      console.error(e);
+      setUserActionError(getErrorMessage(e, '停用用户失败'));
+    } finally {
+      setRemovingUserId(null);
+    }
+  };
+
+  const visibleLogs = activeLogType === 'agent' ? agentLogs : operationLogs;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-body-md">
       {/* Top NavBar */}
@@ -73,8 +126,8 @@ export default function AdminConsole() {
             <div className="text-xl font-bold tracking-tight">DS_MASTERY_AI <span className="font-light text-cyan-400">Admin</span></div>
           </div>
           <div className="flex items-center space-x-6">
-            <button onClick={() => navigate('/dashboard')} className="text-sm text-slate-300 hover:text-white transition-colors cursor-pointer">
-              返回前台
+            <button onClick={() => navigate('/admin')} className="text-sm text-slate-300 hover:text-white transition-colors cursor-pointer">
+              管理首页
             </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold border border-cyan-500/30">
@@ -107,7 +160,7 @@ export default function AdminConsole() {
             }`}
           >
             <span className="material-symbols-outlined text-lg">terminal</span>
-            智能体日志
+            系统日志
           </button>
         </aside>
 
@@ -134,6 +187,12 @@ export default function AdminConsole() {
                 </form>
               </div>
 
+              {userActionError && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {userActionError}
+                </div>
+              )}
+
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
@@ -141,31 +200,59 @@ export default function AdminConsole() {
                       <th className="px-6 py-4 font-medium">用户 ID</th>
                       <th className="px-6 py-4 font-medium">用户名 / 邮箱</th>
                       <th className="px-6 py-4 font-medium">角色</th>
-                      <th className="px-6 py-4 font-medium">最后登录</th>
+                      <th className="px-6 py-4 font-medium">创建时间</th>
+                      <th className="px-6 py-4 font-medium text-right">操作</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {loadingUsers ? (
-                      <tr><td colSpan="4" className="text-center py-12 text-slate-400">加载中...</td></tr>
+                      <tr><td colSpan="5" className="text-center py-12 text-slate-400">加载中...</td></tr>
                     ) : users.length === 0 ? (
-                      <tr><td colSpan="4" className="text-center py-12 text-slate-400">暂无匹配用户</td></tr>
+                      <tr><td colSpan="5" className="text-center py-12 text-slate-400">暂无匹配用户</td></tr>
                     ) : (
-                      users.map(u => (
-                        <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-mono text-xs text-slate-500">{u.id}</td>
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-slate-900">{u.username}</div>
-                            <div className="text-xs text-slate-500">{u.email}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2.5 py-1 rounded text-xs font-bold ${
-                              u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                              u.role === 'teacher' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                            }`}>{u.role.toUpperCase()}</span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-500 text-xs">N/A</td>
-                        </tr>
-                      ))
+                      users.map(u => {
+                        const isCurrentUser = u.id === user?.id || u.email === user?.email;
+                        const isDisabledLocally = disabledUserIds.has(u.id);
+                        const isActionDisabled = isCurrentUser || isDisabledLocally || removingUserId === u.id;
+                        return (
+                          <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-4 font-mono text-xs text-slate-500">{u.id}</td>
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-900">{u.username}</div>
+                              <div className="text-xs text-slate-500">{u.email}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2.5 py-1 rounded text-xs font-bold ${
+                                u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                u.role === 'teacher' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                              }`}>{u.role?.toUpperCase() || 'UNKNOWN'}</span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-500 text-xs">{formatDateTime(u.created_at)}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveUser(u)}
+                                disabled={isActionDisabled}
+                                className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                  isActionDisabled
+                                    ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+                                    : 'cursor-pointer border-red-200 bg-white text-red-600 hover:bg-red-50'
+                                }`}
+                                title={
+                                  isCurrentUser
+                                    ? '不可停用当前登录用户'
+                                    : isDisabledLocally
+                                      ? '该用户已停用'
+                                      : '停用用户'
+                                }
+                              >
+                                <span className="material-symbols-outlined text-[16px]">person_off</span>
+                                {removingUserId === u.id ? '停用中' : isDisabledLocally ? '已停用' : '停用'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -177,11 +264,32 @@ export default function AdminConsole() {
             <div className="animate-in fade-in duration-500 h-full flex flex-col">
               <div className="flex justify-between items-end mb-6">
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-900 mb-1">多智能体协同日志</h1>
-                  <p className="text-sm text-slate-500">实时监控底层 Agent 调度与推断过程。</p>
+                  <h1 className="text-2xl font-bold text-slate-900 mb-1">系统日志</h1>
+                  <p className="text-sm text-slate-500">查看 Agent 运行记录与系统操作事件。</p>
                 </div>
                 <button onClick={fetchLogs} className="flex items-center gap-1 text-cyan-600 hover:underline text-sm font-medium cursor-pointer">
                   <span className="material-symbols-outlined text-[18px]">refresh</span> 刷新日志
+                </button>
+              </div>
+
+              <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveLogType('agent')}
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    activeLogType === 'agent' ? 'bg-cyan-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Agent 日志
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLogType('system')}
+                  className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                    activeLogType === 'system' ? 'bg-cyan-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  系统日志
                 </button>
               </div>
 
@@ -195,10 +303,14 @@ export default function AdminConsole() {
                 <div className="p-4 overflow-y-auto flex-1 space-y-2 text-slate-300">
                   {loadingLogs ? (
                     <div className="text-cyan-500 animate-pulse">Connecting to Agent Mesh...</div>
-                  ) : (
+                  ) : visibleLogs.length === 0 ? (
+                    <div className="text-slate-500">
+                      {activeLogType === 'agent' ? '暂无 Agent 日志' : '暂无系统日志'}
+                    </div>
+                  ) : activeLogType === 'agent' ? (
                     agentLogs.map((log) => (
-                      <div key={log.id} className="flex gap-4 hover:bg-white/5 p-1 rounded transition-colors group">
-                        <span className="text-slate-500 flex-shrink-0 w-48">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                      <div key={`${log.timestamp}-${log.endpoint}-${log.agent_type}`} className="flex gap-4 hover:bg-white/5 p-1 rounded transition-colors group">
+                        <span className="text-slate-500 flex-shrink-0 w-52">[{formatDateTime(log.timestamp)}]</span>
                         <span className={`font-bold flex-shrink-0 w-28 ${
                           log.status === 'error' ? 'text-red-400' : 'text-cyan-400'
                         }`}>
@@ -209,6 +321,24 @@ export default function AdminConsole() {
                           {log.endpoint}{log.error_message ? ` — ${log.error_message}` : ''}
                           <span className="ml-2 text-xs text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
                             (Lat: {log.latency_ms}ms, Tokens: {log.tokens_used})
+                          </span>
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    operationLogs.map((log) => (
+                      <div key={`${log.timestamp}-${log.event_type}-${log.user_id || 'system'}`} className="flex gap-4 hover:bg-white/5 p-1 rounded transition-colors group">
+                        <span className="text-slate-500 flex-shrink-0 w-52">[{formatDateTime(log.timestamp)}]</span>
+                        <span className={`font-bold flex-shrink-0 w-32 ${
+                          log.event_type === 'system_error' || log.event_type === 'security' ? 'text-red-400' : 'text-cyan-400'
+                        }`}>
+                          {log.event_type?.toUpperCase() || 'OPERATION'}
+                        </span>
+                        <span className="text-emerald-400 flex-shrink-0 w-40">[{log.user_id || 'system'}]</span>
+                        <span className="flex-1 break-all text-slate-200">
+                          {log.description || '—'}
+                          <span className="ml-2 text-xs text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                            (IP: {log.ip_address || '—'}, Detail: {log.detail ? JSON.stringify(log.detail) : '{}'})
                           </span>
                         </span>
                       </div>

@@ -57,7 +57,9 @@ export default function Login() {
         login(token, userData);
 
         const userRole = userData?.role;
-        if (userRole === 'admin' || userRole === 'teacher') {
+        if (userRole === 'admin') {
+          navigate('/admin');
+        } else if (userRole === 'teacher') {
           navigate('/teacher');
         } else {
           navigate('/dashboard');

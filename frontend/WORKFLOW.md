@@ -254,6 +254,15 @@
   - 新增前端依赖 `mermaid`，`mindmap` 类型资源详情会将 `content` 作为 Mermaid 源渲染为 SVG。
   - 支持去除常见 ```mermaid 代码围栏；渲染失败时保留原始内容并展示失败提示，页面不崩溃。
   - Mermaid 使用 `securityLevel: strict`，仅前端展示层变化；Backend、Client API、Agent API 均未新增字段。
+- 2026-06-07：Phase A CourseCatalog + 教学班绑定实施完成：
+  - Backend 新增 `CourseCatalog` / `CourseCatalogMaterial` / `CourseOffering`，并补充 MySQL migration `backend/migrations/2026-06-07-add-course-catalogs.sql`。
+  - Admin 可创建/查看课程资源库、登记资料并查看知识库状态；Phase A 暂不实现真实文件上传、Qdrant ingestion 或 KG 生成。
+  - 教师创建教学班时绑定 `ready` CourseCatalog；非 `ready` 不可绑定；旧 `courses` 路径保留兼容。
+  - TeacherConsole 移除教师端资源生成入口；创建教学班时选择共享课程资源库。
+  - AdminConsole 新增课程资源库管理入口。
+  - OpenAPI 已同步新增 CourseCatalog 端点并扩展 `catalog` 字段。
+  - 验证：`cd ../backend && pytest tests/test_course_catalogs.py -q` 通过 4/4；`cd ../backend && pytest tests/test_resources_async.py tests/test_teacher_class_insights.py tests/test_teacher_student_learning.py -q` 失败于 collection 阶段，关键错误为 `RuntimeError: ... Future ... attached to a different loop`，发生在 `tests/test_teacher_student_learning.py` 调用 `init_db()` 的 MySQL/aiomysql 初始化过程；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；`python -m json.tool ../docs/10-client-api/Client-API.openapi.json >/tmp/client-api-openapi-check.json` 通过。
+  - 契约状态：Client API 已同步，无 Agent API 变更；真实 ingestion 和 Agent 消费链路进入 Phase B/C。
 
 ## 本地联调注意事项
 

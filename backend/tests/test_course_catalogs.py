@@ -89,6 +89,17 @@ async def _register_and_login(client: AsyncClient, role: str):
     return {"Authorization": f"Bearer {login.json()['data']['token']}"}
 
 
+async def _set_catalog_status(catalog_id: str, status: str, knowledge_status: str):
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(CourseCatalog).where(CourseCatalog.id == catalog_id)
+        )
+        catalog = result.scalar_one()
+        catalog.status = status
+        catalog.knowledge_status = knowledge_status
+        await db.commit()
+
+
 async def _api_test_admin_catalog_crud():
     await init_db()
     try:
@@ -168,6 +179,52 @@ async def _api_test_catalog_material_and_status():
             assert status_data["catalog_id"] == catalog_id
             assert status_data["status"] == "draft"
             assert status_data["material_count"] == 1
+
+            ready_create = await client.post("/api/v1/admin/course-catalogs", json={
+                "title": "Ready Python 程序设计",
+                "description": "已就绪资源库",
+            }, headers=admin_headers)
+            ready_catalog_id = ready_create.json()["data"]["id"]
+            await _set_catalog_status(ready_catalog_id, "ready", "ready")
+
+            ready_material = await client.post(
+                f"/api/v1/admin/course-catalogs/{ready_catalog_id}/materials",
+                json={
+                    "filename": "python-ready.pdf",
+                    "source_type": "pdf",
+                    "storage_uri": "local://python-ready.pdf",
+                },
+                headers=admin_headers,
+            )
+            assert ready_material.status_code == 201, ready_material.text
+
+            ready_status_res = await client.get(
+                f"/api/v1/admin/course-catalogs/{ready_catalog_id}/knowledge-status",
+                headers=admin_headers,
+            )
+            assert ready_status_res.status_code == 200, ready_status_res.text
+            ready_status_data = ready_status_res.json()["data"]
+            assert ready_status_data["status"] == "draft"
+            assert ready_status_data["knowledge_status"] == "draft"
+
+            ingesting_create = await client.post("/api/v1/admin/course-catalogs", json={
+                "title": "Ingesting Python 程序设计",
+                "description": "入库中资源库",
+            }, headers=admin_headers)
+            ingesting_catalog_id = ingesting_create.json()["data"]["id"]
+            await _set_catalog_status(ingesting_catalog_id, "ingesting", "ingesting")
+
+            ingesting_material = await client.post(
+                f"/api/v1/admin/course-catalogs/{ingesting_catalog_id}/materials",
+                json={
+                    "filename": "python-ingesting.pdf",
+                    "source_type": "pdf",
+                    "storage_uri": "local://python-ingesting.pdf",
+                },
+                headers=admin_headers,
+            )
+            assert ingesting_material.status_code == 409, ingesting_material.text
+            assert ingesting_material.json()["detail"]["message"] == "课程资源库正在入库中"
     finally:
         await engine.dispose()
 

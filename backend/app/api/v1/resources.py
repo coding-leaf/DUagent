@@ -112,6 +112,7 @@ async def get_resource_detail(
             "view_count": resource.view_count,
             "created_at": resource.create_time.isoformat() if resource.create_time else "",
             "content_preview": preview,
+            "content": resource.content,
         },
     }
 

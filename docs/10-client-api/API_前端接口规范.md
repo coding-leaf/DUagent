@@ -1064,7 +1064,7 @@ GET /api/v1/resources?course_id={course_id}&type={type}&page=1&page_size=20
 GET /api/v1/resources/:id
 ```
 
-**说明：** 资源详情页使用该接口读取单条资源内容。`data` 结构为 `ResourceDetailItem`，即资源列表字段加 `content_preview`。
+**说明：** 资源详情页使用该接口读取单条资源内容。`data` 结构为 `ResourceDetailItem`，即资源列表字段加 `content_preview` 和 `content`。
 
 **路径参数：**
 
@@ -1086,10 +1086,12 @@ GET /api/v1/resources/:id
 | view_count | integer | 浏览次数 |
 | created_at | string | 创建时间 |
 | content_preview | string \| null | 正文预览；`document` / `reading` 返回文本预览，其余类型返回 `null` |
+| content | string \| null | 资源正文内容；用于详情页按类型展示正文、代码或思维导图文本 |
 
 **空态语义：**
 
 - `content_preview: null` 表示该资源类型不提供文字正文预览，不代表资源不存在。
+- `content: null` 或空字符串表示当前资源暂无可展示正文内容，前端应展示空态，不应伪造正文。
 - 无权限访问返回 `403`，资源不存在返回 `404`，前端不应以空对象替代。
 
 ### 10.3 触发资源生成

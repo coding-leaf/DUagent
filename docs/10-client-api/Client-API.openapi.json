@@ -3535,7 +3535,7 @@
       },
       "ResourceDetailItem": {
         "type": "object",
-        "description": "ResourceItem 全部字段 + content_preview",
+        "description": "ResourceItem 全部字段 + content_preview + content",
         "allOf": [
           {
             "$ref": "#/components/schemas/ResourceItem"
@@ -3547,6 +3547,11 @@
                 "type": "string",
                 "nullable": true,
                 "description": "文字资源正文预览，通常为正文前若干字符或段落。由 Backend 提供，具体来源是 Backend 实现细节。适用 document/reading 类型；其他类型返回 null。"
+              },
+              "content": {
+                "type": "string",
+                "nullable": true,
+                "description": "资源正文内容。详情页可按 type 渲染为正文、代码块或思维导图文本；暂无内容时返回 null 或空字符串。"
               }
             }
           }

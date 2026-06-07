@@ -1,7 +1,94 @@
 
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import mermaid from 'mermaid';
 import { learningService } from '../api/services/learning';
+
+const TYPE_LABELS = {
+  document: '文档',
+  reading: '阅读材料',
+  code: '代码示例',
+  mindmap: '思维导图',
+  video: '视频',
+};
+
+const getDisplayContent = (resource) => {
+  if (!resource) return '';
+  return resource.content || resource.content_preview || '';
+};
+
+const normalizeMermaidSource = (content) => {
+  const trimmed = (content || '').trim();
+  const fenced = trimmed.match(/^```(?:mermaid)?\s*([\s\S]*?)```$/i);
+  return fenced ? fenced[1].trim() : trimmed;
+};
+
+mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'strict',
+  theme: 'default',
+});
+
+function MermaidDiagram({ content }) {
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState('');
+  const source = normalizeMermaidSource(content);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const renderDiagram = async () => {
+      if (!source) {
+        setSvg('');
+        setError('');
+        return;
+      }
+
+      try {
+        const id = `resource-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const result = await mermaid.render(id, source);
+        if (!cancelled) {
+          setSvg(result.svg);
+          setError('');
+        }
+      } catch (err) {
+        console.error('Mermaid render failed:', err);
+        if (!cancelled) {
+          setSvg('');
+          setError('思维导图渲染失败，已显示原始内容。');
+        }
+      }
+    };
+
+    renderDiagram();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+
+  return (
+    <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-4">
+      <div className="mb-3 flex items-center gap-2 text-primary">
+        <span className="material-symbols-outlined text-lg">schema</span>
+        <span className="text-sm font-semibold">思维导图</span>
+      </div>
+      {svg ? (
+        <div
+          className="overflow-x-auto rounded-lg bg-white p-4 [&_svg]:mx-auto [&_svg]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ) : (
+        <p className="text-body-md whitespace-pre-wrap">{source}</p>
+      )}
+      {error && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ResourceDetail() {
   const navigate = useNavigate();
@@ -107,9 +194,25 @@ export default function ResourceDetail() {
               </header>
 
               <section className="prose prose-slate max-w-none text-on-surface-variant">
-                <p className="text-body-md whitespace-pre-wrap">
-                  {resource?.content_preview || '暂无正文预览'}
-                </p>
+                {getDisplayContent(resource) ? (
+                  resource?.type === 'code' ? (
+                    <pre className="rounded-lg border border-outline-variant bg-slate-950 p-4 text-sm text-slate-100 overflow-x-auto">
+                      <code>{getDisplayContent(resource)}</code>
+                    </pre>
+                  ) : resource?.type === 'mindmap' ? (
+                    <MermaidDiagram content={getDisplayContent(resource)} />
+                  ) : (
+                    <p className="text-body-md whitespace-pre-wrap">
+                      {getDisplayContent(resource)}
+                    </p>
+                  )
+                ) : (
+                  <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-6">
+                    <p className="text-body-md text-outline">
+                      暂无{TYPE_LABELS[resource?.type] || '资源'}内容
+                    </p>
+                  </div>
+                )}
               </section>
 
               <footer className="mt-12 pt-8 border-t border-surface-container-highest flex justify-between items-center">

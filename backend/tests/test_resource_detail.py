@@ -1,7 +1,7 @@
 """Integration tests for GET /api/v1/resources/{id}.
 
 Covers: 401 unauthorized, 404 not found, 403 no course access,
-200 document/reading content_preview, 200 code/mindmap/video null preview.
+200 document/reading content_preview, 200 all resource types content.
 
 Requires MySQL or SQLite.
 
@@ -207,14 +207,16 @@ async def test():
         chk("reading -> type field present", data.get("type") == "reading")
 
         # =============================================
-        # 6. 200 — code type returns null content_preview
+        # 6. 200 — code type returns content
         # =============================================
-        print("\n-- 6. code content_preview null --")
+        print("\n-- 6. code content --")
         r = await client.get(f"/api/v1/resources/{code_id}", headers=stu_headers)
         chk("code -> 200", r.status_code == 200)
         data = r.json()["data"]
         chk("code -> content_preview is null",
             data.get("content_preview") is None)
+        chk("code -> content is full source",
+            data.get("content") == "print('hello')")
         chk("code -> type field present", data.get("type") == "code")
 
         # =============================================
@@ -246,7 +248,8 @@ async def test():
         r = await client.get(f"/api/v1/resources/{doc_id}", headers=stu_headers)
         data = r.json()["data"]
         expected_fields = {"id", "title", "type", "description", "tags", "chapter",
-                           "knowledge_point", "view_count", "created_at", "content_preview"}
+                           "knowledge_point", "view_count", "created_at", "content_preview",
+                           "content"}
         actual_fields = set(data.keys())
         missing = expected_fields - actual_fields
         extra = actual_fields - expected_fields

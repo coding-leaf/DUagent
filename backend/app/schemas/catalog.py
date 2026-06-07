@@ -11,7 +11,7 @@ class CourseCatalogCreateRequest(BaseModel):
 class CourseCatalogItem(BaseModel):
     id: str
     title: str
-    description: str
+    description: Optional[str] = None
     status: str
     knowledge_status: str
     material_count: int

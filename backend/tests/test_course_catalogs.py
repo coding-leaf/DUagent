@@ -1,11 +1,6 @@
 import os
 import sys
 
-os.environ["DATABASE_URL"] = os.environ.get(
-    "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:////tmp/course_catalogs_phase_a.db",
-)
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering

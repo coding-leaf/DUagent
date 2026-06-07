@@ -337,6 +337,26 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "课程资源库不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "课程资源库未就绪",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -2876,6 +2896,27 @@
           },
           "data": {
             "type": "null"
+          }
+        }
+      },
+      "HTTPErrorResponse": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer",
+                "description": "错误码"
+              },
+              "message": {
+                "type": "string",
+                "description": "错误信息"
+              },
+              "data": {
+                "type": "null"
+              }
+            }
           }
         }
       },

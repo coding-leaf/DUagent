@@ -96,7 +96,6 @@ Extend `CourseCatalog`:
 
 Extend `CourseCatalogMaterial`:
 
-- `storage_type: str`, default `local`
 - `file_size: int`
 - `chunk_count: int`
 - `last_error: str | None`
@@ -117,6 +116,8 @@ No `catalog_id` column is added to `AsyncTask` in this phase. CourseCatalog task
   "storage_uris": ["course_catalogs/cat123/mat1/intro.md"]
 }
 ```
+
+No `storage_type` column is added in this phase. All Phase B1 materials are local files under the configured storage root; a storage type field can be introduced later when a real non-local storage backend exists.
 
 ## Storage Rules
 
@@ -290,13 +291,15 @@ The background task is linear:
    - set `last_error`.
 6. Update catalog:
    - all success: `status=ready`, `knowledge_status=ready`;
-   - first ingestion failure: `status=failed`, `knowledge_status=failed`;
+   - first ingestion full failure: `status=failed`, `knowledge_status=failed`;
+   - first ingestion partial success: `status=ready`, `knowledge_status=partial`;
    - incremental failure: `status=ready`, `knowledge_status=partial`.
 7. Update task:
    - all success: `completed`, progress `100`;
    - any failure: `failed`, progress `100`, `error_code`, `error_message`.
 
 If Agent Service is unreachable or raises `AgentServiceError`, all selected materials become `failed`; first ingestion marks catalog `failed`, incremental ingestion marks catalog `partial`.
+If Agent returns mixed material results, any ingested material with positive chunk count means content entered Qdrant; a first ingestion with at least one successful chunk should become `status=ready`, `knowledge_status=partial`, not `failed`.
 
 ## Error Handling
 

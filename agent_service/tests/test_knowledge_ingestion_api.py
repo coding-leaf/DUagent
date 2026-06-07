@@ -43,6 +43,72 @@ def test_knowledge_ingestion_rejects_empty_storage_uri(tmp_path: Path, monkeypat
     assert response.status_code == 422
 
 
+def test_knowledge_ingestion_rejects_empty_catalog_id(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("COURSE_CATALOG_STORAGE_ROOT", str(tmp_path / "course_catalogs"))
+
+    response = _client().post(
+        "/agent/v1/knowledge/ingestions",
+        json={
+            "catalog_id": "",
+            "materials": [{"storage_uri": "chapter_01.md"}],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_knowledge_ingestion_rejects_empty_materials(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("COURSE_CATALOG_STORAGE_ROOT", str(tmp_path / "course_catalogs"))
+
+    response = _client().post(
+        "/agent/v1/knowledge/ingestions",
+        json={
+            "catalog_id": "catalog-1",
+            "materials": [],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_knowledge_ingestion_rejects_current_directory_storage_uri(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("COURSE_CATALOG_STORAGE_ROOT", str(tmp_path / "course_catalogs"))
+
+    response = _client().post(
+        "/agent/v1/knowledge/ingestions",
+        json={
+            "catalog_id": "catalog-1",
+            "materials": [{"storage_uri": "."}],
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == 400
+    assert "storage_uri" in payload["message"]
+
+
+def test_knowledge_ingestion_rejects_storage_root_name_storage_uri(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("COURSE_CATALOG_STORAGE_ROOT", str(tmp_path / "course_catalogs"))
+
+    response = _client().post(
+        "/agent/v1/knowledge/ingestions",
+        json={
+            "catalog_id": "catalog-1",
+            "materials": [{"storage_uri": "course_catalogs"}],
+        },
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == 400
+    assert "storage_uri" in payload["message"]
+
+
 def test_knowledge_ingestion_calls_ingest_with_catalog_id(tmp_path: Path, monkeypatch) -> None:
     from agent_service.api.v1 import knowledge as knowledge_api
     from agent_service.tools.ingest_knowledge import KnowledgeIngestionResult

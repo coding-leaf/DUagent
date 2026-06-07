@@ -10,8 +10,12 @@ class KnowledgeIngestionMaterial(BaseModel):
 
 
 class KnowledgeIngestionRequest(BaseModel):
-    catalog_id: str = Field(..., description="Backend CourseCatalog ID，写入 Qdrant payload.course_id")
-    materials: list[KnowledgeIngestionMaterial] = Field(..., description="待入库课程资料列表")
+    catalog_id: str = Field(
+        ..., min_length=1, description="Backend CourseCatalog ID，写入 Qdrant payload.course_id"
+    )
+    materials: list[KnowledgeIngestionMaterial] = Field(
+        ..., min_length=1, description="待入库课程资料列表"
+    )
 
 
 class KnowledgeIngestionMaterialResult(BaseModel):

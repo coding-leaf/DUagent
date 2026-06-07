@@ -96,11 +96,15 @@ def _resolve_material_path(storage_uri: str, storage_root: Path) -> Path:
     parts = relative_uri.parts
     if parts and parts[0] == storage_root.name:
         parts = parts[1:]
+    if not parts:
+        raise ValueError("storage_uri must point to a material within course catalog storage root")
     resolved_path = storage_root.joinpath(*parts).resolve()
     try:
         resolved_path.relative_to(storage_root)
     except ValueError as exc:
         raise ValueError("storage_uri must stay within course catalog storage root") from exc
+    if resolved_path == storage_root:
+        raise ValueError("storage_uri must point to a material within course catalog storage root")
     return resolved_path
 
 
@@ -109,6 +113,8 @@ def _validate_relative_storage_uri(storage_uri: str) -> PurePosixPath:
     if not stripped_uri:
         raise ValueError("storage_uri must not be empty")
     path = PurePosixPath(stripped_uri)
+    if path == PurePosixPath("."):
+        raise ValueError("storage_uri must point to a material within course catalog storage root")
     if path.is_absolute() or ".." in path.parts:
         raise ValueError("storage_uri must be a safe relative path")
     return path

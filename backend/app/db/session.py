@@ -29,6 +29,7 @@ async def init_db():
 
 import app.models.user  # noqa: E402
 import app.models.course  # noqa: E402
+import app.models.catalog  # noqa: E402
 import app.models.quiz  # noqa: E402
 import app.models.conversation  # noqa: E402
 import app.models.others  # noqa: E402

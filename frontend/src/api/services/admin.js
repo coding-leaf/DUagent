@@ -24,5 +24,13 @@ export const adminService = {
   // 拉取系统基础日志
   getSystemLogs: async (params) => {
     return apiClient.get('/admin/logs/operations', { params });
-  }
+  },
+
+  getCourseCatalogs: async (params) => apiClient.get('/admin/course-catalogs', { params }),
+
+  createCourseCatalog: async (data) => apiClient.post('/admin/course-catalogs', data),
+
+  getCourseCatalogStatus: async (catalogId) => apiClient.get(`/admin/course-catalogs/${catalogId}/knowledge-status`),
+
+  createCourseCatalogMaterial: async (catalogId, data) => apiClient.post(`/admin/course-catalogs/${catalogId}/materials`, data)
 };

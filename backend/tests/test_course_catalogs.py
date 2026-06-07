@@ -1,6 +1,11 @@
 import os
 import sys
 
+os.environ["DATABASE_URL"] = os.environ.get(
+    "TEST_DATABASE_URL",
+    "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent_test?charset=utf8mb4",
+)
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
@@ -278,11 +283,23 @@ async def _api_test_teacher_class_binding_ready_catalog():
             assert class_data["catalog_title"] == "线性代数"
             assert class_data["course_code"]
 
+            legacy_created = await client.post("/api/v1/courses", json={
+                "name": "2026 春 线代 Legacy 班",
+                "description": "旧课程兼容",
+            }, headers=teacher_headers)
+            assert legacy_created.status_code == 201, legacy_created.text
+            legacy_data = legacy_created.json()["data"]
+            assert legacy_data["catalog_id"] == ""
+            assert legacy_data["catalog_title"] == ""
+
             listing = await client.get("/api/v1/courses", headers=teacher_headers)
             assert listing.status_code == 200, listing.text
             listed = [c for c in listing.json()["data"]["courses"] if c["id"] == class_data["id"]][0]
             assert listed["catalog_id"] == catalog_id
             assert listed["catalog_title"] == "线性代数"
+            legacy_listed = [c for c in listing.json()["data"]["courses"] if c["id"] == legacy_data["id"]][0]
+            assert legacy_listed["catalog_id"] == ""
+            assert legacy_listed["catalog_title"] == ""
     finally:
         await engine.dispose()
 

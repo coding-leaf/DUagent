@@ -106,7 +106,19 @@ async def admin_create_catalog_material(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await _get_admin_catalog_or_404(db, catalog_id)
-    if catalog.status == "ingesting":
+    update_result = await db.execute(
+        update(CourseCatalog)
+        .where(
+            CourseCatalog.id == catalog.id,
+            CourseCatalog.status != "ingesting",
+        )
+        .values(
+            material_count=CourseCatalog.material_count + 1,
+            status="draft",
+            knowledge_status="draft",
+        )
+    )
+    if update_result.rowcount == 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
@@ -119,15 +131,6 @@ async def admin_create_catalog_material(
         status="uploaded",
     )
     db.add(material)
-    await db.execute(
-        update(CourseCatalog)
-        .where(CourseCatalog.id == catalog.id)
-        .values(
-            material_count=CourseCatalog.material_count + 1,
-            status="draft",
-            knowledge_status="draft",
-        )
-    )
     await db.flush()
     await db.refresh(material)
     return {

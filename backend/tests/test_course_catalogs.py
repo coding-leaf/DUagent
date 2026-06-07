@@ -225,6 +225,13 @@ async def _api_test_catalog_material_and_status():
             )
             assert ingesting_material.status_code == 409, ingesting_material.text
             assert ingesting_material.json()["detail"]["message"] == "课程资源库正在入库中"
+
+            ingesting_materials = await client.get(
+                f"/api/v1/admin/course-catalogs/{ingesting_catalog_id}/materials",
+                headers=admin_headers,
+            )
+            assert ingesting_materials.status_code == 200, ingesting_materials.text
+            assert len(ingesting_materials.json()["data"]["materials"]) == 0
     finally:
         await engine.dispose()
 

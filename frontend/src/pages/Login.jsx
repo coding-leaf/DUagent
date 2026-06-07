@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/error';
 import { authService } from '../api/services/auth';
 import { useAuth } from '../context/AuthContext';
 
@@ -67,11 +68,7 @@ export default function Login() {
       }
     } catch (err) {
       fetchCaptcha();
-      if (err.response && err.response.data) {
-        setError(err.response.data.message || '登录失败');
-      } else {
-        setError('网络错误，请稍后重试');
-      }
+      setError(getApiErrorMessage(err, '登录失败'));
     } finally {
       setLoading(false);
     }

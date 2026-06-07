@@ -116,14 +116,23 @@ POST /api/v1/auth/register
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| registration_code | string | 是 | 硬编码或预置注册码，区分角色（如 "teacher"、"student"） |
+| registration_code | string | 是 | 永久注册码，区分角色（如 "teacher"、"student"） |
 | email | string | 是 | 邮箱地址 |
 | password | string | 是 | 密码（8-32 位，含大小写字母+数字） |
 | username | string | 是 | 用户名（3-20 位） |
+| real_name | string | 否 | 真实姓名，注册成功后写入用户基础资料 |
+| student_id | string | 否 | 学号或工号，注册成功后写入用户基础资料 |
+| major | string | 否 | 专业 |
+| grade | string | 否 | 年级 |
+| guidance_level | string | 否 | 全局引导粒度：L1 / L2 / L3，默认 L2 |
 | captcha_token | string | 是 | 算术验证码标识 |
 | captcha_code | string | 是 | 算术验证码答案 |
 
-**注册码约定：** v1 开发阶段注册码硬编码：`student` 注册学生账号，`teacher` 注册教师账号；`admin` 不开放注册，由系统预置。
+**注册码约定：** v1 开发阶段注册码为永久可复用码：`student` 注册学生账号，`teacher` 注册教师账号；admin 不开放注册，由系统预置。若数据库中存在同名注册码且未删除，使用数据库记录的 `role`；否则 `student` / `teacher` 两个内置码仍可使用。
+
+**审计约定：** 永久注册码不再写 `is_used=true` 或单一 `used_by`。如需记录注册码使用历史，后续应新增注册事件表。
+
+**AI 隐私边界：** `real_name`、`email`、`student_id`、`username` 只能用于账号和业务识别，不得传入 Agent Service。智能辅导后续可使用脱敏学习上下文 `major`、`grade`、`guidance_level`。
 
 **响应 `data`：**
 
@@ -387,7 +396,7 @@ GET /api/v1/teaching/classes/:class_id/students/:student_id/learning
 
 **权限：** 仅该班级的教师
 
-**说明：** 教师只读查看学生在该课程内的学习看板，不触发学生画像、评估或学习路径刷新。该接口用于偷懒聚合学生端课程详情页的核心展示数据。
+**说明：** 教师只读查看学生在该课程内的学习看板，不触发学生画像、评估或学习路径刷新。该接口用于聚合学生端课程详情页的核心展示数据。
 
 **响应 `data`：**
 
@@ -412,8 +421,59 @@ GET /api/v1/teaching/classes/:class_id/students/:student_id/learning
 | quiz_stats.total_attempts | integer | 总练习次数 |
 | quiz_stats.avg_score | number | 平均正确率 0-100 |
 | quiz_stats.avg_time_spent | integer | 平均耗时（秒） |
-| weak_points | array | 薄弱知识点列表 |
-| recent_activity | array | 最近学习活动 |
+| weak_points | array | 薄弱知识点 Top 5，按错误率和错误次数排序 |
+| weak_points[].knowledge_point | string | 知识点名称 |
+| weak_points[].error_count | integer | 错误次数 |
+| weak_points[].total_attempts | integer | 该知识点答题总数 |
+| weak_points[].error_rate | number | 错误率 0-1 |
+| recent_activity | array | 最近 5 次练习活动，按创建时间倒序 |
+| recent_activity[].quiz_id | string | 练习 ID |
+| recent_activity[].chapter | string | 章节 |
+| recent_activity[].score | number | 得分 0-100 |
+| recent_activity[].correct_count | integer | 正确题数 |
+| recent_activity[].total_count | integer | 总题数 |
+| recent_activity[].time_spent | integer | 耗时（秒） |
+| recent_activity[].created_at | string | 完成时间 |
+
+**空态语义：**
+
+- `weak_points: []` 表示当前课程下暂无可聚合的错题知识点，不回退 mock 数据。
+- `recent_activity: []` 表示当前课程下暂无练习记录。
+- `quiz_stats.avg_score`、`quiz_stats.avg_time_spent` 可为 `0`，表示尚无可统计结果或统计值为 0。
+
+### 4.4 查看班级洞察
+
+```
+GET /api/v1/teaching/classes/:class_id/insights
+```
+
+**权限：** 仅该班级的教师
+
+**说明：** 提供 TeacherConsole 班级概览所需的最小统计聚合，不返回旧 mock UI 中未进入契约的覆盖率、排名、重点关注学生等字段。
+
+**响应 `data`：`ClassInsights`**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| avg_quiz_score | number \| null | 班级平均练习分；无练习记录时为 `null` |
+| total_quiz_attempts | integer | 班级练习总次数 |
+| weak_points_top | array | 班级薄弱知识点 Top 5 |
+| weak_points_top[].knowledge_point | string | 知识点名称 |
+| weak_points_top[].error_count | integer | 班级错题数 |
+| weak_points_top[].total_attempts | integer | 班级该知识点答题总次数 |
+| weak_points_top[].error_rate | number | 错误率 0-1 |
+| path_node_progress | object | 班级学习路径节点状态分布 |
+| path_node_progress.completed | integer | 已完成节点数 |
+| path_node_progress.in_progress | integer | 进行中节点数 |
+| path_node_progress.recommended | integer | 推荐节点数 |
+| path_node_progress.pending | integer | 待学习节点数 |
+| path_node_progress.total_nodes | integer | 总节点数 |
+
+**空态语义：**
+
+- `avg_quiz_score: null` 表示班级还没有练习记录，前端显示为空态而不是 0 分。
+- `weak_points_top: []` 表示班级暂无可聚合的薄弱知识点。
+- `path_node_progress.total_nodes = 0` 且其他节点计数全为 `0` 表示班级暂无学习路径数据。
 
 ---
 
@@ -754,6 +814,12 @@ GET /api/v1/learning-path/nodes/:node_id/resources
 
 **说明：** 根据当前路径节点关联的知识点查询资源和练习。若资源不足，返回空数组，不视为错误。
 
+**查询参数：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| course_id | string | 是 | 课程 ID，用于限定资源查询范围和课程权限校验 |
+
 **响应 `data`：**
 
 | 字段 | 类型 | 说明 |
@@ -761,13 +827,15 @@ GET /api/v1/learning-path/nodes/:node_id/resources
 | node_id | string | 节点 ID |
 | node_name | string | 知识点名称 |
 | weak_point_tutorials | array | 薄弱知识点讲解 |
+| weak_point_tutorials[].id | string | 资源 ID，可跳转 `/resource/:id` |
 | weak_point_tutorials[].title | string | 讲解标题 |
-| weak_point_tutorials[].content | string | 讲解内容 |
+| weak_point_tutorials[].content | string | 正文摘要，不承载完整正文；Backend 仅返回前若干字符预览 |
 | exercises | array | 配套习题 |
 | exercises[].id | string | 题目 ID |
 | exercises[].type | string | 题型：single_choice / multi_choice / code / short_answer |
 | exercises[].content | string | 题目内容 |
 | chapter_materials | array | 章节完整资料 |
+| chapter_materials[].id | string | 资源 ID，可跳转 `/resource/:id` |
 | chapter_materials[].title | string | 资料标题 |
 | chapter_materials[].type | string | 类型：document / mindmap / reading / code |
 | chapter_materials[].url | string | 资源链接 |
@@ -775,6 +843,15 @@ GET /api/v1/learning-path/nodes/:node_id/resources
 | full_exercise_set[].id | string | 题目 ID |
 | full_exercise_set[].type | string | 题型 |
 | full_exercise_set[].content | string | 题目内容 |
+
+**页面消费语义：**
+
+- 本接口用于 LearningPath 底部资源面板的轻量挂载信息，不作为资源正文详情接口。
+- 需要展示完整正文时，前端应根据资源 `id` 跳转 `GET /api/v1/resources/:id`。
+
+**空态语义：**
+
+- `weak_point_tutorials: []`、`exercises: []`、`chapter_materials: []`、`full_exercise_set: []` 均表示该节点当前没有可返回内容，不视为错误。
 
 ---
 
@@ -981,7 +1058,41 @@ GET /api/v1/resources?course_id={course_id}&type={type}&page=1&page_size=20
 
 分页字段位于 `data` 内：`total`, `page`, `page_size`
 
-### 10.2 触发资源生成
+### 10.2 获取资源详情
+
+```
+GET /api/v1/resources/:id
+```
+
+**说明：** 资源详情页使用该接口读取单条资源内容。`data` 结构为 `ResourceDetailItem`，即资源列表字段加 `content_preview`。
+
+**路径参数：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 资源 ID |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | 资源 ID |
+| title | string | 资源标题 |
+| type | string | 资源类型：document / mindmap / reading / code / video |
+| description | string | 资源描述 |
+| tags | array | 标签列表 |
+| chapter | string | 所属章节 |
+| knowledge_point | string | 关联知识点 |
+| view_count | integer | 浏览次数 |
+| created_at | string | 创建时间 |
+| content_preview | string \| null | 正文预览；`document` / `reading` 返回文本预览，其余类型返回 `null` |
+
+**空态语义：**
+
+- `content_preview: null` 表示该资源类型不提供文字正文预览，不代表资源不存在。
+- 无权限访问返回 `403`，资源不存在返回 `404`，前端不应以空对象替代。
+
+### 10.3 触发资源生成
 
 ```
 POST /api/v1/resources/generate

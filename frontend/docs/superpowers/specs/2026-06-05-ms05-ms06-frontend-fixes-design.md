@@ -39,7 +39,7 @@
 
 | 端 | 端点 | 状态 |
 |----|------|------|
-| `POST /courses/join` | 学生加入课程（course_code） | OpenAPI 已声明，Backend 已实现。`courseService.joinCourse` 当前传 `{ invite_code }` **需修正为 `{ course_code }`** |
+| `POST /courses/join` | 学生加入课程（course_code） | OpenAPI 已声明，Backend 已实现，`courseService.joinCourse` 已对齐 `{ course_code }`（`1161e43`） |
 | `GET /users/me` | 当前用户信息 | 返回 `id, username, email, real_name, student_id, role, major, grade, guidance_level, created_at`。已在 AuthContext 的 `user` 对象中 |
 
 ---
@@ -94,7 +94,7 @@
 → submitting = false
 ```
 
-**注意：** `refreshCourses` 需从 `CourseContext` 导出。当前 `CourseContext.jsx` 的 `fetchCourses` 仅在 context 内部使用，需确认或新增公开的 `refreshCourses` 方法。
+**注意：** `refreshCourses` 已由 `CourseContext` 公开导出（当前为 `refreshCourses: fetchCourses`），直接使用即可。
 
 ### MS-06：教师顶部身份展示
 

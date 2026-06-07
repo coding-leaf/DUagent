@@ -10,7 +10,7 @@ import Navbar from '../components/Navbar';
 export default function StudentProfile() {
   const navigate = useNavigate();
   const { activeCourseId, courses } = useCourse();
-const { user, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [guidanceSubmitting, setGuidanceSubmitting] = useState(false);
   const [profileError, setProfileError] = useState(null);
@@ -142,6 +142,12 @@ const { user, refreshUser } = useAuth();
 
   // 当前课程名：从 CourseContext 按 activeCourseId 查找
   const currentCourseName = courses.find(c => c.id === activeCourseId)?.name || '未选择';
+  const profileFields = [
+    { label: '学号 / 工号', value: user?.student_id || '未填写' },
+    { label: '专业', value: user?.major || '未填写' },
+    { label: '年级', value: user?.grade || '未填写' },
+    { label: '引导粒度', value: user?.guidance_level || localGuidanceLevel || 'L2' },
+  ];
 
   // 相对时间格式化
   const daysAgoText = (iso, suffix) => {
@@ -212,6 +218,14 @@ const { user, refreshUser } = useAuth();
                 )}
               </div>
               <p className="text-body-md text-secondary">当前进修课程：<span className="text-primary font-bold">{currentCourseName}</span></p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+                {profileFields.map((field) => (
+                  <div key={field.label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">{field.label}</p>
+                    <p className="text-sm text-on-surface font-semibold truncate">{field.value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

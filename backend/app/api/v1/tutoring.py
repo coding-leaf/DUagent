@@ -18,6 +18,15 @@ from app.services.agent_client import AgentServiceError, agent_client
 router = APIRouter(prefix="/api/v1/tutoring", tags=["tutoring"])
 
 
+def _build_learner_context(user: User) -> dict:
+    """生成可进入 AI 上下文的脱敏学习资料，不包含身份识别字段。"""
+    return {
+        "major": user.major,
+        "grade": user.grade,
+        "guidance_level": user.guidance_level,
+    }
+
+
 async def _assemble_tutoring_payload(
     user_id: str, scope: str, course_id: str | None,
     conversation_id: str, message: str, db: AsyncSession,

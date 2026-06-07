@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 import { useCourse } from '../context/CourseContext';
@@ -16,21 +16,37 @@ export default function TeacherStudentReport() {
   const { user } = useAuth();
   const courseName = courses.find(c => c.id === classId)?.name || '学生报告';
 
-  const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(!!classId && !!studentId);
+  const [reportPayload, setReportPayload] = useState(null);
+  const requestSeq = useRef(0);
+  const activePayload = reportPayload?.classId === classId && reportPayload?.studentId === studentId ? reportPayload : null;
+  const report = activePayload?.data || null;
 
   useEffect(() => {
+    const seq = requestSeq.current + 1;
+    requestSeq.current = seq;
+
     if (!classId || !studentId) {
       return;
     }
+
     teachingService.getStudentReport(classId, studentId).then(res => {
-      if (res.code === 200) {
-        setReport(res.data);
+      if (requestSeq.current !== seq) {
+        return;
       }
-    }).catch(console.error).finally(() => setLoading(false));
+      if (res.code === 200) {
+        setReportPayload({ classId, studentId, data: res.data, error: false });
+      } else {
+        setReportPayload({ classId, studentId, data: null, error: true });
+      }
+    }).catch(error => {
+      if (requestSeq.current === seq) {
+        console.error(error);
+        setReportPayload({ classId, studentId, data: null, error: true });
+      }
+    });
   }, [classId, studentId]);
 
-  if (loading) {
+  if (!activePayload && classId && studentId) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <FeedbackStatus status="loading" title="加载报告数据..." />
@@ -46,7 +62,7 @@ export default function TeacherStudentReport() {
     );
   }
 
-  if (!report) {
+  if (!report || activePayload?.error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <FeedbackStatus status="error" title="未找到报告数据" description="请检查课程和学生信息是否正确" />
@@ -116,8 +132,8 @@ export default function TeacherStudentReport() {
               <p className="text-sm text-secondary">学号: {report.student?.student_id || '未知'} · 班级ID: {classId}</p>
             </div>
             <div className="bg-primary/5 border border-primary/20 rounded-xl px-6 py-4 flex flex-col items-center">
-              <span className="text-3xl font-black text-primary">{report.evaluation_summary?.overall_score || 0}</span>
-              <span className="text-[10px] text-secondary font-bold uppercase tracking-wider">综合评分</span>
+              <span className="text-2xl font-black text-primary">待定</span>
+              <span className="text-[10px] text-secondary font-bold uppercase tracking-wider">评分口径待定</span>
             </div>
           </div>
 

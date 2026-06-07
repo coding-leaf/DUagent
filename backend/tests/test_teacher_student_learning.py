@@ -27,6 +27,7 @@ from httpx import AsyncClient, ASGITransport
 asyncio.run(init_db())
 
 from app.main import app
+from app.models.others import UserProfile
 from app.models.user import RegistrationCode
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 
@@ -229,6 +230,27 @@ async def test():
         st2_data = r.json()["data"]
         st2_wp = st2_data.get("weak_points", [])
         chk("all-correct -> weak_points empty", st2_wp == [])
+
+        # ===== 4a. profile_summary keeps modal_preference when knowledge_coordinates empty =====
+        print("\n-- 4a. profile_summary with empty knowledge_coordinates --")
+        async with async_session_factory() as db:
+            db.add(UserProfile(
+                user_id=stu2_id,
+                course_id=course_id,
+                modal_preference={"text_analysis": 80, "code_practice": 60},
+                knowledge_coordinates=[],
+            ))
+            await db.commit()
+
+        r = await client.get(
+            f"/api/v1/teaching/classes/{course_id}/students/{stu2_id}/learning",
+            headers=tea1_headers)
+        chk("empty knowledge_coordinates profile -> 200", r.status_code == 200)
+        profile_summary = r.json()["data"].get("profile_summary")
+        chk("profile_summary present when knowledge_coordinates empty", profile_summary is not None)
+        if profile_summary is not None:
+            chk("modal_preference preserved", profile_summary.get("modal_preference") == ["text_analysis", "code_practice"])
+            chk("knowledge_coordinates empty list", profile_summary.get("knowledge_coordinates") == [])
 
         # ===== 4b. non-enrolled student -> 404 =====
         print("\n-- 4b. non-enrolled student -> 404 --")

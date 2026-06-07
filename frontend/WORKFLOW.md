@@ -195,6 +195,17 @@
   - `../docs/10-client-api/API_前端接口规范.md` 已补齐 `/resources/{id}`、`/learning-path/nodes/{node_id}/resources`、`/teaching/classes/{class_id}/students/{student_id}/learning`、`/teaching/classes/{class_id}/insights` 的联调说明与空态语义。
   - 本轮未修改运行时代码、OpenAPI JSON 或后端实现；当前无新的 OpenAPI / 契约漂移。
   - 已运行 `git diff --check` 完成基础文档一致性检查。
+- 2026-06-07：注册登录契约扩展与隐私边界收口完成：
+  - Client API：`POST /auth/register` 请求体新增可选 `real_name`、`student_id`、`major`、`grade`、`guidance_level`；`guidance_level` 限定 `L1/L2/L3`，默认 `L2`。
+  - Backend：注册成功写入用户基础资料；注册码改为永久可复用码，`student` / `teacher` 为内置永久码；非法 `guidance_level` 返回 400。
+  - Frontend：注册页不再提交 `gender`，提交 `real_name/student_id/major/grade/guidance_level`；登录/注册错误提示兼容 `message`、`detail.message`、`detail`。
+  - AI 隐私边界：Backend 增加脱敏 `learner_context` helper，仅包含 `major`、`grade`、`guidance_level`；当前不写入实际 Agent `/tutoring/chat` payload，避免 Agent API 契约漂移；测试确认 payload 不含 `real_name/email/student_id/username`。
+  - 验证：`pytest tests/test_auth_register_contract.py tests/test_tutoring_privacy.py -q` 通过 3/3（因当前工具沙箱内 `aiosqlite.connect()` 会挂住，使用已授权非沙箱 pytest 运行）；后续注册码永久化后 `pytest tests/test_auth_register_contract.py -q` 通过 3/3；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；`python -m json.tool ../docs/10-client-api/Client-API.openapi.json` 通过；本轮文件 `git diff --check` 通过。
+  - 契约状态：Client API 已同步更新，无 Client API 漂移；Agent API 未修改，实际 Agent 请求体未新增字段，无 Agent API 漂移。
+- 2026-06-07：StudentProfile 基础资料展示补齐：
+  - 学生个人画像页个人信息卡新增展示 `student_id`、`major`、`grade`、`guidance_level`，数据来自 `/users/me` 的全局用户资料。
+  - 不新增接口、不修改 OpenAPI；资源库 Dashboard 保持资源页职责，不承载完整个人资料。
+  - `npm run lint` / `npm run build` 通过，仍有既有 Vite chunk size warning；本轮文件 `git diff --check` 通过。
 
 ## 本地联调注意事项
 
@@ -220,11 +231,17 @@
   - 交互增强：L1-L3 全局引导粒度可点击切换（乐观更新 + `PUT /users/me`，数据源为 `user.guidance_level` 非课程画像）
   - 2 文件改动：`StudentProfile.jsx`（主体）+ `auth.js`（`updateMyInfo`）
   - 所有 lint / build 通过。Backend/OpenAPI 零改动。
-- 第二轮 P1 剩余：TeacherStudentReport 深度诊断字段扩展、AdminConsole 契约对齐补完、资源生成异步任务链路接入。
+- TeacherStudentReport 深度诊断字段扩展收口（2026-06-07）：
+  - `StudentLearning` 已补 `summary_text`、`knowledge_coordinates`、`mastery_breakdown` 三个真实字段；`useMock` 布局分叉已删除。
+  - 本轮补齐报告切换状态重置与过期响应丢弃，避免同一路由切换学生/课程时展示旧报告。
+  - `profile_summary` 已按 `UserProfile` 存在返回，`knowledge_coordinates=[]` 时仍保留 `modal_preference`；已补集成回归测试。
+  - `overall_score` 真实计算口径仍待独立契约审查；前端综合评分卡显示“待定”，不再展示后端当前硬编码数值。
+  - OpenAPI 无新增漂移；本轮未新增字段、未改 Agent。
+- 第二轮 P1 剩余：AdminConsole 契约对齐补完、资源生成异步任务链路接入。
 - 第二轮 P2：累计学习时长、阅读进度/阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。
 - 新增契约能力必须先走设计/审查；禁止用前端静态字段补齐未确认业务能力。
 - **AGENTS.md 约束检查（2026-06-06）：** 本轮 StudentProfile 连续改动中，代码修改前审查步骤（问题分析→修改方案→用户确认→动手）和增量开发第 2 步（写/补测试）被跳过。后续每次修改代码前必须先通过审查步骤，禁止直接动手；涉及接口变更时必须补集成/E2E 测试。
-- **下一步建议：** 按 AGENTS.md 增量开发流程推进 P1 剩余项。首选 TeacherStudentReport 深度诊断 — 先做契约审查（useMock 布局分叉，mock 20+ fields vs real ~10 fields），确认哪些字段 Backend 能聚合、哪些需 Agent，走 design spec → plan → 审查确认 → 实施路径。
+- **下一步建议：** 按 AGENTS.md 增量开发流程推进 P1 剩余项。优先在 AdminConsole 契约对齐和资源生成异步任务链路中二选一；`overall_score` 真实计算口径单独作为后续契约审查项。

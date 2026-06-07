@@ -16,6 +16,11 @@ from app.schemas.auth import LoginRequest, RegisterRequest
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
+PERMANENT_REGISTRATION_CODES = {
+    "student": "student",
+    "teacher": "teacher",
+}
+
 
 @router.get("/captcha")
 async def get_captcha():
@@ -31,6 +36,12 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
             detail={"code": 40001, "message": "密码需包含大小写字母和数字，8-32位", "data": None},
         )
 
+    if req.guidance_level not in ("L1", "L2", "L3"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40001, "message": "引导粒度必须为 L1/L2/L3", "data": None},
+        )
+
     if not verify_captcha(req.captcha_token, req.captcha_code):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -40,12 +51,12 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(RegistrationCode).where(
             RegistrationCode.code == req.registration_code,
-            RegistrationCode.is_used == False,
             RegistrationCode.is_deleted == False,
         )
     )
     reg_code = result.scalar_one_or_none()
-    if reg_code is None:
+    role = reg_code.role if reg_code else PERMANENT_REGISTRATION_CODES.get(req.registration_code)
+    if role is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": 40001, "message": "注册码无效", "data": None},
@@ -73,10 +84,13 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         username=req.username,
         email=req.email,
         password_hash=hash_password(req.password),
-        role=reg_code.role,
+        real_name=req.real_name,
+        student_id=req.student_id,
+        role=role,
+        major=req.major,
+        grade=req.grade,
+        guidance_level=req.guidance_level,
     )
-    reg_code.is_used = True
-    reg_code.used_by = user.id
     db.add(user)
     await db.flush()
     await db.refresh(user)

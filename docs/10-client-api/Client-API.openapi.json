@@ -58,7 +58,7 @@
           "Auth"
         ],
         "summary": "注册",
-        "description": "使用硬编码注册码+邮箱+密码+用户名+算术验证码注册。注册码区分角色：student 注册学生账号，teacher 注册教师账号；admin 不开放注册，由系统预置。",
+        "description": "使用永久注册码+邮箱+密码+用户名+算术验证码注册。注册码区分角色：student 注册学生账号，teacher 注册教师账号；admin 不开放注册，由系统预置。student / teacher 为内置永久码，可重复使用。",
         "security": [],
         "requestBody": {
           "required": true,
@@ -3478,7 +3478,7 @@
         "properties": {
           "registration_code": {
             "type": "string",
-            "description": "硬编码注册码：student 注册学生账号，teacher 注册教师账号"
+            "description": "永久注册码：student 注册学生账号，teacher 注册教师账号；student / teacher 为内置永久码，可重复使用"
           },
           "email": {
             "type": "string",
@@ -3496,6 +3496,32 @@
             "minLength": 3,
             "maxLength": 20,
             "description": "用户名"
+          },
+          "real_name": {
+            "type": "string",
+            "description": "真实姓名，注册成功后写入用户基础资料；不得传入 Agent Service"
+          },
+          "student_id": {
+            "type": "string",
+            "description": "学号或工号，注册成功后写入用户基础资料；不得传入 Agent Service"
+          },
+          "major": {
+            "type": "string",
+            "description": "专业，可作为脱敏学习上下文"
+          },
+          "grade": {
+            "type": "string",
+            "description": "年级，可作为脱敏学习上下文"
+          },
+          "guidance_level": {
+            "type": "string",
+            "enum": [
+              "L1",
+              "L2",
+              "L3"
+            ],
+            "default": "L2",
+            "description": "全局引导粒度，可作为脱敏学习上下文"
           },
           "captcha_token": {
             "type": "string",

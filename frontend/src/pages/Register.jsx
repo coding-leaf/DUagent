@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/error';
 import { authService } from '../api/services/auth';
 
 export default function Register() {
@@ -7,8 +8,10 @@ export default function Register() {
   const [formData, setFormData] = useState({
     username: '',
     fullName: '',
-    gender: '男',
+    studentId: '',
+    major: '',
     grade: '大一 (Freshman)',
+    guidanceLevel: 'L2',
     email: '',
     captchaCode: '',
     password: '',
@@ -48,6 +51,14 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.username.trim().length < 3) {
+        setError('用户名至少 3 个字符');
+        return;
+    }
+    if (formData.username.trim().length > 20) {
+        setError('用户名最多 20 个字符');
+        return;
+    }
     if (formData.password !== formData.confirmPassword) {
         setError('两次输入的密码不一致，请重新输入');
         return;
@@ -62,6 +73,11 @@ export default function Register() {
         email: formData.email,
         password: formData.password,
         username: formData.username,
+        real_name: formData.fullName,
+        student_id: formData.studentId,
+        major: formData.major,
+        grade: formData.grade,
+        guidance_level: formData.guidanceLevel,
         captcha_token: captchaToken,
         captcha_code: formData.captchaCode
       });
@@ -74,11 +90,7 @@ export default function Register() {
       }
     } catch (err) {
       fetchCaptcha();
-      if (err.response && err.response.data) {
-        setError(err.response.data.message || '注册失败');
-      } else {
-        setError('网络错误，请稍后重试');
-      }
+      setError(getApiErrorMessage(err, '注册失败'));
     } finally {
       setLoading(false);
     }
@@ -193,7 +205,8 @@ export default function Register() {
                     name="username"
                     value={formData.username}
                     onChange={handleChange}
-                    required
+                    minLength={3}
+                    maxLength={20}
                   />
                 </div>
 
@@ -210,20 +223,32 @@ export default function Register() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-md">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
                   <div className="space-y-xs">
-                    <label className="text-label-sm text-secondary block font-medium text-xs">性别</label>
-                    <select
+                    <label className="text-label-sm text-secondary block font-medium text-xs">学号 / 工号</label>
+                    <input
                       className="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
-                      name="gender"
-                      value={formData.gender}
+                      placeholder="输入学号或工号"
+                      type="text"
+                      name="studentId"
+                      value={formData.studentId}
                       onChange={handleChange}
-                    >
-                      <option>男</option>
-                      <option>女</option>
-                      <option>其他</option>
-                    </select>
+                    />
                   </div>
+                  <div className="space-y-xs">
+                    <label className="text-label-sm text-secondary block font-medium text-xs">专业</label>
+                    <input
+                      className="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
+                      placeholder="例如：计算机科学"
+                      type="text"
+                      name="major"
+                      value={formData.major}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
                   <div className="space-y-xs">
                     <label className="text-label-sm text-secondary block font-medium text-xs">年级</label>
                     <select
@@ -236,6 +261,19 @@ export default function Register() {
                       <option>大二 (Sophomore)</option>
                       <option>大三 (Junior)</option>
                       <option>大四 (Senior)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-xs">
+                    <label className="text-label-sm text-secondary block font-medium text-xs">引导粒度</label>
+                    <select
+                      className="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
+                      name="guidanceLevel"
+                      value={formData.guidanceLevel}
+                      onChange={handleChange}
+                    >
+                      <option value="L1">L1</option>
+                      <option value="L2">L2</option>
+                      <option value="L3">L3</option>
                     </select>
                   </div>
                 </div>
@@ -323,7 +361,7 @@ export default function Register() {
                   type="submit"
                   disabled={loading}
                 >
-                  <span>{loading ? '注册中...' : '完成注册并登录'}</span>
+                  <span>{loading ? '注册中...' : '完成注册'}</span>
                   {!loading && <span className="material-symbols-outlined">how_to_reg</span>}
                   {loading && <span className="material-symbols-outlined animate-spin">refresh</span>}
                 </button>

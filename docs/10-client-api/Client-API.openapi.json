@@ -1496,7 +1496,7 @@
           "Quiz"
         ],
         "summary": "生成个性化题目",
-        "description": "学生在练习页触发个性化生题。Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 quiz_questions。",
+        "description": "学生在练习页触发个性化生题。Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 quiz_questions。Backend 会根据教学班 course_id 解析绑定的 CourseCatalog，并要求课程资源库知识库可用：status=ready 且 knowledge_status=ready，或 status=ready、knowledge_status=partial 且 chunk_count>0。请求通过校验后，Backend 保持任务 course_id 为教学班 ID，并将 CourseCatalog.id 作为 Agent 知识检索 course_id。若资源库未绑定、资料未完成入库或知识库为空，请求在创建任务前失败。",
         "requestBody": {
           "required": true,
           "content": {
@@ -1525,6 +1525,60 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/TaskResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "课程未绑定可用资源库",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessHTTPErrorResponse"
+                },
+                "examples": {
+                  "course_catalog_missing": {
+                    "summary": "课程未绑定可用资源库",
+                    "value": {
+                      "detail": {
+                        "code": "course_catalog_missing",
+                        "message": "课程未绑定可用资源库",
+                        "data": null
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "课程资源库未就绪或知识库为空",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessHTTPErrorResponse"
+                },
+                "examples": {
+                  "course_material_missing": {
+                    "summary": "课程资料尚未完成入库",
+                    "value": {
+                      "detail": {
+                        "code": "course_material_missing",
+                        "message": "课程资料尚未完成入库",
+                        "data": null
+                      }
+                    }
+                  },
+                  "knowledge_base_empty": {
+                    "summary": "课程知识库为空",
+                    "value": {
+                      "detail": {
+                        "code": "knowledge_base_empty",
+                        "message": "课程知识库为空",
+                        "data": null
+                      }
                     }
                   }
                 }
@@ -1855,7 +1909,7 @@
           "Resources"
         ],
         "summary": "触发资源生成",
-        "description": "仅教师，异步生成课程级学习资料，Agent 完成后通过 Webhook 回调。该接口不生成个性化题目；个性化题目走 /quiz/generate。课程知识库由开发者在开发阶段自行上传并完成向量化，不通过前端接口上传课程原始资料。",
+        "description": "仅教师，异步生成课程级学习资料，Agent 完成后通过 Webhook 回调。该接口不生成个性化题目；个性化题目走 /quiz/generate。Backend 会根据教学班 course_id 解析绑定的 CourseCatalog，并要求课程资源库知识库可用：status=ready 且 knowledge_status=ready，或 status=ready、knowledge_status=partial 且 chunk_count>0。请求通过校验后，Backend 保持任务 course_id 为教学班 ID，并将 CourseCatalog.id 作为 Agent 知识检索 course_id。若资源库未绑定、资料未完成入库或知识库为空，请求在创建任务前失败。",
         "requestBody": {
           "required": true,
           "content": {
@@ -1908,6 +1962,60 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/TaskResponse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "课程未绑定可用资源库",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessHTTPErrorResponse"
+                },
+                "examples": {
+                  "course_catalog_missing": {
+                    "summary": "课程未绑定可用资源库",
+                    "value": {
+                      "detail": {
+                        "code": "course_catalog_missing",
+                        "message": "课程未绑定可用资源库",
+                        "data": null
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "课程资源库未就绪或知识库为空",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessHTTPErrorResponse"
+                },
+                "examples": {
+                  "course_material_missing": {
+                    "summary": "课程资料尚未完成入库",
+                    "value": {
+                      "detail": {
+                        "code": "course_material_missing",
+                        "message": "课程资料尚未完成入库",
+                        "data": null
+                      }
+                    }
+                  },
+                  "knowledge_base_empty": {
+                    "summary": "课程知识库为空",
+                    "value": {
+                      "detail": {
+                        "code": "knowledge_base_empty",
+                        "message": "课程知识库为空",
+                        "data": null
+                      }
                     }
                   }
                 }
@@ -4753,6 +4861,30 @@
               "last_error": {
                 "type": "string",
                 "nullable": true
+              }
+            }
+          }
+        }
+      },
+      "BusinessHTTPErrorResponse": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "业务错误码"
+              },
+              "message": {
+                "type": "string",
+                "description": "错误信息"
+              },
+              "data": {
+                "type": "object",
+                "nullable": true,
+                "description": "固定为 null",
+                "example": null
               }
             }
           }

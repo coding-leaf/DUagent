@@ -13,12 +13,6 @@ export const learningService = {
   refreshEvaluation() {
     return apiClient.post('/evaluation/refresh');
   },
-  triggerResourceGeneration(params) {
-    return apiClient.post('/resources/generate', params);
-  },
-  getTaskStatus(taskId) {
-    return apiClient.get(`/tasks/${taskId}`);
-  },
   getResourceDetail(id) {
     return apiClient.get(`/resources/${id}`);
   },

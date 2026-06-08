@@ -910,6 +910,24 @@ POST /api/v1/quiz/generate
 
 **说明：** 学生在练习页触发个性化生题。Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 `quiz_questions`。
 
+**CourseCatalog ready gate：**
+
+Backend 会先根据教学班 `course_id` 解析绑定的 `CourseOffering.catalog_id`，再检查对应 `CourseCatalog`：
+
+- `status=ready` 且 `knowledge_status=ready`，允许生成；
+- `status=ready` 且 `knowledge_status=partial` 且 `chunk_count>0`，允许降级生成；
+- `knowledge_status=dirty/draft/failed/ingesting`，拒绝生成；
+- `chunk_count<=0`，拒绝生成。
+
+拒绝发生在创建异步任务前，因此不会返回 `task_id`。
+
+错误：
+
+- `404 course_catalog_missing`：课程未绑定可用资源库；
+- `409 course_material_missing`：课程资料尚未完成入库；
+- `409 knowledge_base_empty`：课程知识库为空。
+
+
 **请求体 `application/json`：**
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -1119,7 +1137,23 @@ POST /api/v1/resources/generate
 
 **说明：** 资源生成为长时间异步任务，Agent 完成后通过 Webhook 回调。该接口由教师触发，用于生成课程级学习资料，不生成个性化题目；个性化题目走 `/api/v1/quiz/generate`。
 
-**资料来源：** 课程知识库由开发者在开发阶段自行上传并完成向量化，不通过前端接口上传课程原始资料。
+**CourseCatalog ready gate：**
+
+Backend 会先根据教学班 `course_id` 解析绑定的 `CourseOffering.catalog_id`，再检查对应 `CourseCatalog`：
+
+- `status=ready` 且 `knowledge_status=ready`，允许生成；
+- `status=ready` 且 `knowledge_status=partial` 且 `chunk_count>0`，允许降级生成；
+- `knowledge_status=dirty/draft/failed/ingesting`，拒绝生成；
+- `chunk_count<=0`，拒绝生成。
+
+拒绝发生在创建异步任务前，因此不会返回 `task_id`。
+
+错误：
+
+- `404 course_catalog_missing`：课程未绑定可用资源库；
+- `409 course_material_missing`：课程资料尚未完成入库；
+- `409 knowledge_base_empty`：课程知识库为空。
+
 
 ---
 

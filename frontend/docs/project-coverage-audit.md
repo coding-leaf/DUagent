@@ -28,6 +28,30 @@
 - Client API：`../docs/10-client-api/Client-API.openapi.json`
 - Agent API：`../docs/20-agent-api/Agent-Service.openapi.json`
 
+## 实际功能链路核查
+
+本节记录当前已经开发出来、可以从用户操作路径理解的能力。它优先于单纯文件清单。
+
+### Admin 课程资源库导入与向量化
+
+当前已经实现“管理员界面导入资料并向量化到课程知识库”的链路：
+
+1. Admin 在 `AdminConsole.jsx` 打开课程资源库详情抽屉 `CourseCatalogDrawer.jsx`。
+2. 抽屉通过 `adminService.getCourseCatalogMaterials()` 和 `adminService.getCourseCatalogStatus()` 展示资料列表、资料数、知识切片数、待入库资料数、失败资料数、资源库状态和知识库状态。
+3. Admin 可选择本地 `txt`、`md`、`pdf` 文件上传；前端调用 `POST /admin/course-catalogs/{catalog_id}/materials/upload`。
+4. Backend `catalogs.py` 将文件保存到 `COURSE_CATALOG_STORAGE_ROOT` 下，创建 `CourseCatalogMaterial`，状态为 `uploaded`。
+5. Admin 点击“开始入库”；前端调用 `POST /admin/course-catalogs/{catalog_id}/ingestions`。
+6. Backend 创建 `course_catalog_ingestion` 类型 `AsyncTask`，把待入库资料状态改为 `ingesting`，后台调用 Agent Service `/agent/v1/knowledge/ingestions`。
+7. Agent Service 校验 `catalog_id` 和安全相对 `storage_uri`，读取 `txt/md/pdf`，切片后调用 embedding provider，再通过 `QdrantCourseKnowledgeStore.upsert_chunks()` 写入课程知识库 collection。
+8. Backend 根据 Agent 返回结果回写每份资料的 `status`、`chunk_count`、`ingested_at`、`last_error`，同时回写 CourseCatalog 的 `status`、`knowledge_status`、`chunk_count`、`last_ingestion_task_id`、`last_ingestion_status`、`last_error`。
+9. 前端通过 `taskService.getTaskStatus()` 轮询 `/tasks/{task_id}`；任务完成后刷新资料列表和知识库状态，界面可看到 `chunk_count` 和 ready/partial/failed 状态。
+
+本链路的边界：
+
+- 自动化测试已覆盖 UI 轮询、Backend 上传/入库状态回写、Agent ingestion API、embedding/upsert 调用逻辑。
+- 部署级 live smoke 仍建议执行，用于确认本机或服务器上的真实 Backend、Agent Service、Qdrant、文件存储路径和 embedding provider 配置同时可用。
+- “仍建议 live smoke”不是指功能未实现，而是部署环境验收。
+
 ## 能力覆盖矩阵
 
 | 能力域 | Frontend 入口 | Client API | Backend 证据 | Agent 证据 | 数据模型 | 测试证据 | 状态 | 缺口 / 风险 |
@@ -35,8 +59,8 @@
 | Auth 登录注册验证码 | `Login.jsx`、`Register.jsx`、`AuthContext.jsx`、`authService` | `/auth/captcha`、`/auth/login`、`/auth/register`、`/users/me`、`PUT /users/me` | `auth.py`、`users.py` | 无直接 Agent 依赖 | `user.py` | `test_auth_register_contract.py`、`test_api.py`、E2E 主链路 | 已闭环 | `PUT /users/me` 已有前端入口，后续扩展用户字段必须同步 OpenAPI。 |
 | 课程列表 / 加入课程 / 教师创建教学班 | `Dashboard.jsx`、`TeacherConsole.jsx`、`JoinCourseDialog.jsx`、`CreateCourseDialog.jsx`、`CourseContext.jsx`、`courseService`、`teachingService.getClasses` | `/courses`、`/courses/join`、`/course-catalogs` | `courses.py`、`catalogs.py` | 无直接 Agent 依赖 | `course.py`、`catalog.py` | `test_course_catalogs.py`、E2E 主链路 | 已闭环 | 教师创建教学班依赖 ready CourseCatalog；旧 legacy course 仍保留兼容但不适合新生成链路。 |
 | CourseCatalog 管理 | `AdminConsole.jsx`、`CourseCatalogDrawer.jsx`、`adminService` | `/admin/course-catalogs`、`/admin/course-catalogs/{catalog_id}` | `catalogs.py` | 无直接 Agent 依赖 | `catalog.py` | `test_course_catalogs.py`、Admin 入库 UI E2E | 已闭环 | Admin UI 已接 catalog 管理；非 Admin 仅通过 `/course-catalogs` 选择 ready 资源库。 |
-| CourseCatalog 资料上传 / 登记 | `CourseCatalogDrawer.jsx`、`adminService.uploadCourseCatalogMaterial`、`adminService.createCourseCatalogMaterial` | `/admin/course-catalogs/{catalog_id}/materials/upload`、`/admin/course-catalogs/{catalog_id}/materials`、`GET /materials` | `catalogs.py` | 无直接 Agent 依赖 | `CourseCatalogMaterial` | `test_course_catalog_ingestion.py`、Admin 入库 UI E2E | 已闭环 | 文件存储和上传内容质量需要真实环境继续验收；不要提交上传文件或存储产物。 |
-| CourseCatalog ingestion | `CourseCatalogDrawer.jsx`、`taskService.getTaskStatus` | `/admin/course-catalogs/{catalog_id}/ingestions`、`/admin/course-catalogs/{catalog_id}/knowledge-status`、`/tasks/{task_id}` | `catalogs.py`、`tasks.py`、`agent_client.py` | `api/v1/knowledge.py`、`memory/course_knowledge_ingestion.py`、`memory/course_knowledge_store.py` | `catalog.py`、`others.AsyncTask` | `test_course_catalog_ingestion.py`、Agent `test_knowledge_ingestion_api.py`、`test_ingest_knowledge.py` | 已闭环 | 真实 Qdrant / storage 环境仍需 smoke；`partial` 状态是可用但降级。 |
+| CourseCatalog 资料上传 / 登记 | `CourseCatalogDrawer.jsx`、`adminService.uploadCourseCatalogMaterial`、`adminService.createCourseCatalogMaterial` | `/admin/course-catalogs/{catalog_id}/materials/upload`、`/admin/course-catalogs/{catalog_id}/materials`、`GET /materials` | `catalogs.py` | 无直接 Agent 依赖 | `CourseCatalogMaterial` | `test_course_catalog_ingestion.py`、Admin 入库 UI E2E | 已闭环 | 管理员界面已支持选择 `txt/md/pdf` 上传；不要提交上传文件或存储产物。 |
+| CourseCatalog ingestion / 向量化 | `CourseCatalogDrawer.jsx`、`taskService.getTaskStatus` | `/admin/course-catalogs/{catalog_id}/ingestions`、`/admin/course-catalogs/{catalog_id}/knowledge-status`、`/tasks/{task_id}` | `catalogs.py`、`tasks.py`、`agent_client.py` | `api/v1/knowledge.py`、`tools/ingest_knowledge.py`、`memory/course_knowledge_ingestion.py`、`memory/course_knowledge_store.py` | `catalog.py`、`others.AsyncTask` | `test_course_catalog_ingestion.py`、Agent `test_knowledge_ingestion_api.py`、`test_ingest_knowledge.py`、`test_course_knowledge_store.py`、Admin 入库 UI E2E | 已闭环 | 功能已实现：上传资料后可触发 Agent 切片、embedding、Qdrant upsert，并回写 `chunk_count/knowledge_status`；部署级 live smoke 仍建议做。 |
 | 资源列表 | `Dashboard.jsx`、`learningService.getResources` | `/resources` | `resources.py` | 无直接 Agent 依赖 | `others.Resource`、`course.py` | `test_resources_async.py`、E2E 主链路 | 已闭环 | 资源质量取决于入库和生成链路；空列表应展示空态。 |
 | 资源详情 / 正文展示 | `ResourceDetail.jsx`、`learningService.getResourceDetail` | `/resources/{id}` | `resources.py` | 无直接 Agent 依赖 | `others.Resource` | `test_resource_detail.py` | 已闭环 | Mermaid mindmap 渲染为前端展示能力；资源内容本身质量不由前端保证。 |
 | 资源生成 | 当前无正式前端入口；曾有 orphan service 已删除 | `/resources/generate` | `resources.py`、`course_catalog_gate.py`、`agent_client.py` | `api/v1/resources.py`、`agents/resources_workflow.py`、`agents/resources.py` | `others.AsyncTask`、`others.Resource`、`catalog.py` | `test_resources_async.py`、`test_course_catalog_ready_gate.py`、Agent `test_resources_workflow.py` | 部分闭环 | Backend ready gate 已完成；还需真实 Backend + Agent webhook 联调，确认 catalog id 检索和资源落库。 |
@@ -98,7 +122,7 @@ Backend 当前测试证据：
 
 - Auth：`test_auth_register_contract.py`、`test_api.py`
 - CourseCatalog：`test_course_catalogs.py`
-- Ingestion：`test_course_catalog_ingestion.py`
+- Ingestion：`test_course_catalog_ingestion.py`，本轮验证 22/22 通过
 - Ready gate：`test_course_catalog_ready_gate.py`
 - Resources：`test_resources_async.py`、`test_resource_detail.py`
 - Quiz：`test_quiz_async.py`、`test_agent_integration.py`
@@ -112,7 +136,7 @@ Frontend 当前 E2E：
 
 Agent Service 当前测试证据：
 
-- Knowledge ingestion：`test_knowledge_ingestion_api.py`、`test_ingest_knowledge.py`、`test_course_knowledge_ingestion.py`
+- Knowledge ingestion：`test_knowledge_ingestion_api.py`、`test_ingest_knowledge.py`、`test_course_knowledge_store.py`、`test_course_knowledge_ingestion.py`；本轮 `test_knowledge_ingestion_api.py` 13/13 通过，`test_ingest_knowledge.py test_course_knowledge_store.py` 11/11 通过
 - Resources：`test_resources_workflow.py`、`test_resources_agent.py`、`test_resources_critic.py`
 - Assessment：`test_assessment_agent.py`、`test_assessment_quality.py`、`test_assessment_knowledge_guard.py`
 - Tutoring：`test_tutoring_api.py`、`test_tutoring_retrieval.py`、`test_tutoring_react*.py`
@@ -120,11 +144,18 @@ Agent Service 当前测试证据：
 - Profile / Evaluation：`test_profile_agent.py`、`test_evaluation_agent.py`
 - Readiness / health / schema：`test_readiness.py`、`test_health.py`、`test_schema_contracts.py`、`test_openapi_alignment.py`
 
+本轮额外核查命令：
+
+- `cd ../backend && ../.venv/bin/pytest tests/test_course_catalog_ingestion.py -q`：22/22 通过。
+- `cd ../agent_service && ../.venv/bin/pytest tests/test_knowledge_ingestion_api.py -q`：13/13 通过。
+- `cd ../agent_service && ../.venv/bin/pytest tests/test_ingest_knowledge.py tests/test_course_knowledge_store.py -q`：11/11 通过。
+- `npm run test:e2e -- e2e/specs.spec.js -g "Admin course catalog ingestion polling"`：1/1 通过。
+
 ## 覆盖结论
 
 `docs/project-direction.md` 覆盖了当前项目的主结构和方向，但不能替代本审计表。按当前证据，项目覆盖状态如下：
 
-- 主链路已闭环：Auth、课程、CourseCatalog 管理、资料入库、资源列表/详情、基础 Quiz、AI Chat、教师基础学情、AsyncTask 查询。
+- 主链路已闭环：Auth、课程、CourseCatalog 管理、管理员资料上传、CourseCatalog 资料入库和向量化、资源列表/详情、基础 Quiz、AI Chat、教师基础学情、AsyncTask 查询。
 - 生成链路部分闭环：资源生成和 Quiz 生成已有 ready gate、契约和后端测试，但缺真实 Backend + Agent Service 联调证据。
 - Agent 依赖链路部分闭环：Profile、Evaluation、LearningPath 有 Backend/Agent 调用和测试，但部分页面指标和 KG ready 口径尚未收口。
 - 阶段二页面能力仍有缺口：学习时长、阅读进度、AIChat 活动摘要、资源偏好分布、复杂教师/Admin 指标不应直接实现。

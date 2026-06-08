@@ -263,6 +263,13 @@
   - OpenAPI 已同步新增 CourseCatalog 端点并扩展 `catalog` 字段。
   - 验证：`cd ../backend && pytest tests/test_course_catalogs.py -q` 通过 4/4；`cd ../backend && pytest tests/test_resources_async.py tests/test_teacher_class_insights.py tests/test_teacher_student_learning.py -q` 失败于 collection 阶段，关键错误为 `RuntimeError: ... Future ... attached to a different loop`，发生在 `tests/test_teacher_student_learning.py` 调用 `init_db()` 的 MySQL/aiomysql 初始化过程；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；`python -m json.tool ../docs/10-client-api/Client-API.openapi.json >/tmp/client-api-openapi-check.json` 通过。
   - 契约状态：Client API 已同步，无 Agent API 变更；真实 ingestion 和 Agent 消费链路进入 Phase B/C。
+- 2026-06-08：Phase B1 CourseCatalog 资料入库后端编排完成：
+  - Agent Service 加固 `POST /agent/v1/knowledge/ingestions` 参数校验，拒绝空白 `catalog_id`。
+  - Backend 新增 `POST /admin/course-catalogs/{catalog_id}/ingestions`，创建 `course_catalog_ingestion` AsyncTask，后台调用 Agent `/agent/v1/knowledge/ingestions`，并按 `storage_uri` 回写 `CourseCatalogMaterial` 状态、`chunk_count`、`ingested_at`、`last_error`。
+  - 知识库状态接口补齐 `chunk_count`、待入库资料数、失败资料数、最近任务 ID/状态和错误信息；管理员可通过 `GET /tasks/{task_id}` 轮询课程资源库入库任务。
+  - 状态策略：首次全成功为 `ready/ready`；首次部分成功为 `ready/partial`；首次全失败为 `failed/failed`；ready 资源库增量失败保持 `status=ready` 且 `knowledge_status=partial`，避免误断开教师开班绑定。
+  - OpenAPI 已同步新增上传、入库触发和扩展状态字段；本轮不新增 Agent API 字段，不引入 `storage_type`，不扩展前端 Admin UI。
+  - 验证：`cd ../agent_service && pytest tests/test_knowledge_ingestion_api.py -q` 通过 13/13；`cd ../backend && pytest tests/test_course_catalog_ingestion.py::test_start_catalog_ingestion_success tests/test_course_catalog_ingestion.py::test_start_catalog_ingestion_without_uploaded_materials_returns_409 tests/test_course_catalog_ingestion.py::test_incremental_ingestion_partial_failure_keeps_catalog_ready tests/test_course_catalog_ingestion.py::test_first_ingestion_partial_success_marks_catalog_ready_partial -q` 通过 4/4；`cd ../backend && pytest tests/test_course_catalog_ingestion.py tests/test_course_catalogs.py -q` 通过 23/23；`python -m json.tool ../docs/10-client-api/Client-API.openapi.json >/tmp/client-api-openapi-check.json` 通过。
 
 ## 本地联调注意事项
 

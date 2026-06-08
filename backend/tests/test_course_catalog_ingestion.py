@@ -13,6 +13,7 @@ import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -584,3 +585,287 @@ async def _api_test_json_material_rejects_knowledge_status_ingesting():
 
 def test_json_material_rejects_knowledge_status_ingesting():
     asyncio.run(_api_test_json_material_rejects_knowledge_status_ingesting())
+
+
+async def _wait_for_task_status(
+    client: AsyncClient,
+    headers: dict,
+    task_id: str,
+    expected: set[str],
+):
+    for _ in range(20):
+        response = await client.get(f"/api/v1/tasks/{task_id}", headers=headers)
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        if data["status"] in expected:
+            return data
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"task {task_id} did not reach {expected}")
+
+
+async def _get_catalog_status(client: AsyncClient, headers: dict, catalog_id: str) -> dict:
+    response = await client.get(
+        f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-status",
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def _get_material_from_list(
+    client: AsyncClient,
+    headers: dict,
+    catalog_id: str,
+    material_id: str,
+) -> dict:
+    response = await client.get(
+        f"/api/v1/admin/course-catalogs/{catalog_id}/materials",
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    materials = response.json()["data"]["materials"]
+    matches = [material for material in materials if material["id"] == material_id]
+    assert matches, f"material {material_id} not found"
+    return matches[0]
+
+
+async def _api_test_start_catalog_ingestion_success(tmp_path, monkeypatch):
+    await _init_test_db()
+    monkeypatch.setattr(
+        "app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT",
+        str(tmp_path / "course_catalogs"),
+    )
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            admin_headers = await _register_and_login(client, "admin")
+            catalog_id = await _create_catalog(client, admin_headers)
+            upload = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
+                headers=admin_headers,
+                files={"file": ("intro.md", b"# Intro", "text/markdown")},
+            )
+            material_id = upload.json()["data"]["id"]
+
+            with patch(
+                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                new_callable=AsyncMock,
+            ) as mock_agent:
+                mock_agent.return_value = {
+                    "catalog_id": catalog_id,
+                    "chunk_count": 2,
+                    "materials": [
+                        {
+                            "storage_uri": f"course_catalogs/{catalog_id}/{material_id}/intro.md",
+                            "status": "ingested",
+                            "chunk_count": 2,
+                            "error": None,
+                        }
+                    ],
+                }
+                response = await client.post(
+                    f"/api/v1/admin/course-catalogs/{catalog_id}/ingestions",
+                    headers=admin_headers,
+                )
+                assert response.status_code == 202, response.text
+                task_id = response.json()["data"]["task_id"]
+
+            task_data = await _wait_for_task_status(client, admin_headers, task_id, {"completed"})
+            assert task_data["task_type"] == "course_catalog_ingestion"
+            assert task_data["status"] == "completed"
+            assert task_data["result"]["catalog_id"] == catalog_id
+            assert task_data["result"]["chunk_count"] == 2
+
+            status_data = await _get_catalog_status(client, admin_headers, catalog_id)
+            material = await _get_material_from_list(client, admin_headers, catalog_id, material_id)
+            assert status_data["status"] == "ready"
+            assert status_data["knowledge_status"] == "ready"
+            assert status_data["chunk_count"] == 2
+            assert status_data["last_ingestion_task_id"] == task_id
+            assert material["status"] == "ingested"
+            assert material["chunk_count"] == 2
+            assert material["ingested_at"] is not None
+    finally:
+        await engine.dispose()
+
+
+def test_start_catalog_ingestion_success(tmp_path, monkeypatch):
+    asyncio.run(_api_test_start_catalog_ingestion_success(tmp_path, monkeypatch))
+
+
+async def _api_test_start_catalog_ingestion_without_uploaded_materials_returns_409():
+    await _init_test_db()
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            admin_headers = await _register_and_login(client, "admin")
+            catalog_id = await _create_catalog(client, admin_headers)
+
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/ingestions",
+                headers=admin_headers,
+            )
+
+            assert response.status_code == 409
+            assert response.json()["detail"]["message"] == "没有待入库资料"
+    finally:
+        await engine.dispose()
+
+
+def test_start_catalog_ingestion_without_uploaded_materials_returns_409():
+    asyncio.run(_api_test_start_catalog_ingestion_without_uploaded_materials_returns_409())
+
+
+async def _api_test_incremental_ingestion_partial_failure_keeps_catalog_ready(
+    tmp_path,
+    monkeypatch,
+):
+    await _init_test_db()
+    monkeypatch.setattr(
+        "app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT",
+        str(tmp_path / "course_catalogs"),
+    )
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            admin_headers = await _register_and_login(client, "admin")
+            catalog_id = await _create_catalog(client, admin_headers, title="Incremental Catalog")
+            await _set_catalog_status(catalog_id, "ready", "ready")
+            upload = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
+                headers=admin_headers,
+                files={"file": ("delta.md", b"# Delta", "text/markdown")},
+            )
+            material_id = upload.json()["data"]["id"]
+
+            with patch(
+                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                new_callable=AsyncMock,
+            ) as mock_agent:
+                mock_agent.return_value = {
+                    "catalog_id": catalog_id,
+                    "chunk_count": 0,
+                    "materials": [
+                        {
+                            "storage_uri": f"course_catalogs/{catalog_id}/{material_id}/delta.md",
+                            "status": "failed",
+                            "chunk_count": 0,
+                            "error": "embedding failed",
+                        }
+                    ],
+                }
+                response = await client.post(
+                    f"/api/v1/admin/course-catalogs/{catalog_id}/ingestions",
+                    headers=admin_headers,
+                )
+                assert response.status_code == 202, response.text
+                task_id = response.json()["data"]["task_id"]
+
+            task_data = await _wait_for_task_status(client, admin_headers, task_id, {"failed"})
+            assert task_data["status"] == "failed"
+            assert task_data["error_code"] == "material_failed"
+
+            status_data = await _get_catalog_status(client, admin_headers, catalog_id)
+            material = await _get_material_from_list(client, admin_headers, catalog_id, material_id)
+            assert status_data["status"] == "ready"
+            assert status_data["knowledge_status"] == "partial"
+            assert status_data["last_error"] == "embedding failed"
+            assert material["status"] == "failed"
+            assert material["last_error"] == "embedding failed"
+    finally:
+        await engine.dispose()
+
+
+def test_incremental_ingestion_partial_failure_keeps_catalog_ready(tmp_path, monkeypatch):
+    asyncio.run(
+        _api_test_incremental_ingestion_partial_failure_keeps_catalog_ready(tmp_path, monkeypatch)
+    )
+
+
+async def _api_test_first_ingestion_partial_success_marks_catalog_ready_partial(
+    tmp_path,
+    monkeypatch,
+):
+    await _init_test_db()
+    monkeypatch.setattr(
+        "app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT",
+        str(tmp_path / "course_catalogs"),
+    )
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            admin_headers = await _register_and_login(client, "admin")
+            catalog_id = await _create_catalog(client, admin_headers, title="First Partial Catalog")
+            upload_ok = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
+                headers=admin_headers,
+                files={"file": ("ok.md", b"# OK", "text/markdown")},
+            )
+            upload_fail = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
+                headers=admin_headers,
+                files={"file": ("bad.md", b"# BAD", "text/markdown")},
+            )
+            ok_material_id = upload_ok.json()["data"]["id"]
+            fail_material_id = upload_fail.json()["data"]["id"]
+
+            with patch(
+                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                new_callable=AsyncMock,
+            ) as mock_agent:
+                mock_agent.return_value = {
+                    "catalog_id": catalog_id,
+                    "chunk_count": 4,
+                    "materials": [
+                        {
+                            "storage_uri": f"course_catalogs/{catalog_id}/{ok_material_id}/ok.md",
+                            "status": "ingested",
+                            "chunk_count": 4,
+                            "error": None,
+                        },
+                        {
+                            "storage_uri": f"course_catalogs/{catalog_id}/{fail_material_id}/bad.md",
+                            "status": "failed",
+                            "chunk_count": 0,
+                            "error": "parse failed",
+                        },
+                    ],
+                }
+                response = await client.post(
+                    f"/api/v1/admin/course-catalogs/{catalog_id}/ingestions",
+                    headers=admin_headers,
+                )
+                assert response.status_code == 202, response.text
+                task_id = response.json()["data"]["task_id"]
+
+            task_data = await _wait_for_task_status(client, admin_headers, task_id, {"failed"})
+            assert task_data["status"] == "failed"
+            assert task_data["error_code"] == "material_failed"
+
+            status_data = await _get_catalog_status(client, admin_headers, catalog_id)
+            ok_material = await _get_material_from_list(
+                client,
+                admin_headers,
+                catalog_id,
+                ok_material_id,
+            )
+            fail_material = await _get_material_from_list(
+                client,
+                admin_headers,
+                catalog_id,
+                fail_material_id,
+            )
+            assert status_data["status"] == "ready"
+            assert status_data["knowledge_status"] == "partial"
+            assert status_data["chunk_count"] == 4
+            assert status_data["last_error"] == "parse failed"
+            assert ok_material["status"] == "ingested"
+            assert fail_material["status"] == "failed"
+    finally:
+        await engine.dispose()
+
+
+def test_first_ingestion_partial_success_marks_catalog_ready_partial(tmp_path, monkeypatch):
+    asyncio.run(
+        _api_test_first_ingestion_partial_success_marks_catalog_ready_partial(tmp_path, monkeypatch)
+    )

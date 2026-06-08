@@ -270,6 +270,12 @@
   - 状态策略：首次全成功为 `ready/ready`；首次部分成功为 `ready/partial`；首次全失败为 `failed/failed`；ready 资源库增量失败保持 `status=ready` 且 `knowledge_status=partial`，避免误断开教师开班绑定。
   - OpenAPI 已同步新增上传、入库触发和扩展状态字段；本轮不新增 Agent API 字段，不引入 `storage_type`，不扩展前端 Admin UI。
   - 验证：`cd ../agent_service && pytest tests/test_knowledge_ingestion_api.py -q` 通过 13/13；`cd ../backend && pytest tests/test_course_catalog_ingestion.py::test_start_catalog_ingestion_success tests/test_course_catalog_ingestion.py::test_start_catalog_ingestion_without_uploaded_materials_returns_409 tests/test_course_catalog_ingestion.py::test_incremental_ingestion_partial_failure_keeps_catalog_ready tests/test_course_catalog_ingestion.py::test_first_ingestion_partial_success_marks_catalog_ready_partial -q` 通过 4/4；`cd ../backend && pytest tests/test_course_catalog_ingestion.py tests/test_course_catalogs.py -q` 通过 23/23；`python -m json.tool ../docs/10-client-api/Client-API.openapi.json >/tmp/client-api-openapi-check.json` 通过。
+- 2026-06-08：AdminConsole 课程资源库入库 UI 接入完成：
+  - 新增资源库详情右侧抽屉，支持资料列表、知识库状态、批量选择文件并逐个上传、手动触发入库和 `GET /tasks/{task_id}` 轮询。
+  - 新增 `taskService` 和共享 `getErrorMessage` 工具；上传请求使用 `FormData`、既有单文件上传接口、60s timeout。
+  - 抽屉对资源库切换、关闭、任务轮询异常和后端状态短暂滞后做了异步保护；`partial` 按可用但不完整状态展示。
+  - 不修改 OpenAPI，不直连 Agent Service，不使用 mock 数据补字段。
+  - `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
 
 ## 本地联调注意事项
 

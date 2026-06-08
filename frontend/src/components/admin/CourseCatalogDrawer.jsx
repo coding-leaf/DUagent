@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminService } from '../../api/services/admin';
 import { taskService } from '../../api/services/task';
 import { getErrorMessage } from '../../utils/apiError';
@@ -34,6 +34,7 @@ const getBadgeClass = (status) => {
 };
 
 const normalizeTask = (task, fallbackId) => ({
+  id: task?.id || task?.task_id || fallbackId || '',
   task_id: task?.task_id || fallbackId || '',
   task_type: task?.task_type || 'course_catalog_ingestion',
   status: task?.status || 'processing',
@@ -53,12 +54,28 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const [ingesting, setIngesting] = useState(false);
   const [activeTask, setActiveTask] = useState(null);
   const [taskError, setTaskError] = useState('');
+  const requestSeqRef = useRef(0);
+  const isMountedRef = useRef(false);
 
   const catalogId = catalog?.id;
 
-  const refreshDetails = useCallback(async () => {
-    if (!catalogId) return;
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      requestSeqRef.current += 1;
+    };
+  }, []);
 
+  const canWriteRequest = useCallback((requestSeq) => (
+    isMountedRef.current && requestSeqRef.current === requestSeq
+  ), []);
+
+  const refreshDetails = useCallback(async () => {
+    if (!catalogId || !open) return false;
+
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
     setLoading(true);
     setError('');
     try {
@@ -66,17 +83,47 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         adminService.getCourseCatalogMaterials(catalogId),
         adminService.getCourseCatalogStatus(catalogId)
       ]);
+      if (!canWriteRequest(requestSeq)) return false;
+
+      const incomingStatus = statusRes.data || null;
       setMaterials(materialsRes.data?.materials || []);
-      setKnowledgeStatus(statusRes.data || null);
+      setKnowledgeStatus(incomingStatus);
+
+      const isIncomingIngesting = incomingStatus?.status === 'ingesting'
+        || incomingStatus?.knowledge_status === 'ingesting';
+      const incomingTaskId = incomingStatus?.last_ingestion_task_id;
+      const incomingTaskStatus = incomingStatus?.last_ingestion_status || 'processing';
+      const isTerminalTask = incomingTaskStatus === 'completed' || incomingTaskStatus === 'failed';
+
+      if (isIncomingIngesting && incomingTaskId && !isTerminalTask) {
+        setIngesting(true);
+        setTaskError('');
+        setActiveTask((prev) => {
+          if (prev?.task_id === incomingTaskId && prev.status === 'processing') return prev;
+          if (prev?.task_id === incomingTaskId && (prev.status === 'completed' || prev.status === 'failed')) return prev;
+          return normalizeTask({
+            id: incomingTaskId,
+            task_id: incomingTaskId,
+            status: 'processing',
+            progress: 0
+          }, incomingTaskId);
+        });
+      }
+      return true;
     } catch (err) {
       console.error('course catalog drawer refresh error', err);
+      if (!canWriteRequest(requestSeq)) return false;
+
       setError(getErrorMessage(err, '课程资源库详情加载失败'));
       setMaterials([]);
       setKnowledgeStatus(null);
+      return false;
     } finally {
-      setLoading(false);
+      if (canWriteRequest(requestSeq)) {
+        setLoading(false);
+      }
     }
-  }, [catalogId]);
+  }, [canWriteRequest, catalogId, open]);
 
   useEffect(() => {
     if (!open || !catalogId) return;
@@ -89,12 +136,30 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setActiveTask(null);
     setTaskError('');
     refreshDetails();
+
+    return () => {
+      requestSeqRef.current += 1;
+    };
   }, [catalogId, open, refreshDetails]);
 
   useEffect(() => {
     if (!open || activeTask?.status !== 'processing' || !activeTask?.task_id) return;
 
     let cancelled = false;
+    let timeoutId;
+
+    const handleTerminalTask = async (task) => {
+      if (cancelled) return;
+      setIngesting(false);
+      if (task.status === 'failed') {
+        setTaskError(task.error_message || '课程资源库入库失败');
+      }
+      const refreshed = await refreshDetails();
+      if (!cancelled && refreshed && onChanged) {
+        onChanged();
+      }
+    };
+
     const pollTask = async () => {
       try {
         const res = await taskService.getTaskStatus(activeTask.task_id);
@@ -104,14 +169,9 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         setActiveTask(task);
 
         if (task.status === 'completed' || task.status === 'failed') {
-          setIngesting(false);
-          if (task.status === 'failed') {
-            setTaskError(task.error_message || '课程资源库入库失败');
-          }
-          await refreshDetails();
-          if (!cancelled && onChanged) {
-            onChanged();
-          }
+          await handleTerminalTask(task);
+        } else if (task.status === 'processing' && !cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
         }
       } catch (err) {
         if (cancelled) return;
@@ -124,17 +184,17 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
           status: 'failed',
           error_message: message
         }));
-        await refreshDetails();
-        if (!cancelled && onChanged) {
+        const refreshed = await refreshDetails();
+        if (!cancelled && refreshed && onChanged) {
           onChanged();
         }
       }
     };
 
-    const timer = setInterval(pollTask, 2000);
+    timeoutId = setTimeout(pollTask, 2000);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      clearTimeout(timeoutId);
     };
   }, [activeTask?.status, activeTask?.task_id, onChanged, open, refreshDetails]);
 
@@ -173,12 +233,12 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setUploading(true);
     setError('');
 
-    for (const item of queuedFiles) {
+    for (const [index, item] of queuedFiles.entries()) {
       setUploadQueue((prev) => prev.map((queueItem) => (
         queueItem.id === item.id ? { ...queueItem, status: 'uploading', message: '' } : queueItem
       )));
       try {
-        const res = await adminService.uploadCourseCatalogMaterial(catalogId, files[queuedFiles.indexOf(item)]);
+        const res = await adminService.uploadCourseCatalogMaterial(catalogId, files[index]);
         setUploadQueue((prev) => prev.map((queueItem) => (
           queueItem.id === item.id
             ? { ...queueItem, status: 'completed', message: res.message || '上传完成' }

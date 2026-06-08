@@ -137,6 +137,13 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-08` `课程资源库知识入库真实联调验收通过`
+  - **环境固化**：Agent Service 本机 `.env` 已配置 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`，与 Backend 上传目录一致；未修改 Client API 或 Agent API 契约。
+  - **数据库前置**：当前 `duagent` 开发库已补齐 `2026-06-08-extend-course-catalog-ingestion.sql` 对应字段（catalog last_ingestion/status/chunk_count/last_error，material file_size/chunk_count/last_error/ingested_at）。
+  - **真实验收**：catalog `533dc29ef5c44166` 上传 material `de8173b05aa74fd7` 后触发 task `e8ee00ddb97c4078`；task `completed`，catalog `ready/ready`，material `ingested`，`chunk_count=1`。
+  - **Qdrant 证据**：`course_knowledge_v1_1024` 按 `course_id=533dc29ef5c44166` 过滤 count=1，payload 包含 `B1_SHARED_ROOT_MARKER_20260608`。
+  - **阶段判断**：Phase B1 Backend-Agent 知识入库链路可按真实联调通过收尾；剩余工作转入前端管理 UI 接入和后续大文件/PDF 压测。
+
 - `2026-06-08` `课程资源库知识入库 Backend 编排收尾`
   - **完成**：`POST /api/v1/admin/course-catalogs/{catalog_id}/ingestions` 已按异步任务模式启动知识入库，Backend 后台任务同步调用 Agent Service 并回写 catalog/material/task 状态。
   - **修复**：启动入库时先对 catalog 做 `SELECT ... FOR UPDATE`，再选择待入库 materials，收口 start/upload/create 并发窗口；上传端点继续保持原有条件更新保护，不额外扩大锁范围。

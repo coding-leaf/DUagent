@@ -68,10 +68,14 @@
 - 不改变 OpenAPI、schemas 或 Backend 调用契约。
 - API 层保持薄路由，业务逻辑放入 `agents/`。
 - 新增 AgentScope API 用法前必须查官方文档或用本地包 introspection 验证。
+- 课程资源库资料入库依赖 Backend 与 Agent Service 共享同一个上传目录；本机 `.env` 已配置 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`，Agent Service 重启时必须保留该配置，否则会出现 `material does not exist`。
 - 工作区存在用户/历史未提交改动，提交时只暂存本轮文件，不回滚无关改动。
 
 ## 最近验证
 
+- `2026-06-08` `Backend 课程资源库知识入库真实联调`：**通过**。Backend catalog `533dc29ef5c44166` 上传资料 `de8173b05aa74fd7` 后触发 task `e8ee00ddb97c4078`，Agent Service 读取共享上传目录并写入 Qdrant；Backend task `completed`，catalog `ready/ready`，material `ingested`，`chunk_count=1`。
+- `curl -X POST http://127.0.0.1:6333/collections/course_knowledge_v1_1024/points/count` 按 `course_id=533dc29ef5c44166` 过滤：**count=1**；scroll payload 包含 `B1_SHARED_ROOT_MARKER_20260608`，证明本轮上传资料已写入课程知识库。
+- `curl http://127.0.0.1:8002/agent/v1/health`：**200**（`qdrant_connected=true`，`model_loaded=true`，共享目录配置后服务健康）。
 - `./.venv/bin/python -m agent_service.tools.ingest_knowledge /tmp/758aeff588e84044`：**通过**（将 `knowledge_base/data_structures` 以 Backend 课程 ID `758aeff588e84044` 摄入 Qdrant，写入 `course_knowledge_v1_1024`，760 chunks）
 - `QdrantVectorStore().search_course_knowledge("758aeff588e84044", embedding("数据结构 顺序表 随机访问"), limit=3)`：**3 hits**（真实课程知识检索可用，证明 Backend 课程 ID 已可命中 Qdrant）
 - `./.venv/bin/pytest tests/test_ai_providers.py tests/test_core_config.py -q`：**19 passed**（SiliconFlow embedding 请求维度开关；默认不向 embeddings API 发送 `dimensions`）

@@ -32,5 +32,24 @@ export const adminService = {
 
   getCourseCatalogStatus: async (catalogId) => apiClient.get(`/admin/course-catalogs/${catalogId}/knowledge-status`),
 
-  createCourseCatalogMaterial: async (catalogId, data) => apiClient.post(`/admin/course-catalogs/${catalogId}/materials`, data)
+  createCourseCatalogMaterial: async (catalogId, data) => apiClient.post(`/admin/course-catalogs/${catalogId}/materials`, data),
+
+  getCourseCatalogMaterials: async (catalogId) => {
+    return apiClient.get(`/admin/course-catalogs/${catalogId}/materials`);
+  },
+
+  uploadCourseCatalogMaterial: async (catalogId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post(`/admin/course-catalogs/${catalogId}/materials/upload`, formData, {
+      timeout: 60000,
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+
+  startCourseCatalogIngestion: async (catalogId) => {
+    return apiClient.post(`/admin/course-catalogs/${catalogId}/ingestions`);
+  }
 };

@@ -16,12 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 async def assemble_generate_payload(
-    user_id: str, course_id: str, req: QuizGenerateRequest, db: AsyncSession
+    user_id: str,
+    class_course_id: str,
+    agent_course_id: str,
+    req: QuizGenerateRequest,
+    db: AsyncSession,
 ) -> dict:
     """组装调用 Agent /assessment/generate-questions 所需的 payload。"""
     payload: dict = {
         "user_id": user_id,
-        "course_id": course_id,
+        "course_id": agent_course_id,
+        "class_course_id": class_course_id,
     }
     if req.chapter:
         payload["chapter"] = req.chapter
@@ -40,7 +45,7 @@ async def assemble_generate_payload(
 
         ev_result = await db.execute(
             select(Evaluation)
-            .where(Evaluation.user_id == user_id, Evaluation.course_id == course_id, Evaluation.is_deleted == False)
+            .where(Evaluation.user_id == user_id, Evaluation.course_id == class_course_id, Evaluation.is_deleted == False)
             .order_by(Evaluation.generated_at.desc())
         )
         ev = ev_result.scalars().first()
@@ -49,7 +54,7 @@ async def assemble_generate_payload(
 
         pf_result = await db.execute(
             select(UserProfile)
-            .where(UserProfile.user_id == user_id, UserProfile.course_id == course_id, UserProfile.is_deleted == False)
+            .where(UserProfile.user_id == user_id, UserProfile.course_id == class_course_id, UserProfile.is_deleted == False)
         )
         pf = pf_result.scalar_one_or_none()
         if pf:
@@ -64,11 +69,11 @@ async def assemble_generate_payload(
             .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
             .where(
                 QuizSession.user_id == user_id,
-                QuizSession.course_id == course_id,
+                QuizSession.course_id == class_course_id,
                 QuizSession.is_deleted == False,
                 QuizAnswer.is_correct == False,
                 QuizAnswer.is_deleted == False,
-                QuizQuestion.course_id == course_id,
+                QuizQuestion.course_id == class_course_id,
                 QuizQuestion.is_deleted == False,
             )
             .order_by(QuizAnswer.create_time.desc())
@@ -86,7 +91,7 @@ async def assemble_generate_payload(
 
         lp_result = await db.execute(
             select(LearningPath)
-            .where(LearningPath.user_id == user_id, LearningPath.course_id == course_id, LearningPath.is_deleted == False)
+            .where(LearningPath.user_id == user_id, LearningPath.course_id == class_course_id, LearningPath.is_deleted == False)
         )
         lp = lp_result.scalar_one_or_none()
         if lp and lp.current_node_name:

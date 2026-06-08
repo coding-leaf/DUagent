@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.operations import QuizGenerateRequest, QuizSubmitRequest
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services import quiz_service
+from app.services.course_catalog_gate import resolve_generation_catalog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])
@@ -99,20 +100,27 @@ async def generate_questions(
     db: AsyncSession = Depends(get_db),
 ):
     """生成个性化题目。调用 Agent /assessment/generate-questions，校验后写入 quiz_questions。"""
-    from app.services.agent_client import AgentServiceError, agent_client
+    catalog_context = await resolve_generation_catalog(db, req.course_id)
 
     task = AsyncTask(
         task_type="quiz_generation",
         status="processing",
         user_id=current_user.id,
         course_id=req.course_id,
+        result=catalog_context.model_dump(),
     )
     db.add(task)
     await db.flush()
     await db.refresh(task)
 
     try:
-        payload = await quiz_service.assemble_generate_payload(current_user.id, req.course_id, req, db)
+        payload = await quiz_service.assemble_generate_payload(
+            current_user.id,
+            req.course_id,
+            catalog_context.catalog_id,
+            req,
+            db,
+        )
         data = await agent_client.post_json("/agent/v1/assessment/generate-questions", payload)
     except AgentServiceError as e:
         task.status = "failed"
@@ -148,7 +156,7 @@ async def generate_questions(
         question_ids.append(new_q.id)
 
     task.status = "completed"
-    task.result = {"question_ids": question_ids}
+    task.result = {**catalog_context.model_dump(), "question_ids": question_ids}
     task.completed_at = datetime.now(timezone.utc)
     await db.flush()
 

@@ -9,6 +9,7 @@
 import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -448,6 +449,8 @@ class TestQuizGenerateIntegration:
         from app.models.user import RegistrationCode
         import uuid, re
 
+        await init_db()
+
         s_suffix = uuid.uuid4().hex[:6]
         t_suffix = uuid.uuid4().hex[:6]
         s_code = f"qs_{s_suffix}"
@@ -498,12 +501,192 @@ class TestQuizGenerateIntegration:
         course_id = r.json()["data"]["courses"][0]["id"]
         return s_h, course_id
 
+    async def _bind_catalog(
+        self,
+        course_id,
+        *,
+        knowledge_status="ready",
+        chunk_count=3,
+        catalog_status="ready",
+    ):
+        """为教学班绑定 CourseCatalog，返回 catalog_id。"""
+        import uuid
+        from app.models.catalog import CourseCatalog, CourseOffering
+        from app.models.course import Course
+        from sqlalchemy import select
+
+        suffix = uuid.uuid4().hex[:8]
+        catalog_id = f"quiz-catalog-{suffix}"
+        async with async_session_factory() as db:
+            course = (
+                await db.execute(select(Course).where(Course.id == course_id))
+            ).scalar_one()
+            catalog = CourseCatalog(
+                id=catalog_id,
+                title="Quiz Gate Catalog",
+                status=catalog_status,
+                knowledge_status=knowledge_status,
+                chunk_count=chunk_count,
+            )
+            offering = CourseOffering(
+                id=course.id,
+                name=course.name,
+                catalog_id=catalog.id,
+                teacher_id=course.teacher_id,
+                class_code=course.course_code,
+            )
+            db.add_all([catalog, offering])
+            await db.commit()
+        return catalog_id
+
+    async def _count_quiz_generation_tasks(self):
+        from app.models.others import AsyncTask
+        from sqlalchemy import func, select
+
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(func.count()).select_from(AsyncTask).where(
+                    AsyncTask.task_type == "quiz_generation",
+                    AsyncTask.is_deleted == False,
+                )
+            )
+            return result.scalar() or 0
+
+    async def _seed_class_personalization(self, user_id, course_id):
+        from app.models.others import Evaluation
+
+        async with async_session_factory() as db:
+            db.add(
+                Evaluation(
+                    user_id=user_id,
+                    course_id=course_id,
+                    summary_text="class scoped evaluation summary",
+                )
+            )
+            await db.commit()
+
+    async def _latest_generated_question(self, course_id):
+        from app.models.quiz import QuizQuestion
+        from sqlalchemy import select
+
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(QuizQuestion)
+                .where(
+                    QuizQuestion.course_id == course_id,
+                    QuizQuestion.source == "personalized",
+                    QuizQuestion.is_deleted == False,
+                )
+                .order_by(QuizQuestion.create_time.desc())
+            )
+            return result.scalars().first()
+
+    async def _current_user_id(self, headers):
+        from app.core.security import decode_token
+
+        token = headers["Authorization"].split(" ", 1)[1]
+        return decode_token(token)["sub"]
+
+    @pytest.mark.asyncio
+    async def test_quiz_generate_legacy_course_rejected_without_task(self):
+        """legacy course 缺少 CourseOffering 时返回 404 且不创建任务。"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            s_h, course_id = await self._setup_student_with_course(client)
+
+            before_tasks = await self._count_quiz_generation_tasks()
+            r = await client.post("/api/v1/quiz/generate", headers=s_h, json={
+                "course_id": course_id, "count": 3, "personalized": True,
+            })
+            after_tasks = await self._count_quiz_generation_tasks()
+
+            assert r.status_code == 404
+            assert r.json()["detail"]["code"] == "course_catalog_missing"
+            assert after_tasks == before_tasks
+
+    @pytest.mark.asyncio
+    async def test_quiz_generate_dirty_catalog_rejected_without_task(self):
+        """dirty catalog 返回 409 course_material_missing 且不创建任务。"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            s_h, course_id = await self._setup_student_with_course(client)
+            await self._bind_catalog(course_id, knowledge_status="dirty", chunk_count=3)
+
+            before_tasks = await self._count_quiz_generation_tasks()
+            r = await client.post("/api/v1/quiz/generate", headers=s_h, json={
+                "course_id": course_id, "count": 3, "personalized": True,
+            })
+            after_tasks = await self._count_quiz_generation_tasks()
+
+            assert r.status_code == 409
+            assert r.json()["detail"]["code"] == "course_material_missing"
+            assert after_tasks == before_tasks
+
+    @pytest.mark.asyncio
+    async def test_quiz_generate_partial_catalog_uses_agent_catalog_id_and_class_persistence(self):
+        """partial catalog 有 chunks 时允许生成，Agent 用 catalog id，写库仍用教学班 id。"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            s_h, course_id = await self._setup_student_with_course(client)
+            user_id = await self._current_user_id(s_h)
+            catalog_id = await self._bind_catalog(
+                course_id,
+                knowledge_status="partial",
+                chunk_count=4,
+            )
+            await self._seed_class_personalization(user_id, course_id)
+
+            with patch("app.api.v1.quiz.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+                mock_agent.return_value = {
+                    "questions": [
+                        {
+                            "chapter": "第1章",
+                            "knowledge_point": "Ready Gate",
+                            "type": "single_choice",
+                            "difficulty": "medium",
+                            "content": "Catalog scoped question",
+                            "options": ["A", "B"],
+                            "answer": "A",
+                            "explanation": "Because",
+                        }
+                    ]
+                }
+                r = await client.post("/api/v1/quiz/generate", headers=s_h, json={
+                    "course_id": course_id,
+                    "count": 1,
+                    "personalized": True,
+                })
+
+            assert r.status_code == 202
+            payload = mock_agent.await_args.args[1]
+            assert payload["course_id"] == catalog_id
+            assert payload["class_course_id"] == course_id
+            assert payload["personalization_context"]["evaluation"]["summary"] == (
+                "class scoped evaluation summary"
+            )
+
+            task_id = r.json()["data"]["task_id"]
+            rt = await client.get(f"/api/v1/tasks/{task_id}", headers=s_h)
+            assert rt.status_code == 200
+            task_data = rt.json()["data"]
+            assert task_data["task_type"] == "quiz_generation"
+            assert task_data["result"]["class_course_id"] == course_id
+            assert task_data["result"]["catalog_id"] == catalog_id
+            assert task_data["result"]["knowledge_status"] == "partial"
+            assert task_data["result"]["degraded"] is True
+            assert task_data["result"]["chunk_count"] == 4
+
+            question = await self._latest_generated_question(course_id)
+            assert question is not None
+            assert question.course_id == course_id
+
     @pytest.mark.asyncio
     async def test_quiz_generate_202(self):
         """验证生成个性化题目返回 202 + task_id。"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             s_h, course_id = await self._setup_student_with_course(client)
+            await self._bind_catalog(course_id)
 
             r = await client.post("/api/v1/quiz/generate", headers=s_h, json={
                 "course_id": course_id, "count": 3, "personalized": True,

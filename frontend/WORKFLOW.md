@@ -12,14 +12,19 @@
 ## 当前施工状态
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
-- 当前最高优先级：资源生成 `/resources/generate` 真实 Backend + Agent Service webhook 联调。
+- 当前最高优先级：Admin CourseCatalog 上传 / 入库真实操作验收，以及教师绑定 ready CourseCatalog 创建教学班验收。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示。
-- 已确认后端闭环但前端无入口能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`。
+- 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
 - 当前待设计阻塞点：LearningPath / KG ready gate。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
+- 2026-06-09：纠正生成接口前端契约主线：
+  - 将 `/resources/generate`、`/quiz/generate` 标记为当前前端契约作废 / 不接入，保留历史后端能力背景但不再作为教师端 UI 或下一步联调主线。
+  - 当前主线回到 Admin 资源库创建、资料上传、触发入库 / 向量化、教师绑定 ready CourseCatalog 创建教学班，以及学生 / 教师如何消费入库后的资源和知识库内容。
+  - 同步修正 `docs/feature-ledger.md`、`docs/project-direction.md`、`docs/project-coverage-audit.md`、Client API Markdown 与 OpenAPI 描述。
+  - 验证：文档语义扫描、OpenAPI JSON 格式检查、`git diff --check`。
 - 2026-06-09：重建功能进度主线看板：
   - 新增 `docs/feature-ledger.md`，按“用户实际能操作什么”重建开发进度账本。
   - 逐页核查真实前端调用，区分 `已可操作`、`后端闭环`、`联调待验收`、`前端无入口`、`待设计`、`暂缓`。
@@ -57,14 +62,14 @@
 - 阶段一真实 Backend 主链路已完成 E2E 验收：登录、注册、课程、资源列表、学习路径基础展示、Quiz、AI Chat、教师基础学情、管理员基础页面。
 - 阶段二已完成多项契约收口：学生端数据契约审查、P0 假展示清理、ResourceDetail 内容、LearningPath 节点资源、教师端学生聚合、AdminConsole 既有契约对齐。
 - CourseCatalog 主线已完成：三表、教学班绑定、Admin 创建资源库、Admin 上传资料、Agent 入库向量化、知识库状态展示、资源/Quiz 生成前 ready gate。
-- TeacherConsole 曾短暂接入资源生成 UI；CourseCatalog 主线调整后已移除。当前资源生成和 Quiz 生成都没有前端正式入口。
+- TeacherConsole 曾短暂接入资源生成 UI；CourseCatalog 主线调整后已移除。当前资源生成和 Quiz 生成在前端契约中作废 / 不接入，不是当前主线。
 - 详细历史请回看 git 提交、`docs/superpowers/specs/`、`docs/superpowers/plans/` 和 `docs/project-coverage-audit.md`。
 
 ## 本地联调注意事项
 
 - 浏览器前端如果使用真实 Backend，请优先使用 `http://localhost:5173`，避免 `127.0.0.1` 与 Backend CORS origin 不一致。
 - 推荐启动方式：`VITE_USE_MOCK=false VITE_API_BASE_URL=http://localhost:8001/api/v1 npm run dev`。
-- 资源生成真实联调需要 Backend、Agent Service、MySQL、Qdrant/storage、embedding provider 配置同时可用。
+- Admin CourseCatalog 入库真实验收需要 Backend、Agent Service、MySQL、Qdrant/storage、embedding provider 配置同时可用。
 
 ## 下一步指针
 

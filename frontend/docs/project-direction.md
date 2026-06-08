@@ -61,6 +61,7 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 - 课程资源库资料入库编排：Backend 创建入库任务，Agent Service 执行 ingestion，Backend 回写状态。
 - Admin 课程资源库入库 UI：上传资料、触发入库、查看知识库状态、轮询任务。
 - 资源生成和 Quiz 生成前置 CourseCatalog ready gate：生成前解析教学班绑定的 `CourseCatalog`，校验 `status`、`knowledge_status` 和 `chunk_count`。
+- 当前前端契约纠偏：`/resources/generate`、`/quiz/generate` 标记为作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
 
 当前 ready gate 口径：
 
@@ -76,27 +77,32 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 
 ## 当前方向
 
-下一阶段不要继续盲目补页面字段。优先方向是让真实数据链路稳定闭环：
+下一阶段不要继续盲目补页面字段，也不要把历史生成接口重新接到教师端。优先方向是让 Admin 资源库入库、教师绑定 ready CourseCatalog、学生 / 教师消费入库内容这条真实产品链路稳定闭环：
 
-1. 真实 Backend + Agent Service 联调资源生成。
-   - 验证 `/resources/generate` 使用 catalog id 调 Agent。
-   - 验证 Agent webhook 回写资源。
-   - 验证前端资源列表和详情能看到真实生成内容。
+1. Admin CourseCatalog 上传 / 入库真实操作验收。
+   - 验证管理员创建资源库、上传资料、触发入库、轮询任务、查看知识库状态。
+   - 验证 Backend、Agent Service、MySQL、Qdrant/storage/provider 在真实配置下能完成资料切片、embedding、upsert 和状态回写。
+   - 验证前端只通过 Backend Client API 操作，不直连 Agent Service。
 
-2. 真实 Backend + Agent Service 联调 Quiz 生成。
-   - 验证 `/quiz/generate` 使用 catalog id 调 Agent。
-   - 验证 Backend 仍按教学班 id 持久化题目。
-   - 验证个性化上下文仍按教学班 id 查询。
+2. 教师绑定 ready CourseCatalog 创建教学班验收。
+   - 验证教师创建教学班时只能选择已就绪资源库。
+   - 验证学生加入教学班后，课程上下文、资源列表、基础 Quiz 和教师端课程视图正常。
+   - 验证 legacy course 兼容边界不污染新 CourseCatalog 主链路。
 
-3. 设计 LearningPath / KG ready 口径。
+3. 设计学生 / 教师消费 CourseCatalog 入库内容的产品口径。
+   - 明确入库资料、资源列表、资源详情、AI Chat 检索、Quiz 取题分别如何使用课程知识库。
+   - 不通过 `/resources/generate` 或 `/quiz/generate` 硬接教师端 UI。
+   - 如果未来需要恢复生成链路，先重新完成产品契约审查。
+
+4. 设计 LearningPath / KG ready 口径。
    - LearningPath 依赖 KG，不应直接复用 chunk-only ready gate。
    - 需要单独确认 KG 状态、错误码、降级策略和前端提示。
 
-4. 收口真实数据质量。
+5. 收口真实数据质量。
    - 资源内容质量、题目质量、诊断质量应进入独立专项。
    - 不用前端文案或 mock 遮盖 Agent 产出问题。
 
-5. 再推进阶段二剩余页面能力。
+6. 再推进阶段二剩余页面能力。
    - 累计学习时长、阅读进度、AIChat 活动摘要、资源偏好分布等，需要先明确采集口径和数据表。
    - Teacher / Admin 更复杂统计也必须先完成契约设计。
 
@@ -108,6 +114,7 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 - 为了页面好看硬编码 mock 数据到真实模式。
 - 前端绕过 Backend 直连 Agent Service。
 - Backend 为了某个页面临时返回未登记到 OpenAPI 的字段。
+- 恢复 `/resources/generate`、`/quiz/generate` 前端入口而没有新的产品契约。
 - 资源生成、Quiz 生成、LearningPath 生成在资料缺失时静默泛化生成。
 - 把 `docs/archive/` 或历史草案当作当前契约。
 - 未经确认直接修改 `.env`、数据库文件、Qdrant 存储、MySQL volume、上传文件或构建产物。
@@ -154,13 +161,12 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 
 ## 当前推荐下一步
 
-推荐从“真实资源生成联调”开始，而不是新增页面：
+推荐从“Admin CourseCatalog 上传 / 入库真实操作验收”开始，而不是新增生成入口：
 
 1. 启动 Backend、Agent Service、MySQL 和必要的向量/存储依赖。
-2. 用 ready 或 partial 的 CourseCatalog 触发资源生成。
-3. 验证 Agent 使用 catalog id 检索知识库。
-4. 验证 Backend webhook 创建 `resources`。
-5. 验证教师端资源列表刷新和 ResourceDetail 正文展示。
-6. 把失败点落成测试或 smoke 脚本。
+2. 管理员创建 CourseCatalog，上传 `txt/md/pdf` 资料并触发入库。
+3. 验证 `/tasks/{task_id}` 轮询、资料状态、`knowledge_status`、`chunk_count` 和错误信息回写。
+4. 教师选择 ready CourseCatalog 创建教学班，学生加入后验证资源列表、资源详情和基础 Quiz。
+5. 记录学生 / 教师消费入库内容的缺口，落成 spec 或 smoke 脚本。
 
-完成资源生成真实闭环后，再用同样方式验证 Quiz 生成真实闭环。
+`/resources/generate`、`/quiz/generate` 是当前前端契约作废 / 不接入的历史接口，不作为当前推荐下一步。

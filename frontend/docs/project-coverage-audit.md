@@ -63,9 +63,9 @@
 | CourseCatalog ingestion / 向量化 | `CourseCatalogDrawer.jsx`、`taskService.getTaskStatus` | `/admin/course-catalogs/{catalog_id}/ingestions`、`/admin/course-catalogs/{catalog_id}/knowledge-status`、`/tasks/{task_id}` | `catalogs.py`、`tasks.py`、`agent_client.py` | `api/v1/knowledge.py`、`tools/ingest_knowledge.py`、`memory/course_knowledge_ingestion.py`、`memory/course_knowledge_store.py` | `catalog.py`、`others.AsyncTask` | `test_course_catalog_ingestion.py`、Agent `test_knowledge_ingestion_api.py`、`test_ingest_knowledge.py`、`test_course_knowledge_store.py`、Admin 入库 UI E2E | 已闭环 | 功能已实现：上传资料后可触发 Agent 切片、embedding、Qdrant upsert，并回写 `chunk_count/knowledge_status`；部署级 live smoke 仍建议做。 |
 | 资源列表 | `Dashboard.jsx`、`learningService.getResources` | `/resources` | `resources.py` | 无直接 Agent 依赖 | `others.Resource`、`course.py` | `test_resources_async.py`、E2E 主链路 | 已闭环 | 资源质量取决于入库和生成链路；空列表应展示空态。 |
 | 资源详情 / 正文展示 | `ResourceDetail.jsx`、`learningService.getResourceDetail` | `/resources/{id}` | `resources.py` | 无直接 Agent 依赖 | `others.Resource` | `test_resource_detail.py` | 已闭环 | Mermaid mindmap 渲染为前端展示能力；资源内容本身质量不由前端保证。 |
-| 资源生成 | 当前无正式前端入口；曾有 orphan service 已删除 | `/resources/generate` | `resources.py`、`course_catalog_gate.py`、`agent_client.py` | `api/v1/resources.py`、`agents/resources_workflow.py`、`agents/resources.py` | `others.AsyncTask`、`others.Resource`、`catalog.py` | `test_resources_async.py`、`test_course_catalog_ready_gate.py`、Agent `test_resources_workflow.py` | 部分闭环 | Backend ready gate 已完成；还需真实 Backend + Agent webhook 联调，确认 catalog id 检索和资源落库。 |
+| 资源生成 | 当前无正式前端入口；曾有 orphan service 已删除 | `/resources/generate` | `resources.py`、`course_catalog_gate.py`、`agent_client.py` | `api/v1/resources.py`、`agents/resources_workflow.py`、`agents/resources.py` | `others.AsyncTask`、`others.Resource`、`catalog.py` | `test_resources_async.py`、`test_course_catalog_ready_gate.py`、Agent `test_resources_workflow.py` | 前端不接入 / 历史接口 | 当前前端契约作废 / 不接入，教师端不提供生成资源入口；保留为后端内部能力或废弃候选背景。 |
 | Quiz 获取题目 / 提交 / 结果 / 历史 | `Quiz.jsx`、`PracticeResult.jsx`、`quizService` | `/quiz/questions`、`/quiz/submit`、`/quiz/result`、`/quiz/history` | `quiz.py`、`quiz_service.py` | `/assessment/evaluate` 用于后台诊断 | `quiz.py`、`others.Evaluation` | `test_quiz_async.py`、`test_agent_integration.py`、E2E 主链路 | 已闭环 | `/assessment/evaluate` 后台失败不阻塞提交结果；诊断质量由 Agent 专项保证。 |
-| Quiz 生成 | 当前无正式前端入口 | `/quiz/generate` | `quiz.py`、`quiz_service.py`、`course_catalog_gate.py` | `api/v1/assessment.py`、`agents/assessment.py`、`agents/assessment_react.py` | `quiz.py`、`others.AsyncTask`、`catalog.py` | `test_agent_integration.py::TestQuizGenerateIntegration`、`test_course_catalog_ready_gate.py`、Agent `test_assessment_agent.py` | 部分闭环 | Backend ready gate 已完成；还需真实 Agent 返回质量和题目落库 smoke。 |
+| Quiz 生成 | 当前无正式前端入口 | `/quiz/generate` | `quiz.py`、`quiz_service.py`、`course_catalog_gate.py` | `api/v1/assessment.py`、`agents/assessment.py`、`agents/assessment_react.py` | `quiz.py`、`others.AsyncTask`、`catalog.py` | `test_agent_integration.py::TestQuizGenerateIntegration`、`test_course_catalog_ready_gate.py`、Agent `test_assessment_agent.py` | 前端不接入 / 历史接口 | 当前前端契约作废 / 不接入，练习页不引导触发生题；保留为后端内部能力或废弃候选背景。 |
 | AI Chat SSE | `AIChat.jsx`、`chatService.streamChat` | `/tutoring/chat`、`/tutoring/conversations`、`/tutoring/conversations/{id}` | `tutoring.py`、`agent_client.py` | `api/v1/tutoring.py`、`agents/tutoring*.py`、`memory/tutoring_retrieval.py` | `conversation.py` | `test_tutoring_privacy.py`、Agent `test_tutoring_api.py`、E2E AIChat 历史消息回归 | 已闭环 | 真实历史响应曾出现 `knowledge_points[]` 元素类型漂移，前端已做防白屏兼容；OpenAPI 元素类型仍需后续契约审查。 |
 | LearningPath 展示 / 刷新 | `LearningPath.jsx`、`learningService.getLearningPath`、`refreshLearningPath` | `/learning-path`、`/learning-path/refresh` | `learning_path.py`、`agent_client.py` | `api/v1/learning_path.py`、`agents/learning_path.py` | `others.LearningPath`、`others.LearningPathNode` | `test_node_resources.py`、`test_refresh_async.py`、Agent `test_learning_path_api.py` | 部分闭环 | LearningPath 依赖 KG，本期未纳入 CourseCatalog ready gate；需要单独设计 KG ready 口径。 |
 | LearningPath 节点资源 | `LearningPath.jsx`、`learningService.getNodeResources` | `/learning-path/nodes/{node_id}/resources` | `learning_path.py` | 无直接 Agent 调用 | `others.Resource`、`others.LearningPathNode` | `test_node_resources.py` | 已闭环 | 依赖资源与节点知识点匹配质量。 |
@@ -75,8 +75,8 @@
 | 教师学生深度报告 | `TeacherStudentReport.jsx`、`teachingService.getStudentReport` | `/teaching/classes/{class_id}/students/{student_id}/learning` | `teaching.py` | 间接依赖 Profile/Evaluation/Quiz 数据 | `others.UserProfile`、`others.Evaluation`、`quiz.py` | `test_teacher_student_learning.py` | 部分闭环 | `overall_score` 真实计算口径仍待审查；前端不展示硬编码评分。 |
 | Admin 用户管理 | `AdminConsole.jsx`、`adminService` | `/admin/users`、`/admin/users/{user_id}` | `admin.py` | 无直接 Agent 依赖 | `user.py` | E2E 管理员主链路、后续可补专测 | 部分闭环 | 用户停用状态跨页面持久展示需要 API 返回 `is_active/status`；当前契约未覆盖。 |
 | Admin 日志 | `AdminConsole.jsx`、`adminService.getAgentLogs`、`getSystemLogs` | `/admin/logs/agent`、`/admin/logs/operations` | `admin.py` | Agent 日志为展示来源之一 | `others.OperationLog`、`others.AgentLog` | E2E 管理员主链路 | 部分闭环 | 真实日志来源和筛选维度仍较基础。 |
-| AsyncTask 查询 | `CourseCatalogDrawer.jsx`、`taskService` | `/tasks/{task_id}` | `tasks.py` | 无直接 Agent 依赖 | `others.AsyncTask` | Admin 入库 UI E2E、生成相关后端测试 | 已闭环 | 前端只在已接 UI 中使用；资源/Quiz 生成暂无前端 UI。 |
-| Agent webhook | 无前端入口 | `/webhooks/agent` | `webhooks.py` | Agent Service 长任务回调 | `others.AsyncTask`、`others.Resource` | `test_resources_async.py`、生成链路 smoke 待补 | 部分闭环 | 资源生成真实 webhook 仍是下一步高优先级联调。 |
+| AsyncTask 查询 | `CourseCatalogDrawer.jsx`、`taskService` | `/tasks/{task_id}` | `tasks.py` | 无直接 Agent 依赖 | `others.AsyncTask` | Admin 入库 UI E2E、生成相关后端测试 | 已闭环 | 前端只在已接 UI 中使用；当前用于 Admin CourseCatalog 入库轮询，不作为资源/Quiz 生成入口。 |
+| Agent webhook | 无前端入口 | `/webhooks/agent` | `webhooks.py` | Agent Service 长任务回调 | `others.AsyncTask`、`others.Resource` | `test_resources_async.py`、历史生成链路 smoke 待补 | 后端内部 / 非前端主线 | Agent webhook 不再作为前端下一步验收目标，除非后续产品重新定义生成链路。 |
 | Memory 压缩 | 无前端入口 | 无 Client API | 无 Backend Client route | `api/v1/memory.py`、`agents/memory.py` | Agent memory store | Agent `test_memory_agent.py`、`test_user_memory_store.py` | 后端/Agent 已有但前端未接 | 属 Agent 内部能力，不应直接进入前端契约。 |
 | KG 生成 | 无前端入口 | 当前 Client API 未形成正式链路 | `test_generate_kg.py` 提示历史能力 | Agent course knowledge store / ingestion | Qdrant course knowledge | `test_generate_kg.py`、Agent knowledge tests | 缺口/风险 | LearningPath/KG ready gate 尚未设计；需要单独专项。 |
 
@@ -86,8 +86,8 @@
 
 - Auth / Users：`/auth/*`、`/users/me`
 - Courses / Catalogs：`/courses`、`/courses/join`、`/course-catalogs`、`/admin/course-catalogs*`
-- Resources：`/resources`、`/resources/{id}`、`/resources/generate`
-- Quiz：`/quiz/questions`、`/quiz/submit`、`/quiz/result`、`/quiz/history`、`/quiz/generate`
+- Resources：`/resources`、`/resources/{id}`；`/resources/generate` 为前端作废 / 不接入的历史接口
+- Quiz：`/quiz/questions`、`/quiz/submit`、`/quiz/result`、`/quiz/history`；`/quiz/generate` 为前端作废 / 不接入的历史接口
 - Learning：`/learning-path`、`/learning-path/refresh`、`/learning-path/nodes/{node_id}/resources`
 - Profile / Evaluation：`/profile*`、`/evaluation*`
 - Teaching：`/teaching/classes/{class_id}/*`
@@ -95,21 +95,21 @@
 - Async / Webhook：`/tasks/{task_id}`、`/webhooks/agent`
 - Tutoring：`/tutoring/chat`、`/tutoring/conversations*`
 
-主要未被前端 UI 接入但已在 Client API 中声明的生成入口：
+主要未被前端 UI 接入但已在 Client API 中声明的历史 / 作废入口：
 
-- `/resources/generate`
-- `/quiz/generate`
+- `/resources/generate`：当前前端契约作废 / 不接入，教师端不得新增生成资源入口。
+- `/quiz/generate`：当前前端契约作废 / 不接入，练习页不得引导触发生题。
 - `/profile/initialize`
 
-这些入口当前不应靠临时 UI 硬接；必须先完成真实联调或明确产品交互设计。
+这些入口当前不应靠临时 UI 硬接；如需恢复，必须先重新完成产品契约审查。
 
 ## Backend 到 Agent Service 调用点
 
 | Backend 调用点 | Agent API | 当前用途 | 主要风险 |
 | --- | --- | --- | --- |
 | `catalogs.py` | `/agent/v1/knowledge/ingestions` | CourseCatalog 资料入库 | 真实存储/Qdrant 环境、partial 状态处理 |
-| `resources.py` | `/agent/v1/resources/generate` | 资源生成 | webhook 回调和资源质量需要真实联调 |
-| `quiz.py` | `/agent/v1/assessment/generate-questions` | Quiz 生成 | 题目质量、catalog id 检索、教学班 id 落库 |
+| `resources.py` | `/agent/v1/resources/generate` | 历史资源生成 / 后端内部能力候选 | 当前不作为前端下一步验收目标；如需恢复需重新定义生成产品链路 |
+| `quiz.py` | `/agent/v1/assessment/generate-questions` | 历史 Quiz 生成 / 后端内部能力候选 | 当前不作为前端下一步验收目标；题目质量和落库链路需等产品重新定义后再验收 |
 | `quiz_service.py` | `/agent/v1/assessment/evaluate` | Quiz 提交后的诊断 | 后台失败不阻塞提交，诊断质量需专项 |
 | `tutoring.py` | `/agent/v1/tutoring/chat` | AI Chat SSE | SSE 事件契约和历史消息类型漂移 |
 | `learning_path.py` | `/agent/v1/learning-path/generate` | 学习路径刷新 | KG ready 口径未收口 |
@@ -156,15 +156,15 @@ Agent Service 当前测试证据：
 `docs/project-direction.md` 覆盖了当前项目的主结构和方向，但不能替代本审计表。按当前证据，项目覆盖状态如下：
 
 - 主链路已闭环：Auth、课程、CourseCatalog 管理、管理员资料上传、CourseCatalog 资料入库和向量化、资源列表/详情、基础 Quiz、AI Chat、教师基础学情、AsyncTask 查询。
-- 生成链路部分闭环：资源生成和 Quiz 生成已有 ready gate、契约和后端测试，但缺真实 Backend + Agent Service 联调证据。
+- 生成链路已降级为前端不接入 / 历史接口：资源生成和 Quiz 生成虽已有 ready gate、契约和后端测试背景，但不再作为当前前端主线。
 - Agent 依赖链路部分闭环：Profile、Evaluation、LearningPath 有 Backend/Agent 调用和测试，但部分页面指标和 KG ready 口径尚未收口。
 - 阶段二页面能力仍有缺口：学习时长、阅读进度、AIChat 活动摘要、资源偏好分布、复杂教师/Admin 指标不应直接实现。
-- 高风险下一步：资源生成 webhook 真实闭环、Quiz 生成真实闭环、LearningPath/KG ready gate 设计。
+- 高风险下一步：Admin CourseCatalog 入库部署级验收、教师绑定 ready CourseCatalog 创建教学班验收、学生 / 教师消费入库内容的产品口径、LearningPath/KG ready gate 设计。
 
 ## 下一轮审计动作
 
-1. 给 `/resources/generate` 做真实环境 smoke，记录 task、webhook、resources 落库和前端展示证据。
-2. 给 `/quiz/generate` 做真实环境 smoke，记录 Agent payload、题目落库和 `/tasks/{task_id}` 结果。
-3. 设计并审计 LearningPath/KG ready gate，避免资料缺失时泛化生成学习路径。
-4. 为 Admin 用户停用状态补契约审查，决定是否扩展 `GET /admin/users`。
-5. 若新增页面指标，先在本表追加一行，再进入 spec 和 plan。
+1. 做 Admin CourseCatalog 上传 / 入库部署级验收，记录真实 Backend、Agent Service、MySQL、Qdrant/storage/provider 配置下的任务和知识库状态证据。
+2. 做教师绑定 ready CourseCatalog 创建教学班验收，确认学生加入、资源列表、基础练习和教师端课程上下文正常。
+3. 设计学生 / 教师如何消费 CourseCatalog 入库后的资源与知识库内容，避免用历史生成接口补 UI。
+4. 设计并审计 LearningPath/KG ready gate，避免资料缺失时泛化生成学习路径。
+5. 为 Admin 用户停用状态补契约审查，决定是否扩展 `GET /admin/users`。

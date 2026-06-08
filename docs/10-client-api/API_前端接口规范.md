@@ -862,7 +862,7 @@ GET /api/v1/learning-path/nodes/:node_id/resources
 - 题库由通用题和个性化题组成。
 - 通用题面向课程/章节/知识点，所有加入该课程的学生可使用。
 - 个性化题按 `owner_user_id` 归属当前学生，只对该学生可见。
-- Agent 不直接写数据库；`POST /quiz/generate` 触发后，Backend 收集上下文并调用 Agent 内部生题接口，Agent 返回结构化题目 JSON，Backend 校验后写入题库。
+- Agent 不直接写数据库；当前前端契约不提供触发 `/quiz/generate` 的页面入口，历史生题链路如需恢复必须重新进行产品契约审查。
 - 支持题型固定为：`single_choice` / `multi_choice` / `code` / `short_answer`。
 
 ### 9.1 获取题目组
@@ -871,7 +871,7 @@ GET /api/v1/learning-path/nodes/:node_id/resources
 GET /api/v1/quiz/questions?course_id={course_id}&chapter={chapter}&knowledge_point={knowledge_point}
 ```
 
-**说明：** 本接口只从题库取题，不实时调用 Agent。返回通用题和当前用户自己的个性化题；若题目不足或为空，返回空数组，前端可引导用户触发 `/quiz/generate`。
+**说明：** 本接口只从题库取题，不实时调用 Agent。返回通用题和当前用户自己的个性化题；若题目不足或为空，返回空数组。当前前端契约不提供触发 `/quiz/generate` 的入口。
 
 **查询参数：**
 
@@ -902,13 +902,15 @@ GET /api/v1/quiz/questions?course_id={course_id}&chapter={chapter}&knowledge_poi
 | questions[].options[].text | string | 选项文本 |
 | total_count | integer | 总题数 |
 
-### 9.2 生成个性化题目
+### 9.2 生成个性化题目（Deprecated / 前端作废不接入）
 
 ```
 POST /api/v1/quiz/generate
 ```
 
-**说明：** 学生在练习页触发个性化生题。Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 `quiz_questions`。
+**前端契约状态：** Deprecated。当前前端页面不应调用本接口，练习页不提供触发生题入口；如未来恢复生题产品链路，必须先重新完成产品契约审查。
+
+**历史说明：** Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 `quiz_questions`。
 
 **CourseCatalog ready gate：**
 
@@ -1112,13 +1114,15 @@ GET /api/v1/resources/:id
 - `content: null` 或空字符串表示当前资源暂无可展示正文内容，前端应展示空态，不应伪造正文。
 - 无权限访问返回 `403`，资源不存在返回 `404`，前端不应以空对象替代。
 
-### 10.3 触发资源生成
+### 10.3 触发资源生成（Deprecated / 前端作废不接入）
 
 ```
 POST /api/v1/resources/generate
 ```
 
-**权限：** 仅 teacher
+**权限：** 仅 teacher（历史接口权限）
+
+**前端契约状态：** Deprecated。当前前端页面不应调用本接口，教师端不提供生成资源入口；如未来恢复资源生成产品链路，必须先重新完成产品契约审查。
 
 **请求体 `application/json`：**
 
@@ -1135,7 +1139,7 @@ POST /api/v1/resources/generate
 |------|------|------|
 | task_id | string | 异步任务 ID |
 
-**说明：** 资源生成为长时间异步任务，Agent 完成后通过 Webhook 回调。该接口由教师触发，用于生成课程级学习资料，不生成个性化题目；个性化题目走 `/api/v1/quiz/generate`。
+**历史说明：** 资源生成为长时间异步任务，Agent 完成后通过 Webhook 回调。该接口曾用于生成课程级学习资料，不生成个性化题目。当前前端契约中 `/api/v1/resources/generate` 和 `/api/v1/quiz/generate` 均作废 / 不接入。
 
 **CourseCatalog ready gate：**
 
@@ -1267,15 +1271,16 @@ GET /api/v1/tutoring/conversations/:id
 
 ### 12.1 查询异步任务状态
 
-**功能是干啥的：** 给前端轮询刷新/生成任务是否完成。用户点“刷新画像 / 生成路径 / 生成题目 / 生成资源”后先拿到 `task_id`，之后只查这个接口，不直接感知 Agent webhook。
+**功能是干啥的：** 给前端轮询异步任务是否完成。当前前端已接入的主要场景包括 Admin CourseCatalog 入库、刷新画像、生成路径、刷新评估等；前端不直接感知 Agent webhook。
 
 **功能实现方法：**
 
 - 所有异步入口先在 Backend 创建任务记录，再返回 `task_id`。
 - 前端每 1-3 秒轮询一次；`processing` 继续等，`completed` 后跳转或重新调用业务 GET，`failed` 显示错误。
 - Backend 查询任务表时必须带上当前登录用户校验归属；无权访问按 404 处理。
-- `resource_generation` 由教师触发并关联 `course_id`；完成后 `result.resource_ids` 只返回资源 ID。
-- `quiz_generation` 完成后 `result.question_ids` 返回新题目 ID；评估、画像、路径刷新完成后通过 `result.updated_at` 表示已写入最新快照。
+- `course_catalog_ingestion` 完成后前端刷新资料列表和知识库状态。
+- `evaluation_refresh` / `profile_refresh` / `learning_path_refresh` 完成后通过 `result.updated_at` 表示已写入最新快照，前端再调用对应 GET 读取最新结果。
+- `resource_generation` / `quiz_generation` 为历史生成任务类型；当前前端契约不提供对应触发入口。
 
 ```
 GET /api/v1/tasks/:task_id

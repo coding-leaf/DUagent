@@ -1411,7 +1411,7 @@
           "Quiz"
         ],
         "summary": "获取练习题目组",
-        "description": "只从题库取题，不实时调用 Agent。返回通用题和当前用户自己的个性化题；若题目不足或为空，返回空数组，前端可引导用户触发 /quiz/generate。",
+        "description": "只从题库取题，不实时调用 Agent。返回通用题和当前用户自己的个性化题；若题目不足或为空，返回空数组。当前前端契约不提供触发 /quiz/generate 的入口。",
         "parameters": [
           {
             "name": "course_id",
@@ -1496,7 +1496,8 @@
           "Quiz"
         ],
         "summary": "生成个性化题目",
-        "description": "学生在练习页触发个性化生题。Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 quiz_questions。Backend 会根据教学班 course_id 解析绑定的 CourseCatalog，并要求课程资源库知识库可用：status=ready 且 knowledge_status=ready，或 status=ready、knowledge_status=partial 且 chunk_count>0。请求通过校验后，Backend 保持任务 course_id 为教学班 ID，并将 CourseCatalog.id 作为 Agent 知识检索 course_id。若资源库未绑定、资料未完成入库或知识库为空，请求在创建任务前失败。",
+        "deprecated": true,
+        "description": "Deprecated。当前前端页面不应调用本接口，练习页不提供触发生题入口；如未来恢复生题产品链路，必须先重新完成产品契约审查。历史链路：Backend 根据课程知识库、最近学习效果评估、用户画像、历史错题、当前学习路径节点等上下文调用 Agent 生题；Agent 返回结构化题目，Backend 校验后写入 quiz_questions。Backend 会根据教学班 course_id 解析绑定的 CourseCatalog，并要求课程资源库知识库可用：status=ready 且 knowledge_status=ready，或 status=ready、knowledge_status=partial 且 chunk_count>0。请求通过校验后，Backend 保持任务 course_id 为教学班 ID，并将 CourseCatalog.id 作为 Agent 知识检索 course_id。若资源库未绑定、资料未完成入库或知识库为空，请求在创建任务前失败。",
         "requestBody": {
           "required": true,
           "content": {
@@ -1909,7 +1910,8 @@
           "Resources"
         ],
         "summary": "触发资源生成",
-        "description": "仅教师，异步生成课程级学习资料，Agent 完成后通过 Webhook 回调。该接口不生成个性化题目；个性化题目走 /quiz/generate。Backend 会根据教学班 course_id 解析绑定的 CourseCatalog，并要求课程资源库知识库可用：status=ready 且 knowledge_status=ready，或 status=ready、knowledge_status=partial 且 chunk_count>0。请求通过校验后，Backend 保持任务 course_id 为教学班 ID，并将 CourseCatalog.id 作为 Agent 知识检索 course_id。若资源库未绑定、资料未完成入库或知识库为空，请求在创建任务前失败。",
+        "deprecated": true,
+        "description": "Deprecated。当前前端页面不应调用本接口，教师端不提供生成资源入口；如未来恢复资源生成产品链路，必须先重新完成产品契约审查。历史链路：仅教师，异步生成课程级学习资料，Agent 完成后通过 Webhook 回调。该接口不生成个性化题目。Backend 会根据教学班 course_id 解析绑定的 CourseCatalog，并要求课程资源库知识库可用：status=ready 且 knowledge_status=ready，或 status=ready、knowledge_status=partial 且 chunk_count>0。请求通过校验后，Backend 保持任务 course_id 为教学班 ID，并将 CourseCatalog.id 作为 Agent 知识检索 course_id。若资源库未绑定、资料未完成入库或知识库为空，请求在创建任务前失败。",
         "requestBody": {
           "required": true,
           "content": {
@@ -2193,7 +2195,7 @@
           "Common"
         ],
         "summary": "查询异步任务状态",
-        "description": "通用异步任务查询接口，用于 evaluation/profile/learning-path/quiz/resources 等刷新/生成任务。功能：给前端轮询任务是否完成，前端不直接感知 Agent webhook。实现：Backend 在所有异步入口先创建任务表记录并返回 task_id；前端每 1-3 秒轮询，processing 继续等待，completed 后调用对应业务 GET 读取最新数据，failed 显示错误。需要用户 JWT；普通用户只能查询自己触发的任务，教师只能查询自己触发的课程资源生成任务。不存在或无权访问统一返回 404。",
+        "description": "通用异步任务查询接口，用于 Admin CourseCatalog 入库、evaluation/profile/learning-path 等异步任务。功能：给前端轮询任务是否完成，前端不直接感知 Agent webhook。实现：Backend 在异步入口先创建任务表记录并返回 task_id；前端每 1-3 秒轮询，processing 继续等待，completed 后调用对应业务 GET 读取最新数据，failed 显示错误。需要用户 JWT；普通用户只能查询自己触发的任务。resource_generation / quiz_generation 为历史生成任务类型，当前前端契约不提供对应触发入口。不存在或无权访问统一返回 404。",
         "parameters": [
           {
             "name": "task_id",
@@ -4409,7 +4411,7 @@
           },
           "result": {
             "type": "object",
-            "description": "任务结果摘要。resource_generation 可返回 resource_ids；quiz_generation 可返回 question_ids；evaluation/profile/learning_path 刷新可返回 updated_at，前端再调用对应 GET 读取最新结果。",
+            "description": "任务结果摘要。course_catalog_ingestion 完成后前端刷新资料列表和知识库状态；evaluation/profile/learning_path 刷新可返回 updated_at，前端再调用对应 GET 读取最新结果。resource_generation / quiz_generation 为历史生成任务类型，当前前端契约不提供对应触发入口。",
             "properties": {
               "resource_ids": {
                 "type": "array",

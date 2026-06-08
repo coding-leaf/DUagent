@@ -20,7 +20,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 
-from app.api.v1.catalogs import admin_upload_catalog_material
+from app.api.v1.catalogs import admin_start_catalog_ingestion, admin_upload_catalog_material
 from app.core.config import settings
 from app.db.session import async_session_factory, engine, init_db
 from app.main import app
@@ -716,6 +716,104 @@ def test_start_catalog_ingestion_without_uploaded_materials_returns_409():
     asyncio.run(_api_test_start_catalog_ingestion_without_uploaded_materials_returns_409())
 
 
+class _ScalarOneOrNoneResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
+class _ScalarsAllResult:
+    def __init__(self, values):
+        self._values = values
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._values
+
+
+class _ConcurrentStartDb:
+    def __init__(self):
+        self.catalog = SimpleNamespace(
+            id="catalog-start-race",
+            status="draft",
+            knowledge_status="draft",
+            is_deleted=False,
+        )
+        self.material = SimpleNamespace(
+            id="material-start-race",
+            catalog_id=self.catalog.id,
+            storage_uri="course_catalogs/catalog-start-race/material-start-race/intro.md",
+            status="uploaded",
+            last_error="old error",
+        )
+        self.added = []
+        self.committed = False
+        self.rolled_back = False
+
+    async def execute(self, statement, *_args, **_kwargs):
+        statement_text = str(statement)
+        if "UPDATE course_catalogs" in statement_text:
+            return _RowCountResult(0)
+        if "FROM course_catalog_materials" in statement_text:
+            return _ScalarsAllResult([self.material])
+        return _ScalarOneOrNoneResult(self.catalog)
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        raise AssertionError("task must not be flushed when catalog transition loses race")
+
+    async def refresh(self, _obj):
+        pass
+
+    async def commit(self):
+        self.committed = True
+
+    async def rollback(self):
+        self.rolled_back = True
+
+
+class _NoopBackgroundTasks:
+    def __init__(self):
+        self.tasks = []
+
+    def add_task(self, func, *args, **kwargs):
+        self.tasks.append((func, args, kwargs))
+
+
+async def _api_test_start_ingestion_rejects_when_atomic_catalog_transition_loses_race():
+    db = _ConcurrentStartDb()
+    background_tasks = _NoopBackgroundTasks()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await admin_start_catalog_ingestion(
+            "catalog-start-race",
+            background_tasks=background_tasks,  # type: ignore[arg-type]
+            current_user=SimpleNamespace(id="admin-id"),  # type: ignore[arg-type]
+            db=db,  # type: ignore[arg-type]
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["message"] == "课程资源库正在入库中"
+    assert db.added == []
+    assert db.committed is False
+    assert db.rolled_back is True
+    assert db.catalog.status == "draft"
+    assert db.catalog.knowledge_status == "draft"
+    assert db.material.status == "uploaded"
+    assert db.material.last_error == "old error"
+    assert background_tasks.tasks == []
+
+
+def test_start_ingestion_rejects_when_atomic_catalog_transition_loses_race():
+    asyncio.run(_api_test_start_ingestion_rejects_when_atomic_catalog_transition_loses_race())
+
+
 async def _api_test_incremental_ingestion_partial_failure_keeps_catalog_ready(
     tmp_path,
     monkeypatch,
@@ -868,4 +966,99 @@ async def _api_test_first_ingestion_partial_success_marks_catalog_ready_partial(
 def test_first_ingestion_partial_success_marks_catalog_ready_partial(tmp_path, monkeypatch):
     asyncio.run(
         _api_test_first_ingestion_partial_success_marks_catalog_ready_partial(tmp_path, monkeypatch)
+    )
+
+
+async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
+    tmp_path,
+    monkeypatch,
+    *,
+    initial: bool,
+):
+    await _init_test_db()
+    monkeypatch.setattr(
+        "app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT",
+        str(tmp_path / "course_catalogs"),
+    )
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            admin_headers = await _register_and_login(client, "admin")
+            title = "Initial Malformed" if initial else "Incremental Malformed"
+            catalog_id = await _create_catalog(client, admin_headers, title=title)
+            if not initial:
+                await _set_catalog_status(catalog_id, "ready", "ready")
+            upload = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
+                headers=admin_headers,
+                files={"file": ("malformed.md", b"# Bad Chunk", "text/markdown")},
+            )
+            assert upload.status_code == 201, upload.text
+            material_id = upload.json()["data"]["id"]
+
+            with patch(
+                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                new_callable=AsyncMock,
+            ) as mock_agent:
+                mock_agent.return_value = {
+                    "catalog_id": catalog_id,
+                    "chunk_count": 1,
+                    "materials": [
+                        {
+                            "storage_uri": (
+                                f"course_catalogs/{catalog_id}/{material_id}/malformed.md"
+                            ),
+                            "status": "ingested",
+                            "chunk_count": "bad",
+                            "error": None,
+                        }
+                    ],
+                }
+                response = await client.post(
+                    f"/api/v1/admin/course-catalogs/{catalog_id}/ingestions",
+                    headers=admin_headers,
+                )
+                assert response.status_code == 202, response.text
+                task_id = response.json()["data"]["task_id"]
+
+            task_data = await _wait_for_task_status(client, admin_headers, task_id, {"failed"})
+            assert task_data["status"] == "failed"
+            assert task_data["error_code"] == "unexpected_error"
+            assert "invalid literal" in task_data["error_message"]
+
+            status_data = await _get_catalog_status(client, admin_headers, catalog_id)
+            material = await _get_material_from_list(client, admin_headers, catalog_id, material_id)
+            assert status_data["status"] == ("failed" if initial else "ready")
+            assert status_data["knowledge_status"] == ("failed" if initial else "partial")
+            assert status_data["last_ingestion_status"] == "failed"
+            assert "invalid literal" in status_data["last_error"]
+            assert material["status"] == "failed"
+            assert "invalid literal" in material["last_error"]
+    finally:
+        await engine.dispose()
+
+
+def test_initial_catalog_ingestion_unexpected_exception_marks_catalog_failed(
+    tmp_path,
+    monkeypatch,
+):
+    asyncio.run(
+        _api_test_catalog_ingestion_unexpected_exception_recovers_state(
+            tmp_path,
+            monkeypatch,
+            initial=True,
+        )
+    )
+
+
+def test_incremental_catalog_ingestion_unexpected_exception_keeps_catalog_ready_partial(
+    tmp_path,
+    monkeypatch,
+):
+    asyncio.run(
+        _api_test_catalog_ingestion_unexpected_exception_recovers_state(
+            tmp_path,
+            monkeypatch,
+            initial=False,
+        )
     )

@@ -229,11 +229,43 @@ async def _run_catalog_ingestion_background(task_id: str) -> None:
         except Exception as exc:
             logger.exception("CourseCatalog ingestion task failed unexpectedly: %s", task_id)
             if task is not None:
+                task_context = task.result or {}
+                catalog_id = task_context.get("catalog_id")
+                material_ids = task_context.get("material_ids") or []
+                initial = bool(task_context.get("initial"))
+                message = str(exc)[:500]
+
+                catalog = None
+                if catalog_id:
+                    catalog_result = await db.execute(
+                        select(CourseCatalog).where(
+                            CourseCatalog.id == catalog_id,
+                            CourseCatalog.is_deleted == False,
+                        )
+                    )
+                    catalog = catalog_result.scalar_one_or_none()
+                if catalog is not None:
+                    catalog.status = "failed" if initial else "ready"
+                    catalog.knowledge_status = "failed" if initial else "partial"
+                    catalog.last_ingestion_status = "failed"
+                    catalog.last_error = message
+                if material_ids:
+                    material_result = await db.execute(
+                        select(CourseCatalogMaterial).where(
+                            CourseCatalogMaterial.id.in_(material_ids),
+                            CourseCatalogMaterial.is_deleted == False,
+                        )
+                    )
+                    for material in material_result.scalars().all():
+                        material.status = "failed"
+                        material.last_error = message
+
                 task.status = "failed"
                 task.progress = 100
                 task.error_code = "unexpected_error"
-                task.error_message = str(exc)[:500]
+                task.error_message = message
                 task.completed_at = _now_utc()
+                task.result = {**task_context, "unexpected_error": message}
                 await db.commit()
 
 
@@ -558,9 +590,26 @@ async def admin_start_catalog_ingestion(
         )
 
     initial = _is_initial_ingestion(catalog)
-    catalog.status = "ingesting" if initial else "ready"
-    catalog.knowledge_status = "ingesting"
-    catalog.last_error = None
+    update_result = await db.execute(
+        update(CourseCatalog)
+        .where(
+            CourseCatalog.id == catalog.id,
+            CourseCatalog.is_deleted == False,
+            CourseCatalog.status != "ingesting",
+            CourseCatalog.knowledge_status != "ingesting",
+        )
+        .values(
+            status="ingesting" if initial else "ready",
+            knowledge_status="ingesting",
+            last_error=None,
+        )
+    )
+    if update_result.rowcount == 0:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
+        )
 
     for material in materials:
         material.status = "ingesting"

@@ -66,6 +66,7 @@ Phase B1 已完成 Backend-Agent 课程资源库知识入库编排：
 
 - `src/api/services/admin.js`
 - `src/api/services/task.js`
+- `src/utils/apiError.js`
 - `src/pages/AdminConsole.jsx`
 - `src/components/admin/CourseCatalogDrawer.jsx`
 - `WORKFLOW.md`
@@ -95,6 +96,14 @@ getTaskStatus(taskId)
 ```
 
 `learningService.getTaskStatus()` 目前可用，但 task 查询是通用能力，不属于 learning 专属。新增 `taskService` 后，后续可逐步让 TeacherConsole 等调用迁移到同一封装。本轮可以只让新抽屉使用 `taskService`，不强制重构 TeacherConsole。
+
+`apiError` 工具承担 API 错误信息提取职责：
+
+```js
+getErrorMessage(error, fallback)
+```
+
+当前 `getErrorMessage` 是 `AdminConsole.jsx` 内的局部函数。由于本轮会新增独立抽屉组件，错误提取逻辑应提取到 `src/utils/apiError.js`，由 `AdminConsole` 和 `CourseCatalogDrawer` 共同导入，避免复制实现。
 
 ## 使用的 Client API
 
@@ -126,6 +135,13 @@ Content-Type: multipart/form-data
 field: file
 ```
 
+上传请求实现要求：
+
+- 使用 `FormData`，字段名必须为 `file`。
+- 上传请求必须设置比全局 `apiClient` 更长的 per-request timeout，建议至少 60 秒。
+- 当前 `apiClient` 全局默认 `Content-Type: application/json`，上传方法必须覆盖该默认行为，确保请求以 `multipart/form-data` 发送。
+- multipart 边界由浏览器或 Axios 根据 `FormData` 生成，不得手写固定 boundary。
+
 触发入库：
 
 ```text
@@ -145,6 +161,20 @@ GET /api/v1/tasks/{task_id}
 ```
 
 ## 数据展示
+
+`apiClient` 响应拦截器返回的是完整业务信封：
+
+```js
+{ code, message, data }
+```
+
+因此前端使用字段时必须显式从 `data` 内层解包：
+
+- 资源库列表使用 `res.data.catalogs`，分页信息使用 `res.data.total`、`res.data.page`、`res.data.page_size`。
+- 资料列表使用 `res.data.materials`。
+- 知识库状态使用 `res.data`。
+- 触发入库响应使用 `res.data.task_id`、`res.data.catalog_id`、`res.data.status`。
+- 任务轮询响应使用 `res.data`。
 
 资源库列表展示：
 

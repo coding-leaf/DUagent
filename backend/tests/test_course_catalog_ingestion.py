@@ -735,30 +735,36 @@ class _ScalarsAllResult:
         return self._values
 
 
-class _ConcurrentStartDb:
+class _LockingStartDb:
     def __init__(self):
         self.catalog = SimpleNamespace(
-            id="catalog-start-race",
+            id="catalog-start-lock",
             status="draft",
             knowledge_status="draft",
             is_deleted=False,
         )
         self.material = SimpleNamespace(
-            id="material-start-race",
+            id="material-start-lock",
             catalog_id=self.catalog.id,
-            storage_uri="course_catalogs/catalog-start-race/material-start-race/intro.md",
+            storage_uri="course_catalogs/catalog-start-lock/material-start-lock/intro.md",
             status="uploaded",
             last_error="old error",
         )
         self.added = []
         self.committed = False
         self.rolled_back = False
+        self.execute_calls = []
 
     async def execute(self, statement, *_args, **_kwargs):
         statement_text = str(statement)
-        if "UPDATE course_catalogs" in statement_text:
-            return _RowCountResult(0)
+        self.execute_calls.append(
+            {
+                "statement": statement_text,
+                "for_update": getattr(statement, "_for_update_arg", None) is not None,
+            }
+        )
         if "FROM course_catalog_materials" in statement_text:
+            assert self.execute_calls[0]["for_update"] is True
             return _ScalarsAllResult([self.material])
         return _ScalarOneOrNoneResult(self.catalog)
 
@@ -766,7 +772,7 @@ class _ConcurrentStartDb:
         self.added.append(obj)
 
     async def flush(self):
-        raise AssertionError("task must not be flushed when catalog transition loses race")
+        self.added[-1].id = "task-start-lock"
 
     async def refresh(self, _obj):
         pass
@@ -786,32 +792,33 @@ class _NoopBackgroundTasks:
         self.tasks.append((func, args, kwargs))
 
 
-async def _api_test_start_ingestion_rejects_when_atomic_catalog_transition_loses_race():
-    db = _ConcurrentStartDb()
+async def _api_test_start_ingestion_locks_catalog_before_selecting_materials():
+    db = _LockingStartDb()
     background_tasks = _NoopBackgroundTasks()
 
-    with pytest.raises(HTTPException) as exc_info:
-        await admin_start_catalog_ingestion(
-            "catalog-start-race",
-            background_tasks=background_tasks,  # type: ignore[arg-type]
-            current_user=SimpleNamespace(id="admin-id"),  # type: ignore[arg-type]
-            db=db,  # type: ignore[arg-type]
-        )
+    response = await admin_start_catalog_ingestion(
+        "catalog-start-lock",
+        background_tasks=background_tasks,  # type: ignore[arg-type]
+        current_user=SimpleNamespace(id="admin-id"),  # type: ignore[arg-type]
+        db=db,  # type: ignore[arg-type]
+    )
 
-    assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["message"] == "课程资源库正在入库中"
-    assert db.added == []
-    assert db.committed is False
-    assert db.rolled_back is True
-    assert db.catalog.status == "draft"
-    assert db.catalog.knowledge_status == "draft"
-    assert db.material.status == "uploaded"
-    assert db.material.last_error == "old error"
-    assert background_tasks.tasks == []
+    assert response["code"] == 202
+    assert db.execute_calls[0]["for_update"] is True
+    assert "FROM course_catalogs" in db.execute_calls[0]["statement"]
+    assert "FROM course_catalog_materials" in db.execute_calls[1]["statement"]
+    assert db.added
+    assert db.committed is True
+    assert db.rolled_back is False
+    assert db.catalog.status == "ingesting"
+    assert db.catalog.knowledge_status == "ingesting"
+    assert db.material.status == "ingesting"
+    assert db.material.last_error is None
+    assert len(background_tasks.tasks) == 1
 
 
-def test_start_ingestion_rejects_when_atomic_catalog_transition_loses_race():
-    asyncio.run(_api_test_start_ingestion_rejects_when_atomic_catalog_transition_loses_race())
+def test_start_ingestion_locks_catalog_before_selecting_materials():
+    asyncio.run(_api_test_start_ingestion_locks_catalog_before_selecting_materials())
 
 
 async def _api_test_incremental_ingestion_partial_failure_keeps_catalog_ready(
@@ -988,6 +995,13 @@ async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
             catalog_id = await _create_catalog(client, admin_headers, title=title)
             if not initial:
                 await _set_catalog_status(catalog_id, "ready", "ready")
+            first_upload = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
+                headers=admin_headers,
+                files={"file": ("good.md", b"# Good Chunk", "text/markdown")},
+            )
+            assert first_upload.status_code == 201, first_upload.text
+            first_material_id = first_upload.json()["data"]["id"]
             upload = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/materials/upload",
                 headers=admin_headers,
@@ -1004,6 +1018,14 @@ async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
                     "catalog_id": catalog_id,
                     "chunk_count": 1,
                     "materials": [
+                        {
+                            "storage_uri": (
+                                f"course_catalogs/{catalog_id}/{first_material_id}/good.md"
+                            ),
+                            "status": "ingested",
+                            "chunk_count": 3,
+                            "error": None,
+                        },
                         {
                             "storage_uri": (
                                 f"course_catalogs/{catalog_id}/{material_id}/malformed.md"
@@ -1027,12 +1049,25 @@ async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
             assert "invalid literal" in task_data["error_message"]
 
             status_data = await _get_catalog_status(client, admin_headers, catalog_id)
+            first_material = await _get_material_from_list(
+                client,
+                admin_headers,
+                catalog_id,
+                first_material_id,
+            )
             material = await _get_material_from_list(client, admin_headers, catalog_id, material_id)
             assert status_data["status"] == ("failed" if initial else "ready")
             assert status_data["knowledge_status"] == ("failed" if initial else "partial")
+            assert status_data["chunk_count"] == 0
             assert status_data["last_ingestion_status"] == "failed"
             assert "invalid literal" in status_data["last_error"]
+            assert first_material["status"] == "failed"
+            assert first_material["chunk_count"] == 0
+            assert first_material["ingested_at"] is None
+            assert "invalid literal" in first_material["last_error"]
             assert material["status"] == "failed"
+            assert material["chunk_count"] == 0
+            assert material["ingested_at"] is None
             assert "invalid literal" in material["last_error"]
     finally:
         await engine.dispose()

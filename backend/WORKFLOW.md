@@ -137,6 +137,18 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-08` `课程资源库知识入库 Backend 编排收尾`
+  - **完成**：`POST /api/v1/admin/course-catalogs/{catalog_id}/ingestions` 已按异步任务模式启动知识入库，Backend 后台任务同步调用 Agent Service 并回写 catalog/material/task 状态。
+  - **修复**：启动入库时先对 catalog 做 `SELECT ... FOR UPDATE`，再选择待入库 materials，收口 start/upload/create 并发窗口；上传端点继续保持原有条件更新保护，不额外扩大锁范围。
+  - **修复**：后台未知异常恢复先 `rollback()`，再用干净 session 重新加载 task/catalog/materials；恢复材料查询限定 `catalog_id`，并将已被内存改动的 material `chunk_count` 与 `ingested_at` 清回 `0` / `null`。
+  - **验证**：
+    - `backend/` 下运行 `../.venv/bin/pytest tests/test_course_catalog_ingestion.py tests/test_course_catalogs.py -q`：26 passed
+    - `agent_service/` 下运行 `../.venv/bin/pytest tests/test_knowledge_ingestion_api.py -q`：13 passed；该命令用于确认下游 Agent Service 入库接口基线仍通过，不是 Backend diff 的直接测试证据
+    - `frontend/` 下运行 `../.venv/bin/python -m json.tool ../docs/10-client-api/Client-API.openapi.json`：通过
+    - `git diff --check -- ../backend/app/api/v1/catalogs.py ../backend/tests/test_course_catalog_ingestion.py`：通过
+  - **契约**：本次改变 Client API 契约：`否` / 本次改变 Agent API 契约：`否`。
+  - **剩余风险**：尚未做真实大文件 PDF 入库压测；当前验证覆盖状态机、异常恢复和 API 契约格式。
+
 - `2026-06-05` `阶段一 E2E 种子数据修复与真实联调验收`
   - **修复**：`UserProfile` ORM 与 `schema.sql` 补齐 `knowledge_mastered`、`knowledge_weak` 两个内部画像统计字段，用于承载 E2E 种子脚本中的画像统计数据。
   - **迁移**：新增 `backend/migrations/2026-06-05-add-user-profile-knowledge-counters.sql`，用于既有 MySQL 库幂等补列；新部署仍由 `schema.sql` 直接创建这两个字段。

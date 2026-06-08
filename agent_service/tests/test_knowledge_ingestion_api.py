@@ -74,6 +74,20 @@ def test_knowledge_ingestion_rejects_empty_catalog_id(tmp_path: Path, monkeypatc
     assert response.status_code == 422
 
 
+def test_knowledge_ingestion_rejects_blank_catalog_id(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("COURSE_CATALOG_STORAGE_ROOT", str(tmp_path / "course_catalogs"))
+
+    response = _client().post(
+        "/agent/v1/knowledge/ingestions",
+        json={
+            "catalog_id": "   ",
+            "materials": [{"storage_uri": "chapter_01.md"}],
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_knowledge_ingestion_rejects_empty_materials(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("COURSE_CATALOG_STORAGE_ROOT", str(tmp_path / "course_catalogs"))
 

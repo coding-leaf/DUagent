@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agent_service.schemas.common import ApiResponse
 
@@ -13,6 +13,14 @@ class KnowledgeIngestionRequest(BaseModel):
     catalog_id: str = Field(
         ..., min_length=1, description="Backend CourseCatalog ID，写入 Qdrant payload.course_id"
     )
+
+    @field_validator("catalog_id")
+    @classmethod
+    def catalog_id_not_blank(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("catalog_id must not be blank")
+        return stripped
     materials: list[KnowledgeIngestionMaterial] = Field(
         ..., min_length=1, description="待入库课程资料列表"
     )

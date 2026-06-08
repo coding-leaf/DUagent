@@ -85,120 +85,17 @@
 
 ## 最近验证
 
+- 2026-06-08：AIChat 历史消息对象知识点白屏修复：
+  - 问题：学生端进入 AIChat 后加载历史会话，真实历史消息中的 `knowledge_points[]` 可能出现 `{name, chapter, mastery}` 对象；前端直接在 `<span>` 中渲染对象，触发 React `Objects are not valid as a React child` 白屏，同时列表使用 index key 触发 key warning。
+  - 修复：`AIChat.jsx` 对历史消息、SSE `knowledge_points` 和 `suggestions` 统一做可展示文本归一化；对象优先展示 `name/title/knowledge_point/label/content/id`，避免对象直接进入 React child；建议、知识点和图解列表改用消息 ID + 内容生成稳定 key。
+  - 回归：新增 Playwright 用例覆盖 `GET /tutoring/conversations/{id}` 返回对象形知识点和对象形 suggestions 时页面不白屏，并展示知识点/建议文本。
+  - 验证：`npm run test:e2e -- e2e/specs.spec.js -g "AI Chat renders historical messages"` 通过 1/1；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+  - 契约状态：前端未改接口路径、方法或请求参数；OpenAPI 仍声明 `messages[].knowledge_points[]` 为 string，当前真实历史响应出现对象元素，属于后端响应与 Client API 契约存在元素类型漂移，前端仅做兼容性防白屏。
 - 2026-06-08：CourseCatalogDrawer 入库任务轮询与状态文案修复：
   - `/tasks/{task_id}` 查询异常不再被本地改写为任务失败，不再停止入库态或写入权威终态集合；展示“任务状态查询失败，正在重试”并按原 2 秒间隔继续轮询。
   - 资源库、知识库、资料、上传队列和任务状态按设计展示中文标签；未知状态保留原值，空状态保留 UNKNOWN / `—` fallback。
   - `npm run test:e2e -- e2e/specs.spec.js -g "Admin course catalog ingestion polling"` 覆盖首次任务查询 500 后继续重试并最终完成；`npm run lint` / `npm run build` / `git diff --check -- src/components/admin/CourseCatalogDrawer.jsx e2e/specs.spec.js WORKFLOW.md` 通过。无 OpenAPI/契约漂移。
-- 2026-06-05：运行 `npm run build`，通过；存在 Vite chunk size warning。
-- 2026-06-05：运行 `npm run lint`，通过。
-- 2026-06-05：运行 `npm run test:e2e`，通过 3/3；环境为 Backend 8001、Agent Service 8002、MySQL `duagent_test`。
-- 2026-06-05：清理阶段一遗留契约疑点 — 删除 `src/api/services/` 中 6 个未使用且不在 `Client-API.openapi.json` 声明中的方法：
-  - `authService.logout` / `refreshToken` / `sendResetPasswordCode` / `resetPassword`
-  - `profileService.updateProfile`
-  - `courseService.getCourseStudents`
-  - 清理后 `npm run lint` / `npm run build` / `npm run test:e2e`（3/3）通过。
-  - `AdminConsole.jsx` 日志渲染适配真实 `AgentLogItem` 字段：`agent_type`、`endpoint`、`latency_ms`、`tokens_used`、`status`、`error_message`（替代 mock 字段 `level`/`agent`/`message`/`metadata.*`）。
-- 2026-06-05：阶段二第一轮联调断层收敛 — 清理 5 个 mock 分支 + AdminConsole 契约修正：
-  - `teaching.js`：移除 getClasses / getClassStudents / getStudentReport 的 mock 路径
-  - `admin.js`：移除 getAgentLogs / getSystemLogs 的 mock 路径，删除 useMock 声明
-  - `AdminConsole.jsx`：搜索参数 search → keyword；删除状态列、封禁按钮、删除按钮（DELETE 语义待契约确认）；last_login 改为 N/A
-  - 清理后 `npm run lint` / `npm run build` / `npm run test:e2e`（3/3）通过。
-- 2026-06-05：修正 `courseService.joinCourse` 请求体：`{ invite_code }` → `{ course_code }`，对齐 OpenAPI `JoinCourseRequest`（`1161e43`）。
-- 2026-06-05：MS-05/MS-06 前端适配完成：
-  - MS-05：Navbar "+ 加入课程"按钮 + `JoinCourseDialog`；Dashboard 无课程状态辅助入口。加入成功后自动 `refreshCourses` + `changeCourse`。无 OpenAPI/契约漂移。
-  - MS-06：TeacherConsole 顶部身份改为真实 `useAuth` 数据（姓名、`roleLabelMap` 角色映射、文字头像）。无 OpenAPI/契约漂移。
-  - `npm run lint` / `npm run build` 通过。
-- 2026-06-05：修复 Tailwind CSS v4 主题自定义间距别名（`--spacing-sm` 等）污染全局宽度类（`max-w-sm` 等）导致弹窗与空状态收缩、文字竖立展示的布局问题。在 `index.css` 的 `@theme` 块中显式指定标准的 `--width-*` 尺寸映射以隔离影响。`npm run lint` / `npm run build` 均编译通过。无 OpenAPI/契约漂移。
-- 2026-06-05：MS-08 教师创建课程入口完成：
-  - 新增 `CreateCourseDialog`：输入课程名称 → `POST /courses` → 展示课程码 + 一键复制（含 clipboard 失败兜底）
-  - TeacherConsole：`refreshClasses` callback 替代原有 effect 内直接 fetch；顶部加"创建课程"按钮；无班级空状态用 Fragment 包裹 + Dialog 确保 early return 路径可打开弹窗
-  - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
-- 2026-06-05：修复 MS-05/MS-08 新增入口的窄容器 UI 中文逐字竖排问题：
-  - `FeedbackStatus`：loading/empty/error 根容器加 `w-[min(92vw,24rem)] min-w-[18rem] box-border`；title 加 `whitespace-nowrap`；description 加 `whitespace-normal break-words`
-  - `JoinCourseDialog` / `CreateCourseDialog`：弹窗卡片宽度从 `max-w-sm` 改为 `w-[min(92vw,24rem)] min-w-[18rem]`；按钮/标题加 `whitespace-nowrap`
-  - `Dashboard` / `TeacherConsole`：空状态父容器加 `w-full px-4`；按钮加 `whitespace-nowrap min-w-fit`
-  - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
-- 2026-06-05：AI Chat SSE 真实流 smoke 验证通过：
-  - Agent `POST /agent/v1/tutoring/chat` 直接调用返回完整 SSE 流：chunk（文本）、diagram（Mermaid）、knowledge_points、suggestion、done 五种事件类型均正常产出
-  - 事件 JSON 结构与前端 `chatService.streamChat` SSE 解析器兼容
-  - spec #17 "运行时稳定性待验证" 降级：Agent 端协议已确认可用。剩余风险为 Backend 代理层 token 过期/网络中断，可通过前端错误重试兜底
-  - 无代码变更，纯验证。
-- 2026-06-05：完成阶段二学生端数据契约审查文档：
-  - 审查范围：StudentProfile、Dashboard/ResourceDetail、LearningPath、Quiz/PracticeResult、AIChat，并标注教师端投影依赖。
-  - 已确认删除：认知成长曲线、建议学习时长、学习动力指数、班级覆盖率、重点关注学生、排名类指标。
-  - 待定：累计学习时长、阅读进度、阅读时长、AIChat 活动摘要、资源偏好分布。
-  - OpenAPI 未修改，无契约漂移。
-  - 审查文档：`docs/superpowers/specs/2026-06-05-phase2-student-data-contract-review.md`
-  - 后续已选择 ResourceDetail 正文预览作为首个 OpenAPI 更新候选并完成实现。
-- 2026-06-06：P0 前端假展示清理完成：
-  - StudentProfile：删除学习动力指数、认知成长曲线；RadarChart 降级为占位；total_duration_hours 改为"待统计"
-  - ResourceDetail：删除"建议用时 25m"静态展示
-  - PracticeResult：删除"新纪录""历史击败"展示
-  - LearningPath：降级静态个性化提示和推荐卡为通用占位文案
-  - TeacherConsole：删除 mock Insights 内平均活跃时间、覆盖率、重点关注学生等假展示
-  - TeacherStudentReport：删除 mock 分支 class_name/rank/motivation_index/total_duration_hours/认知曲线；修正 weak_points/recent_activity 注释（从"不在契约"改为"后端空数组"）
-  - JS bundle 534→520 KB（-14KB 假展示代码）
-  - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
-- 2026-06-06：修正 P0 补刀审查遗留的 `TeacherStudentReport.jsx` JSX 属性名：
-  - 将模态偏好占位文案的 `class` 改为 `className`，消除 React JSX 属性警告风险。
-  - `npm run lint` / `npm run build` 通过。无 OpenAPI/契约漂移。
-- 2026-06-06：ResourceDetail 正文预览契约实现完成：
-  - Client API：新增 `GET /api/v1/resources/{id}` + `ResourceDetailItem` schema（`content_preview` 为 nullable string）
-  - Backend：新增详情路由 `@router.get("/{id}")`，`document`/`reading` 类型返回正文预览，其他 null
-  - Frontend：`learningService.getResourceDetail(id)`；ResourceDetail.jsx 接入 API，删除阅读进度/时长占位
-  - `npm run lint` / `npm run build` / Backend pytest 通过。
-- 2026-06-06：ResourceDetail 审核修复批：
-  - App.jsx：注册 `/resource/:id` 路由（student protected）
-  - Dashboard.jsx：资源卡片添加 `onClick` 跳转到 `/resource/:id`
-  - ResourceDetail.jsx：删除"更新于 2023.10.15"、DS 智能体建议卡片（含 85% 伪进度）、静态学习路径图
-  - Backend `resources.py`：新增课程访问权限校验（`teacher_id` 匹配 + `CourseEnrollment` 检查），403 无权限
-  - OpenAPI：`content_preview` 从 `"type": ["string", "null"]` 修正为 `"type": "string", "nullable": true`（OpenAPI 3.0 标准）
-  - Backend 测试：27 条断言覆盖 401/404/403/document/reading/code/mindmap/video 各类型正确性
-  - `npm run lint` / `npm run build` / Backend pytest 27/27 通过。
-- 2026-06-06：ResourceDetail 后端测试断言修正：
-  - `tests/test_resource_detail.py` 将最终 `return fail == 0` 改为 `assert fail == 0`，确保任一 `chk()` 失败都会让 pytest 报红。
-  - `pytest -s -vv tests/test_resource_detail.py` 通过，输出 `27 OK, 0 FAIL`。
-- 2026-06-06：LearningPath 节点资源接入完成：
-  - OpenAPI：NodeResources schema 补充 `weak_point_tutorials[].id`、`chapter_materials[].id`，`content` 标注为摘要
-  - Backend：`get_node_resources` 补充 `id` 字段，`weak_point_tutorials[].content` 截断为 160 字符
-  - Backend 测试：`test_node_resources.py` 24 条断言覆盖 403 / id 字段 / content 160 截断 / 空资源
-  - Frontend：`learningService.getNodeResources`；LearningPath.jsx 底部动态资源面板替换 3 张静态占位卡
-  - 节点点击：completed/in_progress/recommended 可点，pending 不可点；默认选中 current_node
-  - 新增 recommended 节点分支（星标图标，可点击）
-  - 删除 completed/in_progress 节点内资源/习题占位文案，保留 Agent 提示占位
-  - `npm run lint` / `npm run build` / Backend pytest 51/51 通过。
-- 2026-06-06：LearningPath 节点资源接入审查补修：
-  - `test_node_resources.py` 资源 fixture ID 改为动态值，避免默认 SQLite 测试库复跑时因 `resources.id` 唯一约束失败。
-  - OpenAPI：`GET /learning-path/nodes/{node_id}/resources` 补充 `401`、`403` 错误响应描述，对齐后端认证和课程权限行为。
-  - 运行时业务逻辑未变；本次补修用于测试可重复性和错误响应契约完整性。
-- 2026-06-06：LearningPath 手工验收数据前置补齐：
-  - `backend/scripts/seed_e2e_data.py` 新增 LearningPath smoke 数据：`completed` / `in_progress` / `recommended` 三个节点，当前节点为 `e2e-node-tree`。
-  - 同步写入 `CourseKnowledgeGraph`、每节点 1 条资源、每节点 1 条练习题，使 LearningPath 节点选择 → 底部资源面板 → `/resource/:id` 跳转具备可验收数据。
-  - 修正 seed 脚本直接运行时的 `app` 模块导入问题；仍保留 `ALLOW_E2E_SEED=true` 和测试库名安全检查。
-  - `/tmp` SQLite 验证：首次 seed 后 `learning_paths=1`、`node_count=3`、资源=3、题目=3；复跑后数量不膨胀。
-- 2026-06-06：LearningPath 资源面板 UI 收口：
-  - weak_point_tutorials、exercises、chapter_materials 每组默认展示前 5 条，超出折叠 + "展开全部 (N 条)" 按钮
-  - 每组 `max-h-80 overflow-y-auto` 防止面板过长
-  - 节点切换时自动重置折叠状态
-  - `npm run lint` / `npm run build` 通过。
-- 2026-06-06：教师端学生 weak_points + recent_activity 聚合完成：
-  - Backend 测试（TDD）：`test_teacher_student_learning.py` 26 条断言覆盖 403/weak_points 聚合/全对空数组/recent_activity max 5 + 排序
-  - Backend：`get_student_learning` 补齐 `weak_points`（case() 条件聚合 + HAVING error_count > 0 + 过滤空 KP + top 5）和 `recent_activity`（最近 5 次 QuizSession，create_time DESC）
-  - OpenAPI：`StudentLearning` schema 补齐字段定义
-  - Frontend：`TeacherStudentReport.jsx` 去掉硬编码 `[]`，渲染真实数据 + 空态
-  - 不新增端点、不调 Agent、不改 TeacherConsole Insights
-  - `npm run lint` / `npm run build` / Backend pytest 77/77 通过。
-- 2026-06-06：阶段二轻量手工验收记录：
-  - ResourceDetail / LearningPath 链路可用：路径规划下可正常展示节点资源内容，并可进入资源详情。
-  - 暂未发现前端存在容易进入无权限资源详情的入口；资源权限仍以后端 403 校验兜底。
-  - 教师端学生报告可看到部分真实数据，`weak_points` / `recent_activity` 最小聚合方向成立。
-  - 已知但非本轮重点：资源内容质量偏低，归入后续资源生成/资源库质量专项；学生侧“学习”状态和进度流转仍不完整，归入后续行为采集/学习状态设计。
-  - 本轮不扩大到资源质量、行为采集、累计学习时长或阅读进度。
-- 2026-06-06：阶段二文档收口完成：
-  - `WORKFLOW.md` 已清理 TeacherConsole Insights 过期 P0 阻塞描述，当前统一口径为：阶段二 P0 已完成，转入 P1 收尾。
-  - `../docs/10-client-api/API_前端接口规范.md` 已补齐 `/resources/{id}`、`/learning-path/nodes/{node_id}/resources`、`/teaching/classes/{class_id}/students/{student_id}/learning`、`/teaching/classes/{class_id}/insights` 的联调说明与空态语义。
-  - 本轮未修改运行时代码、OpenAPI JSON 或后端实现；当前无新的 OpenAPI / 契约漂移。
-  - 已运行 `git diff --check` 完成基础文档一致性检查。
+- 2026-06-05 ~ 2026-06-06（已归档，详见 git 历史）：阶段一主链路 E2E 收口（lint/build/e2e 3/3）、阶段一遗留契约疑点与多处 mock 分支清理、MS-05/MS-06/MS-08 前端入口、Tailwind v4 宽度别名修复、阶段二学生端数据契约审查、P0 假展示清理、ResourceDetail 正文/内容契约、LearningPath 节点资源接入、教师端学生 weak_points/recent_activity 聚合、阶段二文档收口。以上均已完成并通过对应 lint/build/pytest，无遗留 OpenAPI 漂移；细节见各 `docs/superpowers/specs|plans/2026-06-05-*`、`2026-06-06-*` 文档与对应 commit。
 - 2026-06-07：注册登录契约扩展与隐私边界收口完成：
   - Client API：`POST /auth/register` 请求体新增可选 `real_name`、`student_id`、`major`、`grade`、`guidance_level`；`guidance_level` 限定 `L1/L2/L3`，默认 `L2`。
   - Backend：注册成功写入用户基础资料；注册码改为永久可复用码，`student` / `teacher` 为内置永久码；非法 `guidance_level` 返回 400。
@@ -295,16 +192,7 @@
 
 ## 下一步建议
 
-- 阶段一契约疑点已清理完毕。
-- 阶段二第一轮 mock 分支清理和 MS-05/MS-06/MS-08 轻量前端适配已完成。
-- ResourceDetail 正文预览、LearningPath 节点资源、教师端学生报告个体聚合已完成并完成轻量手工验收。
-- TeacherConsole 班级 Insights 最小 SQL 聚合已完成（2026-06-06）：OpenAPI 契约（ClassInsights/ClassWeakPoint/PathNodeProgress）、Backend `GET /teaching/classes/{class_id}/insights` 聚合端点（39 项集成测试全通过）、Frontend 接入。`useMock &&` 守卫已移除，真实模式展示班级平均练习分（一位小数）、练习次数、薄弱知识点 Top 5（含错题数/答题总次数/错误率）、路径节点分布。Students 和 Insights 独立错误处理已闭环。
-- StudentProfile 系列完成（2026-06-06，7 次 commit）：
-  - 字段补齐：5 卡片重接 GET /profile 契约字段，7 幽灵字段全删，effectsData 全量清理
-  - Bug 修复：无课程无限 loading、切课竞态防护（useRef + 过期响应丢弃）、失败态/默认态分离（profileError）、枚举未知值兜底
-  - 交互增强：L1-L3 全局引导粒度可点击切换（乐观更新 + `PUT /users/me`，数据源为 `user.guidance_level` 非课程画像）
-  - 2 文件改动：`StudentProfile.jsx`（主体）+ `auth.js`（`updateMyInfo`）
-  - 所有 lint / build 通过。Backend/OpenAPI 零改动。
+- 已完成（已归档，详见 git 历史）：阶段一契约疑点清理；mock 分支清理与 MS-05/MS-06/MS-08 前端入口；ResourceDetail 正文/内容、LearningPath 节点资源、StudentProfile 字段重接与切课竞态修复、教师端学生个体聚合、TeacherConsole 班级 Insights 最小 SQL 聚合（三层对齐、useMock 守卫已移除、students/insights 独立错误处理闭环）。均已轻量手工验收。
 - TeacherStudentReport 深度诊断字段扩展收口（2026-06-07）：
   - `StudentLearning` 已补 `summary_text`、`knowledge_coordinates`、`mastery_breakdown` 三个真实字段；`useMock` 布局分叉已删除。
   - 本轮补齐报告切换状态重置与过期响应丢弃，避免同一路由切换学生/课程时展示旧报告。

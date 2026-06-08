@@ -3,6 +3,49 @@ import { chatService } from '../api/services/chat';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 
+const getDisplayText = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    return value.name
+      || value.title
+      || value.knowledge_point
+      || value.label
+      || value.content
+      || value.id
+      || JSON.stringify(value);
+  }
+  return String(value);
+};
+
+const normalizeTextList = (value) => {
+  const list = Array.isArray(value) ? value : [value];
+  return list
+    .map(getDisplayText)
+    .map(item => item.trim())
+    .filter(Boolean);
+};
+
+const normalizeMessage = (message, index = 0) => {
+  const normalizedId = message?.id
+    || message?.message_id
+    || `${message?.role || 'message'}-${message?.timestamp || index}`;
+
+  return {
+    ...message,
+    id: normalizedId,
+    content: getDisplayText(message?.content),
+    diagrams: Array.isArray(message?.diagrams) ? message.diagrams : [],
+    knowledge_points: normalizeTextList(message?.knowledge_points),
+    suggestions: normalizeTextList(message?.suggestions),
+  };
+};
+
+const normalizeMessages = (items) => (
+  Array.isArray(items) ? items.map(normalizeMessage) : []
+);
+
 export default function AIChat() {
   const { activeCourseId } = useCourse();
   const [sessions, setSessions] = useState([]);
@@ -37,7 +80,7 @@ export default function AIChat() {
     if (activeSession) {
       chatService.getHistory(activeSession).then(res => {
         if (res.code === 200 && res.data) {
-          setMessages(res.data.messages || []);
+          setMessages(normalizeMessages(res.data.messages));
           setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         }
       }).catch(console.error);
@@ -115,12 +158,7 @@ export default function AIChat() {
           setMessages(prev => prev.map(m => {
             if (m.id === 'ai-placeholder') {
               const rawPoints = msg.knowledge_points || msg.points || msg.data || [];
-              const parsedPoints = (Array.isArray(rawPoints) ? rawPoints : [rawPoints]).map(kp => {
-                if (typeof kp === 'object' && kp !== null) {
-                  return kp.name || kp.title || kp.id || JSON.stringify(kp);
-                }
-                return String(kp);
-              });
+              const parsedPoints = normalizeTextList(rawPoints);
               return { ...m, knowledge_points: parsedPoints };
             }
             return m;
@@ -130,7 +168,7 @@ export default function AIChat() {
             if (m.id === 'ai-placeholder') {
               const currentSugs = m.suggestions || [];
               const newSugs = msg.data || msg.content || [];
-              const combined = Array.isArray(newSugs) ? newSugs : [newSugs];
+              const combined = normalizeTextList(newSugs);
               return { ...m, suggestions: [...currentSugs, ...combined] };
             }
             return m;
@@ -277,8 +315,8 @@ export default function AIChat() {
                   {msg.suggestions && msg.suggestions.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
                       {msg.suggestions.map((sug, i) => (
-                        <span 
-                          key={i} 
+                        <span
+                          key={`${msg.id}-suggestion-${i}-${sug}`}
                           onClick={() => handleSendMessage(sug)} 
                           className="px-3 py-1 bg-gray-50 text-cyan-600 text-xs rounded-full cursor-pointer hover:bg-cyan-50 transition-colors border border-gray-100"
                         >
@@ -296,7 +334,7 @@ export default function AIChat() {
                         关联知识点:
                       </span>
                       {msg.knowledge_points.map((kp, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] rounded-full font-medium">
+                        <span key={`${msg.id}-knowledge-${i}-${kp}`} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] rounded-full font-medium">
                           {kp}
                         </span>
                       ))}
@@ -305,7 +343,7 @@ export default function AIChat() {
 
                   {/* Diagrams rendering */}
                   {msg.diagrams && msg.diagrams.map((diag, index) => (
-                    <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200 mt-4 mb-4">
+                    <div key={`${msg.id}-diagram-${index}-${getDisplayText(diag).slice(0, 32)}`} className="bg-gray-50 rounded-xl p-4 border border-gray-200 mt-4 mb-4">
                       <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
                         <span className="material-symbols-outlined text-sm">schema</span>
                         <span>图解模式 (Mermaid)</span>

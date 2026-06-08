@@ -271,4 +271,114 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     expect(taskPollCount).toBeGreaterThanOrEqual(2);
   });
 
+  test('AI Chat renders historical messages with object-shaped knowledge points', async ({ page }) => {
+    const consoleErrors = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
+    page.on('pageerror', (error) => {
+      consoleErrors.push(error.message);
+    });
+
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-student-token');
+      localStorage.setItem('course_id', 'course-e2e');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'student-e2e',
+          email: 'student@example.com',
+          username: 'Student E2E',
+          role: 'student',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'course-e2e',
+            title: '数据结构',
+            description: 'AIChat 历史渲染回归测试',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/tutoring/conversations**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/conversation-e2e')) {
+        await route.fulfill(jsonResponse({
+          code: 200,
+          message: 'success',
+          data: {
+            id: 'conversation-e2e',
+            title: '红黑树答疑',
+            scope: 'course',
+            course_id: 'course-e2e',
+            messages: [{
+              id: 'msg-user-e2e',
+              role: 'user',
+              content: '红黑树旋转怎么理解？',
+              knowledge_points: [],
+              diagrams: [],
+            }, {
+              id: 'msg-ai-e2e',
+              role: 'assistant',
+              content: '可以从局部平衡调整理解。',
+              knowledge_points: [{
+                name: '红黑树旋转',
+                chapter: '树',
+                mastery: 0.42,
+              }],
+              diagrams: [],
+              suggestions: [{
+                title: '继续解释插入修复',
+              }],
+            }],
+            created_at: '2026-06-08T12:00:00Z',
+            updated_at: '2026-06-08T12:01:00Z',
+          },
+        }));
+        return;
+      }
+
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          conversations: [{
+            id: 'conversation-e2e',
+            title: '红黑树答疑',
+            scope: 'course',
+            course_id: 'course-e2e',
+            updated_at: '2026-06-08T12:00:00Z',
+          }],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      }));
+    });
+
+    await page.goto('/ai-chat');
+
+    await expect(page.getByRole('heading', { name: 'DS 智能答疑专家' })).toBeVisible();
+    await expect(page.getByText('可以从局部平衡调整理解。')).toBeVisible();
+    await expect(page.getByText('红黑树旋转', { exact: true })).toBeVisible();
+    await expect(page.getByText('继续解释插入修复', { exact: true })).toBeVisible();
+
+    expect(consoleErrors.join('\n')).not.toContain('Objects are not valid as a React child');
+    expect(consoleErrors.join('\n')).not.toContain('Each child in a list should have a unique "key" prop');
+  });
+
 });

@@ -85,6 +85,14 @@
 
 ## 最近验证
 
+- 2026-06-08：Phase B 资源生成 / Quiz 生成前置 CourseCatalog ready 校验完成：
+  - 基线与设计已重建：`docs/superpowers/specs/2026-06-08-course-catalog-ready-gate-baseline.md` 记录 CourseCatalog 三表、`knowledge_status`、ingestion 链路、生成端缺口、OpenAPI 滞后点；`docs/superpowers/specs/2026-06-08-phase-b-ready-gate-design.md` 与 `docs/superpowers/plans/2026-06-08-phase-b-ready-gate-plan.md` 明确本阶段只覆盖资源生成和 Quiz 生成，不纳入 LearningPath/KG。
+  - Backend 新增共享 `course_catalog_gate.resolve_generation_catalog()`：教学班 `course_id` 必须能解析到 `CourseOffering.catalog_id`；`CourseCatalog.status=ready` 且 `knowledge_status=ready|partial`、`chunk_count>0` 才允许生成；`partial` 可用但标记 `degraded=true`；`dirty/draft/failed/ingesting` 或非 ready catalog 拒绝。
+  - 错误码：未绑定或资源库缺失返回 `404 course_catalog_missing`；资料未完成入库返回 `409 course_material_missing`；知识库为空返回 `409 knowledge_base_empty`。校验在创建 `AsyncTask` 前执行，失败时不产生异步任务。
+  - `/resources/generate` 和 `/quiz/generate` 共用同一套 ready gate；Backend 持久化仍使用教学班 id，发送给 Agent 的 `course_id` 改为 `CourseCatalog.id`；Quiz 个性化上下文仍按教学班 id 查询，Agent payload 额外带 `class_course_id`。
+  - OpenAPI 与 `API_前端接口规范.md` 已同步 404/409 响应和 ready gate 描述；前端删除孤儿 `learningService.triggerResourceGeneration()` / `learningService.getTaskStatus()`，不新增资源生成或 Quiz 生成 UI。
+  - 验证：`cd ../backend && ../.venv/bin/pytest tests/test_course_catalog_ready_gate.py tests/test_resources_async.py tests/test_agent_integration.py::TestQuizGenerateIntegration -q` 通过 20/20；`python3 -m json.tool ../docs/10-client-api/Client-API.openapi.json` 通过；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+  - 已提交：`f6b8b19 新增课程资源库生成前置校验`、`04107e4 接入资源生成资源库 ready 校验`、`1f8d765 同步生成 ready 校验契约`、`7cf6a36 接入 Quiz 生成资源库 ready 校验`。
 - 2026-06-08：AIChat 历史消息对象知识点白屏修复：
   - 问题：学生端进入 AIChat 后加载历史会话，真实历史消息中的 `knowledge_points[]` 可能出现 `{name, chapter, mastery}` 对象；前端直接在 `<span>` 中渲染对象，触发 React `Objects are not valid as a React child` 白屏，同时列表使用 index key 触发 key warning。
   - 修复：`AIChat.jsx` 对历史消息、SSE `knowledge_points` 和 `suggestions` 统一做可展示文本归一化；对象优先展示 `name/title/knowledge_point/label/content/id`，避免对象直接进入 React child；建议、知识点和图解列表改用消息 ID + 内容生成稳定 key。
@@ -202,6 +210,8 @@
 - 第二轮 P1 剩余：资源生成异步任务真实联调验收；教师端已补完成后资源列表刷新和详情跳转。AdminConsole 既有契约对齐已完成，剩余停用状态持久展示和初始化账号固化等细节暂缓，不作为当前阻塞。后续执行流程见 `docs/superpowers/plans/2026-06-07-next-agent-field-integration-flow.md`。
 - 第二轮 P2：累计学习时长、阅读进度/阅读时长、AIChat 活动摘要、资源偏好分布、学生学习状态流转；这些需要行为采集口径和可能的 activity 表设计，暂不直接实现。
 - 资源内容质量偏低暂不作为本轮阻塞，后续应归入资源生成/资源入库质量专项。
+- 资源生成 / Quiz 生成前置 CourseCatalog ready 校验已完成；下一步若继续生成链路，应优先做真实 Backend + Agent Service 联调，确认资源生成 webhook、Quiz Agent 返回和 `partial` 降级提示在真实环境下稳定。
+- LearningPath 生成依赖 KG，本期明确未纳入 Phase B ready gate；后续需要单独设计 KG ready 口径和错误码，不应复用本轮 chunk-only 判定直接放行。
 - 阶段二接口差距分析材料见 `docs/superpowers/specs/2026-06-05-phase2-gap-analysis.md`（19 条差距台账）。
 - 轻量手工体验反馈见 `docs/superpowers/specs/2026-06-05-manual-smoke-feedback.md`，包含学生端个人信息/加入课程入口/资源预期和教师端身份展示/数据丰富度问题。
 - 新增契约能力必须先走设计/审查；禁止用前端静态字段补齐未确认业务能力。

@@ -12,6 +12,7 @@ from app.models.course import Course, CourseEnrollment
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
+from app.services.course_catalog_gate import resolve_generation_catalog
 
 router = APIRouter(prefix="/api/v1/resources", tags=["resources"])
 
@@ -131,12 +132,15 @@ async def generate_resources(
     db: AsyncSession = Depends(get_db),
 ):
     """触发资源生成。创建任务后调用 Agent /resources/generate，Agent 完成后通过 Webhook 回调落库。"""
+    catalog_context = await resolve_generation_catalog(db, req.course_id)
+
     # 创建任务
     task = AsyncTask(
         task_type="resource_generation",
         status="processing",
         user_id=current_user.id,
         course_id=req.course_id,
+        result=catalog_context.model_dump(),
     )
     db.add(task)
     await db.flush()
@@ -146,7 +150,7 @@ async def generate_resources(
     payload: dict = {
         "task_id": task.id,
         "user_id": current_user.id,
-        "course_id": req.course_id,
+        "course_id": catalog_context.catalog_id,
         "webhook_url": _webhook_url(request),
     }
     if req.chapter:

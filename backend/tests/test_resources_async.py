@@ -10,6 +10,8 @@ import os
 import uuid
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
     "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4",
@@ -21,9 +23,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.db.session import async_session_factory
 from httpx import AsyncClient, ASGITransport
 from app.main import app
+from app.models.catalog import CourseCatalog, CourseOffering
+from app.models.course import Course
 from app.models.user import RegistrationCode
 from app.models.others import AsyncTask, Resource
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 
 async def _register_and_login(client, code, email, username):
@@ -61,6 +65,59 @@ def _webhook_headers(with_secret=True):
     return h
 
 
+async def _create_bound_ready_course(
+    teacher_id,
+    *,
+    knowledge_status="ready",
+    chunk_count=3,
+):
+    suffix = uuid.uuid4().hex[:8]
+    class_course_id = f"class_{suffix}"
+    catalog_id = f"catalog_{suffix}"
+    class_name = f"Bound Course {suffix}"
+    async with async_session_factory() as db:
+        course = Course(
+            id=class_course_id,
+            name=class_name,
+            course_code=f"C{suffix[:7]}",
+            teacher_id=teacher_id,
+        )
+        catalog = CourseCatalog(
+            id=catalog_id,
+            title=f"Ready Catalog {suffix}",
+            status="ready",
+            knowledge_status=knowledge_status,
+            chunk_count=chunk_count,
+        )
+        offering = CourseOffering(
+            id=class_course_id,
+            name=class_name,
+            catalog_id=catalog_id,
+            teacher_id=teacher_id,
+            class_code=course.course_code,
+        )
+        db.add_all([course, catalog, offering])
+        await db.commit()
+    return {
+        "class_course_id": class_course_id,
+        "catalog_id": catalog_id,
+        "catalog_title": f"Ready Catalog {suffix}",
+    }
+
+
+async def _count_resource_generation_tasks(course_id, user_id):
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(func.count()).select_from(AsyncTask).where(
+                AsyncTask.task_type == "resource_generation",
+                AsyncTask.course_id == course_id,
+                AsyncTask.user_id == user_id,
+            )
+        )
+        return result.scalar() or 0
+
+
+@pytest.mark.asyncio
 async def test():
     transport = ASGITransport(app=app)
     ok = fail = 0
@@ -90,15 +147,79 @@ async def test():
 
         headers, user_id = await _register_and_login(client, teacher_code, email, uname)
 
-        # Create a course
+        # Create a legacy course without CourseOffering binding
         r = await client.post("/api/v1/courses", json={"name": "Test Course"}, headers=headers)
         assert r.status_code == 201, f"Course creation failed: {r.json()}"
-        course_id = r.json()["data"]["id"]
+        legacy_course_id = r.json()["data"]["id"]
+        course_context = await _create_bound_ready_course(user_id)
+        course_id = course_context["class_course_id"]
 
         # =============================================
-        # 1. resources/generate success
+        # 1. resources/generate ready gate
         # =============================================
-        print("\n-- 1. resources/generate --")
+        print("\n-- 1. resources/generate ready gate --")
+
+        legacy_count_before = await _count_resource_generation_tasks(legacy_course_id, user_id)
+        r = await client.post("/api/v1/resources/generate", json={
+            "course_id": legacy_course_id,
+        }, headers=headers)
+        legacy_count_after = await _count_resource_generation_tasks(legacy_course_id, user_id)
+        chk("legacy course without offering → 404", r.status_code == 404)
+        chk("legacy course without offering → course_catalog_missing",
+            r.json().get("detail", {}).get("code") == "course_catalog_missing")
+        chk("legacy course without offering → no AsyncTask",
+            legacy_count_after == legacy_count_before)
+
+        dirty_context = await _create_bound_ready_course(
+            user_id,
+            knowledge_status="dirty",
+            chunk_count=3,
+        )
+        dirty_count_before = await _count_resource_generation_tasks(
+            dirty_context["class_course_id"],
+            user_id,
+        )
+        r = await client.post("/api/v1/resources/generate", json={
+            "course_id": dirty_context["class_course_id"],
+        }, headers=headers)
+        dirty_count_after = await _count_resource_generation_tasks(
+            dirty_context["class_course_id"],
+            user_id,
+        )
+        chk("dirty catalog → 409", r.status_code == 409)
+        chk("dirty catalog → course_material_missing",
+            r.json().get("detail", {}).get("code") == "course_material_missing")
+        chk("dirty catalog → no AsyncTask", dirty_count_after == dirty_count_before)
+
+        partial_context = await _create_bound_ready_course(
+            user_id,
+            knowledge_status="partial",
+            chunk_count=2,
+        )
+        with patch("app.api.v1.resources.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+            mock_agent.return_value = {"task_id": "ignored", "estimated_duration": 60}
+            r = await client.post("/api/v1/resources/generate", json={
+                "course_id": partial_context["class_course_id"],
+            }, headers=headers)
+            chk("partial catalog → 202", r.status_code == 202)
+            partial_task_id = r.json()["data"]["task_id"]
+            chk("partial catalog → task_id present", bool(partial_task_id))
+            partial_payload = mock_agent.await_args.args[1]
+            chk("partial catalog → agent receives catalog_id",
+                partial_payload["course_id"] == partial_context["catalog_id"])
+
+            rt = await client.get(f"/api/v1/tasks/{partial_task_id}", headers=headers)
+            td = rt.json().get("data", {})
+            chk("partial catalog → task_type=resource_generation",
+                td.get("task_type") == "resource_generation")
+            chk("partial catalog → class_course_id recorded",
+                td.get("result", {}).get("class_course_id") == partial_context["class_course_id"])
+            chk("partial catalog → catalog_id recorded",
+                td.get("result", {}).get("catalog_id") == partial_context["catalog_id"])
+            chk("partial catalog → degraded recorded",
+                td.get("result", {}).get("degraded") is True)
+
+        print("\n-- 1b. resources/generate success --")
         with patch("app.api.v1.resources.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {"task_id": "ignored", "estimated_duration": 60}
             r = await client.post("/api/v1/resources/generate", json={
@@ -107,6 +228,9 @@ async def test():
             chk("generate → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             chk("generate → task_id present", bool(task_id))
+            success_payload = mock_agent.await_args.args[1]
+            chk("generate → agent receives catalog_id",
+                success_payload["course_id"] == course_context["catalog_id"])
 
             rt = await client.get(f"/api/v1/tasks/{task_id}", headers=headers)
             td = rt.json().get("data", {})
@@ -362,6 +486,7 @@ async def test():
 
     print(f"\n{'='*50}")
     print(f"  Total: {ok} OK, {fail} FAIL")
+    assert fail == 0
     return fail == 0
 
 

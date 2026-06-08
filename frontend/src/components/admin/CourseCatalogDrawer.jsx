@@ -64,6 +64,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const openRef = useRef(false);
   const uploadOperationSeqRef = useRef(0);
   const ingestionOperationSeqRef = useRef(0);
+  const authoritativeTerminalTaskIdsRef = useRef(new Set());
 
   const catalogId = catalog?.id;
 
@@ -78,11 +79,13 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
 
   useEffect(() => {
     isMountedRef.current = true;
+    const authoritativeTerminalTaskIds = authoritativeTerminalTaskIdsRef.current;
     return () => {
       isMountedRef.current = false;
       requestSeqRef.current += 1;
       uploadOperationSeqRef.current += 1;
       ingestionOperationSeqRef.current += 1;
+      authoritativeTerminalTaskIds.clear();
     };
   }, []);
 
@@ -175,14 +178,17 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setUploading(false);
     setIngesting(false);
     activeTaskRef.current = null;
+    authoritativeTerminalTaskIdsRef.current.clear();
     setActiveTask(null);
     setTaskError('');
     refreshDetails();
 
+    const authoritativeTerminalTaskIds = authoritativeTerminalTaskIdsRef.current;
     return () => {
       requestSeqRef.current += 1;
       uploadOperationSeqRef.current += 1;
       ingestionOperationSeqRef.current += 1;
+      authoritativeTerminalTaskIds.clear();
     };
   }, [catalogId, open, refreshDetails]);
 
@@ -214,6 +220,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         setActiveTask(task);
 
         if (task.status === 'completed' || task.status === 'failed') {
+          authoritativeTerminalTaskIdsRef.current.add(task.task_id);
           await handleTerminalTask(task);
         } else if (task.status === 'processing' && !cancelled) {
           timeoutId = setTimeout(pollTask, 2000);
@@ -263,7 +270,8 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const taskTerminal = activeTask?.status === 'completed' || activeTask?.status === 'failed';
   const sameTerminalKnowledgeTask = taskTerminal
     && activeTask?.task_id
-    && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id;
+    && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id
+    && authoritativeTerminalTaskIdsRef.current.has(activeTask.task_id);
   const catalogIngesting = !sameTerminalKnowledgeTask && (
     catalog?.status === 'ingesting'
     || knowledgeStatus?.status === 'ingesting'
@@ -334,6 +342,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setIngesting(true);
     setTaskError('');
     setError('');
+    authoritativeTerminalTaskIdsRef.current.clear();
     try {
       const res = await adminService.startCourseCatalogIngestion(operationCatalogId);
       if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;

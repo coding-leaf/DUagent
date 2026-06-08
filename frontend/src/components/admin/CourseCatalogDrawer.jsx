@@ -27,7 +27,10 @@ const getBadgeClass = (status) => {
   if (normalized === 'ingesting' || normalized === 'processing' || normalized === 'dirty') {
     return 'bg-cyan-50 text-cyan-700 border-cyan-200';
   }
-  if (normalized === 'failed' || normalized === 'partial') {
+  if (normalized === 'partial') {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  if (normalized === 'failed') {
     return 'bg-red-50 text-red-700 border-red-200';
   }
   return 'bg-slate-100 text-slate-600 border-slate-200';
@@ -56,19 +59,49 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const [taskError, setTaskError] = useState('');
   const requestSeqRef = useRef(0);
   const isMountedRef = useRef(false);
+  const activeTaskRef = useRef(null);
+  const catalogIdRef = useRef(null);
+  const openRef = useRef(false);
+  const uploadOperationSeqRef = useRef(0);
+  const ingestionOperationSeqRef = useRef(0);
 
   const catalogId = catalog?.id;
+
+  useEffect(() => {
+    activeTaskRef.current = activeTask;
+  }, [activeTask]);
+
+  useEffect(() => {
+    catalogIdRef.current = catalogId;
+    openRef.current = open;
+  }, [catalogId, open]);
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       requestSeqRef.current += 1;
+      uploadOperationSeqRef.current += 1;
+      ingestionOperationSeqRef.current += 1;
     };
   }, []);
 
   const canWriteRequest = useCallback((requestSeq) => (
     isMountedRef.current && requestSeqRef.current === requestSeq
+  ), []);
+
+  const canWriteUploadOperation = useCallback((operationSeq, operationCatalogId) => (
+    isMountedRef.current
+    && openRef.current
+    && catalogIdRef.current === operationCatalogId
+    && uploadOperationSeqRef.current === operationSeq
+  ), []);
+
+  const canWriteIngestionOperation = useCallback((operationSeq, operationCatalogId) => (
+    isMountedRef.current
+    && openRef.current
+    && catalogIdRef.current === operationCatalogId
+    && ingestionOperationSeqRef.current === operationSeq
   ), []);
 
   const refreshDetails = useCallback(async () => {
@@ -94,13 +127,21 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       const incomingTaskId = incomingStatus?.last_ingestion_task_id;
       const incomingTaskStatus = incomingStatus?.last_ingestion_status || 'processing';
       const isTerminalTask = incomingTaskStatus === 'completed' || incomingTaskStatus === 'failed';
+      const currentTask = activeTaskRef.current;
+      const isCurrentTaskTerminal = currentTask?.task_id === incomingTaskId
+        && (currentTask.status === 'completed' || currentTask.status === 'failed');
 
-      if (isIncomingIngesting && incomingTaskId && !isTerminalTask) {
-        setIngesting(true);
-        setTaskError('');
+      if (isCurrentTaskTerminal) {
+        setIngesting(false);
+      } else if (isIncomingIngesting && incomingTaskId && !isTerminalTask) {
         setActiveTask((prev) => {
           if (prev?.task_id === incomingTaskId && prev.status === 'processing') return prev;
-          if (prev?.task_id === incomingTaskId && (prev.status === 'completed' || prev.status === 'failed')) return prev;
+          if (prev?.task_id === incomingTaskId && (prev.status === 'completed' || prev.status === 'failed')) {
+            setIngesting(false);
+            return prev;
+          }
+          setIngesting(true);
+          setTaskError('');
           return normalizeTask({
             id: incomingTaskId,
             task_id: incomingTaskId,
@@ -133,12 +174,15 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setUploadQueue([]);
     setUploading(false);
     setIngesting(false);
+    activeTaskRef.current = null;
     setActiveTask(null);
     setTaskError('');
     refreshDetails();
 
     return () => {
       requestSeqRef.current += 1;
+      uploadOperationSeqRef.current += 1;
+      ingestionOperationSeqRef.current += 1;
     };
   }, [catalogId, open, refreshDetails]);
 
@@ -166,6 +210,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         if (cancelled) return;
 
         const task = normalizeTask(res.data, activeTask.task_id);
+        activeTaskRef.current = task;
         setActiveTask(task);
 
         if (task.status === 'completed' || task.status === 'failed') {
@@ -179,11 +224,15 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         const message = getErrorMessage(err, '入库任务状态查询失败');
         setTaskError(message);
         setIngesting(false);
-        setActiveTask((prev) => ({
-          ...normalizeTask(prev, activeTask.task_id),
-          status: 'failed',
-          error_message: message
-        }));
+        setActiveTask((prev) => {
+          const failedTask = {
+            ...normalizeTask(prev, activeTask.task_id),
+            status: 'failed',
+            error_message: message
+          };
+          activeTaskRef.current = failedTask;
+          return failedTask;
+        });
         const refreshed = await refreshDetails();
         if (!cancelled && refreshed && onChanged) {
           onChanged();
@@ -210,10 +259,16 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     [materials]
   );
 
-  const catalogIngesting = catalog?.status === 'ingesting'
-    || knowledgeStatus?.status === 'ingesting'
-    || knowledgeStatus?.knowledge_status === 'ingesting';
   const taskProcessing = activeTask?.status === 'processing';
+  const taskTerminal = activeTask?.status === 'completed' || activeTask?.status === 'failed';
+  const sameTerminalKnowledgeTask = taskTerminal
+    && activeTask?.task_id
+    && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id;
+  const catalogIngesting = !sameTerminalKnowledgeTask && (
+    catalog?.status === 'ingesting'
+    || knowledgeStatus?.status === 'ingesting'
+    || knowledgeStatus?.knowledge_status === 'ingesting'
+  );
   const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing;
   const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting;
 
@@ -222,6 +277,9 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     event.target.value = '';
     if (!catalogId || files.length === 0 || uploadDisabled) return;
 
+    const operationCatalogId = catalogId;
+    const operationSeq = uploadOperationSeqRef.current + 1;
+    uploadOperationSeqRef.current = operationSeq;
     const queuedFiles = files.map((file, index) => ({
       id: `${Date.now()}-${index}-${file.name}`,
       name: file.name,
@@ -229,16 +287,19 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       message: ''
     }));
 
+    if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
     setUploadQueue(queuedFiles);
     setUploading(true);
     setError('');
 
     for (const [index, item] of queuedFiles.entries()) {
+      if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
       setUploadQueue((prev) => prev.map((queueItem) => (
         queueItem.id === item.id ? { ...queueItem, status: 'uploading', message: '' } : queueItem
       )));
       try {
-        const res = await adminService.uploadCourseCatalogMaterial(catalogId, files[index]);
+        const res = await adminService.uploadCourseCatalogMaterial(operationCatalogId, files[index]);
+        if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
         setUploadQueue((prev) => prev.map((queueItem) => (
           queueItem.id === item.id
             ? { ...queueItem, status: 'completed', message: res.message || '上传完成' }
@@ -246,6 +307,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         )));
       } catch (err) {
         console.error('course catalog material upload error', err);
+        if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
         setUploadQueue((prev) => prev.map((queueItem) => (
           queueItem.id === item.id
             ? { ...queueItem, status: 'failed', message: getErrorMessage(err, '上传失败') }
@@ -254,9 +316,10 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       }
     }
 
+    if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
     setUploading(false);
-    await refreshDetails();
-    if (onChanged) {
+    const refreshed = await refreshDetails();
+    if (canWriteUploadOperation(operationSeq, operationCatalogId) && refreshed && onChanged) {
       onChanged();
     }
   };
@@ -264,15 +327,22 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const handleStartIngestion = async () => {
     if (!catalogId || startDisabled) return;
 
+    const operationCatalogId = catalogId;
+    const operationSeq = ingestionOperationSeqRef.current + 1;
+    ingestionOperationSeqRef.current = operationSeq;
+    if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
     setIngesting(true);
     setTaskError('');
     setError('');
     try {
-      const res = await adminService.startCourseCatalogIngestion(catalogId);
+      const res = await adminService.startCourseCatalogIngestion(operationCatalogId);
+      if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
       const task = normalizeTask(res.data);
+      activeTaskRef.current = task;
       setActiveTask(task);
     } catch (err) {
       console.error('course catalog ingestion start error', err);
+      if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
       setTaskError(getErrorMessage(err, '课程资源库入库启动失败'));
       setIngesting(false);
     }

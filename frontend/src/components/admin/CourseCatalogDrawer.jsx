@@ -116,7 +116,18 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       } catch (err) {
         if (cancelled) return;
         console.error('course catalog ingestion task poll error', err);
-        setTaskError(getErrorMessage(err, '入库任务状态查询失败'));
+        const message = getErrorMessage(err, '入库任务状态查询失败');
+        setTaskError(message);
+        setIngesting(false);
+        setActiveTask((prev) => ({
+          ...normalizeTask(prev, activeTask.task_id),
+          status: 'failed',
+          error_message: message
+        }));
+        await refreshDetails();
+        if (!cancelled && onChanged) {
+          onChanged();
+        }
       }
     };
 
@@ -143,12 +154,13 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     || knowledgeStatus?.status === 'ingesting'
     || knowledgeStatus?.knowledge_status === 'ingesting';
   const taskProcessing = activeTask?.status === 'processing';
+  const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing;
   const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting;
 
   const handleUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
-    if (!catalogId || files.length === 0 || uploading) return;
+    if (!catalogId || files.length === 0 || uploadDisabled) return;
 
     const queuedFiles = files.map((file, index) => ({
       id: `${Date.now()}-${index}-${file.name}`,
@@ -271,7 +283,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                 <p className="mt-1 text-xs text-slate-500">支持 TXT、Markdown、PDF 文件。</p>
               </div>
               <label className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                uploading || catalogIngesting
+                uploadDisabled
                   ? 'cursor-not-allowed bg-slate-100 text-slate-400'
                   : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
               }`}>
@@ -282,7 +294,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                   type="file"
                   accept=".txt,.md,.pdf"
                   multiple
-                  disabled={uploading || catalogIngesting}
+                  disabled={uploadDisabled}
                   onChange={handleUpload}
                   className="hidden"
                 />

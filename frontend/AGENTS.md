@@ -24,17 +24,38 @@ If a subdirectory contains another AGENTS.md, the more specific file takes prece
 2. `../docs/10-client-api/API_前端接口规范.md`
 3. `../docs/00-overview/需求规格说明书1.1.docx`
 4. 当前项目代码
-5. `README.md`
-6. `WORKFLOW.md`
+5. `docs/feature-ledger.md`
+6. `docs/project-direction.md`
+7. `docs/project-coverage-audit.md`
+8. `WORKFLOW.md`
+9. `README.md`
 
 说明：
 
 - 接口契约以 OpenAPI 和前端接口规范为准。
 - 需求规格说明书是业务需求依据。
 - 当前项目代码用于理解已有实现和兼容现状。
-- 接口实现进度、当前任务状态和待办项以 `WORKFLOW.md` 的项目进度表为准。
+- 功能整体进度和主线以 `docs/feature-ledger.md`（功能进度看板）为准；具体某次改动的施工记录和最近验证查 `WORKFLOW.md`。
+- 断层恢复方向、项目结构和恢复流程查 `docs/project-direction.md`；带文件路径的覆盖证据查 `docs/project-coverage-audit.md`。
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
 - 如果文档之间冲突，先说明冲突点和影响，不要直接猜测修改。
+
+进度类文档分工：
+
+- `docs/feature-ledger.md`：功能级看板，回答"现在到哪了、卡在哪、下一个做什么"。主线看这份。
+- `WORKFLOW.md`：按日期的施工日记，回答"那天改了什么、跑了什么测试"。回溯看这份。
+- `docs/project-direction.md`：方向与断层恢复流程。
+- `docs/project-coverage-audit.md`：带文件路径的深度证据表，核验用。
+- `docs/goals.md` / `docs/decisions.md` / `docs/glossary.md`：目标、决策记录、术语表。
+
+从本文件开始恢复上下文时，建议按以下顺序读取：
+
+1. `docs/feature-ledger.md`：先确认当前主线和下一步。
+2. `docs/project-direction.md`：确认项目结构、边界和断层恢复流程。
+3. `docs/project-coverage-audit.md`：需要证据时查页面/API/Backend/Agent/测试对应关系。
+4. `WORKFLOW.md`：回看最近施工和验证。
+5. `../docs/10-client-api/*`：涉及接口或契约时核对正式 Client API。
+6. 当前代码：最终以实际代码行为核验。
 
 ---
 
@@ -45,8 +66,8 @@ If a subdirectory contains another AGENTS.md, the more specific file takes prece
 - 如果代码与 `../docs/` 冲突，默认修改代码或测试以贴合文档。
 - `frontend/docs/superpowers/` 下的 specs 和 plans 是本工作区的正式设计与实施计划来源。
 - `frontend/docs/` 中 superpowers 目录以外的历史副本、草案或归档资料，不作为正式契约来源。
-- `WORKFLOW.md` 是进度跟踪文件，可以按已确认任务同步更新。
-- 临时进度、当前任务、下一步队列写入 `WORKFLOW.md`，不要写入 `AGENTS.md`。
+- `WORKFLOW.md` 是施工日记，可以按已确认任务同步更新。
+- 临时进度、当前任务、下一步队列写入 `WORKFLOW.md` 或 `docs/feature-ledger.md`，不要写入 `AGENTS.md`。
 
 ---
 
@@ -198,9 +219,9 @@ commit message 示例：
 
 ## Progress Tracking 与 Completion Summary
 
-完成接口、页面能力、联调节点、测试闭环或阶段性开发任务后，更新 `WORKFLOW.md`。纯格式、文案、局部修复、只读审查或无代码变更任务，可以不更新，但最终总结需说明原因。
+完成接口、页面能力、联调节点、测试闭环或阶段性开发任务后，更新 `WORKFLOW.md`（施工记录），并在功能状态发生变化时同步 `docs/feature-ledger.md`（看板状态与下一步）。纯格式、文案、局部修复、只读审查或无代码变更任务，可以不更新，但最终总结需说明原因。
 
-接口状态以 `WORKFLOW.md` 的项目进度表为准。不能以更新进度为理由扩大业务代码修改范围。
+功能整体状态和主线以 `docs/feature-ledger.md` 为准，单次改动的施工记录以 `WORKFLOW.md` 为准。不能以更新进度为理由扩大业务代码修改范围。
 
 每次完成开发任务后，最终回复（以及同步到 `WORKFLOW.md` 的内容）必须包含：
 

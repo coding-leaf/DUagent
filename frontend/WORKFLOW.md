@@ -85,6 +85,10 @@
 
 ## 最近验证
 
+- 2026-06-08：CourseCatalogDrawer 入库任务轮询与状态文案修复：
+  - `/tasks/{task_id}` 查询异常不再被本地改写为任务失败，不再停止入库态或写入权威终态集合；展示“任务状态查询失败，正在重试”并按原 2 秒间隔继续轮询。
+  - 资源库、知识库、资料、上传队列和任务状态按设计展示中文标签；未知状态保留原值，空状态保留 UNKNOWN / `—` fallback。
+  - `npm run lint` / `npm run build` / `git diff --check -- src/components/admin/CourseCatalogDrawer.jsx` 通过。无 OpenAPI/契约漂移。
 - 2026-06-05：运行 `npm run build`，通过；存在 Vite chunk size warning。
 - 2026-06-05：运行 `npm run lint`，通过。
 - 2026-06-05：运行 `npm run test:e2e`，通过 3/3；环境为 Backend 8001、Agent Service 8002、MySQL `duagent_test`。

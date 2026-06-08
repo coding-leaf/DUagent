@@ -21,10 +21,10 @@ const formatFileSize = (value) => {
 
 const getBadgeClass = (status) => {
   const normalized = String(status || '').toLowerCase();
-  if (normalized === 'ready' || normalized === 'completed' || normalized === 'uploaded') {
+  if (normalized === 'ready' || normalized === 'completed' || normalized === 'uploaded' || normalized === 'ingested') {
     return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   }
-  if (normalized === 'ingesting' || normalized === 'processing' || normalized === 'dirty') {
+  if (normalized === 'ingesting' || normalized === 'processing' || normalized === 'dirty' || normalized === 'uploading') {
     return 'bg-cyan-50 text-cyan-700 border-cyan-200';
   }
   if (normalized === 'partial') {
@@ -35,6 +35,48 @@ const getBadgeClass = (status) => {
   }
   return 'bg-slate-100 text-slate-600 border-slate-200';
 };
+
+const createStatusLabelFormatter = (labels, fallback) => (status) => {
+  if (!status) return fallback;
+  const normalized = String(status).toLowerCase();
+  return labels[normalized] || status;
+};
+
+const formatCatalogStatus = createStatusLabelFormatter({
+  draft: '未入库',
+  ingesting: '入库中',
+  ready: '可绑定',
+  failed: '入库失败'
+}, 'UNKNOWN');
+
+const formatKnowledgeStatus = createStatusLabelFormatter({
+  draft: '未入库',
+  ingesting: '入库中',
+  ready: '已同步',
+  dirty: '待更新',
+  partial: '部分失败',
+  failed: '入库失败'
+}, 'UNKNOWN');
+
+const formatMaterialStatus = createStatusLabelFormatter({
+  uploaded: '已上传',
+  ingesting: '入库中',
+  ingested: '已入库',
+  failed: '入库失败'
+}, 'UNKNOWN');
+
+const formatUploadQueueStatus = createStatusLabelFormatter({
+  queued: '等待上传',
+  uploading: '上传中',
+  uploaded: '已上传',
+  failed: '上传失败'
+}, 'UNKNOWN');
+
+const formatTaskStatus = createStatusLabelFormatter({
+  processing: '处理中',
+  completed: '已完成',
+  failed: '失败'
+}, '—');
 
 const normalizeTask = (task, fallbackId) => ({
   id: task?.id || task?.task_id || fallbackId || '',
@@ -193,7 +235,12 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   }, [catalogId, open, refreshDetails]);
 
   useEffect(() => {
-    if (!open || activeTask?.status !== 'processing' || !activeTask?.task_id) return;
+    if (
+      !open
+      || !activeTask?.task_id
+      || activeTask.status === 'completed'
+      || activeTask.status === 'failed'
+    ) return;
 
     let cancelled = false;
     let timeoutId;
@@ -218,31 +265,21 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         const task = normalizeTask(res.data, activeTask.task_id);
         activeTaskRef.current = task;
         setActiveTask(task);
+        setTaskError('');
 
         if (task.status === 'completed' || task.status === 'failed') {
           authoritativeTerminalTaskIdsRef.current.add(task.task_id);
           await handleTerminalTask(task);
-        } else if (task.status === 'processing' && !cancelled) {
+        } else if (!cancelled) {
           timeoutId = setTimeout(pollTask, 2000);
         }
       } catch (err) {
         if (cancelled) return;
         console.error('course catalog ingestion task poll error', err);
-        const message = getErrorMessage(err, '入库任务状态查询失败');
-        setTaskError(message);
-        setIngesting(false);
-        setActiveTask((prev) => {
-          const failedTask = {
-            ...normalizeTask(prev, activeTask.task_id),
-            status: 'failed',
-            error_message: message
-          };
-          activeTaskRef.current = failedTask;
-          return failedTask;
-        });
-        const refreshed = await refreshDetails();
-        if (!cancelled && refreshed && onChanged) {
-          onChanged();
+        const detail = getErrorMessage(err, '');
+        setTaskError(detail ? `任务状态查询失败：${detail}，正在重试` : '任务状态查询失败，正在重试');
+        if (!cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
         }
       }
     };
@@ -291,7 +328,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     const queuedFiles = files.map((file, index) => ({
       id: `${Date.now()}-${index}-${file.name}`,
       name: file.name,
-      status: 'pending',
+      status: 'queued',
       message: ''
     }));
 
@@ -310,7 +347,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
         setUploadQueue((prev) => prev.map((queueItem) => (
           queueItem.id === item.id
-            ? { ...queueItem, status: 'completed', message: res.message || '上传完成' }
+            ? { ...queueItem, status: 'uploaded', message: res.message || '上传完成' }
             : queueItem
         )));
       } catch (err) {
@@ -386,10 +423,10 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <span className={`rounded border px-2.5 py-1 text-xs font-bold ${getBadgeClass(knowledgeStatus?.status || catalog.status)}`}>
-              资源库 {knowledgeStatus?.status || catalog.status || 'UNKNOWN'}
+              资源库 {formatCatalogStatus(knowledgeStatus?.status || catalog.status)}
             </span>
             <span className={`rounded border px-2.5 py-1 text-xs font-bold ${getBadgeClass(knowledgeStatus?.knowledge_status || catalog.knowledge_status)}`}>
-              知识库 {knowledgeStatus?.knowledge_status || catalog.knowledge_status || 'UNKNOWN'}
+              知识库 {formatKnowledgeStatus(knowledgeStatus?.knowledge_status || catalog.knowledge_status)}
             </span>
           </div>
         </header>
@@ -448,7 +485,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                       {item.message && <div className="mt-0.5 break-words text-xs text-slate-500">{item.message}</div>}
                     </div>
                     <span className={`flex-shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(item.status)}`}>
-                      {item.status}
+                      {formatUploadQueueStatus(item.status)}
                     </span>
                   </div>
                 ))}
@@ -484,7 +521,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                           )}
                         </div>
                         <span className={`flex-shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(material.status)}`}>
-                          {material.status || 'UNKNOWN'}
+                          {formatMaterialStatus(material.status)}
                         </span>
                       </div>
                     </div>
@@ -528,7 +565,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-500">status</span>
-                  <span className={`rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(activeTask.status)}`}>{activeTask.status || '—'}</span>
+                  <span className={`rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(activeTask.status)}`}>{formatTaskStatus(activeTask.status)}</span>
                 </div>
                 <div>
                   <div className="mb-1 flex justify-between text-xs text-slate-500">

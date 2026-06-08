@@ -2398,6 +2398,107 @@
         }
       }
     },
+    "/admin/course-catalogs/{catalog_id}/materials/upload": {
+      "post": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "上传课程资源库资料",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已创建",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogMaterialResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "文件名、类型或内容非法"
+          },
+          "409": {
+            "description": "课程资源库正在入库中"
+          },
+          "413": {
+            "description": "资料文件过大"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}/ingestions": {
+      "post": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "触发课程资源库知识入库",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "已接受",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogIngestionResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "正在入库或没有待入库资料"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/course-catalogs/{catalog_id}/knowledge-status": {
       "get": {
         "tags": [
@@ -4180,7 +4281,8 @@
               "profile_refresh",
               "learning_path_refresh",
               "quiz_generation",
-              "resource_generation"
+              "resource_generation",
+              "course_catalog_ingestion"
             ],
             "description": "任务类型"
           },
@@ -4390,11 +4492,28 @@
               "draft",
               "ingesting",
               "ready",
+              "dirty",
+              "partial",
               "failed"
             ]
           },
           "material_count": {
             "type": "integer"
+          },
+          "last_ingestion_task_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "last_ingestion_status": {
+            "type": "string",
+            "nullable": true
+          },
+          "chunk_count": {
+            "type": "integer"
+          },
+          "last_error": {
+            "type": "string",
+            "nullable": true
           },
           "created_at": {
             "type": "string",
@@ -4502,12 +4621,55 @@
           "source_type": {
             "type": "string"
           },
+          "file_size": {
+            "type": "integer"
+          },
           "status": {
             "type": "string"
+          },
+          "chunk_count": {
+            "type": "integer"
+          },
+          "last_error": {
+            "type": "string",
+            "nullable": true
+          },
+          "ingested_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CourseCatalogIngestionAccepted": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "catalog_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "CourseCatalogIngestionResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CourseCatalogIngestionAccepted"
           }
         }
       },
@@ -4570,6 +4732,27 @@
               },
               "material_count": {
                 "type": "integer"
+              },
+              "chunk_count": {
+                "type": "integer"
+              },
+              "pending_material_count": {
+                "type": "integer"
+              },
+              "failed_material_count": {
+                "type": "integer"
+              },
+              "last_ingestion_task_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "last_ingestion_status": {
+                "type": "string",
+                "nullable": true
+              },
+              "last_error": {
+                "type": "string",
+                "nullable": true
               }
             }
           }

@@ -620,6 +620,128 @@ GET /api/v1/admin/logs/operations
 
 分页字段位于 `data` 内：`total`, `page`, `page_size`
 
+### 5.6 课程资源库生成资源与软删除
+
+#### 5.6.1 管理员触发课程资源库学习资源生成
+
+```
+POST /api/v1/admin/course-catalogs/:catalog_id/resources/generations
+```
+
+**权限：** 仅 admin
+
+**说明：** 基于 CourseCatalog 已入库知识生成标准学习资源。Backend 将生成结果按当前绑定该资源库的教学班 fan-out 写入 `resources`；生成后才绑定的教学班不会自动回补。无绑定教学班时返回 `409`。
+
+**请求体 `application/json`：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| chapter | string | 否 | 章节 |
+| knowledge_point | string | 否 | 知识点 |
+| resource_types | array | 是 | 至少一种资源类型：document / mindmap / reading / code |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| task_id | string | 异步任务 ID |
+| catalog_id | string | 课程资源库 ID |
+| status | string | 任务状态，创建后为 processing |
+
+**错误码：**
+
+| code | 说明 |
+|------|------|
+| 40913 | 课程资料尚未完成入库 |
+| 40914 | 课程知识库为空 |
+| 40915 | 课程资源库尚未绑定教学班 |
+| 42210 | 资源类型为空或不合法 |
+
+#### 5.6.2 管理员课程资源库生成资源列表
+
+```
+GET /api/v1/admin/course-catalogs/:catalog_id/resources
+```
+
+**权限：** 仅 admin
+
+**说明：** 聚合当前绑定教学班下未软删除的生成资源，供 Admin 在资源库抽屉中管理。该接口不替代学生端 `GET /resources`。
+
+**查询参数：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| type | string | 否 | 资源类型筛选 |
+| page | integer | 否 | 页码，默认 1 |
+| page_size | integer | 否 | 每页条数，默认 20 |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| resources | array | 生成资源列表 |
+| resources[].id | string | 资源 ID |
+| resources[].course_id | string | fan-out 后的教学班 ID |
+| resources[].title | string | 资源标题 |
+| resources[].type | string | 资源类型 |
+| resources[].description | string | 资源描述 |
+| resources[].tags | array | 标签 |
+| resources[].chapter | string | 章节 |
+| resources[].knowledge_point | string | 知识点 |
+| resources[].view_count | integer | 浏览次数 |
+| resources[].created_at | string | 创建时间 |
+
+分页字段位于 `data` 内：`total`, `page`, `page_size`
+
+#### 5.6.3 管理员软删除学习资源
+
+```
+DELETE /api/v1/admin/resources/:resource_id
+```
+
+**权限：** 仅 admin
+
+**说明：** 仅设置 `Resource.is_deleted=true`，不删除数据库行、文件、Qdrant chunks 或 Agent 产物。
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | 资源 ID |
+| deleted | boolean | 固定为 true |
+
+**错误码：**
+
+| code | 说明 |
+|------|------|
+| 40412 | 资源不存在 |
+
+#### 5.6.4 管理员软删除课程资源库资料
+
+```
+DELETE /api/v1/admin/course-catalogs/:catalog_id/materials/:material_id
+```
+
+**权限：** 仅 admin
+
+**说明：** 仅隐藏资料记录，不删除上传文件，不删除 Qdrant chunks，不回滚 `chunk_count`。`ready/partial` 资源库删除资料后 `knowledge_status=dirty`。
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | 资料 ID |
+| catalog_id | string | 课程资源库 ID |
+| deleted | boolean | 固定为 true |
+| knowledge_status | string | 删除后的知识库状态 |
+
+**错误码：**
+
+| code | 说明 |
+|------|------|
+| 40411 | 课程资源库资料不存在 |
+| 40911 | 课程资源库正在入库中 |
+
 ---
 
 ## 六、学习效果评估 `/api/v1/evaluation`

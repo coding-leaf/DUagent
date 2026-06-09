@@ -486,7 +486,7 @@ async def test_admin_soft_deletes_resource_and_hides_from_reads():
     assert response.json()["data"] == {"id": "resource-soft-delete", "deleted": True}
     assert list_response.json()["data"]["resources"] == []
     assert missing_response.status_code == 404
-    assert missing_response.json()["detail"]["code"] == 40402
+    assert missing_response.json()["detail"]["code"] == 40412
     async with async_session_factory() as db:
         resource = await db.get(Resource, "resource-soft-delete")
         assert resource.is_deleted is True
@@ -525,7 +525,7 @@ async def test_admin_soft_deletes_material_marks_catalog_dirty_without_changing_
     assert status_data["knowledge_status"] == "dirty"
     assert status_data["chunk_count"] == 7
     assert missing_response.status_code == 404
-    assert missing_response.json()["detail"]["code"] == 40401
+    assert missing_response.json()["detail"]["code"] == 40411
     async with async_session_factory() as db:
         material = await db.get(CourseCatalogMaterial, "material-admin-gen")
         catalog = await db.get(CourseCatalog, catalog_id)

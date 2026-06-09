@@ -2508,6 +2508,56 @@
         }
       }
     },
+    "/admin/course-catalogs/{catalog_id}/materials/{material_id}": {
+      "delete": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员软删除课程资源库资料",
+        "description": "仅软删除资料记录，不删除上传文件，不删除 Qdrant chunks，不回滚 chunk_count。ready/partial 资源库删除资料后 knowledge_status 变为 dirty。",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已删除",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCatalogMaterialDeleteResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资料不存在，业务码 40411"
+          },
+          "409": {
+            "description": "课程资源库正在入库中"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/course-catalogs/{catalog_id}/materials/upload": {
       "post": {
         "tags": [
@@ -2637,6 +2687,156 @@
             }
           }
         }
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}/resources": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员课程资源库生成资源列表",
+        "description": "聚合当前绑定该 CourseCatalog 的教学班下未软删除资源，供 Admin 在资源库抽屉中管理。",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCatalogResourcesResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}/resources/generations": {
+      "post": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员触发课程资源库学习资源生成",
+        "description": "Admin-only。基于 CourseCatalog 已入库知识生成标准学习资源。生成结果按当前绑定该 CourseCatalog 的教学班 fan-out 写入 resources；生成后才绑定的教学班不会自动回补。无绑定教学班时返回 409。",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogResourceGenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "已接受",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogResourceGenerationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "资源库未就绪、知识库为空或尚未绑定教学班；业务码 40913/40914/40915"
+          },
+          "422": {
+            "description": "资源类型为空或不合法，业务码 42210"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/resources/{resource_id}": {
+      "delete": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "管理员软删除学习资源",
+        "description": "仅设置 Resource.is_deleted=true，不删除数据库行、文件、Qdrant chunks 或 Agent 产物。",
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已删除",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminResourceDeleteResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在，业务码 40412"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/course-catalogs": {
@@ -4819,6 +5019,186 @@
           }
         }
       },
+      "CatalogResourceGenerateRequest": {
+        "type": "object",
+        "properties": {
+          "chapter": {
+            "type": "string"
+          },
+          "knowledge_point": {
+            "type": "string"
+          },
+          "resource_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "document",
+                "mindmap",
+                "reading",
+                "code"
+              ]
+            },
+            "description": "必填，至少选择一种资源类型"
+          }
+        }
+      },
+      "CatalogResourceGenerationAccepted": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "catalog_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogResourceGenerationResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CatalogResourceGenerationAccepted"
+          }
+        }
+      },
+      "AdminCatalogResourceItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "course_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chapter": {
+            "type": "string"
+          },
+          "knowledge_point": {
+            "type": "string"
+          },
+          "view_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminCatalogResourcesResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "resources": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AdminCatalogResourceItem"
+                }
+              },
+              "total": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "page_size": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "AdminResourceDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "deleted": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "CourseCatalogMaterialDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "catalog_id": {
+                "type": "string"
+              },
+              "deleted": {
+                "type": "boolean"
+              },
+              "knowledge_status": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "ingesting",
+                  "ready",
+                  "dirty",
+                  "partial",
+                  "failed"
+                ]
+              }
+            }
+          }
+        }
+      },
       "CourseCatalogKnowledgeStatusResponse": {
         "type": "object",
         "properties": {
@@ -4838,7 +5218,15 @@
                 "type": "string"
               },
               "knowledge_status": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "ingesting",
+                  "ready",
+                  "dirty",
+                  "partial",
+                  "failed"
+                ]
               },
               "material_count": {
                 "type": "integer"

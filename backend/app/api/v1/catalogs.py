@@ -579,7 +579,7 @@ async def admin_delete_catalog_material(
     if material is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 40401, "message": "课程资源库资料不存在", "data": None},
+            detail={"code": 40411, "message": "课程资源库资料不存在", "data": None},
         )
 
     material.is_deleted = True
@@ -814,7 +814,7 @@ async def admin_delete_resource(
     if resource is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 40402, "message": "资源不存在", "data": None},
+            detail={"code": 40412, "message": "资源不存在", "data": None},
         )
 
     resource.is_deleted = True

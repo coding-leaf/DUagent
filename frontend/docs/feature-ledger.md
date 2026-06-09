@@ -41,12 +41,12 @@
 
 ## 当前主线结论
 
-当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成，而是把 Admin 资源库入库、Admin 资源库级资源生成和教师绑定 ready CourseCatalog 的真实产品链路验收清楚：
+当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成。Admin 资源库入库、Admin 资源库级资源生成、教师绑定 ready CourseCatalog 和学生消费 fan-out 资源已经完成一次真实多服务验收，下一步应设计学生 / 教师如何消费 CourseCatalog 入库内容：
 
 1. CourseCatalog 管理、资料上传、入库向量化已经从 Admin UI 到 Backend/Agent 入库链路打通。
 2. Admin 可在资源库抽屉中触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源。
 3. 教师创建教学班时绑定已就绪 CourseCatalog，是当前教师侧资源库使用入口。
-4. 资源列表和资源详情已经可展示真实资源，后续重点是确认学生 / 教师如何消费 CourseCatalog 入库后的资源与知识库内容。
+4. 真实验收证据：资源库 `89f51dfbdedc4995` 入库 task `d0b234d74df94822` completed，`chunk_count=1`；资源生成 task `39dfbd5feb9a4cb7` completed，fan-out 到教学班 `59360ad8b8f445b7`，学生端可见并打开资源详情。
 5. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
 6. LearningPath 展示可操作，但刷新和 KG ready gate 仍未收口，需要单独设计。
 
@@ -134,20 +134,17 @@
 
 ## 当前下一步队列
 
-1. **Admin CourseCatalog 入库 / 资源生成真实操作验收**
-   用真实 Backend + Agent Service + MySQL + Qdrant/storage/provider 验收管理员创建资源库、上传资料、触发入库、触发资源生成、轮询任务、查看知识库状态和生成资源列表的完整操作证据。
-
-2. **教师绑定 ready CourseCatalog 创建教学班验收**
-   验证教师只能选择已就绪资源库创建教学班，学生加入后课程上下文、资源列表和基础练习仍按教学班正常工作。
-
-3. **学生 / 教师消费 CourseCatalog 入库内容的产品口径**
+1. **学生 / 教师消费 CourseCatalog 入库内容的产品口径**
    明确入库后的资料、资源、知识库内容分别如何被资源列表、资源详情、AI Chat、Quiz 和教师端查看或引用。
 
-4. **#21 KG ready gate 设计**
+2. **#21 KG ready gate 设计**
    LearningPath 刷新依赖 KG，不能复用 chunk-only ready gate。先定 KG 状态、错误码和降级策略。
 
-5. **#27 Admin 用户停用状态契约**
+3. **#27 Admin 用户停用状态契约**
    如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
+
+4. **真实联调运行态固化**
+   Agent Service 启动必须带共享上传目录 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`；否则 Admin 入库会失败为 `material does not exist`。后续可考虑把该检查纳入 readiness 或启动脚本。
 
 ## 纠偏记录
 

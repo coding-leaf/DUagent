@@ -12,7 +12,7 @@
 ## 当前施工状态
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
-- 当前最高优先级：Admin CourseCatalog 入库 / 资源生成真实操作验收，以及教师绑定 ready CourseCatalog 创建教学班验收。
+- 当前最高优先级：学生 / 教师消费 CourseCatalog 入库内容的产品口径设计；LearningPath / KG ready gate 设计。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
 - 当前待设计阻塞点：LearningPath / KG ready gate。
@@ -20,6 +20,15 @@
 
 ## 最近验证
 
+- 2026-06-09：Admin CourseCatalog 入库 / 资源生成 / 教师绑定 / 学生消费真实多服务冒烟验收通过：
+  - 真实服务：Backend `8001`、Agent Service `8002`、MySQL、Qdrant 均在线；Agent health 返回 `qdrant_connected=true`、`model_loaded=true`。
+  - 首次 live smoke 暴露运行态配置问题：Agent Service 未带共享上传目录，入库 task `b09513e51aef4431` 失败，错误为 `material does not exist`。根因是 Backend 文件在 `../backend/storage/course_catalogs`，Agent 默认从自身 `storage/course_catalogs` 解析。重启 Agent 时显式设置 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs` 后通过。
+  - 通过正式 Client API 创建 Admin/Teacher/Student，创建资源库 `89f51dfbdedc4995`，上传真实 md 资料 `2ff62f2a34134655`，触发入库 task `d0b234d74df94822`，任务 `completed`，资源库 `status=ready`、`knowledge_status=ready`、`chunk_count=1`。
+  - 教师可见 ready CourseCatalog，并绑定创建教学班 `59360ad8b8f445b7`，确认 `CourseOffering.id == Course.id`。
+  - Admin 触发资源库级资源生成 task `39dfbd5feb9a4cb7`，任务 `completed`，fan-out 到课程 `59360ad8b8f445b7`，生成资源 `c9faf2f4ce304d3d`（document）和 `2ca8a6af636f4b20`（mindmap）。
+  - 学生加入教学班后，`GET /resources` 可见生成资源，`GET /resources/{id}` 可打开真实内容；软删除 `2ca8a6af636f4b20` 后 Admin/Student 列表均隐藏，数据库只读核验该资源 `is_deleted=1`，未软删 document 仍保留。
+  - Qdrant 只读核验：按 `course_id=89f51dfbdedc4995` 过滤 `course_knowledge_v1_1024` count 为 1。
+  - 回归验证：`../.venv/bin/pytest tests/test_admin_catalog_resource_generation.py tests/test_course_catalog_ingestion.py tests/test_resources_async.py tests/test_course_catalog_ready_gate.py -q` 通过 54/54；`npm run test:e2e -- e2e/specs.spec.js -g "Admin course catalog resource generation|Teacher console does not expose"` 通过 2/2；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；`python3 -m json.tool ../docs/10-client-api/Client-API.openapi.json` 通过。
 - 2026-06-09：Admin 课程资源库资源生成和软删除前端接入完成：
   - `CourseCatalogDrawer.jsx` 新增 Admin-only 生成学习资源表单、生成任务独立轮询、生成资源列表、资料软删除和生成资源软删除。
   - 前端只调用已写入 Client API 的 Admin 端点：`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/resources/{resource_id}`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`。
@@ -75,6 +84,7 @@
 - 浏览器前端如果使用真实 Backend，请优先使用 `http://localhost:5173`，避免 `127.0.0.1` 与 Backend CORS origin 不一致。
 - 推荐启动方式：`VITE_USE_MOCK=false VITE_API_BASE_URL=http://localhost:8001/api/v1 npm run dev`。
 - Admin CourseCatalog 入库和资源生成真实验收需要 Backend、Agent Service、MySQL、Qdrant/storage、embedding provider 配置同时可用。
+- Agent Service 必须带共享上传目录运行：`COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`。缺失时入库会失败为 `material does not exist`。
 
 ## 下一步指针
 

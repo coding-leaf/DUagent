@@ -4,18 +4,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
 from app.db.session import async_session_factory
-from app.models.catalog import CourseCatalog, CourseCatalogMaterial
+from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
 from app.models.others import AsyncTask
 from app.models.user import User
 from app.schemas.catalog import CourseCatalogCreateRequest, CourseCatalogMaterialCreateRequest
-from app.services.agent_client import AgentClient, AgentServiceError
+from app.schemas.operations import CatalogResourceGenerateRequest
+from app.services.agent_client import AgentClient, AgentServiceError, agent_client
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ ingestion_agent_client = AgentClient(timeout=300.0)
 
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
 
 
 def _catalog_item(catalog: CourseCatalog) -> dict:
@@ -98,6 +100,32 @@ def _first_error(errors: list[str]) -> str:
 
 def _remove_material_dir(target_path: Path) -> None:
     shutil.rmtree(target_path.parent, ignore_errors=True)
+
+
+def _webhook_url(request: Request) -> str:
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/api/v1/webhooks/agent"
+
+
+def _course_material_missing() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": 40913, "message": "课程资料尚未完成入库", "data": None},
+    )
+
+
+def _knowledge_base_empty() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": 40914, "message": "课程知识库为空", "data": None},
+    )
+
+
+def _course_offering_missing() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": 40915, "message": "课程资源库尚未绑定教学班", "data": None},
+    )
 
 
 async def _run_catalog_ingestion_background(task_id: str) -> None:
@@ -644,6 +672,108 @@ async def admin_start_catalog_ingestion(
 
     background_tasks.add_task(_run_catalog_ingestion_background, task.id)
 
+    return {
+        "code": 202,
+        "message": "accepted",
+        "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
+    }
+
+
+@router.post("/admin/course-catalogs/{catalog_id}/resources/generations", status_code=202)
+async def admin_generate_catalog_resources(
+    catalog_id: str,
+    req: CatalogResourceGenerateRequest,
+    request: Request,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    if catalog.status != "ready":
+        raise _course_material_missing()
+    if catalog.knowledge_status not in {"ready", "partial"}:
+        raise _course_material_missing()
+    if (catalog.chunk_count or 0) <= 0:
+        raise _knowledge_base_empty()
+
+    if not req.resource_types:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": 42210, "message": "至少选择一种资源类型", "data": None},
+        )
+    invalid_types = [item for item in req.resource_types if item not in RESOURCE_TYPES]
+    if invalid_types:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": 42210, "message": "资源类型不合法", "data": {"invalid_types": invalid_types}},
+        )
+
+    offerings_result = await db.execute(
+        select(CourseOffering)
+        .where(
+            CourseOffering.catalog_id == catalog.id,
+            CourseOffering.is_deleted == False,
+        )
+        .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
+    )
+    offerings = offerings_result.scalars().all()
+    fanout_course_ids = [offering.id for offering in offerings]
+    if not fanout_course_ids:
+        raise _course_offering_missing()
+
+    task_result = {
+        "catalog_id": catalog.id,
+        "catalog_title": catalog.title,
+        "fanout_course_ids": fanout_course_ids,
+        "knowledge_status": catalog.knowledge_status,
+        "degraded": catalog.knowledge_status == "partial",
+        "chunk_count": catalog.chunk_count or 0,
+        "resource_types": req.resource_types,
+    }
+    if req.chapter:
+        task_result["chapter"] = req.chapter
+    if req.knowledge_point:
+        task_result["knowledge_point"] = req.knowledge_point
+
+    task = AsyncTask(
+        task_type="resource_generation",
+        status="processing",
+        progress=10,
+        user_id=current_user.id,
+        course_id=None,
+        result=task_result,
+    )
+    db.add(task)
+    await db.flush()
+    await db.refresh(task)
+
+    payload = {
+        "task_id": task.id,
+        "user_id": current_user.id,
+        "course_id": catalog.id,
+        "resource_types": req.resource_types,
+        "webhook_url": _webhook_url(request),
+    }
+    if req.chapter:
+        payload["chapter"] = req.chapter
+    if req.knowledge_point:
+        payload["knowledge_point"] = req.knowledge_point
+
+    try:
+        await agent_client.post_json("/agent/v1/resources/generate", payload)
+    except AgentServiceError as e:
+        task.status = "failed"
+        task.error_code = str(e.agent_code or "agent_error")
+        task.error_message = e.message
+        task.progress = 100
+        task.completed_at = _now_utc()
+        await db.commit()
+        return {
+            "code": 202,
+            "message": "accepted",
+            "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
+        }
+
+    await db.commit()
     return {
         "code": 202,
         "message": "accepted",

@@ -31,3 +31,9 @@ class ResourceGenerateRequest(BaseModel):
     chapter: Optional[str] = None
     knowledge_point: Optional[str] = None
     resource_types: Optional[list[str]] = None
+
+
+class CatalogResourceGenerateRequest(BaseModel):
+    chapter: Optional[str] = None
+    knowledge_point: Optional[str] = None
+    resource_types: Optional[list[str]] = None

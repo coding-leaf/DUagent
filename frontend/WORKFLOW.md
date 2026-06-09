@@ -35,6 +35,7 @@
     - `../.venv/bin/python tools/probe_kg_resource_alignment.py probe --catalog-id 89f51dfbdedc4995 --calibration --sample-mode all --format csv --out /tmp/kg-resource-probe/89f51-calibration.csv`：通过，`wrote 0 calibration probe rows`。
     - `../.venv/bin/python` 校验 `/tmp/kg-resource-probe/89f51-calibration.csv` 必需列：`missing=[]`，`row_count=0`。
     - `../.venv/bin/python` 检查 `/tmp/kg-resource-probe/inventory.json` 正式样本候选：`eligible_count=0`。
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/node_resources_probe_regression?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_node_resources.py -q -p no:cacheprovider`：1/1 passed；测试初始化补充 `engine.dispose()` 以适配 MySQL async engine。
   - Commits：`58dec7e 新增KG资源对齐探针服务`、`361b3a7 新增KG资源对齐探针命令行工具`、`988c463 修复KG探针命令连接释放`。
 - 2026-06-09：CourseCatalog 资源消费闭环前端落地完成：
   - 学生端 `Dashboard.jsx` 仅把“有课程但无资源”空态文案改为“课程资源正在准备中 / 请稍后查看”，`data-testid="resources-empty"` 保留不变，无课程空态仍是“暂无课程 / 请先加入一门课程”。

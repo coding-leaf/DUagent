@@ -21,10 +21,11 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_node_resources.db",
 )
 
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
 from httpx import AsyncClient, ASGITransport
 
 asyncio.run(init_db())
+asyncio.run(engine.dispose())
 
 from app.main import app
 from app.models.user import RegistrationCode

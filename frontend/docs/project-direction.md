@@ -60,6 +60,7 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 - CourseCatalog 三表和教学班绑定：`CourseCatalog`、`CourseCatalogMaterial`、`CourseOffering`。
 - 课程资源库资料入库编排：Backend 创建入库任务，Agent Service 执行 ingestion，Backend 回写状态。
 - Admin 课程资源库入库 UI：上传资料、触发入库、查看知识库状态、轮询任务。
+- Admin 课程资源库资源生成和软删除 UI：触发资源库级学习资源生成、轮询生成任务、查看生成资源列表、软删除资料和生成资源。
 - 资源生成和 Quiz 生成前置 CourseCatalog ready gate：生成前解析教学班绑定的 `CourseCatalog`，校验 `status`、`knowledge_status` 和 `chunk_count`。
 - 当前前端契约纠偏：`/resources/generate`、`/quiz/generate` 标记为作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
 
@@ -77,10 +78,11 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 
 ## 当前方向
 
-下一阶段不要继续盲目补页面字段，也不要把历史生成接口重新接到教师端。优先方向是让 Admin 资源库入库、教师绑定 ready CourseCatalog、学生 / 教师消费入库内容这条真实产品链路稳定闭环：
+下一阶段不要继续盲目补页面字段，也不要把历史生成接口重新接到教师端。优先方向是让 Admin 资源库入库与资源库级资源生成、教师绑定 ready CourseCatalog、学生 / 教师消费入库和生成内容这条真实产品链路稳定闭环：
 
-1. Admin CourseCatalog 上传 / 入库真实操作验收。
-   - 验证管理员创建资源库、上传资料、触发入库、轮询任务、查看知识库状态。
+1. Admin CourseCatalog 上传 / 入库 / 资源生成真实操作验收。
+   - 验证管理员创建资源库、上传资料、触发入库、触发资源生成、轮询任务、查看知识库状态和生成资源列表。
+   - 验证资料和生成资源软删除仅影响可见列表，不删除文件、Qdrant chunks 或 Agent 产物。
    - 验证 Backend、Agent Service、MySQL、Qdrant/storage/provider 在真实配置下能完成资料切片、embedding、upsert 和状态回写。
    - 验证前端只通过 Backend Client API 操作，不直连 Agent Service。
 
@@ -92,7 +94,7 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 3. 设计学生 / 教师消费 CourseCatalog 入库内容的产品口径。
    - 明确入库资料、资源列表、资源详情、AI Chat 检索、Quiz 取题分别如何使用课程知识库。
    - 不通过 `/resources/generate` 或 `/quiz/generate` 硬接教师端 UI。
-   - 如果未来需要恢复生成链路，先重新完成产品契约审查。
+   - 如果未来需要恢复教师/学生侧生成链路，先重新完成产品契约审查。
 
 4. 设计 LearningPath / KG ready 口径。
    - LearningPath 依赖 KG，不应直接复用 chunk-only ready gate。
@@ -161,12 +163,13 @@ Frontend -> Backend Client API -> SQL / AsyncTask / Agent Service -> Backend web
 
 ## 当前推荐下一步
 
-推荐从“Admin CourseCatalog 上传 / 入库真实操作验收”开始，而不是新增生成入口：
+推荐从“Admin CourseCatalog 上传 / 入库 / 资源生成真实操作验收”开始，而不是恢复教师端历史生成入口：
 
 1. 启动 Backend、Agent Service、MySQL 和必要的向量/存储依赖。
 2. 管理员创建 CourseCatalog，上传 `txt/md/pdf` 资料并触发入库。
-3. 验证 `/tasks/{task_id}` 轮询、资料状态、`knowledge_status`、`chunk_count` 和错误信息回写。
-4. 教师选择 ready CourseCatalog 创建教学班，学生加入后验证资源列表、资源详情和基础 Quiz。
-5. 记录学生 / 教师消费入库内容的缺口，落成 spec 或 smoke 脚本。
+3. 管理员触发资源库级学习资源生成，验证 `/tasks/{task_id}` 轮询、生成资源列表和软删除可见性。
+4. 验证资料状态、`knowledge_status`、`chunk_count` 和错误信息回写。
+5. 教师选择 ready CourseCatalog 创建教学班，学生加入后验证资源列表、资源详情和基础 Quiz。
+6. 记录学生 / 教师消费入库内容的缺口，落成 spec 或 smoke 脚本。
 
 `/resources/generate`、`/quiz/generate` 是当前前端契约作废 / 不接入的历史接口，不作为当前推荐下一步。

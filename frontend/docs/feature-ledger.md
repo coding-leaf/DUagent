@@ -41,13 +41,14 @@
 
 ## 当前主线结论
 
-当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成，而是把 Admin 资源库入库和教师绑定 ready CourseCatalog 的真实产品链路验收清楚：
+当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成，而是把 Admin 资源库入库、Admin 资源库级资源生成和教师绑定 ready CourseCatalog 的真实产品链路验收清楚：
 
 1. CourseCatalog 管理、资料上传、入库向量化已经从 Admin UI 到 Backend/Agent 入库链路打通。
-2. 教师创建教学班时绑定已就绪 CourseCatalog，是当前教师侧资源库使用入口。
-3. 资源列表和资源详情已经可展示真实资源，后续重点是确认学生 / 教师如何消费 CourseCatalog 入库后的资源与知识库内容。
-4. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
-5. LearningPath 展示可操作，但刷新和 KG ready gate 仍未收口，需要单独设计。
+2. Admin 可在资源库抽屉中触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源。
+3. 教师创建教学班时绑定已就绪 CourseCatalog，是当前教师侧资源库使用入口。
+4. 资源列表和资源详情已经可展示真实资源，后续重点是确认学生 / 教师如何消费 CourseCatalog 入库后的资源与知识库内容。
+5. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
+6. LearningPath 展示可操作，但刷新和 KG ready gate 仍未收口，需要单独设计。
 
 ## 页面真实调用核查
 
@@ -69,7 +70,7 @@
 | `TeacherConsole.jsx` | 查看班级、学生列表、班级洞察 | `GET /courses`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 复杂排名/覆盖率/动力指数已从当前实现边界移除。 |
 | `TeacherStudentReport.jsx` | 查看单个学生学习报告 | `GET /teaching/classes/{class_id}/students/{student_id}/learning` | ✅ 已可操作 | `overall_score` 真实口径仍待设计，前端不展示硬编码分。 |
 | `AdminConsole.jsx` | 管理用户、查看日志、创建/查看课程资源库 | `GET /admin/users`、`DELETE /admin/users/{user_id}`、`GET /admin/logs/agent`、`GET /admin/logs/operations`、`GET/POST /admin/course-catalogs` | ✅ 已可操作 | 用户停用状态持久展示仍缺契约字段。 |
-| `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}` | ✅ 已可操作 | Admin 资料导入并向量化的核心入口。 |
+| `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态、触发资源库级学习资源生成、查看生成资源、软删除资料/资源 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}`、`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`、`DELETE /admin/resources/{resource_id}` | ✅ 已可操作 | Admin 资料导入、向量化、资源生成和软删除的核心入口。 |
 | 无页面入口 | 资源生成 | `POST /resources/generate` | 🚫 前端不接入 | 历史接口 / 废弃候选；教师端不提供生成资源入口，不作为当前 UI 或联调主线。 |
 | 无页面入口 | Quiz 生成 | `POST /quiz/generate` | 🚫 前端不接入 | 历史接口 / 废弃候选；练习页不引导触发生题，不作为当前 UI 或联调主线。 |
 
@@ -87,7 +88,7 @@
 | 6 | Quiz 历史 | ⚠️ 前端无入口 | `quizService.getHistory()` 存在，对应 `/quiz/history` | 决定是否需要页面入口；不需要则登记为未接 UI。 |
 | 7 | AI Chat SSE | ✅ 已可操作 | 会话列表、历史消息、SSE 流式对话已接真实 API | 后续审查 `knowledge_points[]` 元素类型契约。 |
 | 8 | 教师班级 / 学生 / Insights | ✅ 已可操作 | 教师端课程、学生列表、班级洞察已接真实 API | 复杂指标必须先契约设计。 |
-| 9 | 管理员用户 / 日志 | ✅ 已可操作 | 用户列表、停用、Agent 日志、系统日志已接真实 API | 停用状态持久展示见 #24。 |
+| 9 | 管理员用户 / 日志 | ✅ 已可操作 | 用户列表、停用、Agent 日志、系统日志已接真实 API | 停用状态持久展示见 #27。 |
 
 ### 二、CourseCatalog 与知识库入库
 
@@ -96,43 +97,45 @@
 | 10 | CourseCatalog 三表 + 教学班绑定 | ✅ 已可操作 | `CourseCatalog`、`CourseCatalogMaterial`、`CourseOffering` 已支撑 Admin 建资源库、教师开班绑定资源库 | 无当前阻塞。 |
 | 11 | Admin 资料上传 / 登记 | ✅ 已可操作 | Admin 抽屉可上传 `txt/md/pdf`，Backend 保存文件并创建 `CourseCatalogMaterial` | 部署时不要提交上传文件或 storage 产物。 |
 | 12 | Admin 触发入库向量化 | ✅ 已可操作 | Admin 点击入库后，Backend 创建 `course_catalog_ingestion` task，Agent 切片、embedding、Qdrant upsert，Backend 回写 `chunk_count/knowledge_status`，前端轮询刷新 | 建议做一次部署级 live smoke，确认真实 Qdrant/storage/provider 配置。 |
-| 13 | 历史生成接口 CourseCatalog ready gate | ✅ 后端闭环 + 🚫 前端不接入 | `/resources/generate` 和 `/quiz/generate` 曾共用 ready gate：`status=ready`、`knowledge_status=ready|partial`、`chunk_count>0` | 不再驱动前端 UI 或下一步主线；保留为历史后端能力 / 废弃候选背景。 |
+| 13 | Admin 资源库级学习资源生成 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/resources/generations`，按资源类型触发生成，独立轮询 `resource_generation` task，完成后刷新生成资源列表 | 建议做一次部署级 live smoke，确认 Agent 返回资源、Backend fan-out 和前端刷新一致。 |
+| 14 | Admin 资料 / 生成资源软删除 | ✅ 已可操作 | Admin 抽屉调用资料和资源 DELETE 接口；资料删除后可显示 `dirty`，资源删除后从生成资源列表消失 | 软删除不删除文件、Qdrant chunks 或 Agent 产物。 |
+| 15 | 历史生成接口 CourseCatalog ready gate | ✅ 后端闭环 + 🚫 前端不接入 | `/resources/generate` 和 `/quiz/generate` 曾共用 ready gate：`status=ready`、`knowledge_status=ready|partial`、`chunk_count>0` | 不再驱动教师端 / 学生端 UI 或下一步主线；保留为历史后端能力 / 废弃候选背景。 |
 
 ### 三、历史生成接口 / 前端不接入
 
 | # | 功能 | 状态 | 已实现内容 | 下一步 |
 | --- | --- | --- | --- | --- |
-| 14 | 资源生成 `/resources/generate` | 🚫 前端不接入 | Backend 曾实现 API、ready gate、Agent payload 使用 `CourseCatalog.id`；前端正式入口已删除 | 当前前端契约作废 / 不接入；不得新增教师端生成资源入口。 |
-| 15 | Quiz 生成 `/quiz/generate` | 🚫 前端不接入 | Backend 曾实现 API、ready gate、Agent payload 使用 `CourseCatalog.id`，题目按教学班 id 落库 | 当前前端契约作废 / 不接入；练习页不引导触发生题。 |
-| 16 | 资源/题目/诊断内容质量 | ⏸️ 暂缓 | 暂不靠前端文案遮盖 Agent 质量问题 | 先确认 Admin 入库资源和现有题库消费口径，再决定是否需要新的生成产品设计。 |
+| 16 | 资源生成 `/resources/generate` | 🚫 前端不接入 | Backend 曾实现 API、ready gate、Agent payload 使用 `CourseCatalog.id`；前端正式入口已删除 | 当前前端契约作废 / 不接入；不得新增教师端生成资源入口。 |
+| 17 | Quiz 生成 `/quiz/generate` | 🚫 前端不接入 | Backend 曾实现 API、ready gate、Agent payload 使用 `CourseCatalog.id`，题目按教学班 id 落库 | 当前前端契约作废 / 不接入；练习页不引导触发生题。 |
+| 18 | 资源/题目/诊断内容质量 | ⏸️ 暂缓 | 暂不靠前端文案遮盖 Agent 质量问题 | 先确认 Admin 入库资源和现有题库消费口径，再决定是否需要新的生成产品设计。 |
 
 ### 四、Agent 依赖能力
 
 | # | 功能 | 状态 | 已实现内容 | 下一步 |
 | --- | --- | --- | --- | --- |
-| 17 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源 | 刷新入口和 KG ready gate 另见 #18。 |
-| 18 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先设计 KG ready gate，再决定是否接刷新 UI。 |
-| 19 | KG ready gate | 📋 待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成 | 单独 spec：KG 状态、错误码、降级策略、前端提示。 |
-| 20 | 学生画像展示 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile`，并展示 `/users/me` 基础资料 | 字段扩展必须走契约。 |
-| 21 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
-| 22 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
-| 23 | Evaluation refresh | ⚠️ 前端无入口 | `learningService.refreshEvaluation()` 存在，对应 `/evaluation/refresh`，但页面无调用 | 决定是否接刷新入口或删除误导性 service。 |
-| 24 | 教师学生深度报告 | ✅ 已可操作 + 📋 待设计局部口径 | 学生报告页面接 `GET /teaching/classes/{class_id}/students/{student_id}/learning` | `overall_score` 真实计算口径待设计。 |
+| 19 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源 | 刷新入口和 KG ready gate 另见 #20。 |
+| 20 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先设计 KG ready gate，再决定是否接刷新 UI。 |
+| 21 | KG ready gate | 📋 待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成 | 单独 spec：KG 状态、错误码、降级策略、前端提示。 |
+| 22 | 学生画像展示 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile`，并展示 `/users/me` 基础资料 | 字段扩展必须走契约。 |
+| 23 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
+| 24 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
+| 25 | Evaluation refresh | ⚠️ 前端无入口 | `learningService.refreshEvaluation()` 存在，对应 `/evaluation/refresh`，但页面无调用 | 决定是否接刷新入口或删除误导性 service。 |
+| 26 | 教师学生深度报告 | ✅ 已可操作 + 📋 待设计局部口径 | 学生报告页面接 `GET /teaching/classes/{class_id}/students/{student_id}/learning` | `overall_score` 真实计算口径待设计。 |
 
 ### 五、待设计 / 暂缓
 
 | # | 功能 | 状态 | 当前判断 | 下一步 |
 | --- | --- | --- | --- | --- |
-| 25 | Admin 用户停用状态持久展示 | 📋 待设计 | 当前 `GET /admin/users` 契约未返回 `is_active/status`，页面刷新后无法持久展示停用状态 | 先扩展 Client API，再同步 Backend/Frontend。 |
-| 26 | AI Chat `knowledge_points[]` 元素类型 | 📋 待设计 | 真实历史响应出现对象元素，OpenAPI 仍声明 string；前端已兼容防白屏 | 做契约审查，决定 string 还是 object union。 |
-| 27 | 复杂教师/Admin 指标 | 📋 待设计 | 排名、覆盖率、动力指数等不能前端补造 | 先设计 SQL/Agent/Client API 来源。 |
-| 28 | 累计学习时长 / 阅读进度 / AIChat 活动摘要 / 资源偏好分布 | ⏸️ 暂缓 | 缺行为采集口径和 activity 表设计 | 单独数据采集专项。 |
-| 29 | Memory 压缩 | ⏸️ 暂缓 | Agent 内部能力，不进当前前端主线 | 不作为 Client API 功能推进。 |
+| 27 | Admin 用户停用状态持久展示 | 📋 待设计 | 当前 `GET /admin/users` 契约未返回 `is_active/status`，页面刷新后无法持久展示停用状态 | 先扩展 Client API，再同步 Backend/Frontend。 |
+| 28 | AI Chat `knowledge_points[]` 元素类型 | 📋 待设计 | 真实历史响应出现对象元素，OpenAPI 仍声明 string；前端已兼容防白屏 | 做契约审查，决定 string 还是 object union。 |
+| 29 | 复杂教师/Admin 指标 | 📋 待设计 | 排名、覆盖率、动力指数等不能前端补造 | 先设计 SQL/Agent/Client API 来源。 |
+| 30 | 累计学习时长 / 阅读进度 / AIChat 活动摘要 / 资源偏好分布 | ⏸️ 暂缓 | 缺行为采集口径和 activity 表设计 | 单独数据采集专项。 |
+| 31 | Memory 压缩 | ⏸️ 暂缓 | Agent 内部能力，不进当前前端主线 | 不作为 Client API 功能推进。 |
 
 ## 当前下一步队列
 
-1. **Admin CourseCatalog 上传 / 入库真实操作验收**
-   用真实 Backend + Agent Service + MySQL + Qdrant/storage/provider 验收管理员创建资源库、上传资料、触发入库、轮询任务、查看知识库状态的完整操作证据。
+1. **Admin CourseCatalog 入库 / 资源生成真实操作验收**
+   用真实 Backend + Agent Service + MySQL + Qdrant/storage/provider 验收管理员创建资源库、上传资料、触发入库、触发资源生成、轮询任务、查看知识库状态和生成资源列表的完整操作证据。
 
 2. **教师绑定 ready CourseCatalog 创建教学班验收**
    验证教师只能选择已就绪资源库创建教学班，学生加入后课程上下文、资源列表和基础练习仍按教学班正常工作。
@@ -140,15 +143,15 @@
 3. **学生 / 教师消费 CourseCatalog 入库内容的产品口径**
    明确入库后的资料、资源、知识库内容分别如何被资源列表、资源详情、AI Chat、Quiz 和教师端查看或引用。
 
-4. **#19 KG ready gate 设计**
+4. **#21 KG ready gate 设计**
    LearningPath 刷新依赖 KG，不能复用 chunk-only ready gate。先定 KG 状态、错误码和降级策略。
 
-5. **#25 Admin 用户停用状态契约**
+5. **#27 Admin 用户停用状态契约**
    如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
 
 ## 纠偏记录
 
-- TeacherConsole 曾经接过资源生成 UI；CourseCatalog 主线调整后已经移除。当前资源生成没有前端正式入口。
+- TeacherConsole 曾经接过资源生成 UI；CourseCatalog 主线调整后已经移除。当前教师端资源生成没有前端正式入口；Admin 资源库级生成使用独立 Admin 端点。
 - 2026-06-09 契约纠偏：`/resources/generate`、`/quiz/generate` 在当前前端契约中标记为作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
 - `learningService.triggerResourceGeneration()` 和旧 `learningService.getTaskStatus()` 已删除；任务查询由 `taskService.getTaskStatus()` 承担。
 - Admin 课程资源库导入和向量化已经实现，不应再误判为“只做了后端”或“没接 UI”。

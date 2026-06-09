@@ -271,6 +271,313 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     expect(taskPollCount).toBeGreaterThanOrEqual(2);
   });
 
+  test('Admin course catalog resource generation and soft delete uses declared admin endpoints', async ({ page }) => {
+    let generationStarted = false;
+    let generationPollCount = 0;
+    let materialDeleted = false;
+    const resources = [{
+      id: 'resource-e2e-a',
+      course_id: 'class-e2e',
+      title: '二叉树讲义',
+      type: 'document',
+      description: '已有资源',
+      tags: ['tree'],
+      chapter: '树',
+      knowledge_point: '二叉树',
+      view_count: 0,
+      created_at: '2026-06-09T09:00:00Z',
+    }];
+
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-admin-token');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'admin-e2e',
+          email: 'admin@example.com',
+          username: 'Admin E2E',
+          role: 'admin',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/users**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: { users: [] },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/logs/**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: { logs: [] },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          catalogs: [{
+            id: 'catalog-e2e',
+            title: 'E2E 资源库',
+            description: '资源生成回归测试',
+            status: 'ready',
+            knowledge_status: materialDeleted ? 'dirty' : 'ready',
+            material_count: materialDeleted ? 0 : 1,
+            chunk_count: 6,
+            created_at: '2026-06-09T08:00:00Z',
+          }],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/materials(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          materials: materialDeleted ? [] : [{
+            id: 'material-e2e',
+            filename: 'lesson.md',
+            source_type: 'file',
+            file_size: 128,
+            status: 'ingested',
+            chunk_count: 6,
+            created_at: '2026-06-09T08:01:00Z',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/materials/material-e2e', async (route) => {
+      materialDeleted = true;
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'deleted',
+        data: {
+          id: 'material-e2e',
+          catalog_id: 'catalog-e2e',
+          deleted: true,
+          knowledge_status: 'dirty',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/knowledge-status', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          status: 'ready',
+          knowledge_status: materialDeleted ? 'dirty' : 'ready',
+          material_count: materialDeleted ? 0 : 1,
+          chunk_count: 6,
+          pending_material_count: 0,
+          failed_material_count: 0,
+          last_ingestion_task_id: null,
+          last_ingestion_status: null,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/resources(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources,
+          total: resources.length,
+          page: 1,
+          page_size: 20,
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/resources/generations', async (route) => {
+      generationStarted = true;
+      const payload = route.request().postDataJSON();
+      expect(payload).toEqual({
+        chapter: '树',
+        knowledge_point: '二叉树',
+        resource_types: ['document', 'mindmap'],
+      });
+      await route.fulfill(jsonResponse({
+        code: 202,
+        message: 'accepted',
+        data: {
+          task_id: 'generation-task-e2e',
+          catalog_id: 'catalog-e2e',
+          status: 'processing',
+        },
+      }, 202));
+    });
+
+    await page.route('**/api/v1/tasks/generation-task-e2e', async (route) => {
+      generationPollCount += 1;
+      if (generationStarted && generationPollCount >= 2 && resources.length === 1) {
+        resources.push({
+          id: 'resource-e2e-b',
+          course_id: 'class-e2e',
+          title: '二叉树导图',
+          type: 'mindmap',
+          description: '生成资源',
+          tags: ['tree', 'mindmap'],
+          chapter: '树',
+          knowledge_point: '二叉树',
+          view_count: 0,
+          created_at: '2026-06-09T09:03:00Z',
+        });
+      }
+
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          task_id: 'generation-task-e2e',
+          task_type: 'resource_generation',
+          status: generationPollCount >= 2 ? 'completed' : 'processing',
+          progress: generationPollCount >= 2 ? 100 : 35,
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/resources/resource-e2e-a', async (route) => {
+      const index = resources.findIndex((resource) => resource.id === 'resource-e2e-a');
+      if (index >= 0) resources.splice(index, 1);
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'deleted',
+        data: {
+          id: 'resource-e2e-a',
+          deleted: true,
+        },
+      }));
+    });
+
+    await page.goto('/admin');
+    await page.getByRole('button', { name: '课程资源库' }).click();
+    await page.getByRole('button', { name: '管理资料' }).click();
+
+    await expect(page.getByTestId('catalog-drawer')).toBeVisible();
+    await expect(page.getByText('生成学习资源')).toBeVisible();
+    await expect(page.getByText('二叉树讲义')).toBeVisible();
+
+    await page.getByPlaceholder('章节').fill('树');
+    await page.getByPlaceholder('知识点').fill('二叉树');
+    await page.getByLabel('文档').check();
+    await page.getByLabel('思维导图').check();
+    await page.getByRole('button', { name: '生成资源' }).click();
+
+    await expect(page.getByTestId('catalog-generation-task-status').getByText('处理中')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('catalog-generation-task-status').getByText('已完成')).toBeVisible({ timeout: 7000 });
+    await expect(page.getByText('二叉树导图')).toBeVisible();
+    expect(generationPollCount).toBeGreaterThanOrEqual(2);
+
+    await page.getByTestId('catalog-resource-row').filter({ hasText: '二叉树讲义' }).getByRole('button', { name: '删除资源' }).click();
+    await expect(page.getByText('二叉树讲义')).toHaveCount(0);
+
+    await page.getByTestId('catalog-material-row').filter({ hasText: 'lesson.md' }).getByRole('button', { name: '删除资料' }).click();
+    await expect(page.getByText('lesson.md')).toHaveCount(0);
+    await expect(page.getByText('知识库 待更新')).toBeVisible();
+  });
+
+  test('Teacher console does not expose resource generation entry', async ({ page }) => {
+    let deprecatedGenerateRequests = 0;
+
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-teacher-token');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'teacher-e2e',
+          email: 'teacher@example.com',
+          username: 'Teacher E2E',
+          role: 'teacher',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/resources/generate', async (route) => {
+      deprecatedGenerateRequests += 1;
+      await route.fulfill(jsonResponse({
+        code: 410,
+        message: 'deprecated',
+        data: null,
+      }, 410));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'class-e2e',
+            name: '一班',
+            description: '数据结构',
+            student_count: 1,
+            catalog_id: 'catalog-e2e',
+            catalog_title: 'E2E 资源库',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/teaching/classes/class-e2e/students', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          students: [{
+            id: 'student-e2e',
+            username: 'student',
+            real_name: '学生',
+            student_id: '20260001',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/teaching/classes/class-e2e/insights', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          summary: {},
+          attention_students: [],
+        },
+      }));
+    });
+
+    await page.goto('/teacher');
+
+    await expect(page.getByRole('heading', { name: '教学班选择' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '生成资源' })).toHaveCount(0);
+    await expect(page.getByText('生成学习资源')).toHaveCount(0);
+    expect(deprecatedGenerateRequests).toBe(0);
+  });
+
   test('AI Chat renders historical messages with object-shaped knowledge points', async ({ page }) => {
     const consoleErrors = [];
     page.on('console', (msg) => {

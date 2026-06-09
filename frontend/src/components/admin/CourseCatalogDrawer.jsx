@@ -78,10 +78,30 @@ const formatTaskStatus = createStatusLabelFormatter({
   failed: '失败'
 }, '—');
 
-const normalizeTask = (task, fallbackId) => ({
+const formatResourceType = createStatusLabelFormatter({
+  document: '文档',
+  mindmap: '思维导图',
+  reading: '阅读材料',
+  code: '代码示例'
+}, 'UNKNOWN');
+
+const RESOURCE_TYPE_OPTIONS = [
+  { value: 'document', label: '文档' },
+  { value: 'mindmap', label: '思维导图' },
+  { value: 'reading', label: '阅读材料' },
+  { value: 'code', label: '代码示例' }
+];
+
+const createGenerationForm = () => ({
+  chapter: '',
+  knowledge_point: '',
+  resource_types: []
+});
+
+const normalizeTask = (task, fallbackId, fallbackType = 'course_catalog_ingestion') => ({
   id: task?.id || task?.task_id || fallbackId || '',
   task_id: task?.task_id || fallbackId || '',
-  task_type: task?.task_type || 'course_catalog_ingestion',
+  task_type: task?.task_type || fallbackType,
   status: task?.status || 'processing',
   progress: task?.progress ?? 0,
   error_message: task?.error_message || '',
@@ -91,6 +111,7 @@ const normalizeTask = (task, fallbackId) => ({
 
 export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged }) {
   const [materials, setMaterials] = useState([]);
+  const [resources, setResources] = useState([]);
   const [knowledgeStatus, setKnowledgeStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -99,13 +120,21 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const [ingesting, setIngesting] = useState(false);
   const [activeTask, setActiveTask] = useState(null);
   const [taskError, setTaskError] = useState('');
+  const [generationForm, setGenerationForm] = useState(createGenerationForm);
+  const [generating, setGenerating] = useState(false);
+  const [generationTask, setGenerationTask] = useState(null);
+  const [generationTaskError, setGenerationTaskError] = useState('');
+  const [deletingMaterialIds, setDeletingMaterialIds] = useState(() => new Set());
+  const [deletingResourceIds, setDeletingResourceIds] = useState(() => new Set());
   const requestSeqRef = useRef(0);
   const isMountedRef = useRef(false);
   const activeTaskRef = useRef(null);
+  const generationTaskRef = useRef(null);
   const catalogIdRef = useRef(null);
   const openRef = useRef(false);
   const uploadOperationSeqRef = useRef(0);
   const ingestionOperationSeqRef = useRef(0);
+  const generationOperationSeqRef = useRef(0);
   const authoritativeTerminalTaskIdsRef = useRef(new Set());
 
   const catalogId = catalog?.id;
@@ -113,6 +142,10 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   useEffect(() => {
     activeTaskRef.current = activeTask;
   }, [activeTask]);
+
+  useEffect(() => {
+    generationTaskRef.current = generationTask;
+  }, [generationTask]);
 
   useEffect(() => {
     catalogIdRef.current = catalogId;
@@ -127,6 +160,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       requestSeqRef.current += 1;
       uploadOperationSeqRef.current += 1;
       ingestionOperationSeqRef.current += 1;
+      generationOperationSeqRef.current += 1;
       authoritativeTerminalTaskIds.clear();
     };
   }, []);
@@ -149,6 +183,13 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     && ingestionOperationSeqRef.current === operationSeq
   ), []);
 
+  const canWriteGenerationOperation = useCallback((operationSeq, operationCatalogId) => (
+    isMountedRef.current
+    && openRef.current
+    && catalogIdRef.current === operationCatalogId
+    && generationOperationSeqRef.current === operationSeq
+  ), []);
+
   const refreshDetails = useCallback(async () => {
     if (!catalogId || !open) return false;
 
@@ -157,14 +198,16 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setLoading(true);
     setError('');
     try {
-      const [materialsRes, statusRes] = await Promise.all([
+      const [materialsRes, statusRes, resourcesRes] = await Promise.all([
         adminService.getCourseCatalogMaterials(catalogId),
-        adminService.getCourseCatalogStatus(catalogId)
+        adminService.getCourseCatalogStatus(catalogId),
+        adminService.getCourseCatalogResources(catalogId, { page: 1, page_size: 50 })
       ]);
       if (!canWriteRequest(requestSeq)) return false;
 
       const incomingStatus = statusRes.data || null;
       setMaterials(materialsRes.data?.materials || []);
+      setResources(resourcesRes.data?.resources || []);
       setKnowledgeStatus(incomingStatus);
 
       const isIncomingIngesting = incomingStatus?.status === 'ingesting'
@@ -202,6 +245,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
 
       setError(getErrorMessage(err, '课程资源库详情加载失败'));
       setMaterials([]);
+      setResources([]);
       setKnowledgeStatus(null);
       return false;
     } finally {
@@ -215,14 +259,22 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     if (!open || !catalogId) return;
 
     setMaterials([]);
+    setResources([]);
     setKnowledgeStatus(null);
     setUploadQueue([]);
     setUploading(false);
     setIngesting(false);
+    setGenerating(false);
+    setGenerationForm(createGenerationForm());
     activeTaskRef.current = null;
+    generationTaskRef.current = null;
     authoritativeTerminalTaskIdsRef.current.clear();
     setActiveTask(null);
     setTaskError('');
+    setGenerationTask(null);
+    setGenerationTaskError('');
+    setDeletingMaterialIds(new Set());
+    setDeletingResourceIds(new Set());
     refreshDetails();
 
     const authoritativeTerminalTaskIds = authoritativeTerminalTaskIdsRef.current;
@@ -230,6 +282,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       requestSeqRef.current += 1;
       uploadOperationSeqRef.current += 1;
       ingestionOperationSeqRef.current += 1;
+      generationOperationSeqRef.current += 1;
       authoritativeTerminalTaskIds.clear();
     };
   }, [catalogId, open, refreshDetails]);
@@ -291,6 +344,62 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     };
   }, [activeTask?.status, activeTask?.task_id, onChanged, open, refreshDetails]);
 
+  useEffect(() => {
+    if (
+      !open
+      || !generationTask?.task_id
+      || generationTask.status === 'completed'
+      || generationTask.status === 'failed'
+    ) return;
+
+    let cancelled = false;
+    let timeoutId;
+
+    const handleTerminalTask = async (task) => {
+      if (cancelled) return;
+      setGenerating(false);
+      if (task.status === 'failed') {
+        setGenerationTaskError(task.error_message || '学习资源生成失败');
+      }
+      const refreshed = await refreshDetails();
+      if (!cancelled && refreshed && onChanged) {
+        onChanged();
+      }
+    };
+
+    const pollTask = async () => {
+      try {
+        const res = await taskService.getTaskStatus(generationTask.task_id);
+        if (cancelled) return;
+
+        const task = normalizeTask(res.data, generationTask.task_id, 'resource_generation');
+        generationTaskRef.current = task;
+        setGenerationTask(task);
+        setGenerationTaskError('');
+
+        if (task.status === 'completed' || task.status === 'failed') {
+          await handleTerminalTask(task);
+        } else if (!cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('course catalog resource generation task poll error', err);
+        const detail = getErrorMessage(err, '');
+        setGenerationTaskError(detail ? `生成任务状态查询失败：${detail}，正在重试` : '生成任务状态查询失败，正在重试');
+        if (!cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
+        }
+      }
+    };
+
+    timeoutId = setTimeout(pollTask, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [generationTask?.status, generationTask?.task_id, onChanged, open, refreshDetails]);
+
   const summary = useMemo(() => ({
     material_count: knowledgeStatus?.material_count ?? catalog?.material_count ?? catalog?.materials_count ?? materials.length,
     chunk_count: knowledgeStatus?.chunk_count ?? catalog?.chunk_count ?? 0,
@@ -305,6 +414,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
 
   const taskProcessing = activeTask?.status === 'processing';
   const taskTerminal = activeTask?.status === 'completed' || activeTask?.status === 'failed';
+  const generationProcessing = generationTask?.status === 'processing';
   const sameTerminalKnowledgeTask = taskTerminal
     && activeTask?.task_id
     && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id
@@ -314,8 +424,21 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     || knowledgeStatus?.status === 'ingesting'
     || knowledgeStatus?.knowledge_status === 'ingesting'
   );
-  const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing;
-  const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting;
+  const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating;
+  const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting || generationProcessing || generating;
+  const hasReadyKnowledge = (knowledgeStatus?.status || catalog?.status) === 'ready'
+    && (knowledgeStatus?.knowledge_status || catalog?.knowledge_status) === 'ready'
+    && summary.chunk_count > 0;
+  const generationDisabled = !hasReadyKnowledge
+    || generationForm.resource_types.length === 0
+    || generationProcessing
+    || generating
+    || catalogIngesting
+    || uploading
+    || ingesting
+    || taskProcessing;
+  const materialDeleteDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating;
+  const resourceDeleteDisabled = generationProcessing || generating;
 
   const handleUpload = async (event) => {
     const files = Array.from(event.target.files || []);
@@ -391,6 +514,103 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
       setTaskError(getErrorMessage(err, '课程资源库入库启动失败'));
       setIngesting(false);
+    }
+  };
+
+  const handleGenerationFieldChange = (field, value) => {
+    setGenerationForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleGenerationTypeToggle = (type) => {
+    setGenerationForm((prev) => {
+      const exists = prev.resource_types.includes(type);
+      return {
+        ...prev,
+        resource_types: exists
+          ? prev.resource_types.filter((item) => item !== type)
+          : [...prev.resource_types, type]
+      };
+    });
+  };
+
+  const handleStartGeneration = async () => {
+    if (!catalogId || generationDisabled) return;
+
+    const operationCatalogId = catalogId;
+    const operationSeq = generationOperationSeqRef.current + 1;
+    generationOperationSeqRef.current = operationSeq;
+    if (!canWriteGenerationOperation(operationSeq, operationCatalogId)) return;
+
+    setGenerating(true);
+    setGenerationTaskError('');
+    setError('');
+    try {
+      const payload = {
+        chapter: generationForm.chapter.trim(),
+        knowledge_point: generationForm.knowledge_point.trim(),
+        resource_types: generationForm.resource_types
+      };
+      const res = await adminService.startCourseCatalogResourceGeneration(operationCatalogId, payload);
+      if (!canWriteGenerationOperation(operationSeq, operationCatalogId)) return;
+      const task = normalizeTask(res.data, res.data?.task_id, 'resource_generation');
+      generationTaskRef.current = task;
+      setGenerationTask(task);
+    } catch (err) {
+      console.error('course catalog resource generation start error', err);
+      if (!canWriteGenerationOperation(operationSeq, operationCatalogId)) return;
+      setGenerationTaskError(getErrorMessage(err, '学习资源生成启动失败'));
+      setGenerating(false);
+    }
+  };
+
+  const handleDeleteMaterial = async (material) => {
+    if (!catalogId || !material?.id || materialDeleteDisabled || deletingMaterialIds.has(material.id)) return;
+
+    setDeletingMaterialIds((prev) => new Set(prev).add(material.id));
+    setError('');
+    try {
+      const res = await adminService.deleteCourseCatalogMaterial(catalogId, material.id);
+      setMaterials((prev) => prev.filter((item) => item.id !== material.id));
+      if (res.data?.knowledge_status) {
+        setKnowledgeStatus((prev) => ({
+          ...(prev || {}),
+          catalog_id: catalogId,
+          knowledge_status: res.data.knowledge_status,
+          material_count: Math.max(0, (prev?.material_count ?? materials.length) - 1)
+        }));
+      }
+      const refreshed = await refreshDetails();
+      if (refreshed && onChanged) onChanged();
+    } catch (err) {
+      console.error('course catalog material delete error', err);
+      setError(getErrorMessage(err, '资料删除失败'));
+    } finally {
+      setDeletingMaterialIds((prev) => {
+        const next = new Set(prev);
+        next.delete(material.id);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteResource = async (resource) => {
+    if (!resource?.id || resourceDeleteDisabled || deletingResourceIds.has(resource.id)) return;
+
+    setDeletingResourceIds((prev) => new Set(prev).add(resource.id));
+    setError('');
+    try {
+      await adminService.deleteResource(resource.id);
+      setResources((prev) => prev.filter((item) => item.id !== resource.id));
+      await refreshDetails();
+    } catch (err) {
+      console.error('course catalog generated resource delete error', err);
+      setError(getErrorMessage(err, '资源删除失败'));
+    } finally {
+      setDeletingResourceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(resource.id);
+        return next;
+      });
     }
   };
 
@@ -520,9 +740,188 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                             </div>
                           )}
                         </div>
-                        <span className={`flex-shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(material.status)}`}>
-                          {formatMaterialStatus(material.status)}
-                        </span>
+                        <div className="flex flex-shrink-0 items-center gap-2">
+                          <span className={`rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(material.status)}`}>
+                            {formatMaterialStatus(material.status)}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="删除资料"
+                            title="删除资料"
+                            disabled={materialDeleteDisabled || deletingMaterialIds.has(material.id) || !material.id}
+                            onClick={() => handleDeleteMaterial(material)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                              materialDeleteDisabled || deletingMaterialIds.has(material.id) || !material.id
+                                ? 'cursor-not-allowed text-slate-300'
+                                : 'text-red-500 hover:bg-red-50 hover:text-red-700'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">
+                              {deletingMaterialIds.has(material.id) ? 'progress_activity' : 'delete'}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="mb-5 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">生成学习资源</h3>
+                <p className="mt-1 text-xs text-slate-500">基于已入库知识为当前绑定教学班生成资源。</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartGeneration}
+                disabled={generationDisabled}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  generationDisabled
+                    ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                    : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
+                }`}
+              >
+                <span className={`material-symbols-outlined text-[18px] ${generationProcessing ? 'animate-spin' : ''}`}>
+                  {generationProcessing ? 'progress_activity' : 'auto_awesome'}
+                </span>
+                {generationProcessing || generating ? '生成中' : '生成资源'}
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input
+                type="text"
+                placeholder="章节"
+                value={generationForm.chapter}
+                onChange={(event) => handleGenerationFieldChange('chapter', event.target.value)}
+                disabled={generationProcessing || generating}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
+              />
+              <input
+                type="text"
+                placeholder="知识点"
+                value={generationForm.knowledge_point}
+                onChange={(event) => handleGenerationFieldChange('knowledge_point', event.target.value)}
+                disabled={generationProcessing || generating}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {RESOURCE_TYPE_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                    generationForm.resource_types.includes(option.value)
+                      ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  } ${generationProcessing || generating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-cyan-200'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={generationForm.resource_types.includes(option.value)}
+                    disabled={generationProcessing || generating}
+                    onChange={() => handleGenerationTypeToggle(option.value)}
+                    className="h-4 w-4 accent-cyan-600"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+
+            {!hasReadyKnowledge && (
+              <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                知识库就绪且存在知识切片后才能生成学习资源。
+              </div>
+            )}
+
+            <div data-testid="catalog-generation-task-status" className="mt-4">
+              {generationTask ? (
+                <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">task_id</span>
+                    <span className="break-all font-mono text-xs text-slate-800">{generationTask.task_id || '—'}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">status</span>
+                    <span className={`rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(generationTask.status)}`}>
+                      {formatTaskStatus(generationTask.status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between text-xs text-slate-500">
+                      <span>progress</span>
+                      <span>{generationTask.progress ?? 0}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-cyan-500 transition-all"
+                        style={{ width: `${Math.max(0, Math.min(100, generationTask.progress ?? 0))}%` }}
+                      />
+                    </div>
+                  </div>
+                  {(generationTask.error_message || generationTaskError) && (
+                    <div className="break-words rounded bg-red-50 px-2 py-1 text-xs text-red-700">
+                      {generationTask.error_message || generationTaskError}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                  {generationTaskError || '选择资源类型后可触发生成任务。'}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="mb-5 rounded-lg border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+              <h3 className="text-sm font-bold text-slate-900">生成资源列表</h3>
+              {loading && <span className="text-xs text-slate-400">加载中...</span>}
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {resources.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-slate-400">暂无生成资源</div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {resources.map((resource) => (
+                    <div key={resource.id || resource.title} data-testid="catalog-resource-row" className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="break-words text-sm font-semibold text-slate-900">{resource.title || '未命名资源'}</div>
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                            <span>{formatResourceType(resource.type)}</span>
+                            {resource.chapter && <span>章节 {resource.chapter}</span>}
+                            {resource.knowledge_point && <span>知识点 {resource.knowledge_point}</span>}
+                            <span>浏览 {resource.view_count ?? 0}</span>
+                            <span>创建 {formatDateTime(resource.created_at)}</span>
+                          </div>
+                          {resource.description && (
+                            <div className="mt-2 break-words text-xs text-slate-500">
+                              {resource.description}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="删除资源"
+                          title="删除资源"
+                          disabled={resourceDeleteDisabled || deletingResourceIds.has(resource.id) || !resource.id}
+                          onClick={() => handleDeleteResource(resource)}
+                          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            resourceDeleteDisabled || deletingResourceIds.has(resource.id) || !resource.id
+                              ? 'cursor-not-allowed text-slate-300'
+                              : 'text-red-500 hover:bg-red-50 hover:text-red-700'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            {deletingResourceIds.has(resource.id) ? 'progress_activity' : 'delete'}
+                          </span>
+                        </button>
                       </div>
                     </div>
                   ))}

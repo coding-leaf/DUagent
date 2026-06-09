@@ -38,6 +38,10 @@ export const adminService = {
     return apiClient.get(`/admin/course-catalogs/${catalogId}/materials`);
   },
 
+  deleteCourseCatalogMaterial: async (catalogId, materialId) => {
+    return apiClient.delete(`/admin/course-catalogs/${catalogId}/materials/${materialId}`);
+  },
+
   uploadCourseCatalogMaterial: async (catalogId, file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -51,5 +55,17 @@ export const adminService = {
 
   startCourseCatalogIngestion: async (catalogId) => {
     return apiClient.post(`/admin/course-catalogs/${catalogId}/ingestions`);
+  },
+
+  getCourseCatalogResources: async (catalogId, params) => {
+    return apiClient.get(`/admin/course-catalogs/${catalogId}/resources`, { params });
+  },
+
+  startCourseCatalogResourceGeneration: async (catalogId, data) => {
+    return apiClient.post(`/admin/course-catalogs/${catalogId}/resources/generations`, data);
+  },
+
+  deleteResource: async (resourceId) => {
+    return apiClient.delete(`/admin/resources/${resourceId}`);
   }
 };

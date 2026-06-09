@@ -30,12 +30,11 @@ async def get_task_status(
 
     # Permission: user owns the task, or role-specific shared task type is allowed.
     if task.user_id and task.user_id != current_user.id:
-        allowed_teacher_task = current_user.role == "teacher" and task.task_type == "resource_generation"
         allowed_admin_task = current_user.role == "admin" and task.task_type in {
             "course_catalog_ingestion",
             "resource_generation",
         }
-        if not (allowed_teacher_task or allowed_admin_task):
+        if not allowed_admin_task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": 40400, "message": "任务不存在", "data": None},

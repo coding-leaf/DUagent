@@ -426,8 +426,9 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   );
   const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating;
   const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting || generationProcessing || generating;
+  const knowledgeReadyStatus = knowledgeStatus?.knowledge_status || catalog?.knowledge_status;
   const hasReadyKnowledge = (knowledgeStatus?.status || catalog?.status) === 'ready'
-    && (knowledgeStatus?.knowledge_status || catalog?.knowledge_status) === 'ready'
+    && (knowledgeReadyStatus === 'ready' || knowledgeReadyStatus === 'partial')
     && summary.chunk_count > 0;
   const generationDisabled = !hasReadyKnowledge
     || generationForm.resource_types.length === 0

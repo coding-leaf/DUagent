@@ -129,8 +129,13 @@ async def agent_webhook(
                 )
                 db.add(resource)
 
+        task_result = task.result if isinstance(task.result, dict) else {}
         task.status = "completed"
-        task.result = req.result
+        task.result = {
+            **task_result,
+            "agent_result": req.result,
+            "resource_count": len(resources_data),
+        }
         task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
     elif req.status == "failed":

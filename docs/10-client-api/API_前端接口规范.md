@@ -640,6 +640,8 @@ POST /api/v1/admin/course-catalogs/:catalog_id/resources/generations
 | knowledge_point | string | 否 | 知识点 |
 | resource_types | array | 是 | 至少一种资源类型：document / mindmap / reading / code |
 
+`resource_types` 必须至少包含 1 项；缺失或空数组均返回 `42210`。
+
 **响应 `data`：**
 
 | 字段 | 类型 | 说明 |

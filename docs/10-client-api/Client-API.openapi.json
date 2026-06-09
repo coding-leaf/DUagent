@@ -5021,6 +5021,9 @@
       },
       "CatalogResourceGenerateRequest": {
         "type": "object",
+        "required": [
+          "resource_types"
+        ],
         "properties": {
           "chapter": {
             "type": "string"
@@ -5030,6 +5033,7 @@
           },
           "resource_types": {
             "type": "array",
+            "minItems": 1,
             "items": {
               "type": "string",
               "enum": [

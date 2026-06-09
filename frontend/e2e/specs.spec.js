@@ -336,7 +336,7 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
             title: 'E2E 资源库',
             description: '资源生成回归测试',
             status: 'ready',
-            knowledge_status: materialDeleted ? 'dirty' : 'ready',
+            knowledge_status: materialDeleted ? 'dirty' : 'partial',
             material_count: materialDeleted ? 0 : 1,
             chunk_count: 6,
             created_at: '2026-06-09T08:00:00Z',
@@ -386,7 +386,7 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
         message: 'success',
         data: {
           status: 'ready',
-          knowledge_status: materialDeleted ? 'dirty' : 'ready',
+          knowledge_status: materialDeleted ? 'dirty' : 'partial',
           material_count: materialDeleted ? 0 : 1,
           chunk_count: 6,
           pending_material_count: 0,
@@ -476,13 +476,14 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await page.getByRole('button', { name: '管理资料' }).click();
 
     await expect(page.getByTestId('catalog-drawer')).toBeVisible();
-    await expect(page.getByText('生成学习资源')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '生成学习资源' })).toBeVisible();
     await expect(page.getByText('二叉树讲义')).toBeVisible();
 
     await page.getByPlaceholder('章节').fill('树');
     await page.getByPlaceholder('知识点').fill('二叉树');
     await page.getByLabel('文档').check();
     await page.getByLabel('思维导图').check();
+    await expect(page.getByRole('button', { name: '生成资源' })).toBeEnabled();
     await page.getByRole('button', { name: '生成资源' }).click();
 
     await expect(page.getByTestId('catalog-generation-task-status').getByText('处理中')).toBeVisible({ timeout: 5000 });

@@ -208,6 +208,30 @@ async def test_admin_catalog_generation_rejects_empty_resource_types_without_tas
 
 
 @pytest.mark.asyncio
+async def test_admin_catalog_generation_rejects_invalid_resource_types_without_task():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+            json={"resource_types": ["document", "bad"]},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": 42210,
+        "message": "资源类型不合法",
+        "data": {"invalid_types": ["bad"]},
+    }
+    assert await _count_tasks(catalog_id) == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "knowledge_status", "chunk_count", "expected_code"),
     [
@@ -320,6 +344,11 @@ async def test_webhook_fanout_writes_resources_to_bound_classes():
         resources = result.scalars().all()
         assert sorted(resource.course_id for resource in resources) == [class_a, class_b]
         assert len(resources) == 2
+        task = await db.get(AsyncTask, "task-admin-gen")
+        assert task.result["catalog_id"] == catalog_id
+        assert task.result["fanout_course_ids"] == [class_a, class_b]
+        assert task.result["resource_count"] == 1
+        assert task.result["agent_result"]["resources"][0]["title"] == "Catalog Doc"
 
 
 @pytest.mark.asyncio
@@ -383,6 +412,61 @@ async def test_admin_can_poll_catalog_resource_generation_task():
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["task_type"] == "resource_generation"
+
+
+@pytest.mark.asyncio
+async def test_teacher_cannot_poll_admin_catalog_resource_generation_task():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id="task-admin-gen",
+                task_type="resource_generation",
+                status="processing",
+                user_id="admin-admin-gen",
+                course_id=None,
+                result={"catalog_id": "catalog-admin-gen", "fanout_course_ids": []},
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/tasks/task-admin-gen",
+            headers=_auth_headers("teacher-admin-gen", "teacher"),
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == 40400
+
+
+@pytest.mark.asyncio
+async def test_teacher_can_poll_own_legacy_resource_generation_task():
+    await _reset_db()
+    await _seed_user("teacher-admin-gen", "teacher")
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id="task-teacher-gen",
+                task_type="resource_generation",
+                status="processing",
+                user_id="teacher-admin-gen",
+                course_id="class-admin-gen-a",
+                result={"catalog_id": "catalog-admin-gen"},
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/tasks/task-teacher-gen",
+            headers=_auth_headers("teacher-admin-gen", "teacher"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["task_id"] == "task-teacher-gen"
 
 
 @pytest.mark.asyncio

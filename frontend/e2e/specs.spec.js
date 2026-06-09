@@ -628,12 +628,230 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
       }));
     });
 
+    await page.route(/\/api\/v1\/resources(\?.*)?$/, async (route) => {
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get('course_id')).toBe('class-e2e');
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [],
+          total: 0,
+          page: 1,
+          page_size: 50,
+        },
+      }));
+    });
+
     await page.goto('/teacher');
 
     await expect(page.getByRole('heading', { name: '教学班选择' })).toBeVisible();
     await expect(page.getByRole('button', { name: '生成资源' })).toHaveCount(0);
     await expect(page.getByText('生成学习资源')).toHaveCount(0);
     expect(deprecatedGenerateRequests).toBe(0);
+  });
+
+  test('Teacher console shows catalog-bound class resources and opens detail', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-teacher-token');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'teacher-e2e',
+          email: 'teacher@example.com',
+          username: 'Teacher E2E',
+          role: 'teacher',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'class-resource-e2e',
+            name: '一班',
+            description: '数据结构',
+            student_count: 1,
+            catalog_id: 'catalog-e2e',
+            catalog_title: 'E2E 资源库',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/teaching/classes/class-resource-e2e/students', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: { students: [] },
+      }));
+    });
+
+    await page.route('**/api/v1/teaching/classes/class-resource-e2e/insights', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          avg_quiz_score: null,
+          total_quiz_attempts: 0,
+          weak_points_top: [],
+          path_node_progress: {
+            total_nodes: 0,
+            completed: 0,
+            in_progress: 0,
+            recommended: 0,
+            pending: 0,
+          },
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/resources(\?.*)?$/, async (route) => {
+      expect(route.request().method()).toBe('GET');
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get('course_id')).toBe('class-resource-e2e');
+      expect(url.searchParams.get('page')).toBe('1');
+      expect(url.searchParams.get('page_size')).toBe('50');
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [{
+            id: 'resource-teacher-e2e',
+            course_id: 'class-resource-e2e',
+            title: '二叉树讲义',
+            type: 'document',
+            description: 'Admin 生成的班级学习资源',
+            chapter: '树',
+            knowledge_point: '二叉树',
+            tags: ['tree'],
+            created_at: '2026-06-09T10:00:00Z',
+          }],
+          total: 1,
+          page: 1,
+          page_size: 50,
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/resources/resource-teacher-e2e', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'resource-teacher-e2e',
+          course_id: 'class-resource-e2e',
+          title: '二叉树讲义',
+          type: 'document',
+          description: 'Admin 生成的班级学习资源',
+          content: '二叉树是一种常用的数据结构。',
+          chapter: '树',
+          knowledge_point: '二叉树',
+          tags: ['tree'],
+        },
+      }));
+    });
+
+    await page.goto('/teacher');
+
+    await expect(page.getByTestId('teacher-resource-section')).toBeVisible();
+    await expect(page.getByTestId('teacher-resource-section').getByText('绑定资源库：E2E 资源库')).toBeVisible();
+    await expect(page.getByTestId('teacher-resource-card').getByText('二叉树讲义')).toBeVisible();
+
+    await page.getByTestId('teacher-resource-card').click();
+    await page.waitForURL('**/resource/resource-teacher-e2e');
+    await expect(page.getByRole('heading', { name: '二叉树讲义' })).toBeVisible();
+    await expect(page.getByText('二叉树是一种常用的数据结构。')).toBeVisible();
+  });
+
+  test('Teacher console shows no-resource fallback', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-teacher-token');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'teacher-e2e',
+          email: 'teacher@example.com',
+          username: 'Teacher E2E',
+          role: 'teacher',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'class-empty-resource-e2e',
+            name: '二班',
+            description: '数据结构',
+            student_count: 0,
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/teaching/classes/class-empty-resource-e2e/students', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: { students: [] },
+      }));
+    });
+
+    await page.route('**/api/v1/teaching/classes/class-empty-resource-e2e/insights', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          avg_quiz_score: null,
+          total_quiz_attempts: 0,
+          weak_points_top: [],
+          path_node_progress: {
+            total_nodes: 0,
+            completed: 0,
+            in_progress: 0,
+            recommended: 0,
+            pending: 0,
+          },
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/resources(\?.*)?$/, async (route) => {
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get('course_id')).toBe('class-empty-resource-e2e');
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [],
+          total: 0,
+          page: 1,
+          page_size: 50,
+        },
+      }));
+    });
+
+    await page.goto('/teacher');
+
+    await expect(page.getByTestId('teacher-resource-section')).toBeVisible();
+    await expect(page.getByTestId('teacher-resource-section').getByText('未绑定课程资源库')).toBeVisible();
+    await expect(page.getByText('本班暂无学习资源，请联系管理员生成')).toBeVisible();
+    await expect(page.getByTestId('teacher-resource-card')).toHaveCount(0);
   });
 
   test('AI Chat renders historical messages with object-shaped knowledge points', async ({ page }) => {

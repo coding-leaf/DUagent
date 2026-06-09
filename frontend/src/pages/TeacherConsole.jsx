@@ -1,11 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
+import { learningService } from '../api/services/learning';
 import FeedbackStatus from '../components/FeedbackStatus';
 import CreateCourseDialog from '../components/CreateCourseDialog';
 import { useAuth } from '../context/AuthContext';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
+const resourceTypeLabels = {
+  document: '文档',
+  reading: '阅读材料',
+  code: '代码示例',
+  mindmap: '思维导图',
+  video: '视频',
+};
 
 export default function TeacherConsole() {
   const navigate = useNavigate();
@@ -21,6 +29,9 @@ export default function TeacherConsole() {
   const [studentsError, setStudentsError] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState(null);
+  const [resources, setResources] = useState([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourcesError, setResourcesError] = useState(null);
 
   // 获取教学班列表
   const refreshClasses = useCallback(async (silent = false) => {
@@ -48,7 +59,7 @@ export default function TeacherConsole() {
     refreshClasses(); // eslint-disable-line react-hooks/set-state-in-effect
   }, [refreshClasses]);
 
-  // 当选择的教学班改变时，获取学生列表和AI洞察
+  // 当选择的教学班改变时，获取学生列表、AI洞察和学习资源
   useEffect(() => {
     if (!activeClass) return;
 
@@ -81,6 +92,24 @@ export default function TeacherConsole() {
       })
       .finally(() => {
         if (!cancelled) setInsightsLoading(false);
+      });
+
+    setResourcesLoading(true);
+    setResourcesError(null);
+    learningService.getResources({ course_id: activeClass, page: 1, page_size: 50 })
+      .then((res) => {
+        if (!cancelled && res.code === 200) {
+          setResources(res.data?.resources || []);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('resources fetch error', err);
+        setResourcesError('学习资源加载失败，请稍后重试。');
+        setResources([]);
+      })
+      .finally(() => {
+        if (!cancelled) setResourcesLoading(false);
       });
 
     return () => {
@@ -191,6 +220,72 @@ export default function TeacherConsole() {
                   <p className="text-sm text-outline">{cls.students} 名学生</p>
                 </button>
               ))}
+            </div>
+          </section>
+
+          {/* Class Learning Resources */}
+          <section className="mb-margin" data-testid="teacher-resource-section">
+            <div className="bg-white rounded-xl border border-outline-variant shadow-sm overflow-hidden">
+              <div className="px-md py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">library_books</span>
+                  <h3 className="font-h3 text-xl text-on-surface">本班学习资源</h3>
+                </div>
+                <span className="text-xs font-semibold text-outline">
+                  {activeClassInfo?.catalog_title
+                    ? `绑定资源库：${activeClassInfo.catalog_title}`
+                    : '未绑定课程资源库'}
+                </span>
+              </div>
+
+              <div className="p-md">
+                {resourcesLoading ? (
+                  <div className="py-8 flex justify-center">
+                    <FeedbackStatus status="loading" title="加载学习资源..." />
+                  </div>
+                ) : resourcesError ? (
+                  <div className="py-8 flex justify-center">
+                    <FeedbackStatus status="error" title={resourcesError} />
+                  </div>
+                ) : resources.length === 0 ? (
+                  <div className="py-8 flex justify-center">
+                    <FeedbackStatus status="empty" title="本班暂无学习资源，请联系管理员生成" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {resources.map((resource) => (
+                      <button
+                        key={resource.id}
+                        type="button"
+                        data-testid="teacher-resource-card"
+                        onClick={() => navigate(`/resource/${resource.id}`)}
+                        className="text-left rounded-xl border border-outline-variant bg-surface-container-lowest p-4 hover:border-primary/50 hover:shadow-sm transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div>
+                            <p className="font-semibold text-on-surface line-clamp-1">{resource.title}</p>
+                            <p className="text-xs text-outline mt-1">
+                              {resourceTypeLabels[resource.type] || resource.type || '资源'}
+                            </p>
+                          </div>
+                          <span className="material-symbols-outlined text-primary text-lg">open_in_new</span>
+                        </div>
+                        {resource.description && (
+                          <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{resource.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-2 text-xs text-outline">
+                          {resource.chapter && (
+                            <span className="px-2 py-1 rounded bg-surface-container-high">章节：{resource.chapter}</span>
+                          )}
+                          {resource.knowledge_point && (
+                            <span className="px-2 py-1 rounded bg-surface-container-high">知识点：{resource.knowledge_point}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 

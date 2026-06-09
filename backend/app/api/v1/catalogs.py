@@ -12,7 +12,7 @@ from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
 from app.db.session import async_session_factory
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
-from app.models.others import AsyncTask
+from app.models.others import AsyncTask, Resource
 from app.models.user import User
 from app.schemas.catalog import CourseCatalogCreateRequest, CourseCatalogMaterialCreateRequest
 from app.schemas.operations import CatalogResourceGenerateRequest
@@ -554,6 +554,64 @@ async def admin_list_catalog_materials(
     }
 
 
+@router.delete("/admin/course-catalogs/{catalog_id}/materials/{material_id}")
+async def admin_delete_catalog_material(
+    catalog_id: str,
+    material_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    if catalog.status == "ingesting" or catalog.knowledge_status == "ingesting":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
+        )
+
+    result = await db.execute(
+        select(CourseCatalogMaterial).where(
+            CourseCatalogMaterial.id == material_id,
+            CourseCatalogMaterial.catalog_id == catalog.id,
+            CourseCatalogMaterial.is_deleted == False,
+        )
+    )
+    material = result.scalar_one_or_none()
+    if material is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "课程资源库资料不存在", "data": None},
+        )
+
+    material.is_deleted = True
+    remaining_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(CourseCatalogMaterial)
+            .where(
+                CourseCatalogMaterial.catalog_id == catalog.id,
+                CourseCatalogMaterial.is_deleted == False,
+                CourseCatalogMaterial.id != material.id,
+            )
+        )
+    ).scalar() or 0
+    catalog.material_count = remaining_count
+    if catalog.knowledge_status in {"ready", "partial"}:
+        catalog.knowledge_status = "dirty"
+    catalog.last_error = None
+    await db.commit()
+
+    return {
+        "code": 200,
+        "message": "deleted",
+        "data": {
+            "id": material.id,
+            "catalog_id": catalog.id,
+            "deleted": True,
+            "knowledge_status": catalog.knowledge_status,
+        },
+    }
+
+
 @router.get("/admin/course-catalogs/{catalog_id}/knowledge-status")
 async def admin_get_catalog_knowledge_status(
     catalog_id: str,
@@ -677,6 +735,92 @@ async def admin_start_catalog_ingestion(
         "message": "accepted",
         "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
     }
+
+
+@router.get("/admin/course-catalogs/{catalog_id}/resources")
+async def admin_list_catalog_resources(
+    catalog_id: str,
+    type: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_admin_catalog_or_404(db, catalog_id)
+    offering_result = await db.execute(
+        select(CourseOffering.id).where(
+            CourseOffering.catalog_id == catalog_id,
+            CourseOffering.is_deleted == False,
+        )
+    )
+    course_ids = list(offering_result.scalars().all())
+    if not course_ids:
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {"resources": [], "total": 0, "page": page, "page_size": page_size},
+        }
+
+    query = select(Resource).where(
+        Resource.course_id.in_(course_ids),
+        Resource.is_deleted == False,
+    )
+    if type:
+        query = query.where(Resource.type == type)
+
+    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
+    result = await db.execute(
+        query.order_by(Resource.create_time.desc(), Resource.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    resources = result.scalars().all()
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "resources": [
+                {
+                    "id": r.id,
+                    "course_id": r.course_id,
+                    "title": r.title,
+                    "type": r.type,
+                    "description": r.description or "",
+                    "tags": r.tags or [],
+                    "chapter": r.chapter,
+                    "knowledge_point": r.knowledge_point,
+                    "view_count": r.view_count,
+                    "created_at": r.create_time.isoformat() if r.create_time else "",
+                }
+                for r in resources
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
+    }
+
+
+@router.delete("/admin/resources/{resource_id}")
+async def admin_delete_resource(
+    resource_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Resource).where(Resource.id == resource_id, Resource.is_deleted == False)
+    )
+    resource = result.scalar_one_or_none()
+    if resource is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40402, "message": "资源不存在", "data": None},
+        )
+
+    resource.is_deleted = True
+    resource.update_by = current_user.id
+    await db.commit()
+    return {"code": 200, "message": "deleted", "data": {"id": resource.id, "deleted": True}}
 
 
 @router.post("/admin/course-catalogs/{catalog_id}/resources/generations", status_code=202)

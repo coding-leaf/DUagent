@@ -383,3 +383,151 @@ async def test_admin_can_poll_catalog_resource_generation_task():
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["task_type"] == "resource_generation"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    class_b = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-b")
+    async with async_session_factory() as db:
+        db.add_all([
+            Resource(
+                id="resource-a",
+                course_id=class_a,
+                title="Doc A",
+                type="document",
+                description="a",
+                tags=[],
+                chapter="树",
+                knowledge_point="二叉树",
+                content="a",
+            ),
+            Resource(
+                id="resource-b",
+                course_id=class_b,
+                title="Doc B",
+                type="document",
+                description="b",
+                tags=[],
+                chapter="树",
+                knowledge_point="二叉树",
+                content="b",
+            ),
+            Resource(
+                id="resource-deleted",
+                course_id=class_a,
+                title="Deleted",
+                type="document",
+                description="d",
+                tags=[],
+                chapter="树",
+                knowledge_point="二叉树",
+                content="d",
+                is_deleted=True,
+            ),
+        ])
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/resources",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["total"] == 2
+    assert [item["id"] for item in data["resources"]] == ["resource-b", "resource-a"]
+    assert all(item["course_id"] in {class_a, class_b} for item in data["resources"])
+
+
+@pytest.mark.asyncio
+async def test_admin_soft_deletes_resource_and_hides_from_reads():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    async with async_session_factory() as db:
+        db.add(
+            Resource(
+                id="resource-soft-delete",
+                course_id=class_id,
+                title="Delete Me",
+                type="document",
+                description="d",
+                tags=[],
+                chapter="树",
+                knowledge_point="二叉树",
+                content="d",
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete(
+            "/api/v1/admin/resources/resource-soft-delete",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+        list_response = await client.get(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/resources",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+        missing_response = await client.delete(
+            "/api/v1/admin/resources/not-found-resource",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {"id": "resource-soft-delete", "deleted": True}
+    assert list_response.json()["data"]["resources"] == []
+    assert missing_response.status_code == 404
+    assert missing_response.json()["detail"]["code"] == 40402
+    async with async_session_factory() as db:
+        resource = await db.get(Resource, "resource-soft-delete")
+        assert resource.is_deleted is True
+        assert resource.update_by == "admin-admin-gen"
+
+
+@pytest.mark.asyncio
+async def test_admin_soft_deletes_material_marks_catalog_dirty_without_changing_chunks():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    catalog_id = await _seed_ready_catalog(chunk_count=7)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/materials/material-admin-gen",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+        materials_response = await client.get(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/materials",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+        status_response = await client.get(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-status",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+        missing_response = await client.delete(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/materials/not-found-material",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["knowledge_status"] == "dirty"
+    assert materials_response.json()["data"]["materials"] == []
+    status_data = status_response.json()["data"]
+    assert status_data["material_count"] == 0
+    assert status_data["knowledge_status"] == "dirty"
+    assert status_data["chunk_count"] == 7
+    assert missing_response.status_code == 404
+    assert missing_response.json()["detail"]["code"] == 40401
+    async with async_session_factory() as db:
+        material = await db.get(CourseCatalogMaterial, "material-admin-gen")
+        catalog = await db.get(CourseCatalog, catalog_id)
+        assert material.is_deleted is True
+        assert catalog.chunk_count == 7

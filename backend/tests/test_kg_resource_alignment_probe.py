@@ -30,6 +30,7 @@ from app.services.kg_resource_alignment_probe import (
     serialize_rows_csv,
     serialize_rows_jsonl,
 )
+from tools.probe_kg_resource_alignment import build_parser, render_inventory_output, render_output
 
 asyncio.run(init_db())
 asyncio.run(engine.dispose())
@@ -429,3 +430,90 @@ def test_serialize_rows_jsonl_emits_one_json_object_per_row():
 
     assert jsonl_text.count("\n") == 2
     assert '"node_name": "AVL树旋转"' in jsonl_text
+
+
+def test_cli_parser_probe_defaults_to_all_csv():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "probe",
+            "--catalog-id",
+            "catalog_probe",
+            "--course-id",
+            "course_probe",
+            "--out",
+            "/tmp/probe.csv",
+        ]
+    )
+
+    assert args.command == "probe"
+    assert args.catalog_id == "catalog_probe"
+    assert args.course_id == "course_probe"
+    assert args.sample_mode == "all"
+    assert args.format == "csv"
+    assert args.calibration is False
+
+
+def test_cli_parser_supports_calibration_core_jsonl():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "probe",
+            "--catalog-id",
+            "89f51dfbdedc4995",
+            "--calibration",
+            "--sample-mode",
+            "core",
+            "--limit",
+            "15",
+            "--format",
+            "jsonl",
+            "--out",
+            "/tmp/probe.jsonl",
+        ]
+    )
+
+    assert args.command == "probe"
+    assert args.catalog_id == "89f51dfbdedc4995"
+    assert args.course_id is None
+    assert args.calibration is True
+    assert args.sample_mode == "core"
+    assert args.limit == 15
+    assert args.format == "jsonl"
+
+
+def test_render_output_supports_json_csv_and_jsonl():
+    rows = [{"catalog_id": "catalog_probe", "course_id": "course_probe", "node_id": "node_1"}]
+
+    assert render_output(rows, "json").startswith("[")
+    assert "catalog_probe" in render_output(rows, "csv")
+    assert render_output(rows, "jsonl").strip().startswith("{")
+
+
+def test_render_inventory_output_preserves_inventory_csv_fields():
+    rows = [
+        {
+            "catalog_id": "catalog_probe",
+            "catalog_title": "Probe Catalog",
+            "course_id": "course_probe",
+            "offering_name": "Probe Course",
+            "chunk_count": 12,
+            "kg_node_count": 10,
+            "learning_path_node_count": 3,
+            "resource_count": 4,
+            "distinct_resource_knowledge_point_count": 2,
+            "distinct_resource_chapter_count": 1,
+            "quiz_count": 1,
+            "distinct_quiz_knowledge_point_count": 1,
+            "eligible_for_formal_probe": True,
+        }
+    ]
+
+    csv_text = render_inventory_output(rows, "csv")
+
+    header = csv_text.splitlines()[0].split(",")
+    assert "catalog_title" in header
+    assert "chunk_count" in header
+    assert "eligible_for_formal_probe" in header
+    assert "Probe Catalog" in csv_text
+    assert "True" in csv_text

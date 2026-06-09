@@ -20,6 +20,22 @@
 
 ## 最近验证
 
+- 2026-06-10：KG-Resource 对齐探针真实盘点与校准执行：
+  - 已新增只读 KG-Resource 对齐探针 service/CLI，用于盘点 catalog/course 数据、导出 KG/LearningPath 节点候选、汇总人工标注；未新增 API route，未修改前端页面，未修改 OpenAPI。
+  - 当前服务状态：Backend `8001`、Agent Service `8002`、Frontend `5173` 均返回 200；MySQL、Qdrant 容器在线。探针 CLI 本身只读 MySQL，不调用 Agent Service。
+  - 数据底盘盘点输出：`/tmp/kg-resource-probe/inventory.json`，共 10 个 catalog/course 组合。
+  - `89f51dfbdedc4995` 盘点结果：course `59360ad8b8f445b7`，`chunk_count=1`，`kg_node_count=0`，`learning_path_node_count=0`，`resource_count=1`，`quiz_count=0`，`eligible_for_formal_probe=false`。
+  - 已对 `89f51dfbdedc4995` 执行 calibration 导出：`/tmp/kg-resource-probe/89f51-calibration.csv`；导出命令成功，必需列完整，节点行数为 0。该 catalog 当前只能证明探针流程和表头可跑，不能产出命中率或 go/no-go。
+  - 正式第二 catalog 选择结果：当前 inventory 中 `eligible_for_formal_probe=true` 的第二 catalog 数量为 0；因此本轮不能输出 KG-Resource 对齐 go/no-go。
+  - 上线前置条件：补充或构造足量真实样本，要求 KG/LearningPath 节点可抽取 10-15 个核心节点，且资源或题目存在可匹配的 `knowledge_point` 或 `chapter` 元数据。
+  - CLI 运行态修复：真实 MySQL inventory 首次暴露 `aiomysql RuntimeError: Event loop is closed` 退出噪声，已在 CLI 结束时显式 `engine.dispose()`，重跑 inventory 不再出现该警告。
+  - 已运行：
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_resource_probe_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_resource_alignment_probe.py -q -p no:cacheprovider`：13/13 passed。
+    - `../.venv/bin/python tools/probe_kg_resource_alignment.py inventory --format json --out /tmp/kg-resource-probe/inventory.json`：通过。
+    - `../.venv/bin/python tools/probe_kg_resource_alignment.py probe --catalog-id 89f51dfbdedc4995 --calibration --sample-mode all --format csv --out /tmp/kg-resource-probe/89f51-calibration.csv`：通过，`wrote 0 calibration probe rows`。
+    - `../.venv/bin/python` 校验 `/tmp/kg-resource-probe/89f51-calibration.csv` 必需列：`missing=[]`，`row_count=0`。
+    - `../.venv/bin/python` 检查 `/tmp/kg-resource-probe/inventory.json` 正式样本候选：`eligible_count=0`。
+  - Commits：`58dec7e 新增KG资源对齐探针服务`、`361b3a7 新增KG资源对齐探针命令行工具`、`988c463 修复KG探针命令连接释放`。
 - 2026-06-09：CourseCatalog 资源消费闭环前端落地完成：
   - 学生端 `Dashboard.jsx` 仅把“有课程但无资源”空态文案改为“课程资源正在准备中 / 请稍后查看”，`data-testid="resources-empty"` 保留不变，无课程空态仍是“暂无课程 / 请先加入一门课程”。
   - 教师端 `TeacherConsole.jsx` 新增只读“本班学习资源”区，按当前教学班 `course_id` 调 `GET /resources?course_id=...&page=1&page_size=50`，展示绑定资源库状态、资源卡片，并可跳转现有 `/resource/:id` 详情。

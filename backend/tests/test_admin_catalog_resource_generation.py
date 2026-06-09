@@ -258,3 +258,128 @@ async def test_non_admin_cannot_generate_catalog_resources():
         )
 
     assert response.status_code == 403
+
+
+def _webhook_headers() -> dict:
+    from app.core.config import settings
+
+    return {"X-Webhook-Secret": settings.WEBHOOK_SECRET}
+
+
+@pytest.mark.asyncio
+async def test_webhook_fanout_writes_resources_to_bound_classes():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    class_b = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-b")
+
+    async with async_session_factory() as db:
+        task = AsyncTask(
+            id="task-admin-gen",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            course_id=None,
+            result={
+                "catalog_id": catalog_id,
+                "fanout_course_ids": [class_a, class_b],
+            },
+        )
+        db.add(task)
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/agent",
+            headers=_webhook_headers(),
+            json={
+                "task_id": "task-admin-gen",
+                "task_type": "resource_generation",
+                "status": "completed",
+                "result": {
+                    "resources": [
+                        {
+                            "title": "Catalog Doc",
+                            "type": "document",
+                            "description": "doc",
+                            "content": "doc content",
+                            "chapter": "树",
+                            "knowledge_point": "二叉树",
+                            "tags": ["catalog"],
+                        }
+                    ]
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        result = await db.execute(select(Resource).where(Resource.title == "Catalog Doc"))
+        resources = result.scalars().all()
+        assert sorted(resource.course_id for resource in resources) == [class_a, class_b]
+        assert len(resources) == 2
+
+
+@pytest.mark.asyncio
+async def test_webhook_rejects_empty_generated_resources_without_marking_success():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    catalog_id = await _seed_ready_catalog()
+    async with async_session_factory() as db:
+        task = AsyncTask(
+            id="task-admin-empty",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            course_id=None,
+            result={"catalog_id": catalog_id, "fanout_course_ids": ["class-admin-gen-a"]},
+        )
+        db.add(task)
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/agent",
+            headers=_webhook_headers(),
+            json={
+                "task_id": "task-admin-empty",
+                "task_type": "resource_generation",
+                "status": "completed",
+                "result": {"resources": []},
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["message"] == "result.resources 不能为空"
+    async with async_session_factory() as db:
+        task = await db.get(AsyncTask, "task-admin-empty")
+        assert task.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_poll_catalog_resource_generation_task():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id="task-admin-gen",
+                task_type="resource_generation",
+                status="processing",
+                user_id="admin-admin-gen",
+                course_id=None,
+                result={"catalog_id": "catalog-admin-gen", "fanout_course_ids": []},
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/tasks/task-admin-gen",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["task_type"] == "resource_generation"

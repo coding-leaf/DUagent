@@ -38,6 +38,8 @@ def _validate_resource_generation_result(result: dict | None) -> list[dict]:
     resources = result.get("resources")
     if not isinstance(resources, list):
         raise _bad_webhook_request("result.resources 必须为数组")
+    if not resources:
+        raise _bad_webhook_request("result.resources 不能为空")
 
     for resource in resources:
         if not isinstance(resource, dict):
@@ -98,20 +100,34 @@ async def agent_webhook(
     if req.status == "completed":
         # --- resource_generation: write result.resources to SQL ---
         resources_data = _validate_resource_generation_result(req.result)
-        for r in resources_data:
-            resource = Resource(
-                id=uuid.uuid4().hex[:16],
-                course_id=task.course_id or "",
-                title=r["title"],
-                type=r["type"],
-                description=r["description"],
-                tags=r["tags"],
-                chapter=r["chapter"],
-                knowledge_point=r["knowledge_point"],
-                content=r["content"],
-                url="",
-            )
-            db.add(resource)
+        fanout_course_ids = []
+        if isinstance(task.result, dict):
+            raw_fanout_course_ids = task.result.get("fanout_course_ids") or []
+            if isinstance(raw_fanout_course_ids, list):
+                fanout_course_ids = [
+                    str(course_id) for course_id in raw_fanout_course_ids if course_id
+                ]
+
+        target_course_ids = fanout_course_ids or ([task.course_id] if task.course_id else [])
+        if not target_course_ids:
+            raise _bad_webhook_request("resource_generation 任务缺少 course_id")
+
+        for target_course_id in target_course_ids:
+            for r in resources_data:
+                resource = Resource(
+                    id=uuid.uuid4().hex[:16],
+                    course_id=target_course_id,
+                    title=r["title"],
+                    type=r["type"],
+                    description=r["description"],
+                    tags=r["tags"],
+                    chapter=r["chapter"],
+                    knowledge_point=r["knowledge_point"],
+                    content=r["content"],
+                    url="",
+                    create_by=task.user_id,
+                )
+                db.add(resource)
 
         task.status = "completed"
         task.result = req.result

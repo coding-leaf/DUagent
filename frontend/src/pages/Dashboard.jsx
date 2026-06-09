@@ -261,7 +261,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div data-testid="resources-empty">
-                <FeedbackStatus status="empty" title="暂无资源" description="当前课程暂无学习资源" />
+                <FeedbackStatus status="empty" title="课程资源正在准备中" description="请稍后查看" />
               </div>
             )}
           </div>

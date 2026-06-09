@@ -61,6 +61,63 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await expect(resourceCard.or(resourcesEmpty).first()).toBeVisible();
   });
 
+  test('Student dashboard shows preparation copy when active course has no resources', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-student-token');
+      localStorage.setItem('course_id', 'course-empty-e2e');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'student-empty-e2e',
+          email: 'student@example.com',
+          username: 'Student E2E',
+          role: 'student',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'course-empty-e2e',
+            name: '空资源教学班',
+            description: '有课程但暂无学习资源',
+          }],
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/resources(\?.*)?$/, async (route) => {
+      expect(route.request().method()).toBe('GET');
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get('course_id')).toBe('course-empty-e2e');
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [],
+          total: 0,
+          page: 1,
+          page_size: 50,
+        },
+      }));
+    });
+
+    await page.goto('/dashboard');
+
+    await expect(page.getByText('暂无课程')).toHaveCount(0);
+    await expect(page.getByTestId('resources-empty')).toBeVisible();
+    await expect(page.getByTestId('resources-empty').getByText('课程资源正在准备中')).toBeVisible();
+    await expect(page.getByTestId('resources-empty').getByText('请稍后查看')).toBeVisible();
+  });
+
   test('UseCase 2: Student switches course -> views learning path & quiz', async ({ page }) => {
     // 1. Log in student
     await loginUser(page, 's@t.com', 'Abc12345');

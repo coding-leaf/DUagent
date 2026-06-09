@@ -20,6 +20,15 @@
 
 ## 最近验证
 
+- 2026-06-09：CourseCatalog 资源消费闭环前端落地完成：
+  - 学生端 `Dashboard.jsx` 仅把“有课程但无资源”空态文案改为“课程资源正在准备中 / 请稍后查看”，`data-testid="resources-empty"` 保留不变，无课程空态仍是“暂无课程 / 请先加入一门课程”。
+  - 教师端 `TeacherConsole.jsx` 新增只读“本班学习资源”区，按当前教学班 `course_id` 调 `GET /resources?course_id=...&page=1&page_size=50`，展示绑定资源库状态、资源卡片，并可跳转现有 `/resource/:id` 详情。
+  - 教师端未恢复生成 / 上传 / 删除入口，仍不调用 deprecated `/resources/generate`。
+  - E2E 回归通过：`npm run test:e2e -- e2e/specs.spec.js -g "Student dashboard shows preparation copy|Teacher console shows catalog-bound class resources|Teacher console shows no-resource fallback|Teacher console does not expose"` 通过 4/4。
+  - 前端检查通过：`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+  - 契约检查：未修改 Backend / OpenAPI / `../docs/`，继续按班存、按班读，不引入 catalog-level resource API。
+  - Commit：`998b29d 调整学生资源准备空态`、`e6421d9 新增教师只读资源面板`。
+  - 剩余风险：`ResourceDetail.jsx` 仍无显式 404/403 错误态；教师资源区 E2E 存在重复路由设置，后续测试扩展时可再抽 helper。
 - 2026-06-09：Admin CourseCatalog 入库 / 资源生成 / 教师绑定 / 学生消费真实多服务冒烟验收通过：
   - 真实服务：Backend `8001`、Agent Service `8002`、MySQL、Qdrant 均在线；Agent health 返回 `qdrant_connected=true`、`model_loaded=true`。
   - 首次 live smoke 暴露运行态配置问题：Agent Service 未带共享上传目录，入库 task `b09513e51aef4431` 失败，错误为 `material does not exist`。根因是 Backend 文件在 `../backend/storage/course_catalogs`，Agent 默认从自身 `storage/course_catalogs` 解析。重启 Agent 时显式设置 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs` 后通过。

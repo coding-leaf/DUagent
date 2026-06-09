@@ -142,12 +142,37 @@ The existing deprecated teacher-oriented `POST /resources/generate` stays deprec
 
 Generated resources continue to be stored in `resources`.
 
-Because current student reads are class-scoped by `course_id`, Backend must define how catalog-generated resources become visible to classes bound to the catalog. First version should choose one clear rule:
+Current schema already determines the first-version persistence rule:
 
-- On generation request, Backend accepts a `catalog_id`, resolves bound `CourseOffering` classes when persisting results, and writes generated resources for each bound class; or
-- Backend stores catalog resource ownership separately and projects resources to bound classes in `GET /resources`.
+- `Resource.course_id` is required and points to `courses.id`.
+- `Resource` has no `catalog_id`.
+- Teacher class creation creates both `Course` and `CourseOffering`, with `CourseOffering.id = Course.id`.
+- Therefore every bound `CourseOffering.id` is already a valid `Resource.course_id`.
 
-The implementation plan must pick one after checking current Backend constraints. The design preference is to avoid schema churn where possible, but not at the cost of unclear visibility.
+First version uses fan-out persistence:
+
+1. Backend accepts `catalog_id`.
+2. Backend selects non-deleted bound classes:
+
+   ```sql
+   SELECT id FROM course_offerings
+   WHERE catalog_id = :catalog_id AND is_deleted = false
+   ```
+
+3. Backend calls Agent with the `catalog_id` as the knowledge retrieval id.
+4. When generated resources are persisted, Backend writes one `resources` row per generated resource per bound class, using `CourseOffering.id` as `Resource.course_id`.
+
+This path requires no schema change for student visibility because existing resource reads are already class-scoped by `Resource.course_id`.
+
+The catalog-projection alternative is not part of this version. It would require adding catalog ownership to resources or introducing a new mapping table, and would be the schema-changing path.
+
+### Fan-Out Boundaries
+
+Fan-out writes only to classes bound at generation time.
+
+If a teacher binds a new class to the catalog after generation, the first version does not automatically backfill old generated resources into that new class. Admin can trigger generation again if the new class needs resources.
+
+If a catalog has no non-deleted bound classes, generation returns `409` instead of creating a successful task that writes zero visible resources.
 
 ## Resource Soft Delete
 
@@ -179,7 +204,8 @@ The endpoint is Admin-only.
 Backend sets:
 
 - `Resource.is_deleted = true`
-- `Resource.update_by = current admin id`, if current model conventions support it
+- `Resource.update_by = current admin id`
+- `Resource.update_time` through the model's update timestamp behavior
 
 Backend does not:
 
@@ -228,6 +254,8 @@ Backend sets:
 - `CourseCatalog.knowledge_status = "dirty"` when the catalog was previously `ready` or `partial`;
 - `CourseCatalog.last_error = null`.
 
+The implementation plan must verify that `dirty` remains covered by OpenAPI and frontend status rendering. Current frontend drawer rendering already maps `dirty` to a visible "待更新" label, but the contract update must keep that status explicit.
+
 Backend does not:
 
 - delete uploaded files;
@@ -265,8 +293,9 @@ For material list:
 
 For generated resources:
 
-- If Backend provides a catalog resource list, show generated resources in the drawer and allow soft delete.
-- If Backend only exposes class resource reads in first version, do not create a fake catalog resource list. The first implementation plan must add a real list endpoint before showing catalog resources in Admin UI.
+- Add a real Admin catalog resource list endpoint before showing generated resources in the drawer.
+- The list should aggregate fan-out resources for the catalog's bound classes without requiring frontend to call class-specific student resource APIs.
+- Do not create a fake catalog resource list in frontend state.
 
 ### TeacherConsole
 
@@ -295,7 +324,7 @@ Expected errors:
 - `401`: unauthenticated.
 - `403`: non-admin access.
 - `404`: catalog, material, or resource not found.
-- `409`: catalog ingesting, knowledge base not ready, no bound class if the chosen persistence rule requires bound classes.
+- `409`: catalog ingesting, knowledge base not ready, no bound class.
 - `422`: invalid resource type or empty request after validation.
 
 ## Testing Strategy
@@ -305,6 +334,9 @@ Backend tests:
 - Admin can trigger catalog-scoped resource generation only when CourseCatalog is ready and has chunks.
 - Non-admin cannot trigger catalog resource generation.
 - Generation rejects dirty, draft, ingesting, failed, or empty catalogs.
+- Generation rejects catalogs with no non-deleted bound classes.
+- Generation fan-outs persisted resources to currently bound classes using `CourseOffering.id` as `Resource.course_id`.
+- Classes bound after generation do not receive old generated resources automatically.
 - Resource soft delete sets `is_deleted` and hides the resource from read endpoints.
 - Material soft delete sets `is_deleted`, refreshes material counts, marks catalog dirty when appropriate, and does not alter `chunk_count`.
 
@@ -335,8 +367,8 @@ When implementation is completed:
 
 ## Open Questions For Implementation Plan
 
-1. Whether generated resources should be physically duplicated into each bound teaching class or projected from catalog ownership at read time.
-2. Whether a catalog resource list endpoint should be part of the first implementation batch.
-3. Whether generation should be rejected when no class is currently bound to the catalog.
+1. Exact Admin catalog resource list response shape and deduplication fields.
+2. Exact async task `result` structure for fan-out generation progress and per-class resource counts.
+3. Whether repeated generation with the same chapter, knowledge point, and resource types should be allowed or guarded with a duplicate warning.
 
 The implementation plan must resolve these before code changes.

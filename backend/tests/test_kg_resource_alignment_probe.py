@@ -30,6 +30,7 @@ from app.services.kg_resource_alignment_probe import (
     serialize_rows_csv,
     serialize_rows_jsonl,
 )
+import tools.probe_kg_resource_alignment as probe_cli
 from tools.probe_kg_resource_alignment import build_parser, render_inventory_output, render_output
 
 asyncio.run(init_db())
@@ -517,3 +518,22 @@ def test_render_inventory_output_preserves_inventory_csv_fields():
     assert "eligible_for_formal_probe" in header
     assert "Probe Catalog" in csv_text
     assert "True" in csv_text
+
+
+@pytest.mark.asyncio
+async def test_async_main_disposes_engine_after_command(monkeypatch):
+    calls = []
+
+    async def fake_run_inventory(args):
+        calls.append(args.command)
+
+    class FakeEngine:
+        async def dispose(self):
+            calls.append("disposed")
+
+    monkeypatch.setattr(probe_cli, "run_inventory", fake_run_inventory)
+    monkeypatch.setattr(probe_cli, "engine", FakeEngine(), raising=False)
+
+    await probe_cli.async_main(["inventory"])
+
+    assert calls == ["inventory", "disposed"]

@@ -10,7 +10,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db.session import async_session_factory
+from app.db.session import async_session_factory, engine
 from app.services.kg_resource_alignment_probe import (
     build_probe_rows,
     compute_annotation_summary,
@@ -147,17 +147,20 @@ async def async_main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "inventory":
-        await run_inventory(args)
-        return
-    if args.command == "probe":
-        await run_probe(args)
-        return
-    if args.command == "summarize":
-        await run_summarize(args)
-        return
+    try:
+        if args.command == "inventory":
+            await run_inventory(args)
+            return
+        if args.command == "probe":
+            await run_probe(args)
+            return
+        if args.command == "summarize":
+            await run_summarize(args)
+            return
 
-    parser.error(f"unsupported command: {args.command}")
+        parser.error(f"unsupported command: {args.command}")
+    finally:
+        await engine.dispose()
 
 
 def main() -> None:

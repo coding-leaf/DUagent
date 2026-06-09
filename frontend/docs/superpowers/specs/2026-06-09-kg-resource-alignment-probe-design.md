@@ -40,6 +40,33 @@
 - 新增 LearningPath refresh UI。
 - 修改 OpenAPI、Backend、Agent 或前端页面。
 
+当前接口返回的 `full_exercise_set` 是课程全量题目兜底集合，不是按节点匹配的挂载结果。它不参与节点级命中判定，不计入 `candidate_count`，只可作为页面附带内容单独记录。
+
+## 第 0 步：数据底盘盘点
+
+正式探针前必须先盘点现有数据，确认是否存在足量第二样本。
+
+盘点每个真实 catalog / course 组合：
+
+- `catalog_id`。
+- 已绑定 `course_id`。
+- `chunk_count`。
+- KG 节点数。
+- LearningPath 节点数。
+- 非删除资源数。
+- distinct `Resource.knowledge_point` 数。
+- distinct `Resource.chapter` 数。
+- 非删除题目数。
+- distinct `QuizQuestion.knowledge_point` 数。
+
+第二轮正式样本必须满足：
+
+- KG 或 LearningPath 节点数足以抽取 `10-15` 个核心节点。
+- 非删除资源或题目数量足以支持人工判断。
+- 资源或题目至少存在可匹配的 `knowledge_point` 或 `chapter` 元数据。
+
+如果盘点后不存在合格的第二个 catalog，本轮不能输出 `go/no-go`。结论应写为：`数据量不足以评估；上线前置是补充或构造足量真实样本`。此时只能执行 `89f51dfbdedc4995` 的流程校准，不能推进 `KG ready gate`。
+
 ## 样本策略
 
 评估分三轮，顺序固定：
@@ -51,10 +78,11 @@
 
 2. 内容更杂、chunk 更多的真实 catalog。
    - 目的：作为正式对齐结论来源。
+   - 前提：第 0 步盘点确认存在满足条件的第二样本。
    - 样本：抽取 `10-15` 个核心节点。
    - 核心节点定义必须客观：
-     - 优先使用真实命中 / 访问数据，即学生实际访问或命中过的节点。
-     - 如果没有真实行为数据，退而使用 chunk 覆盖密度或知识点在资料中的出现频次作为代理指标。
+     - 默认使用 chunk 覆盖密度、知识点在资料中的出现频次、distinct resource coverage 作为代理指标。
+     - 如果项目已经存在真实访问 / 命中埋点，再优先使用学生实际访问或命中过的节点；没有埋点时不强求行为数据。
 
 3. 最近新鲜入库的真实 catalog。
    - 目的：贴近上线场景做压力测试。
@@ -140,18 +168,18 @@
 - `go`：
   - 精确未命中率 `<= 30%`。
   - 且未命中节点中，`semantic_text_mismatch` 占比 `<= 50%`。
-  - 且没有集中出现单一阻塞类型超过未命中节点的 `70%`。
+  - 且没有集中出现单一阻塞类型（`semantic_text_mismatch` 除外）超过未命中节点的 `70%`。
 
 - `no-go`：
   - 精确未命中率 `> 30%`。
   - 或未命中节点中，`semantic_text_mismatch` 占比 `> 50%`。
-  - 或单一阻塞类型超过未命中节点的 `70%`。
+  - 或单一阻塞类型（`semantic_text_mismatch` 除外）超过未命中节点的 `70%`。
 
 解释：
 
 - 精确未命中率高，说明当前挂载规则整体不可依赖。
 - 未命中里大量是 `semantic_text_mismatch`，说明资源语义本身可能对，但精确相等不适配 KG 挂载，后续应进入语义匹配、别名表、字段规范化或 Agent 输出对齐分支。
-- 如果单一阻塞类型高度集中，说明问题可定位，但上线前仍需要先处理该阻塞，不应直接做 KG ready gate。
+- 如果除 `semantic_text_mismatch` 以外的单一阻塞类型高度集中，说明问题可定位，但上线前仍需要先处理该阻塞，不应直接做 KG ready gate。
 
 ## 决策分支
 

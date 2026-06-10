@@ -136,11 +136,11 @@
 
 ## 当前下一步队列
 
-1. **KG-Resource 对齐探针复验**
-   Route A 可用支撑阈值版本已按 `>=0.60` 生成，开发库 active KG 为 `version=3`、`108/116` nodes、`100` edges，metrics 保留 `strong/good/weak_but_usable/unsupported = 57/34/17/8` 分布。下一步跑 KG-Resource 对齐探针，确认 LearningPath 节点到资源的命名和章节匹配是否改善。
+1. **资源生成 metadata 与 KG 节点对齐设计**
+   Route A 可用支撑阈值版 active KG 已生成并通过 KG-Resource 正式探针底盘条件，但探针导出 `108/108` 节点 `candidate_count=0`。当前 4 个资源全部是 `chapter=课程整体`、`knowledge_point=综合知识点`，与 KG 具体章节/知识点体系不一致。下一步应设计资源生成时如何写入可匹配的 `chapter/knowledge_point` 或资源到 KG 节点的映射，不应先进入 LearningPath ready gate。
 
 2. **LearningPath 读取 active KG 结果评估**
-   在 KG-Resource 对齐探针通过或暴露具体缺口后，再评估 LearningPath 读取 `route_a_prune_usable_060` active KG 的节点质量与资源挂载结果；不要先做 KG ready gate 或刷新 UI。
+   在资源 metadata / KG 节点映射方案完成并通过 KG-Resource 对齐探针后，再评估 LearningPath 读取 `route_a_prune_usable_060` active KG 的节点质量与资源挂载结果；不要先做 KG ready gate 或刷新 UI。
 
 3. **#29 AI Chat 检索能力独立 spec**
    按已定口径，后续 Chat spec 必须从“先验证 Agent 检索能力”开始，不先加 UI。
@@ -165,6 +165,7 @@
 - 2026-06-10 Route A no-go 归因：失败不是资料缺失；主要问题是 47 个节点仍命中目录/索引/点线页码噪声，49 个节点落在 `0.65-0.70` 边缘区，说明正文候选过滤和单节点名 query 都不够稳。下一步先做过滤与 query 扩展探针，再决定正文补点或正文聚类。
 - 2026-06-10 过滤与 query 扩展探针复验：增强目录/点线页码/附录索引过滤后，真实 C 语言样本 baseline `22/116=18.97%` 变为 `18/116=15.52%`，说明过滤主要纠正误判，不直接提分；开启 `node.name + chapter/node_name/相邻节点名` 双 query 取最优后提升到 `57/116=49.14%`，49 个边缘节点中 23 个过线，但仍未达到 `>=70%`。下一步进入正文补点 / 正文聚类。
 - 2026-06-11 Route A 可用阈值版本通过：Backend Route A 裁剪默认线从 `0.70` 调整为 `0.60`，开发库 C 语言样本生成 active KG `version=3`、`108/116` nodes、`100` edges，分档为 `strong=57`、`good=34`、`weak_but_usable=17`、`unsupported=8`。`weak_but_usable` 可进入 active KG，但后续 ready gate 不得把它当成 strong 支撑；`metrics.pruned_nodes` 仍保留完整 detail 列表，未来大图需考虑限长或外部诊断产物。
+- 2026-06-11 KG-Resource 对齐探针复验：`b2444963f0e54587` / `6c698badb60a4809` 已具备正式探针条件并导出 108 行 KG 节点候选，但 `108/108` 节点 `candidate_count=0`。零命中原因是当前资源元数据仍为 `chapter=课程整体`、`knowledge_point=综合知识点`，不是新版 active KG 未生效；下一步转为资源生成 metadata / KG 映射设计。
 
 ## 更新规则
 

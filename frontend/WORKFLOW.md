@@ -20,6 +20,13 @@
 
 ## 最近验证
 
+- 2026-06-11：Route A 可用阈值版 KG-Resource 对齐探针复验：
+  - 重新盘点 `/tmp/kg-resource-probe/inventory-after-route-a-usable.json`：C 语言 catalog `b2444963f0e54587` / course `6c698badb60a4809` 已具备正式探针条件，`chunk_count=665`、`kg_node_count=108`、`resource_count=4`、`eligible_for_formal_probe=true`。
+  - 导出正式探针 `/tmp/kg-resource-probe/c-language-route-a-usable-kg-resource-probe.csv`，共 `108` 行，全部来自 active KG。
+  - 探针结果：`candidate_count=0` 的节点 `108/108`，即新版 KG 节点虽然正文支撑明显改善，但当前资源挂载规则仍无法命中任何资源或题目。
+  - 只读核验资源元数据：当前 4 个课程资源全部为 `chapter=课程整体`、`knowledge_point=综合知识点`，而 KG 节点是具体章节/知识点；零命中原因是资源生成 metadata 粒度与 KG 节点体系不一致，不是 KG active 版本未生效。
+  - 验证：`DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4 ../.venv/bin/python tools/probe_kg_resource_alignment.py inventory --format json --out /tmp/kg-resource-probe/inventory-after-route-a-usable.json` 通过；同库 `probe --catalog-id b2444963f0e54587 --course-id 6c698badb60a4809 --sample-mode all --format csv` 通过。
+  - 附注：`../.venv/bin/python -m pytest tests/test_kg_resource_alignment_probe.py -q -p no:cacheprovider` 在当前工具会话中无结果输出，但进程表确认无 pytest 子进程残留；本次结论基于只读 MySQL probe 命令和导出 CSV。
 - 2026-06-11：Route A 可用正文支撑阈值实现并生成新 active KG：
   - Backend Route A 裁剪默认线从强支撑 `0.70` 调整为可用支撑 `0.60`，并保留 `strong/good/weak_but_usable/unsupported` 分档 metrics。
   - `body_support_pass_ratio` 继续按传入阈值计算；`usable_support_ratio` 固定按 `0.60` 计算，避免后续 ready gate 把 weak support 当作 strong support。

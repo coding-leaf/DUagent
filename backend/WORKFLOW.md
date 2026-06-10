@@ -137,6 +137,16 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-10` `Route A KG 正文支撑裁剪工具链接入`
+  - **完成**：`tools/generate_knowledge_graph.py` 新增 `--grounding-file` / `--grounding-threshold`，读取 Agent Service `tools/kg_body_grounding.py` 导出的正文支撑 JSON，调用 Backend 纯裁剪层保留 `body_top1_score >= threshold` 的节点、裁掉悬空边，并以 `source_type=route_a_body_grounded`、`generation_strategy=route_a_prune_unsupported` 创建新 KG 版本。
+  - **边界**：Backend 不导入 `agent_service`，不直接访问 Qdrant / embedding；Agent Service 不读写 Backend SQL。两段式文件交接不新增 Client API 或 Agent HTTP API。
+  - **验证**：
+    - `../.venv/bin/python -m pytest tests/test_generate_kg.py tests/test_kg_body_grounding.py -q`：13 passed（有既有 pytest cache 只读 warning）
+    - `../.venv/bin/python -m pytest tests/test_kg_cli_versioning.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider`：1 passed, 4 skipped（未带 MySQL URL）
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_cli_versioning.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider`：8 passed
+  - **契约**：Client API 契约改变：`否` / Agent API 契约改变：`否`。
+  - **剩余风险**：尚未用真实 C 语言 `116` 节点样本重跑 Route A 新版本；固定成功线仍是排除目录型 chunk 后 `body_top1_score>=0.70` 节点占比 `>=70%`。
+
 - `2026-06-08` `课程资源库知识入库真实联调验收通过`
   - **环境固化**：Agent Service 本机 `.env` 已配置 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`，与 Backend 上传目录一致；未修改 Client API 或 Agent API 契约。
   - **数据库前置**：当前 `duagent` 开发库已补齐 `2026-06-08-extend-course-catalog-ingestion.sql` 对应字段（catalog last_ingestion/status/chunk_count/last_error，material file_size/chunk_count/last_error/ingested_at）。

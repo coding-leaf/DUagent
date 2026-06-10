@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+- 2026-06-10：KG 版本化与 Route A 工具链阶段性接入：
+  - 已完成 KG 版本 / 回滚基础设施：`course_knowledge_graphs` 支持 `version/is_active/source_type/generation_strategy/metrics/parent_graph_id`，LearningPath 默认读取 active KG，`generate_knowledge_graph.py` / `import_knowledge_graph.py` 不再覆盖旧 KG，而是创建版本或切换 active。
+  - 已完成 Agent 侧只读正文支撑 scorer：`agent_service/memory/kg_body_grounding.py` 对 KG 节点逐个 embedding，检索 Qdrant `course_knowledge`，过滤目录型 chunk，输出 `body_top1_score/chunk_id/source_file/preview/supported`。
+  - 已完成两段式 Route A 工具链：Agent CLI `agent_service/tools/kg_body_grounding.py` 导出 grounding JSON；Backend CLI `backend/tools/generate_knowledge_graph.py --grounding-file ...` 读取该 JSON，调用纯裁剪层保留正文支撑节点、裁掉悬空边，并写入 `route_a_body_grounded / route_a_prune_unsupported` 新版本。
+  - 架构边界：Backend 不导入 Agent Service、不直接访问 Qdrant；Agent Service 不读写 Backend SQL；本阶段未新增 Client API / Agent HTTP API。
+  - 已运行：Agent `./.venv/bin/pytest tests/test_kg_body_grounding.py tests/test_kg_body_grounding_tool.py tests/test_vector_store.py -q` 14/14 passed；Backend `../.venv/bin/python -m pytest tests/test_generate_kg.py tests/test_kg_body_grounding.py -q` 13/13 passed；Backend MySQL `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_cli_versioning.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider` 8/8 passed。
+  - Commits：`705ae8f 增加KG版本化表结构`、`b89449e 增加KG版本切换服务`、`c1d2575 切换KG读取为active版本`、`5404b5e 改造KG导入工具保留版本`、`33599f4 增加KG正文支撑裁剪逻辑`、`a90cac6 新增KG正文支撑度评分模块`、`0bec53e 新增KG正文支撑导出工具`。Backend Route A CLI 接入提交见本轮后续 commit。
+  - 未完成：尚未对真实 C 语言 `116` 节点样本生成 Route A 新版本，也尚未重跑成功线验收；固定成功线仍是排除目录型 chunk 后 `body_top1_score>=0.70` 节点占比从 `21.6%` 提升到 `>=70%`。
 - 2026-06-10：KG 生成方式真实探针与返工方向确认：
   - 真实运行现有 CLI `../backend/tools/generate_knowledge_graph.py`，对 catalog `b2444963f0e54587` 绑定教学班 `6c698badb60a4809` 生成 SQL KG：`116` 个节点、`115` 条边。该 CLI 只从外部 `--file/--outline` 大纲文本生成 KG，未自动读取 CourseCatalog 正文 chunk。
   - 资源挂载探针：`/tmp/kg-resource-probe/c-language-after-kg.csv`。20 个核心 KG 节点样本 `candidate_count=0`；当前课程 4 个资源全部是 `chapter=课程整体`、`knowledge_point=综合知识点`，与 KG 具体节点名 / 章节不在同一命名体系。

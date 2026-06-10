@@ -1,5 +1,12 @@
+from pathlib import Path
+
 import pytest
-from tools.generate_knowledge_graph import build_import_result, validate_and_clean_kg
+from tools.generate_knowledge_graph import (
+    build_import_result,
+    load_grounding_matches,
+    prune_kg_with_grounding_file,
+    validate_and_clean_kg,
+)
 
 
 def test_validate_and_clean_kg_success():
@@ -100,3 +107,105 @@ def test_build_import_result_uses_version_metadata():
         "metrics": {"node_count": 2, "edge_count": 1},
         "activated": True,
     }
+
+
+def test_load_grounding_matches_reads_agent_json(tmp_path: Path) -> None:
+    grounding_file = tmp_path / "grounding.json"
+    grounding_file.write_text(
+        """
+        {
+          "course_id": "course-1",
+          "threshold": 0.7,
+          "results": [
+            {
+              "node_id": "node_1",
+              "body_top1_score": 0.82,
+              "chunk_id": "chunk-1",
+              "preview": "指针保存变量地址。"
+            },
+            {
+              "node_id": "node_2",
+              "body_top1_score": null,
+              "chunk_id": null,
+              "preview": ""
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    matches = load_grounding_matches(grounding_file)
+
+    assert [(match.node_id, match.score, match.chunk_id, match.content_preview) for match in matches] == [
+        ("node_1", 0.82, "chunk-1", "指针保存变量地址。"),
+        ("node_2", 0.0, "", ""),
+    ]
+
+
+def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path: Path) -> None:
+    nodes = [
+        {"id": "node_1", "name": "变量", "chapter": "第一章"},
+        {"id": "node_2", "name": "指针", "chapter": "第二章"},
+        {"id": "node_3", "name": "数组", "chapter": "第三章"},
+    ]
+    edges = [
+        {"from": "node_1", "to": "node_2"},
+        {"from": "node_2", "to": "node_3"},
+    ]
+    grounding_file = tmp_path / "grounding.json"
+    grounding_file.write_text(
+        """
+        {
+          "course_id": "course-1",
+          "threshold": 0.7,
+          "results": [
+            {
+              "node_id": "node_1",
+              "body_top1_score": 0.91,
+              "chunk_id": "chunk-a",
+              "preview": "变量用于保存程序运行中的数据。"
+            },
+            {
+              "node_id": "node_2",
+              "body_top1_score": 0.69,
+              "chunk_id": "chunk-b",
+              "preview": "指针保存地址。"
+            },
+            {
+              "node_id": "node_3",
+              "body_top1_score": 0.70,
+              "chunk_id": "chunk-c",
+              "preview": "数组是一组连续元素。"
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    kept_nodes, kept_edges, metrics = prune_kg_with_grounding_file(
+        nodes,
+        edges,
+        grounding_file,
+        threshold=0.70,
+    )
+
+    assert kept_nodes == [nodes[0], nodes[2]]
+    assert kept_edges == []
+    assert metrics["body_top1_threshold"] == 0.70
+    assert metrics["candidate_node_count"] == 3
+    assert metrics["kept_node_count"] == 2
+    assert metrics["pruned_node_count"] == 1
+    assert metrics["body_support_pass_ratio"] == pytest.approx(2 / 3)
+    assert metrics["grounding_source_file"] == str(grounding_file)
+    assert metrics["pruned_nodes"] == [
+        {
+            "node_id": "node_2",
+            "node_name": "指针",
+            "chapter": "第二章",
+            "body_top1_score": 0.69,
+            "chunk_id": "chunk-b",
+            "content_preview": "指针保存地址。",
+        }
+    ]

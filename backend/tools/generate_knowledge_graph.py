@@ -17,6 +17,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
 from app.db.session import async_session_factory
+from app.services.kg_body_grounding import (
+    GroundingMatch,
+    filter_supported_knowledge_graph,
+)
 from app.services.course_knowledge_graphs import (
     create_knowledge_graph_version,
     get_active_knowledge_graph,
@@ -192,6 +196,54 @@ def build_import_result(graph) -> dict:
     }
 
 
+def load_grounding_matches(grounding_file: Path) -> list[GroundingMatch]:
+    """Load Agent-produced KG body grounding JSON into Backend pruning matches."""
+    data = json.loads(grounding_file.read_text(encoding="utf-8"))
+    results = data.get("results") if isinstance(data, dict) else data
+    if not isinstance(results, list):
+        raise ValueError("Grounding file must contain a results list.")
+
+    matches: list[GroundingMatch] = []
+    for index, item in enumerate(results):
+        if not isinstance(item, dict):
+            print(f"WARNING: Skipping grounding result at index {index} because it is not a dictionary.")
+            continue
+        node_id = str(item.get("node_id") or "").strip()
+        if not node_id:
+            print(f"WARNING: Skipping grounding result at index {index} because node_id is missing.")
+            continue
+        score_value = item.get("body_top1_score")
+        score = float(score_value) if isinstance(score_value, int | float) else 0.0
+        matches.append(
+            GroundingMatch(
+                node_id=node_id,
+                score=score,
+                chunk_id=str(item.get("chunk_id") or ""),
+                content_preview=str(item.get("preview") or item.get("content_preview") or ""),
+            )
+        )
+    return matches
+
+
+def prune_kg_with_grounding_file(
+    nodes: list[dict],
+    edges: list[dict],
+    grounding_file: Path,
+    *,
+    threshold: float = 0.70,
+) -> tuple[list[dict], list[dict], dict]:
+    """Prune generated KG nodes using Agent-produced body grounding scores."""
+    matches = load_grounding_matches(grounding_file)
+    kept_nodes, kept_edges, metrics = filter_supported_knowledge_graph(
+        nodes,
+        edges,
+        matches,
+        threshold=threshold,
+    )
+    metrics["grounding_source_file"] = str(grounding_file)
+    return kept_nodes, kept_edges, metrics
+
+
 async def save_knowledge_graph_version(
     course_id: str,
     nodes: list,
@@ -224,6 +276,8 @@ async def main_async():
     parser = argparse.ArgumentParser(description="CourseKnowledgeGraph 智能生成与导入运维工具")
     parser.add_argument("--course-id", required=True, help="课程 ID")
     parser.add_argument("--auto", action="store_true", help="跳过用户命令行交互，直接落库")
+    parser.add_argument("--grounding-file", type=Path, help="Agent kg_body_grounding JSON output for Route A pruning")
+    parser.add_argument("--grounding-threshold", type=float, default=0.70, help="Route A body grounding score threshold")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", "-f", help="课程大纲文本文档路径")
     src.add_argument("--outline", "-o", help="直接传入课程大纲文本")
@@ -263,6 +317,29 @@ async def main_async():
         print("ERROR: No valid nodes extracted from LLM response.", file=sys.stderr)
         sys.exit(1)
 
+    source_type = "outline_llm"
+    generation_strategy = "legacy_outline"
+    metrics = {"node_count": len(nodes), "edge_count": len(edges)}
+
+    if args.grounding_file:
+        try:
+            nodes, edges, metrics = prune_kg_with_grounding_file(
+                nodes,
+                edges,
+                args.grounding_file,
+                threshold=args.grounding_threshold,
+            )
+        except Exception as e:
+            print(f"ERROR: Failed to prune KG with grounding file: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if not nodes:
+            print("ERROR: Route A pruning removed all nodes; refusing to create an active KG.", file=sys.stderr)
+            sys.exit(1)
+
+        source_type = "route_a_body_grounded"
+        generation_strategy = "route_a_prune_unsupported"
+
     # 3. 打印预览
     print("\n================ KG EXTRACTED PREVIEW ================")
     print(f"Course ID: {course_id}")
@@ -287,8 +364,14 @@ async def main_async():
             sys.exit(0)
 
     # 5. 落库
-    metrics = {"node_count": len(nodes), "edge_count": len(edges)}
-    result = await save_knowledge_graph_version(course_id, nodes, edges, metrics=metrics)
+    result = await save_knowledge_graph_version(
+        course_id,
+        nodes,
+        edges,
+        source_type=source_type,
+        generation_strategy=generation_strategy,
+        metrics=metrics,
+    )
     print(
         "\nSUCCESS: Created version "
         f"{result['version']} knowledge graph {result['graph_id']} for course {course_id} "

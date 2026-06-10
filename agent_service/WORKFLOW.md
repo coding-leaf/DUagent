@@ -73,6 +73,7 @@
 
 ## 最近验证
 
+- `2026-06-10` `KG body grounding JSON export CLI`：**通过**。新增 `tools/kg_body_grounding.py`，从 KG JSON / nodes JSON 读取节点，调用 Agent 侧 `score_kg_body_grounding` 对 Qdrant 正文 chunk 只读打分，并输出 Backend 裁剪工具可读取的 JSON；不新增 Agent HTTP API，不改 OpenAPI/schema。RED：`./.venv/bin/pytest tests/test_kg_body_grounding_tool.py -q` 因模块缺失失败；GREEN：同命令 **5 passed**；focused regression：`./.venv/bin/pytest tests/test_kg_body_grounding.py tests/test_kg_body_grounding_tool.py tests/test_vector_store.py -q` **14 passed**。
 - `2026-06-10` `Task 6 Agent-side KG body grounding scorer/probe slice`：**通过**。新增 `memory/kg_body_grounding.py` 只读评分模块，用 fake embedding / fake vector store 单测覆盖每节点 embed/search、TOC-like 命中过滤、低分或无正文候选 unsupported、node name/title/label/id fallback；RED：`./.venv/bin/pytest tests/test_kg_body_grounding.py -q` 因模块缺失失败；GREEN：`./.venv/bin/pytest tests/test_kg_body_grounding.py -q` **4 passed**；focused regression：`./.venv/bin/pytest tests/test_vector_store.py tests/test_kg_body_grounding.py -q` **9 passed**。
 - `2026-06-08` `Backend 课程资源库知识入库真实联调`：**通过**。Backend catalog `533dc29ef5c44166` 上传资料 `de8173b05aa74fd7` 后触发 task `e8ee00ddb97c4078`，Agent Service 读取共享上传目录并写入 Qdrant；Backend task `completed`，catalog `ready/ready`，material `ingested`，`chunk_count=1`。
 - `curl -X POST http://127.0.0.1:6333/collections/course_knowledge_v1_1024/points/count` 按 `course_id=533dc29ef5c44166` 过滤：**count=1**；scroll payload 包含 `B1_SHARED_ROOT_MARKER_20260608`，证明本轮上传资料已写入课程知识库。

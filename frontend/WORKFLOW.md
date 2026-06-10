@@ -12,14 +12,23 @@
 ## 当前施工状态
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
-- 当前最高优先级：学生 / 教师消费 CourseCatalog 入库内容的产品口径设计；LearningPath / KG ready gate 设计。
+- 当前最高优先级：KG 生成方式返工前置收口；先做 KG 版本 / 回滚基础设施，再按“目录骨架 + 正文 chunk 验证 / 补充”的路线 A 返工 KG 生成。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
-- 当前待设计阻塞点：LearningPath / KG ready gate。
+- 当前待设计阻塞点：KG 版本 / 回滚、正文支撑型 KG 生成；LearningPath / KG ready gate 后置，不能在 KG 可靠性和资源对齐未通过前推进。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
+- 2026-06-10：KG 生成方式真实探针与返工方向确认：
+  - 真实运行现有 CLI `../backend/tools/generate_knowledge_graph.py`，对 catalog `b2444963f0e54587` 绑定教学班 `6c698badb60a4809` 生成 SQL KG：`116` 个节点、`115` 条边。该 CLI 只从外部 `--file/--outline` 大纲文本生成 KG，未自动读取 CourseCatalog 正文 chunk。
+  - 资源挂载探针：`/tmp/kg-resource-probe/c-language-after-kg.csv`。20 个核心 KG 节点样本 `candidate_count=0`；当前课程 4 个资源全部是 `chapter=课程整体`、`knowledge_point=综合知识点`，与 KG 具体节点名 / 章节不在同一命名体系。
+  - KG 初筛对账：116 个 KG 节点检索 665 个 Qdrant chunks，`nodes_with_exact_name_in_top5=99/116=85.3%`，但 `top1_toc_like_count=112/116=96.6%`，说明表面命中主要来自 PDF 目录 / 索引。
+  - 正文支撑对账：`/tmp/kg-resource-probe/kg-to-body-chunk-probe-c-language.json`、`.csv`。跑前固定判据为“排除目录型 chunk 后，`body_top1_score>=0.70` 的节点占比 `>=70%` 才算 KG 有内容支撑”；实际 `25/116=21.6%`，`body_top1_score_median=0.668`，决策为 `toc_replica_needs_generation_rework`。
+  - 正文 chunk 密度确认：`/tmp/kg-resource-probe/body-chunk-density-c-language.json`。剔除 52 个目录型 chunk 后，正文 chunk `613` 个，知识型正文 `465/613=75.9%`；第 1-8 章知识型覆盖分别为 `48/29/26/40/50/27/32/26`，决策为 `materials_dense_enough_for_route_a`。
+  - 结论：资料本身够厚，不需要先补资料；当前 KG 不合格的根因是生成方式主要复刻目录、没有正文验证。暂停 KG ready gate、审核 / 签字流程、LearningPath refresh UI、资源继承 KG 节点名落地。
+  - 下一步顺序：先做 KG 版本 / 回滚基础设施；再按路线 A 返工 KG 生成（目录给骨架，正文 chunk 验证节点并补充正文中真实存在的知识点）；新 KG 生成后重跑正文支撑对账和 KG-Resource 对齐探针。
+  - 归档报告：`docs/superpowers/specs/2026-06-10-kg-body-grounding-probe-report.md`。
 - 2026-06-10：KG-Resource 对齐探针真实盘点与校准执行：
   - 已新增只读 KG-Resource 对齐探针 service/CLI，用于盘点 catalog/course 数据、导出 KG/LearningPath 节点候选、汇总人工标注；未新增 API route，未修改前端页面，未修改 OpenAPI。
   - 当前服务状态：Backend `8001`、Agent Service `8002`、Frontend `5173` 均返回 200；MySQL、Qdrant 容器在线。探针 CLI 本身只读 MySQL，不调用 Agent Service。

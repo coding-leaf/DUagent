@@ -116,8 +116,8 @@
 | # | 功能 | 状态 | 已实现内容 | 下一步 |
 | --- | --- | --- | --- | --- |
 | 20 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源 | 刷新入口和 KG ready gate 另见 #22。 |
-| 21 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先设计 KG ready gate，再决定是否接刷新 UI。 |
-| 22 | KG ready gate | 📋 待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成 | 单独 spec：KG 状态、错误码、降级策略、前端提示。 |
+| 21 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先完成正文支撑型 KG 生成和资源对齐验证，再决定是否接刷新 UI。 |
+| 22 | KG ready gate | 📋 后置待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成；真实探针已证明现有目录版 KG 正文支撑不足 | 待 KG 生成方式返工并通过正文对账 / 资源对齐后，再设计 KG 状态、错误码、降级策略、前端提示。 |
 | 23 | 学生画像展示 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile`，并展示 `/users/me` 基础资料 | 字段扩展必须走契约。 |
 | 24 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
 | 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
@@ -136,16 +136,19 @@
 
 ## 当前下一步队列
 
-1. **#22 KG ready gate 设计**
-   LearningPath 刷新依赖 KG，不能复用 chunk-only ready gate。先定 KG 状态、错误码和降级策略。
+1. **KG 版本 / 回滚基础设施**
+   当前 `course_knowledge_graphs` 是 upsert 覆盖唯一记录。接下来要反复试验目录版、路线 A、可能的路线 B；先保存多版本和回滚能力，避免每次生成覆盖掉对比基础。
 
-2. **#29 AI Chat 检索能力独立 spec**
+2. **正文支撑型 KG 生成路线 A**
+   目录只作为章节骨架，KG 节点必须由正文 chunk 验证；正文中真实存在但目录未覆盖的知识点可补入。新 KG 生成后重跑正文支撑对账和 KG-Resource 对齐探针。
+
+3. **#29 AI Chat 检索能力独立 spec**
    按已定口径，后续 Chat spec 必须从“先验证 Agent 检索能力”开始，不先加 UI。
 
-3. **#28 Admin 用户停用状态契约**
+4. **#28 Admin 用户停用状态契约**
    如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
 
-4. **真实联调运行态固化**
+5. **真实联调运行态固化**
    Agent Service 启动必须带共享上传目录 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`；否则 Admin 入库会失败为 `material does not exist`。后续可考虑把该检查纳入 readiness 或启动脚本。
 
 ## 纠偏记录
@@ -157,6 +160,7 @@
 - `refreshLearningPath()`、`refreshEvaluation()`、`refreshProfile()`、`quizService.getHistory()` 这类方法存在不等于用户功能可操作；必须看页面是否调用。
 - 后续更新本账本时，必须优先写用户入口和真实调用，再写文件证据。
 - 2026-06-09 资源消费闭环归档：第一版采用按班存 / 按班读；学生端消费 fan-out 学习资源，教师端只读确认绑定资源库和本班资源。资源库中心模式登记为已知演进方向，仅当出现一个 catalog 绑定多个班且需要历史资源同步 / 复用 / 统一更新删除的真实需求时再做接口级重构。
+- 2026-06-10 KG 方向纠偏：现有 CLI 目录版 KG 已在真实 catalog `b2444963f0e54587` / course `6c698badb60a4809` 生成 `116` 节点，但排除目录型 chunk 后仅 `25/116=21.6%` 节点达到正文支撑阈值；同时正文资料密度足够（知识型正文 `465/613=75.9%`）。因此下一步不是审核 / 签字或 KG ready gate，而是先做 KG 版本 / 回滚，再按“目录骨架 + 正文 chunk 验证 / 补充”的路线 A 返工 KG 生成。
 
 ## 更新规则
 

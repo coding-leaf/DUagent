@@ -89,6 +89,8 @@ Backend 行为：
 
 Agent 继续根据 `course_id` 检索 CourseCatalog 知识库，根据 `chapter/knowledge_point` 生成资源。Backend 不直接访问 Qdrant，Agent Service 不写 Backend SQL。
 
+这里的 Agent `course_id` 应继续传 `catalog_id`，不是 teaching class `course_id`。当前 Admin 入库链路中，Backend 调 Agent knowledge ingestion 时传 `catalog_id`，Agent Service 又用 `ingest_course_knowledge(source_path, course_id=request.catalog_id)` 写入 Qdrant，payload 字段名仍叫 `course_id`。因此资源生成 RAG 检索必须使用同一个 `catalog_id` 才能命中 CourseCatalog 知识库 chunk。Backend 落库到 `resources.course_id` 时才使用 fan-out 后的 teaching class id。
+
 ## 核心节点选择
 
 第一版选择算法必须确定性执行，不让 AI 自行决定挂载节点。
@@ -102,8 +104,17 @@ Agent 继续根据 `course_id` 检索 CourseCatalog 知识库，根据 `chapter/
 - 优先级：`strong` > `good` > `weak_but_usable`。
 - 不优先选择 `weak_but_usable`，仅在 strong/good 不足时补齐。
 - 去重键：`chapter + node_name`。
-- 章节均衡：按 chapter 分组轮询取节点，避免核心节点集中在单一章节。
+- 章节均衡：只在同一 support band 内按 chapter 分组轮询取节点，避免同档节点集中在单一章节。
 - 排序信号：优先使用节点 grounding 分数；如果 active KG nodes 没有携带节点级分数，则按 support band、KG 原始顺序和章节均衡兜底。
+
+支撑分档优先级高于章节均衡。选择流程固定为：
+
+1. 先处理 `strong` 候选，在 strong 档内做章节轮询。
+2. strong 不足目标数量时，再处理 `good` 候选，在 good 档内做章节轮询。
+3. strong + good 仍不足目标数量时，再处理 `weak_but_usable` 候选，在 weak 档内做章节轮询。
+4. 不跨 support band 为了章节覆盖而提前选择低档节点。
+
+示例：如果第一章有 15 个 strong，第二章只有 1 个 good，默认目标数量为 10，则第一版会选 10 个 strong，不会为了章节均衡提前选择第二章的 good。章节均衡只负责同一支撑档内的分布。
 
 如果当前 active KG 没有节点级 support band 字段，Backend 可从 KG `metrics` 中已有 grounding/pruned detail 或节点附带字段中读取；如果都没有，只能使用 KG 顺序和章节均衡兜底，同时在父任务 `result.selection_degraded=true` 中记录原因。
 
@@ -130,6 +141,7 @@ Agent 继续根据 `course_id` 检索 CourseCatalog 知识库，根据 `chapter/
   "fanout_course_ids": ["6c698badb60a4809"],
   "mode": "kg_node_targets",
   "target_node_count": 10,
+  "total_child_count": 10,
   "resource_types": ["document", "mindmap", "reading", "code"],
   "target_nodes": [
     {
@@ -173,11 +185,35 @@ Agent 继续根据 `course_id` 检索 CourseCatalog 知识库，根据 `chapter/
 
 父任务聚合规则：
 
-- 所有子任务完成后，父任务 `completed`。
-- 至少一个子任务成功、部分失败时，父任务仍 `completed`，但 `result.degraded=true`。
-- `result.successful_node_count` 和 `result.failed_node_count` 必须记录。
-- 所有子任务失败时，父任务 `failed`。
-- 子任务 webhook 结束后触发父任务状态重算；如果当前实现不引入异步 worker，可在 webhook 同一事务后重算父任务。
+- 父任务创建时必须写入 `result.total_child_count`，值为实际创建的子任务数。
+- 每个子任务 webhook 完成并更新自身状态后，Backend 在同一事务中重算父任务状态。
+- 重算时锁定父任务行，避免并发 webhook 竞争更新同一个父任务。
+- 重算使用子任务表内状态作为事实来源，不依赖内存计数器。
+
+重算查询口径：
+
+```sql
+SELECT COUNT(*) FROM async_tasks
+WHERE task_type = 'resource_generation'
+  AND is_deleted = false
+  AND JSON_UNQUOTE(JSON_EXTRACT(result, '$.parent_task_id')) = :parent_task_id
+  AND status IN ('completed', 'failed');
+```
+
+同时分别统计：
+
+- `completed_child_count`
+- `failed_child_count`
+- `processing_child_count`
+
+判定规则：
+
+- `completed_child_count + failed_child_count < total_child_count`：父任务保持 `processing`。
+- `completed_child_count > 0` 且已完成子任务数等于 `total_child_count`：父任务 `completed`。
+- `completed_child_count > 0` 且 `failed_child_count > 0`：父任务 `completed` 且 `result.degraded=true`。
+- `completed_child_count == 0` 且 `failed_child_count == total_child_count`：父任务 `failed`。
+
+父任务 `result.successful_node_count`、`result.failed_node_count`、`result.completed_child_count`、`result.failed_child_count` 必须随重算更新。父任务进入最终态后，重复 webhook 不得重复插入资源，也不得把最终态回退。
 
 ## Webhook 落库规则
 

@@ -20,6 +20,14 @@ _TOC_LINE_PATTERNS = (
     re.compile(r".*(?:\.{2,}|…{2,})\s*\d+\s*$"),
     re.compile(r"^\s*\d+(?:\.\d+)+\s+\S.{0,80}\s+\d+\s*$"),
 )
+USABLE_SUPPORT_THRESHOLD = 0.60
+GOOD_SUPPORT_THRESHOLD = 0.65
+STRONG_SUPPORT_THRESHOLD = 0.70
+
+SUPPORT_BAND_STRONG = "strong"
+SUPPORT_BAND_GOOD = "good"
+SUPPORT_BAND_WEAK_BUT_USABLE = "weak_but_usable"
+SUPPORT_BAND_UNSUPPORTED = "unsupported"
 
 
 def is_toc_like_chunk(content: str) -> bool:
@@ -50,11 +58,25 @@ def _is_toc_heading(line: str) -> bool:
     return normalized in _TOC_MARKERS
 
 
+def _support_band(score: float | None) -> str:
+    if score is None or score < USABLE_SUPPORT_THRESHOLD:
+        return SUPPORT_BAND_UNSUPPORTED
+    if score >= STRONG_SUPPORT_THRESHOLD:
+        return SUPPORT_BAND_STRONG
+    if score >= GOOD_SUPPORT_THRESHOLD:
+        return SUPPORT_BAND_GOOD
+    return SUPPORT_BAND_WEAK_BUT_USABLE
+
+
+def _ratio(numerator: int, denominator: int) -> float:
+    return numerator / denominator if denominator > 0 else 0.0
+
+
 def filter_supported_knowledge_graph(
     nodes: Iterable[dict[str, Any]],
     edges: Iterable[dict[str, Any]],
     matches: Iterable[GroundingMatch],
-    threshold: float = 0.70,
+    threshold: float = USABLE_SUPPORT_THRESHOLD,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     node_list = list(nodes)
     edge_list = list(edges)
@@ -66,10 +88,19 @@ def filter_supported_knowledge_graph(
 
     kept_nodes: list[dict[str, Any]] = []
     pruned_nodes: list[dict[str, Any]] = []
+    support_band_counts = {
+        SUPPORT_BAND_STRONG: 0,
+        SUPPORT_BAND_GOOD: 0,
+        SUPPORT_BAND_WEAK_BUT_USABLE: 0,
+        SUPPORT_BAND_UNSUPPORTED: 0,
+    }
 
     for node in node_list:
         node_id = str(node.get("id", ""))
         match = match_by_node_id.get(node_id)
+        score = match.score if match is not None else None
+        support_band_counts[_support_band(score)] += 1
+
         if match is not None and match.score >= threshold:
             kept_nodes.append(dict(node))
             continue
@@ -79,7 +110,7 @@ def filter_supported_knowledge_graph(
                 "node_id": node_id,
                 "node_name": node.get("name", ""),
                 "chapter": node.get("chapter", ""),
-                "body_top1_score": match.score if match is not None else None,
+                "body_top1_score": score,
                 "chunk_id": match.chunk_id if match is not None else None,
                 "content_preview": match.content_preview if match is not None else "",
             }
@@ -95,15 +126,32 @@ def filter_supported_knowledge_graph(
 
     candidate_node_count = len(node_list)
     kept_node_count = len(kept_nodes)
-    pass_ratio = (
-        kept_node_count / candidate_node_count if candidate_node_count > 0 else 0.0
+    strong_node_count = support_band_counts[SUPPORT_BAND_STRONG]
+    good_node_count = support_band_counts[SUPPORT_BAND_GOOD]
+    weak_but_usable_node_count = support_band_counts[SUPPORT_BAND_WEAK_BUT_USABLE]
+    usable_node_count = (
+        strong_node_count + good_node_count + weak_but_usable_node_count
     )
     metrics = {
         "body_top1_threshold": threshold,
+        "usable_support_threshold": USABLE_SUPPORT_THRESHOLD,
+        "good_support_threshold": GOOD_SUPPORT_THRESHOLD,
+        "strong_support_threshold": STRONG_SUPPORT_THRESHOLD,
         "candidate_node_count": candidate_node_count,
         "kept_node_count": kept_node_count,
         "pruned_node_count": len(pruned_nodes),
-        "body_support_pass_ratio": pass_ratio,
+        "body_support_pass_ratio": _ratio(kept_node_count, candidate_node_count),
+        "usable_support_ratio": _ratio(usable_node_count, candidate_node_count),
+        "strong_support_ratio": _ratio(strong_node_count, candidate_node_count),
+        "good_or_strong_support_ratio": _ratio(
+            strong_node_count + good_node_count,
+            candidate_node_count,
+        ),
+        "strong_node_count": strong_node_count,
+        "good_node_count": good_node_count,
+        "weak_but_usable_node_count": weak_but_usable_node_count,
+        "unsupported_node_count": support_band_counts[SUPPORT_BAND_UNSUPPORTED],
+        "support_band_counts": support_band_counts,
         "pruned_nodes": pruned_nodes,
     }
 

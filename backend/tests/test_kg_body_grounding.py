@@ -51,18 +51,107 @@ def test_is_toc_like_chunk_does_not_match_body_marker_words_or_trailing_numbers(
     assert not is_toc_like_chunk(body_ending_with_numbers)
 
 
-def test_filter_supported_knowledge_graph_prunes_nodes_edges_and_metrics() -> None:
+def test_filter_supported_knowledge_graph_defaults_to_usable_threshold_and_support_bands() -> None:
     nodes = [
         {"id": "node-1", "name": "变量", "chapter": "第一章"},
         {"id": "node-2", "name": "指针", "chapter": "第二章"},
         {"id": "node-3", "name": "数组", "chapter": "第三章"},
         {"id": "node-4", "name": "结构体", "chapter": "第四章"},
+        {"id": "node-5", "name": "文件", "chapter": "第五章"},
     ]
     edges = [
         {"from": "node-1", "to": "node-2"},
         {"from": "node-2", "to": "node-3"},
-        {"from": "node-2", "to": "node-4"},
         {"from": "node-3", "to": "node-4"},
+        {"from": "node-4", "to": "node-5"},
+    ]
+    matches = [
+        GroundingMatch(
+            node_id="node-1",
+            score=0.72,
+            chunk_id="chunk-strong",
+            content_preview="变量用于保存程序运行过程中的数据。",
+        ),
+        GroundingMatch(
+            node_id="node-2",
+            score=0.66,
+            chunk_id="chunk-good",
+            content_preview="指针保存对象的地址。",
+        ),
+        GroundingMatch(
+            node_id="node-3",
+            score=0.62,
+            chunk_id="chunk-weak",
+            content_preview="数组是一组连续元素。",
+        ),
+        GroundingMatch(
+            node_id="node-4",
+            score=0.59,
+            chunk_id="chunk-low",
+            content_preview="结构体候选低于可用阈值。",
+        ),
+    ]
+
+    filtered_nodes, filtered_edges, metrics = filter_supported_knowledge_graph(
+        nodes,
+        edges,
+        matches,
+    )
+
+    assert filtered_nodes == nodes[:3]
+    assert filtered_edges == [
+        {"from": "node-1", "to": "node-2"},
+        {"from": "node-2", "to": "node-3"},
+    ]
+    assert metrics == {
+        "body_top1_threshold": 0.60,
+        "usable_support_threshold": 0.60,
+        "good_support_threshold": 0.65,
+        "strong_support_threshold": 0.70,
+        "candidate_node_count": 5,
+        "kept_node_count": 3,
+        "pruned_node_count": 2,
+        "body_support_pass_ratio": 0.6,
+        "usable_support_ratio": 0.6,
+        "strong_support_ratio": 0.2,
+        "good_or_strong_support_ratio": 0.4,
+        "strong_node_count": 1,
+        "good_node_count": 1,
+        "weak_but_usable_node_count": 1,
+        "unsupported_node_count": 2,
+        "support_band_counts": {
+            "strong": 1,
+            "good": 1,
+            "weak_but_usable": 1,
+            "unsupported": 2,
+        },
+        "pruned_nodes": [
+            {
+                "node_id": "node-4",
+                "node_name": "结构体",
+                "chapter": "第四章",
+                "body_top1_score": 0.59,
+                "chunk_id": "chunk-low",
+                "content_preview": "结构体候选低于可用阈值。",
+            },
+            {
+                "node_id": "node-5",
+                "node_name": "文件",
+                "chapter": "第五章",
+                "body_top1_score": None,
+                "chunk_id": None,
+                "content_preview": "",
+            },
+        ],
+    }
+
+
+def test_filter_supported_knowledge_graph_explicit_threshold_preserves_pass_ratio_but_counts_all_bands() -> None:
+    nodes = [
+        {"id": "node-1", "name": "变量", "chapter": "第一章"},
+        {"id": "node-2", "name": "指针", "chapter": "第二章"},
+        {"id": "node-3", "name": "数组", "chapter": "第三章"},
+        {"id": "node-4", "name": "结构体", "chapter": "第四章"},
     ]
     matches = [
         GroundingMatch(
@@ -79,7 +168,7 @@ def test_filter_supported_knowledge_graph_prunes_nodes_edges_and_metrics() -> No
         ),
         GroundingMatch(
             node_id="node-3",
-            score=0.69,
+            score=0.62,
             chunk_id="chunk-c",
             content_preview="数组是一组连续元素。",
         ),
@@ -87,36 +176,29 @@ def test_filter_supported_knowledge_graph_prunes_nodes_edges_and_metrics() -> No
 
     filtered_nodes, filtered_edges, metrics = filter_supported_knowledge_graph(
         nodes,
-        edges,
+        [{"from": "node-1", "to": "node-2"}, {"from": "node-2", "to": "node-3"}],
         matches,
+        threshold=0.70,
     )
 
     assert filtered_nodes == nodes[:2]
     assert filtered_edges == [{"from": "node-1", "to": "node-2"}]
-    assert metrics == {
-        "body_top1_threshold": 0.70,
-        "candidate_node_count": 4,
-        "kept_node_count": 2,
-        "pruned_node_count": 2,
-        "body_support_pass_ratio": 0.5,
-        "pruned_nodes": [
-            {
-                "node_id": "node-3",
-                "node_name": "数组",
-                "chapter": "第三章",
-                "body_top1_score": 0.69,
-                "chunk_id": "chunk-c",
-                "content_preview": "数组是一组连续元素。",
-            },
-            {
-                "node_id": "node-4",
-                "node_name": "结构体",
-                "chapter": "第四章",
-                "body_top1_score": None,
-                "chunk_id": None,
-                "content_preview": "",
-            },
-        ],
+    assert metrics["body_top1_threshold"] == 0.70
+    assert metrics["kept_node_count"] == 2
+    assert metrics["pruned_node_count"] == 2
+    assert metrics["body_support_pass_ratio"] == 0.5
+    assert metrics["usable_support_ratio"] == 0.75
+    assert metrics["strong_support_ratio"] == 0.5
+    assert metrics["good_or_strong_support_ratio"] == 0.5
+    assert metrics["strong_node_count"] == 2
+    assert metrics["good_node_count"] == 0
+    assert metrics["weak_but_usable_node_count"] == 1
+    assert metrics["unsupported_node_count"] == 1
+    assert metrics["support_band_counts"] == {
+        "strong": 2,
+        "good": 0,
+        "weak_but_usable": 1,
+        "unsupported": 1,
     }
 
 
@@ -137,11 +219,27 @@ def test_filter_supported_knowledge_graph_handles_zero_candidate_nodes() -> None
     assert filtered_nodes == []
     assert filtered_edges == []
     assert metrics == {
-        "body_top1_threshold": 0.70,
+        "body_top1_threshold": 0.60,
+        "usable_support_threshold": 0.60,
+        "good_support_threshold": 0.65,
+        "strong_support_threshold": 0.70,
         "candidate_node_count": 0,
         "kept_node_count": 0,
         "pruned_node_count": 0,
         "body_support_pass_ratio": 0.0,
+        "usable_support_ratio": 0.0,
+        "strong_support_ratio": 0.0,
+        "good_or_strong_support_ratio": 0.0,
+        "strong_node_count": 0,
+        "good_node_count": 0,
+        "weak_but_usable_node_count": 0,
+        "unsupported_node_count": 0,
+        "support_band_counts": {
+            "strong": 0,
+            "good": 0,
+            "weak_but_usable": 0,
+            "unsupported": 0,
+        },
         "pruned_nodes": [],
     }
 

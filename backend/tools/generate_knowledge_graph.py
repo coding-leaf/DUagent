@@ -10,16 +10,17 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 # 将 backend 加入 sys.path，支持从任意目录运行
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
-from sqlalchemy import select
 from app.db.session import async_session_factory
-from app.models.others import CourseKnowledgeGraph
+from app.services.course_knowledge_graphs import (
+    create_knowledge_graph_version,
+    get_active_knowledge_graph,
+)
 
 
 async def generate_kg_from_llm(outline: str) -> dict:
@@ -176,36 +177,47 @@ def validate_and_clean_kg(data: dict) -> tuple[list[dict], list[dict]]:
     return cleaned_nodes, cleaned_edges
 
 
-async def upsert_knowledge_graph(course_id: str, nodes: list, edges: list) -> dict:
-    """Upsert 课程知识图谱。"""
+def build_import_result(graph) -> dict:
+    """Build a stable CLI result payload from a CourseKnowledgeGraph instance."""
+    return {
+        "course_id": graph.course_id,
+        "graph_id": graph.id,
+        "version": graph.version,
+        "node_count": len(graph.nodes or []),
+        "edge_count": len(graph.edges or []),
+        "source_type": graph.source_type,
+        "generation_strategy": graph.generation_strategy,
+        "metrics": graph.metrics,
+        "activated": graph.is_active,
+    }
+
+
+async def save_knowledge_graph_version(
+    course_id: str,
+    nodes: list,
+    edges: list,
+    *,
+    source_type: str = "outline_llm",
+    generation_strategy: str = "legacy_outline",
+    metrics: dict | None = None,
+    activate: bool = True,
+) -> dict:
+    """Create a new versioned course knowledge graph."""
     async with async_session_factory() as db:
-        result = await db.execute(
-            select(CourseKnowledgeGraph).where(
-                CourseKnowledgeGraph.course_id == course_id,
-                CourseKnowledgeGraph.is_deleted == False,
-            )
+        active_graph = await get_active_knowledge_graph(db, course_id)
+        graph = await create_knowledge_graph_version(
+            db,
+            course_id=course_id,
+            nodes=nodes,
+            edges=edges,
+            source_type=source_type,
+            generation_strategy=generation_strategy,
+            metrics=metrics,
+            activate=activate,
+            parent_graph_id=active_graph.id if active_graph else None,
         )
-        existing = result.scalar_one_or_none()
-
-        if existing:
-            existing.nodes = nodes
-            existing.edges = edges
-            existing.update_time = datetime.now(timezone.utc)
-            updated = True
-        else:
-            kg = CourseKnowledgeGraph(
-                course_id=course_id, nodes=nodes, edges=edges,
-            )
-            db.add(kg)
-            updated = False
-
         await db.commit()
-        return {
-            "course_id": course_id,
-            "updated": updated,
-            "node_count": len(nodes),
-            "edge_count": len(edges),
-        }
+        return build_import_result(graph)
 
 
 async def main_async():
@@ -257,7 +269,7 @@ async def main_async():
     print(f"Nodes count: {len(nodes)}")
     for node in nodes:
         print(f"  Node: [{node['id']}] {node['name']} (Chapter: {node['chapter']})")
-    
+
     print(f"\nEdges count: {len(edges)}")
     for edge in edges:
         print(f"  Dependency: {edge['from']} -> {edge['to']}")
@@ -275,9 +287,14 @@ async def main_async():
             sys.exit(0)
 
     # 5. 落库
-    result = await upsert_knowledge_graph(course_id, nodes, edges)
-    action = "Updated" if result["updated"] else "Created"
-    print(f"\nSUCCESS: {action} knowledge graph for course {course_id} ({len(nodes)} nodes, {len(edges)} edges).")
+    metrics = {"node_count": len(nodes), "edge_count": len(edges)}
+    result = await save_knowledge_graph_version(course_id, nodes, edges, metrics=metrics)
+    print(
+        "\nSUCCESS: Created version "
+        f"{result['version']} knowledge graph {result['graph_id']} for course {course_id} "
+        f"({result['node_count']} nodes, {result['edge_count']} edges, "
+        f"activated={result['activated']})."
+    )
 
 
 def main():

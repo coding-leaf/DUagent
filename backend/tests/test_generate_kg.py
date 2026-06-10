@@ -1,5 +1,5 @@
 import pytest
-from tools.generate_knowledge_graph import validate_and_clean_kg
+from tools.generate_knowledge_graph import build_import_result, validate_and_clean_kg
 
 
 def test_validate_and_clean_kg_success():
@@ -71,3 +71,32 @@ def test_validate_and_clean_kg_dangling_edges():
     assert len(nodes) == 2
     assert len(edges) == 1
     assert edges[0]["to"] == "node_2"
+
+
+def test_build_import_result_uses_version_metadata():
+    """测试导入结果返回版本化 KG 元数据。"""
+
+    class Graph:
+        id = "graph-1"
+        course_id = "course-1"
+        version = 3
+        nodes = [{"id": "node_1"}, {"id": "node_2"}]
+        edges = [{"from": "node_1", "to": "node_2"}]
+        source_type = "outline_llm"
+        generation_strategy = "legacy_outline"
+        metrics = {"node_count": 2, "edge_count": 1}
+        is_active = True
+
+    result = build_import_result(Graph())
+
+    assert result == {
+        "course_id": "course-1",
+        "graph_id": "graph-1",
+        "version": 3,
+        "node_count": 2,
+        "edge_count": 1,
+        "source_type": "outline_llm",
+        "generation_strategy": "legacy_outline",
+        "metrics": {"node_count": 2, "edge_count": 1},
+        "activated": True,
+    }

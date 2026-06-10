@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, Text, func, ForeignKey, JSON
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -114,11 +114,27 @@ class LearningPath(Base):
 class CourseKnowledgeGraph(Base):
     """课程静态知识图谱 — Backend 调用 Agent /learning-path/generate 时传入 knowledge_graph.nodes/edges。"""
     __tablename__ = "course_knowledge_graphs"
+    __table_args__ = (
+        UniqueConstraint("course_id", "version", name="uk_course_version"),
+        Index("idx_course_active", "course_id", "is_active", "is_deleted"),
+        Index("idx_parent_graph_id", "parent_graph_id"),
+        Index("idx_is_deleted", "is_deleted"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), default="manual_import", nullable=False)
+    generation_strategy: Mapped[str] = mapped_column(String(60), default="legacy_outline", nullable=False)
     nodes: Mapped[dict] = mapped_column(JSON, nullable=False)
     edges: Mapped[dict] = mapped_column(JSON, nullable=False)
+    metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    parent_graph_id: Mapped[str | None] = mapped_column(
+        String(32),
+        ForeignKey("course_knowledge_graphs.id", name="fk_ckg_parent_graph"),
+        nullable=True,
+    )
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
     update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

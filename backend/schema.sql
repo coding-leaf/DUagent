@@ -379,20 +379,29 @@ CREATE TABLE learning_paths (
 -- 15. course_knowledge_graphs — 课程静态知识图谱表
 -- ============================================================
 -- Backend 调用 Agent /learning-path/generate 时传入 knowledge_graph.nodes/edges。
--- 来源：开发者预置 JSON 或从课程资源/向量库导出，每门课一条记录。
+-- 来源：开发者预置 JSON 或从课程资源/向量库导出，每门课可有多个版本，active 标记当前使用版本。
 CREATE TABLE course_knowledge_graphs (
     id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '图谱记录ID',
     course_id       VARCHAR(32)   NOT NULL COMMENT '课程ID',
+    version         INT           NOT NULL DEFAULT 1 COMMENT '课程内图谱版本号',
+    is_active       TINYINT(1)    NOT NULL DEFAULT 1 COMMENT '是否为当前启用版本',
+    source_type     VARCHAR(40)   NOT NULL DEFAULT 'manual_import' COMMENT '图谱来源类型',
+    generation_strategy VARCHAR(60) NOT NULL DEFAULT 'legacy_outline' COMMENT '生成策略',
     nodes           JSON          NOT NULL COMMENT '知识图谱节点 [{id, name, chapter}]',
     edges           JSON          NOT NULL COMMENT '前置依赖边 [{from, to}]',
+    metrics         JSON          DEFAULT NULL COMMENT '图谱质量与生成指标',
+    parent_graph_id VARCHAR(32)   DEFAULT NULL COMMENT '父版本图谱ID',
     create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
     update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
     update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
     is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    UNIQUE INDEX uk_course (course_id),
+    UNIQUE INDEX uk_course_version (course_id, version),
+    INDEX idx_course_active (course_id, is_active, is_deleted),
+    INDEX idx_parent_graph_id (parent_graph_id),
     INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_ckg_course FOREIGN KEY (course_id) REFERENCES courses(id)
+    CONSTRAINT fk_ckg_course FOREIGN KEY (course_id) REFERENCES courses(id),
+    CONSTRAINT fk_ckg_parent_graph FOREIGN KEY (parent_graph_id) REFERENCES course_knowledge_graphs(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课程静态知识图谱表';
 
 

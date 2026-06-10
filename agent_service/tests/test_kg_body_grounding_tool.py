@@ -39,6 +39,25 @@ def test_load_nodes_from_graph_object(tmp_path) -> None:
     ]
 
 
+def test_load_graph_from_graph_object(tmp_path) -> None:
+    kg_file = tmp_path / "kg.json"
+    kg_file.write_text(
+        json.dumps(
+            {
+                "nodes": [{"id": "n1", "name": "顺序表"}],
+                "edges": [{"from": "n1", "to": "n2"}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    graph = tool.load_graph(kg_file)
+
+    assert graph.nodes == [{"id": "n1", "name": "顺序表"}]
+    assert graph.edges == [{"from": "n1", "to": "n2"}]
+
+
 def test_load_nodes_from_plain_node_list(tmp_path) -> None:
     kg_file = tmp_path / "nodes.json"
     kg_file.write_text(
@@ -105,6 +124,8 @@ def test_run_grounding_writes_json_output(tmp_path) -> None:
         limit=5,
         threshold=0.7,
         preview_chars=120,
+        query_expansion=False,
+        edges=None,
     ):
         assert course_id == "course-1"
         assert nodes == [{"id": "n1", "name": "哈希表"}]
@@ -113,6 +134,8 @@ def test_run_grounding_writes_json_output(tmp_path) -> None:
         assert limit == 3
         assert threshold == 0.75
         assert preview_chars == 80
+        assert query_expansion is True
+        assert edges == []
         return [
             KgBodyGroundingResult(
                 node_id="n1",
@@ -133,6 +156,7 @@ def test_run_grounding_writes_json_output(tmp_path) -> None:
             threshold=0.75,
             limit=3,
             preview_chars=80,
+            query_expansion=True,
             provider_factory=lambda: FakeProviders(),
             scorer=fake_score_kg_body_grounding,
         )

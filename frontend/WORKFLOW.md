@@ -20,6 +20,12 @@
 
 ## 最近验证
 
+- 2026-06-10：KG 正文候选过滤 + query 扩展探针完成：
+  - Agent Service `memory/kg_body_grounding.py` 增强目录/索引噪声过滤，新增点线页码目录、附录目录/索引识别；`tools/kg_body_grounding.py` 新增可选 `--query-expansion`，默认行为不变。
+  - query 扩展策略不是替换单节点名，而是同时检索 `node.name` 和 `chapter + node_name + 相邻节点名`，取最高正文候选，避免已支持节点回退。
+  - 真实 C 语言样本复验：baseline `22/116=18.97%`；仅过滤后 `18/116=15.52%`（纠正目录误判但不提分）；过滤 + query 扩展取最优后 `57/116=49.14%`，baseline `0.65-0.70` 的 49 个边缘节点有 23 个过线，且无已支持节点回退。
+  - 结论：第 1、2 步有效但仍未达到固定成功线 `>=70%`；下一步应进入正文补点 / 正文聚类策略设计，不继续调阈值。
+  - 验证：Agent `./.venv/bin/pytest tests/test_kg_body_grounding.py tests/test_kg_body_grounding_tool.py tests/test_vector_store.py -q` 19/19 passed；真实探针输出 `/tmp/kg-resource-probe/c-language-route-a-grounding-filtered.json`、`/tmp/kg-resource-probe/c-language-route-a-grounding-filtered-expanded-best.json`。
 - 2026-06-10：Route A no-go 归因完成：
   - 已分析 `/tmp/kg-resource-probe/c-language-route-a-grounding.json` 的 116 个节点 grounding 结果。
   - 分数分布：`>=0.70` 22 个；`0.65-0.70` 49 个；`0.60-0.65` 33 个；`<0.60` 12 个；无候选 0 个。

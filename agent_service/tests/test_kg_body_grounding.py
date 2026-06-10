@@ -10,7 +10,7 @@ class FakeEmbeddingProvider:
 
     async def embed_texts(self, texts):
         self.calls.append(list(texts))
-        return [[float(len(texts[0]))]]
+        return [[float(len(text))] for text in texts]
 
 
 class FakeVectorStore:
@@ -64,6 +64,80 @@ def test_scores_each_node_with_embedding_and_course_search() -> None:
     assert len(results[0].preview) <= 120
 
 
+def test_query_expansion_includes_chapter_and_neighbor_node_names() -> None:
+    embedding = FakeEmbeddingProvider()
+    nodes = [
+        {"id": "n1", "name": "变量与算术表达式", "chapter": "第1章 导言"},
+        {"id": "n2", "name": "for语句", "chapter": "第1章 导言"},
+        {"id": "n3", "name": "符号常量", "chapter": "第1章 导言"},
+    ]
+    query = "第1章 导言 变量与算术表达式 for语句 符号常量"
+    store = FakeVectorStore(
+        {
+            float(len(query)): [
+                VectorSearchResult(
+                    text="变量与算术表达式用于说明 C 程序中变量声明、赋值和表达式求值的基本规则。",
+                    score=0.73,
+                    payload={"chunk_id": "expanded", "source_file": "chapter1.md"},
+                )
+            ]
+        }
+    )
+
+    results = asyncio.run(
+        score_kg_body_grounding(
+            "course-1",
+            nodes,
+            embedding,
+            vector_store=store,
+            query_expansion=True,
+            edges=[{"from": "n1", "to": "n2"}, {"from": "n3", "to": "n1"}],
+        )
+    )
+
+    assert embedding.calls[0] == ["变量与算术表达式", query]
+    assert results[0].node_name == "变量与算术表达式"
+    assert results[0].supported is True
+    assert results[0].chunk_id == "expanded"
+
+
+def test_query_expansion_keeps_better_node_name_candidate() -> None:
+    embedding = FakeEmbeddingProvider()
+    nodes = [
+        {"id": "n1", "name": "赋值运算符与表达式", "chapter": "第2章 类型、运算符与表达式"},
+        {"id": "n2", "name": "条件表达式", "chapter": "第2章 类型、运算符与表达式"},
+    ]
+    expanded_query = "第2章 类型、运算符与表达式 赋值运算符与表达式 条件表达式"
+    store = FakeVectorStore(
+        {
+            float(len("赋值运算符与表达式")): [
+                VectorSearchResult(
+                    text="赋值运算符要求左操作数是可修改的左值，赋值表达式的值为赋值后的左操作数。",
+                    score=0.74,
+                    payload={"chunk_id": "node-name-hit", "source_file": "chapter2.md"},
+                )
+            ],
+            float(len(expanded_query)): [],
+        }
+    )
+
+    result = asyncio.run(
+        score_kg_body_grounding(
+            "course-1",
+            nodes,
+            embedding,
+            vector_store=store,
+            query_expansion=True,
+            edges=[{"from": "n1", "to": "n2"}],
+        )
+    )[0]
+
+    assert embedding.calls[0] == ["赋值运算符与表达式", expanded_query]
+    assert result.supported is True
+    assert result.body_top1_score == 0.74
+    assert result.chunk_id == "node-name-hit"
+
+
 def test_filters_toc_like_top_hit_and_uses_next_body_hit() -> None:
     embedding = FakeEmbeddingProvider()
     store = FakeVectorStore(
@@ -89,6 +163,85 @@ def test_filters_toc_like_top_hit_and_uses_next_body_hit() -> None:
     assert result.body_top1_score == 0.76
     assert result.chunk_id == "body"
     assert "目录" not in result.preview
+
+
+def test_filters_dotted_page_number_listing_and_uses_next_body_hit() -> None:
+    embedding = FakeEmbeddingProvider()
+    store = FakeVectorStore(
+        {
+            float(len("指针与数组")): [
+                VectorSearchResult(
+                    text=(
+                        "5.7 指针和多维数组 ........ 123\n"
+                        "5.8 指针数组的初始化 ........ 128\n"
+                        "5.9 命令行参数 ........ 134"
+                    ),
+                    score=0.95,
+                    payload={"chunk_id": "dotted-toc", "source_file": "chapter5.pdf"},
+                ),
+                VectorSearchResult(
+                    text="指针与数组关系密切，数组名在表达式中通常会转换为指向首元素的指针。",
+                    score=0.74,
+                    payload={"chunk_id": "body", "source_file": "chapter5.pdf"},
+                ),
+            ]
+        }
+    )
+
+    result = asyncio.run(
+        score_kg_body_grounding(
+            "course-1",
+            [{"id": "n1", "name": "指针与数组"}],
+            embedding,
+            vector_store=store,
+        )
+    )[0]
+
+    assert result.supported is True
+    assert result.body_top1_score == 0.74
+    assert result.chunk_id == "body"
+
+
+def test_filters_appendix_listing_and_bare_index_terms() -> None:
+    embedding = FakeEmbeddingProvider()
+    store = FakeVectorStore(
+        {
+            float(len("数学函数")): [
+                VectorSearchResult(
+                    text=(
+                        "附录B 标准库\n"
+                        "B.1 输入与输出 ........ 241\n"
+                        "B.2 字符串函数 ........ 246\n"
+                        "B.3 数学函数 ........ 252"
+                    ),
+                    score=0.91,
+                    payload={"chunk_id": "appendix-toc", "source_file": "appendix.pdf"},
+                )
+            ],
+            float(len("break语句")): [
+                VectorSearchResult(
+                    text="auto 201\nbreak 202\ncase 203\nchar 204\ncontinue 205\ndefault 206",
+                    score=0.89,
+                    payload={"chunk_id": "bare-index", "source_file": "chapter-index.pdf"},
+                )
+            ],
+        }
+    )
+
+    results = asyncio.run(
+        score_kg_body_grounding(
+            "course-1",
+            [{"id": "n1", "name": "数学函数"}, {"id": "n2", "name": "break语句"}],
+            embedding,
+            vector_store=store,
+        )
+    )
+
+    assert [(result.node_id, result.supported, result.body_top1_score) for result in results] == [
+        ("n1", False, None),
+        ("n2", False, None),
+    ]
+    assert [result.chunk_id for result in results] == [None, None]
 
 
 def test_unsupported_when_no_body_candidate_or_score_below_threshold() -> None:

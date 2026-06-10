@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.others import CourseKnowledgeGraph, LearningPath, Resource
 from app.models.quiz import QuizQuestion
+from app.services.course_knowledge_graphs import get_active_knowledge_graph
 
 
 MISMATCH_TYPES = {
@@ -92,15 +93,7 @@ async def _count_distinct_nonempty(db: AsyncSession, column: Any, *conditions: A
 
 
 async def _knowledge_graph(db: AsyncSession, course_id: str) -> CourseKnowledgeGraph | None:
-    result = await db.execute(
-        select(CourseKnowledgeGraph)
-        .where(
-            CourseKnowledgeGraph.course_id == course_id,
-            _not_deleted(CourseKnowledgeGraph),
-        )
-        .order_by(CourseKnowledgeGraph.update_time.desc(), CourseKnowledgeGraph.create_time.desc())
-    )
-    return result.scalars().first()
+    return await get_active_knowledge_graph(db, course_id)
 
 
 async def _latest_learning_path(

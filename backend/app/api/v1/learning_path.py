@@ -10,10 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.db.session import async_session_factory
 from app.models.course import CourseEnrollment
-from app.models.others import AsyncTask, CourseKnowledgeGraph, Evaluation, LearningPath, Resource, UserProfile
+from app.models.others import AsyncTask, Evaluation, LearningPath, Resource, UserProfile
 from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
+from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.schemas.ai_features import RefreshRequest
 
 logger = logging.getLogger(__name__)
@@ -121,11 +122,7 @@ async def _assemble_learning_path_payload(
     } if pf else {}
 
     # knowledge_graph: 课程静态知识图谱
-    kg_r = await db.execute(
-        select(CourseKnowledgeGraph)
-        .where(CourseKnowledgeGraph.course_id == course_id, CourseKnowledgeGraph.is_deleted == False)
-    )
-    kg = kg_r.scalars().first()
+    kg = await get_active_knowledge_graph(db, course_id)
     if kg:
         payload["knowledge_graph"] = {"nodes": kg.nodes or [], "edges": kg.edges or []}
     else:
@@ -351,14 +348,7 @@ async def get_node_resources(
                 break
 
     # 2. 从知识图谱获取 chapter（schema 约定 [{id, name, chapter}]）
-    kg_result = await db.execute(
-        select(CourseKnowledgeGraph)
-        .where(
-            CourseKnowledgeGraph.course_id == course_id,
-            CourseKnowledgeGraph.is_deleted == False,
-        )
-    )
-    kg = kg_result.scalars().first()
+    kg = await get_active_knowledge_graph(db, course_id)
     if kg and kg.nodes:
         kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
         for kg_node in kg_nodes:

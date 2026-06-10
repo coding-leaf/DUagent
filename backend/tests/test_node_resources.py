@@ -28,7 +28,10 @@ asyncio.run(init_db())
 asyncio.run(engine.dispose())
 
 from app.main import app
-from app.models.user import RegistrationCode
+from app.api.v1.learning_path import _assemble_learning_path_payload
+from app.models.user import RegistrationCode, User
+from sqlalchemy import delete, update
+
 from app.models.course import Course, CourseEnrollment
 from app.models.others import LearningPath, Resource, CourseKnowledgeGraph
 from app.models.quiz import QuizQuestion
@@ -56,6 +59,87 @@ async def _register_and_login(client, code, email, username):
     })
     assert "token" in r.json().get("data", {}), f"Login failed: {r.json()}"
     return {"Authorization": f"Bearer {r.json()['data']['token']}"}, r.json()["data"]["user"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_learning_path_payload_uses_active_knowledge_graph():
+    suffix = uuid.uuid4().hex[:8]
+    teacher_id = f"payload_teacher_{suffix}"
+    user_id = f"payload_user_{suffix}"
+    course_id = f"payload_course_{suffix}"
+
+    active_node = {"id": "active_node", "name": "Active KG Node", "chapter": "active_chapter"}
+    inactive_node = {"id": "inactive_only", "name": "Inactive KG Node", "chapter": "inactive_chapter"}
+    active_edge = {"source": "active_node", "target": "active_next"}
+    inactive_edge = {"source": "inactive_only", "target": "inactive_next"}
+
+    payload = None
+    try:
+        async with async_session_factory() as db:
+            db.add_all(
+                [
+                    User(
+                        id=teacher_id,
+                        username=f"payload_teacher_{suffix}",
+                        email=f"payload_teacher_{suffix}@test.com",
+                        password_hash="hash",
+                        role="teacher",
+                    ),
+                    User(
+                        id=user_id,
+                        username=f"payload_user_{suffix}",
+                        email=f"payload_user_{suffix}@test.com",
+                        password_hash="hash",
+                        role="student",
+                    ),
+                    Course(
+                        id=course_id,
+                        name="Payload KG Course",
+                        course_code=f"PL{suffix[:8]}",
+                        teacher_id=teacher_id,
+                    ),
+                ]
+            )
+            await db.flush()
+            db.add_all(
+                [
+                    CourseKnowledgeGraph(
+                        course_id=course_id,
+                        version=2,
+                        is_active=False,
+                        nodes=[inactive_node],
+                        edges=[inactive_edge],
+                    ),
+                    CourseKnowledgeGraph(
+                        course_id=course_id,
+                        version=1,
+                        is_active=True,
+                        nodes=[active_node],
+                        edges=[active_edge],
+                    ),
+                ]
+            )
+            await db.commit()
+
+            payload = await _assemble_learning_path_payload(user_id, course_id, db)
+    finally:
+        async with async_session_factory() as db:
+            await db.execute(
+                update(CourseKnowledgeGraph)
+                .where(CourseKnowledgeGraph.course_id == course_id)
+                .values(parent_graph_id=None)
+            )
+            await db.execute(delete(CourseKnowledgeGraph).where(CourseKnowledgeGraph.course_id == course_id))
+            await db.execute(delete(Course).where(Course.id == course_id))
+            await db.execute(delete(User).where(User.id.in_([teacher_id, user_id])))
+            await db.commit()
+        await engine.dispose()
+
+    assert payload is not None
+    assert payload["knowledge_graph"]["nodes"] == [active_node]
+    assert inactive_node not in payload["knowledge_graph"]["nodes"]
+    assert payload["knowledge_graph"]["edges"] == [active_edge]
+    assert inactive_edge not in payload["knowledge_graph"]["edges"]
 
 
 @pytest.mark.asyncio
@@ -124,13 +208,23 @@ async def test():
             # Resource for weak_point_tutorials (matched by knowledge_point == node_name)
             db.add(Resource(id=weak_resource_id, course_id=course_id, title="弱项讲解", type="document",
                             knowledge_point=node_name, chapter="ch1", content=long_content))
-            # Resource for chapter_materials (matched by chapter from KG)
+            # Resource for chapter_materials (matched by active KG chapter)
             db.add(Resource(id=chapter_resource_id, course_id=course_id, title="章节资料", type="reading",
-                            knowledge_point="other", chapter="ch1", content="章节内容"))
-            # Knowledge graph for chapter lookup
+                            knowledge_point="other", chapter="active_ch", content="章节内容"))
+            # Inactive high-version graph must not drive chapter lookup.
             db.add(CourseKnowledgeGraph(
                 course_id=course_id,
-                nodes=[{"id": node_id, "name": node_name, "chapter": "ch1"}],
+                version=2,
+                is_active=False,
+                nodes=[{"id": node_id, "name": node_name, "chapter": "inactive_ch"}],
+                edges=[],
+            ))
+            # Active graph for chapter lookup.
+            db.add(CourseKnowledgeGraph(
+                course_id=course_id,
+                version=1,
+                is_active=True,
+                nodes=[{"id": node_id, "name": node_name, "chapter": "active_ch"}],
                 edges=[],
             ))
             # QuizQuestion for exercises
@@ -175,11 +269,10 @@ async def test():
             chk("chapter_materials[0].id present", bool(cm[0].get("id")))
             chk("chapter_materials[0].title present", bool(cm[0].get("title")))
             chk("chapter_materials[0].type present", bool(cm[0].get("type")))
-            # both resources (weak_point and chapter_material) share the same chapter,
-            # so both appear. Verify res_cm is among them.
+            # Active KG chapter filters chapter_materials; weak resource stays on a different chapter.
             cm_ids = {r.get("id") for r in cm}
             chk("chapter_materials include chapter resource", chapter_resource_id in cm_ids)
-            chk("chapter_materials include weak resource", weak_resource_id in cm_ids)
+            chk("chapter_materials exclude weak resource from inactive chapter", weak_resource_id not in cm_ids)
 
         # exercises
         ex = data.get("exercises", [])

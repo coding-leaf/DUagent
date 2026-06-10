@@ -1,11 +1,12 @@
 import asyncio
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -16,7 +17,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 
 from app.db.session import async_session_factory, engine, init_db
 from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.course import Course
+from app.models.course import Course, CourseEnrollment
 from app.models.others import CourseKnowledgeGraph, LearningPath, Resource
 from app.models.quiz import QuizQuestion
 from app.models.user import User
@@ -41,6 +42,7 @@ asyncio.run(engine.dispose())
 async def clean_db():
     await engine.dispose()
     async with async_session_factory() as db:
+        await db.execute(update(CourseKnowledgeGraph).values(parent_graph_id=None))
         for model in [
             QuizQuestion,
             Resource,
@@ -48,6 +50,7 @@ async def clean_db():
             CourseKnowledgeGraph,
             CourseOffering,
             CourseCatalog,
+            CourseEnrollment,
             Course,
             User,
         ]:
@@ -57,6 +60,7 @@ async def clean_db():
     yield
     await engine.dispose()
     async with async_session_factory() as db:
+        await db.execute(update(CourseKnowledgeGraph).values(parent_graph_id=None))
         for model in [
             QuizQuestion,
             Resource,
@@ -64,6 +68,7 @@ async def clean_db():
             CourseKnowledgeGraph,
             CourseOffering,
             CourseCatalog,
+            CourseEnrollment,
             Course,
             User,
         ]:
@@ -136,10 +141,27 @@ async def seed_probe_data():
         db.add_all(
             [
                 CourseKnowledgeGraph(
-                    id="kg_probe",
+                    id="kg_probe_active",
                     course_id="course_probe",
+                    version=1,
+                    is_active=True,
                     nodes=kg_nodes,
                     edges=[],
+                    create_time=datetime(2026, 1, 1, 10, 0, 0),
+                    update_time=datetime(2026, 1, 1, 10, 0, 0),
+                ),
+                CourseKnowledgeGraph(
+                    id="kg_probe_inactive",
+                    course_id="course_probe",
+                    version=2,
+                    is_active=False,
+                    nodes=[
+                        {"id": "node_1", "name": "废弃AVL节点", "chapter": "废弃章节"},
+                        {"id": "inactive_only", "name": "废弃独有节点", "chapter": "废弃章节"},
+                    ],
+                    edges=[],
+                    create_time=datetime(2026, 1, 2, 10, 0, 0),
+                    update_time=datetime(2026, 1, 2, 10, 0, 0),
                 ),
                 LearningPath(
                     id="lp_probe",

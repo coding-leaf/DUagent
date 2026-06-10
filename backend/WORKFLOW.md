@@ -137,6 +137,16 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-10` `Route A 真实样本闭环 no-go`
+  - **真实执行**：开发库 `duagent.course_knowledge_graphs` 已应用版本化迁移；C 语言课程 `6c698badb60a4809` 旧目录版 KG 为 `version=1`，`116` nodes / `115` edges。Agent CLI 对 catalog `b2444963f0e54587` 真实 Qdrant chunks 导出 `/tmp/kg-resource-probe/c-language-route-a-grounding.json`。
+  - **结果**：`body_top1_score>=0.70` 的节点只有 `22/116=18.97%`，median `0.6618`，未达到跑前固定成功线 `>=70%`。Backend CLI 创建 Route A 新 KG `1801d8e677d04a43`，`version=2,is_active=1`，`22` nodes / `2` edges，`metrics.body_support_pass_ratio=0.1896551724137931`。
+  - **结论**：两段式 Route A 工具链可跑通，但“只裁剪无正文支撑节点”第一版在真实样本上 no-go；KG 生成未完成，下一步应改生成策略，优先分析被裁剪节点并推进正文补点 / 正文驱动候选生成。
+  - **修复**：`tools/generate_knowledge_graph.py` 新增 `--kg-json`，支持直接裁剪现有 KG JSON，避免重新 LLM 生成导致 grounding 节点 id 不匹配；CLI 结束时显式 `engine.dispose()`，收口 aiomysql event loop closed 噪声。
+  - **验证**：
+    - `../.venv/bin/python -m pytest tests/test_generate_kg.py tests/test_kg_body_grounding.py -q`：15 passed（有既有 pytest cache 只读 warning）
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_cli_versioning.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider`：8 passed
+  - **契约**：Client API 契约改变：`否` / Agent API 契约改变：`否`。
+
 - `2026-06-10` `Route A KG 正文支撑裁剪工具链接入`
   - **完成**：`tools/generate_knowledge_graph.py` 新增 `--grounding-file` / `--grounding-threshold`，读取 Agent Service `tools/kg_body_grounding.py` 导出的正文支撑 JSON，调用 Backend 纯裁剪层保留 `body_top1_score >= threshold` 的节点、裁掉悬空边，并以 `source_type=route_a_body_grounded`、`generation_strategy=route_a_prune_unsupported` 创建新 KG 版本。
   - **边界**：Backend 不导入 `agent_service`，不直接访问 Qdrant / embedding；Agent Service 不读写 Backend SQL。两段式文件交接不新增 Client API 或 Agent HTTP API。

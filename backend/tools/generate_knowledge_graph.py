@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
-from app.db.session import async_session_factory
+from app.db.session import async_session_factory, engine
 from app.services.kg_body_grounding import (
     GroundingMatch,
     filter_supported_knowledge_graph,
@@ -181,6 +181,14 @@ def validate_and_clean_kg(data: dict) -> tuple[list[dict], list[dict]]:
     return cleaned_nodes, cleaned_edges
 
 
+def load_kg_json(kg_file: Path) -> tuple[list[dict], list[dict]]:
+    """Load an existing KG JSON file and run the same structural validation as LLM output."""
+    data = json.loads(kg_file.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("KG JSON must be an object containing nodes and edges.")
+    return validate_and_clean_kg(data)
+
+
 def build_import_result(graph) -> dict:
     """Build a stable CLI result payload from a CourseKnowledgeGraph instance."""
     return {
@@ -281,37 +289,45 @@ async def main_async():
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", "-f", help="课程大纲文本文档路径")
     src.add_argument("--outline", "-o", help="直接传入课程大纲文本")
+    src.add_argument("--kg-json", type=Path, help="直接读取现有 KG JSON，跳过 LLM 生成")
     args = parser.parse_args()
 
     course_id = args.course_id
 
-    # 读取输入大纲
-    if args.file:
-        file_path = Path(args.file)
-        if not file_path.exists():
-            print(f"ERROR: Outline file does not exist: {file_path}", file=sys.stderr)
+    if args.kg_json:
+        try:
+            nodes, edges = load_kg_json(args.kg_json)
+        except Exception as e:
+            print(f"ERROR: KG JSON validation failed: {e}", file=sys.stderr)
             sys.exit(1)
-        outline = file_path.read_text(encoding="utf-8")
     else:
-        outline = args.outline
+        # 读取输入大纲
+        if args.file:
+            file_path = Path(args.file)
+            if not file_path.exists():
+                print(f"ERROR: Outline file does not exist: {file_path}", file=sys.stderr)
+                sys.exit(1)
+            outline = file_path.read_text(encoding="utf-8")
+        else:
+            outline = args.outline
 
-    if not outline.strip():
-        print("ERROR: Syllabus/Outline content is empty.", file=sys.stderr)
-        sys.exit(1)
+        if not outline.strip():
+            print("ERROR: Syllabus/Outline content is empty.", file=sys.stderr)
+            sys.exit(1)
 
-    # 1. 调大模型生成
-    try:
-        raw_data = await generate_kg_from_llm(outline)
-    except Exception as e:
-        print(f"ERROR: Failed to call LLM or parse response: {e}", file=sys.stderr)
-        sys.exit(1)
+        # 1. 调大模型生成
+        try:
+            raw_data = await generate_kg_from_llm(outline)
+        except Exception as e:
+            print(f"ERROR: Failed to call LLM or parse response: {e}", file=sys.stderr)
+            sys.exit(1)
 
-    # 2. 校验与去重
-    try:
-        nodes, edges = validate_and_clean_kg(raw_data)
-    except Exception as e:
-        print(f"ERROR: Generated data format validation failed: {e}", file=sys.stderr)
-        sys.exit(1)
+        # 2. 校验与去重
+        try:
+            nodes, edges = validate_and_clean_kg(raw_data)
+        except Exception as e:
+            print(f"ERROR: Generated data format validation failed: {e}", file=sys.stderr)
+            sys.exit(1)
 
     if not nodes:
         print("ERROR: No valid nodes extracted from LLM response.", file=sys.stderr)
@@ -380,8 +396,15 @@ async def main_async():
     )
 
 
+async def _run_cli() -> None:
+    try:
+        await main_async()
+    finally:
+        await engine.dispose()
+
+
 def main():
-    asyncio.run(main_async())
+    asyncio.run(_run_cli())
 
 
 if __name__ == "__main__":

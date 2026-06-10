@@ -1,8 +1,10 @@
 from pathlib import Path
 
 import pytest
+from tools import generate_knowledge_graph as generate_kg_module
 from tools.generate_knowledge_graph import (
     build_import_result,
+    load_kg_json,
     load_grounding_matches,
     prune_kg_with_grounding_file,
     validate_and_clean_kg,
@@ -109,6 +111,32 @@ def test_build_import_result_uses_version_metadata():
     }
 
 
+def test_load_kg_json_validates_existing_graph_file(tmp_path: Path) -> None:
+    kg_file = tmp_path / "kg.json"
+    kg_file.write_text(
+        """
+        {
+          "nodes": [
+            {"id": "node_1", "name": "变量", "chapter": "第一章"},
+            {"id": "node_2", "name": "指针", "chapter": "第二章"}
+          ],
+          "edges": [
+            {"from": "node_1", "to": "node_2"}
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    nodes, edges = load_kg_json(kg_file)
+
+    assert nodes == [
+        {"id": "node_1", "name": "变量", "chapter": "第一章"},
+        {"id": "node_2", "name": "指针", "chapter": "第二章"},
+    ]
+    assert edges == [{"from": "node_1", "to": "node_2"}]
+
+
 def test_load_grounding_matches_reads_agent_json(tmp_path: Path) -> None:
     grounding_file = tmp_path / "grounding.json"
     grounding_file.write_text(
@@ -209,3 +237,21 @@ def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path
             "content_preview": "指针保存地址。",
         }
     ]
+
+
+def test_main_disposes_engine_after_command(monkeypatch) -> None:
+    calls = []
+
+    async def fake_main_async():
+        calls.append("main")
+
+    class FakeEngine:
+        async def dispose(self):
+            calls.append("disposed")
+
+    monkeypatch.setattr(generate_kg_module, "main_async", fake_main_async)
+    monkeypatch.setattr(generate_kg_module, "engine", FakeEngine(), raising=False)
+
+    generate_kg_module.main()
+
+    assert calls == ["main", "disposed"]

@@ -20,6 +20,15 @@
 
 ## 最近验证
 
+- 2026-06-10：Route A 真实 C 语言样本闭环验收：
+  - 已对开发库 `duagent` 执行已提交迁移 `backend/migrations/2026-06-10-version-course-knowledge-graphs.sql`，旧目录版 KG 成为 `version=1,is_active=1`，`116` nodes / `115` edges。
+  - 从 active KG 导出 `/tmp/kg-resource-probe/c-language-active-kg-v1.json`，用 Agent CLI 真实检索 Qdrant catalog `b2444963f0e54587`，输出 `/tmp/kg-resource-probe/c-language-route-a-grounding.json`。
+  - Grounding 结果：`116` 节点中 `body_top1_score>=0.70` 的节点 `22` 个，占比 `18.97%`，median `0.6618`，未达到跑前固定成功线 `>=70%`。
+  - Backend CLI 用 `--kg-json /tmp/kg-resource-probe/c-language-active-kg-v1.json --grounding-file /tmp/kg-resource-probe/c-language-route-a-grounding.json` 创建 Route A 新 KG：`graph_id=1801d8e677d04a43`，`version=2,is_active=1`，`source_type=route_a_body_grounded`，`generation_strategy=route_a_prune_unsupported`，`22` nodes / `2` edges，parent 指向旧 `f36b0d8580724805`。
+  - 数据库只读核验：version 1 已 inactive，version 2 active，`metrics.body_support_pass_ratio=0.1896551724137931`、`kept_node_count=22`、`pruned_node_count=94`。
+  - 结论：Route A 第一版“只裁剪无支撑节点”工具链可跑通，但真实样本验收 **no-go**；KG 生成还不能算完成。下一步不是测试收尾，而是改生成策略：分析被裁剪节点和正文覆盖，推进正文补点 / 更稳的正文驱动候选生成。
+  - 额外修复：`backend/tools/generate_knowledge_graph.py` 增加 `--kg-json`，避免真实闭环重新调 LLM 导致 grounding 节点 id 不匹配；CLI 结束时显式 `engine.dispose()`，收口 aiomysql event loop closed 噪声。
+  - 验证：Backend `../.venv/bin/python -m pytest tests/test_generate_kg.py tests/test_kg_body_grounding.py -q` 15/15 passed；Backend MySQL `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_cli_versioning.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider` 8/8 passed。
 - 2026-06-10：KG 版本化与 Route A 工具链阶段性接入：
   - 已完成 KG 版本 / 回滚基础设施：`course_knowledge_graphs` 支持 `version/is_active/source_type/generation_strategy/metrics/parent_graph_id`，LearningPath 默认读取 active KG，`generate_knowledge_graph.py` / `import_knowledge_graph.py` 不再覆盖旧 KG，而是创建版本或切换 active。
   - 已完成 Agent 侧只读正文支撑 scorer：`agent_service/memory/kg_body_grounding.py` 对 KG 节点逐个 embedding，检索 Qdrant `course_knowledge`，过滤目录型 chunk，输出 `body_top1_score/chunk_id/source_file/preview/supported`。

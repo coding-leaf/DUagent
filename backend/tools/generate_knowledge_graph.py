@@ -8,6 +8,7 @@
 import argparse
 import asyncio
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ import httpx
 from app.db.session import async_session_factory, engine
 from app.services.kg_body_grounding import (
     GroundingMatch,
+    USABLE_SUPPORT_THRESHOLD,
     filter_supported_knowledge_graph,
 )
 from app.services.course_knowledge_graphs import (
@@ -238,7 +240,7 @@ def prune_kg_with_grounding_file(
     edges: list[dict],
     grounding_file: Path,
     *,
-    threshold: float = 0.70,
+    threshold: float = USABLE_SUPPORT_THRESHOLD,
 ) -> tuple[list[dict], list[dict], dict]:
     """Prune generated KG nodes using Agent-produced body grounding scores."""
     matches = load_grounding_matches(grounding_file)
@@ -250,6 +252,17 @@ def prune_kg_with_grounding_file(
     )
     metrics["grounding_source_file"] = str(grounding_file)
     return kept_nodes, kept_edges, metrics
+
+
+def route_a_generation_strategy_for_threshold(threshold: float) -> str:
+    if math.isclose(
+        threshold,
+        USABLE_SUPPORT_THRESHOLD,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        return "route_a_prune_usable_060"
+    return "route_a_prune_unsupported"
 
 
 async def save_knowledge_graph_version(
@@ -280,16 +293,26 @@ async def save_knowledge_graph_version(
         return build_import_result(graph)
 
 
-async def main_async():
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CourseKnowledgeGraph 智能生成与导入运维工具")
     parser.add_argument("--course-id", required=True, help="课程 ID")
     parser.add_argument("--auto", action="store_true", help="跳过用户命令行交互，直接落库")
     parser.add_argument("--grounding-file", type=Path, help="Agent kg_body_grounding JSON output for Route A pruning")
-    parser.add_argument("--grounding-threshold", type=float, default=0.70, help="Route A body grounding score threshold")
+    parser.add_argument(
+        "--grounding-threshold",
+        type=float,
+        default=USABLE_SUPPORT_THRESHOLD,
+        help="Route A body grounding score threshold",
+    )
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", "-f", help="课程大纲文本文档路径")
     src.add_argument("--outline", "-o", help="直接传入课程大纲文本")
     src.add_argument("--kg-json", type=Path, help="直接读取现有 KG JSON，跳过 LLM 生成")
+    return parser
+
+
+async def main_async():
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     course_id = args.course_id
@@ -354,7 +377,7 @@ async def main_async():
             sys.exit(1)
 
         source_type = "route_a_body_grounded"
-        generation_strategy = "route_a_prune_unsupported"
+        generation_strategy = route_a_generation_strategy_for_threshold(args.grounding_threshold)
 
     # 3. 打印预览
     print("\n================ KG EXTRACTED PREVIEW ================")

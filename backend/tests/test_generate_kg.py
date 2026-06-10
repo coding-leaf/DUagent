@@ -171,6 +171,29 @@ def test_load_grounding_matches_reads_agent_json(tmp_path: Path) -> None:
     ]
 
 
+def test_build_arg_parser_defaults_grounding_threshold_to_usable_060() -> None:
+    parser = generate_kg_module.build_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--course-id",
+            "course-1",
+            "--kg-json",
+            "/tmp/kg.json",
+            "--grounding-file",
+            "/tmp/grounding.json",
+        ]
+    )
+
+    assert args.grounding_threshold == 0.60
+
+
+def test_route_a_generation_strategy_uses_usable_name_only_for_default_threshold() -> None:
+    assert generate_kg_module.route_a_generation_strategy_for_threshold(0.60) == "route_a_prune_usable_060"
+    assert generate_kg_module.route_a_generation_strategy_for_threshold(0.6000000001) == "route_a_prune_usable_060"
+    assert generate_kg_module.route_a_generation_strategy_for_threshold(0.70) == "route_a_prune_unsupported"
+
+
 def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path: Path) -> None:
     nodes = [
         {"id": "node_1", "name": "变量", "chapter": "第一章"},
@@ -226,6 +249,15 @@ def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path
     assert metrics["kept_node_count"] == 2
     assert metrics["pruned_node_count"] == 1
     assert metrics["body_support_pass_ratio"] == pytest.approx(2 / 3)
+    assert metrics["usable_support_ratio"] == pytest.approx(1.0)
+    assert metrics["strong_support_ratio"] == pytest.approx(2 / 3)
+    assert metrics["good_or_strong_support_ratio"] == pytest.approx(1.0)
+    assert metrics["support_band_counts"] == {
+        "strong": 2,
+        "good": 1,
+        "weak_but_usable": 0,
+        "unsupported": 0,
+    }
     assert metrics["grounding_source_file"] == str(grounding_file)
     assert metrics["pruned_nodes"] == [
         {
@@ -237,6 +269,79 @@ def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path
             "content_preview": "指针保存地址。",
         }
     ]
+
+
+def test_prune_kg_with_grounding_file_defaults_to_usable_threshold(tmp_path: Path) -> None:
+    nodes = [
+        {"id": "node_1", "name": "变量", "chapter": "第一章"},
+        {"id": "node_2", "name": "指针", "chapter": "第二章"},
+        {"id": "node_3", "name": "数组", "chapter": "第三章"},
+        {"id": "node_4", "name": "结构体", "chapter": "第四章"},
+    ]
+    edges = [
+        {"from": "node_1", "to": "node_2"},
+        {"from": "node_2", "to": "node_3"},
+        {"from": "node_3", "to": "node_4"},
+    ]
+    grounding_file = tmp_path / "grounding.json"
+    grounding_file.write_text(
+        """
+        {
+          "course_id": "course-1",
+          "threshold": 0.7,
+          "results": [
+            {
+              "node_id": "node_1",
+              "body_top1_score": 0.91,
+              "chunk_id": "chunk-a",
+              "preview": "变量用于保存程序运行中的数据。"
+            },
+            {
+              "node_id": "node_2",
+              "body_top1_score": 0.62,
+              "chunk_id": "chunk-b",
+              "preview": "指针保存地址。"
+            },
+            {
+              "node_id": "node_3",
+              "body_top1_score": 0.59,
+              "chunk_id": "chunk-c",
+              "preview": "数组候选分数不足。"
+            },
+            {
+              "node_id": "node_4",
+              "body_top1_score": null,
+              "chunk_id": null,
+              "preview": ""
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    kept_nodes, kept_edges, metrics = prune_kg_with_grounding_file(
+        nodes,
+        edges,
+        grounding_file,
+    )
+
+    assert kept_nodes == nodes[:2]
+    assert kept_edges == [{"from": "node_1", "to": "node_2"}]
+    assert metrics["body_top1_threshold"] == 0.60
+    assert metrics["candidate_node_count"] == 4
+    assert metrics["kept_node_count"] == 2
+    assert metrics["pruned_node_count"] == 2
+    assert metrics["body_support_pass_ratio"] == 0.5
+    assert metrics["usable_support_ratio"] == 0.5
+    assert metrics["strong_support_ratio"] == 0.25
+    assert metrics["good_or_strong_support_ratio"] == 0.25
+    assert metrics["support_band_counts"] == {
+        "strong": 1,
+        "good": 0,
+        "weak_but_usable": 1,
+        "unsupported": 2,
+    }
 
 
 def test_main_disposes_engine_after_command(monkeypatch) -> None:

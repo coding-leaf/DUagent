@@ -20,6 +20,12 @@
 
 ## 最近验证
 
+- 2026-06-10：Route A no-go 归因完成：
+  - 已分析 `/tmp/kg-resource-probe/c-language-route-a-grounding.json` 的 116 个节点 grounding 结果。
+  - 分数分布：`>=0.70` 22 个；`0.65-0.70` 49 个；`0.60-0.65` 33 个；`<0.60` 12 个；无候选 0 个。
+  - 启发式归类：`toc_or_index_noise` 47 个、`near_threshold_body_match` 21 个、`low_score_body_match` 17 个、`near_threshold_unclear` 6 个、`low_score_or_wrong_candidate` 3 个、`supported` 22 个。
+  - 结论：no-go 不是资料缺失，主要是目录/索引噪声仍进入候选、单节点名 query 太弱、目录候选直接裁剪会把 KG 变成碎片图。下一步先加强正文候选过滤和 query 扩展探针，再决定是否做正文补点 / 正文驱动候选生成。
+  - 归档报告：`docs/superpowers/specs/2026-06-10-route-a-no-go-attribution-report.md`。
 - 2026-06-10：Route A 真实 C 语言样本闭环验收：
   - 已对开发库 `duagent` 执行已提交迁移 `backend/migrations/2026-06-10-version-course-knowledge-graphs.sql`，旧目录版 KG 成为 `version=1,is_active=1`，`116` nodes / `115` edges。
   - 从 active KG 导出 `/tmp/kg-resource-probe/c-language-active-kg-v1.json`，用 Agent CLI 真实检索 Qdrant catalog `b2444963f0e54587`，输出 `/tmp/kg-resource-probe/c-language-route-a-grounding.json`。

@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+- 2026-06-11：Route A 可用正文支撑阈值实现并生成新 active KG：
+  - Backend Route A 裁剪默认线从强支撑 `0.70` 调整为可用支撑 `0.60`，并保留 `strong/good/weak_but_usable/unsupported` 分档 metrics。
+  - `body_support_pass_ratio` 继续按传入阈值计算；`usable_support_ratio` 固定按 `0.60` 计算，避免后续 ready gate 把 weak support 当作 strong support。
+  - CLI `--grounding-threshold` 默认改为 `0.60`；默认 Route A 版本写入 `generation_strategy=route_a_prune_usable_060`，显式非 `0.60` 阈值仍写 `route_a_prune_unsupported`。
+  - 真实 C 语言样本已在开发库 `duagent` 生成新 active KG：`graph_id=27c3acb1e98a49d1`，`version=3`，`108` nodes / `100` edges，明显高于旧 Route A `22` nodes / `2` edges。
+  - metrics 核验：`candidate_node_count=116`、`kept_node_count=108`、`pruned_node_count=8`、`body_support_pass_ratio=0.9310344827586208`、`support_band_counts={strong:57, good:34, weak_but_usable:17, unsupported:8}`。
+  - `pruned_nodes` 详细列表暂保留，未来大图需要做限长或外部诊断产物。
+  - 验证：Backend `../.venv/bin/python -m pytest tests/test_kg_body_grounding.py tests/test_generate_kg.py -q -p no:cacheprovider` 19/19 passed；MySQL versioning 回归 8/8 passed；真实生成命令成功。
 - 2026-06-11：KG residual TOC/index 过滤漏网小补丁完成：
   - 按补点决策文件中的 `filter_review_first` 结论，增强 Agent Service KG grounding 过滤，新增英文索引页码串、单行稀疏点线页码、`索引/目录 + 点线/页码` 噪声识别。
   - TDD 覆盖：`expression ...，52，200` 这类英文索引、`...30 1.5.1 文件复制 ...31` 单行点线目录、`252 索引 ...` 尾部索引残留均会 fallback 到下一个正文候选。

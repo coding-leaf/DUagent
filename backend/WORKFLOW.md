@@ -137,6 +137,19 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-11` `Route A 可用正文支撑阈值实现`
+  - **完成**：Backend Route A 裁剪默认阈值从 `0.70` 改为 `0.60`；显式传入其他阈值时仍按传入阈值裁剪，`body_support_pass_ratio` 保持兼容语义。
+  - **完成**：`filter_supported_knowledge_graph()` 新增固定 `0.60/0.65/0.70` 支撑分档 metrics；`strong/good/weak_but_usable/unsupported` count 均按全部 candidate nodes 统计，不只统计 kept nodes。
+  - **完成**：CLI `--grounding-threshold` 默认改为 `0.60`，默认 Route A 版本写入 `generation_strategy=route_a_prune_usable_060`；显式非 `0.60` 阈值仍写 `route_a_prune_unsupported`。
+  - **真实执行**：开发库 `duagent` 用 `/tmp/kg-resource-probe/c-language-active-kg-v1.json` 和 `/tmp/kg-resource-probe/c-language-route-a-grounding-filtered-expanded-best-v3.json` 生成新 active KG：`graph_id=27c3acb1e98a49d1`，`version=3`，`source_type=route_a_body_grounded`，`generation_strategy=route_a_prune_usable_060`，`108` nodes / `100` edges。
+  - **真实核验**：metrics 为 `candidate_node_count=116`、`kept_node_count=108`、`pruned_node_count=8`、`body_support_pass_ratio=0.9310344827586208`、`support_band_counts={strong:57, good:34, weak_but_usable:17, unsupported:8}`。
+  - **已知后续风险**：`metrics.pruned_nodes` 仍保留完整 detail 列表，当前 C 语言样本只裁 8 个节点可接受；未来更大图需要考虑限长或外部诊断文件。
+  - **验证**：
+    - `../.venv/bin/python -m pytest tests/test_kg_body_grounding.py tests/test_generate_kg.py -q -p no:cacheprovider`：19 passed
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_cli_versioning.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider`：8 passed
+    - `DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4 PYTHONDONTWRITEBYTECODE=1 ../.venv/bin/python tools/generate_knowledge_graph.py --course-id 6c698badb60a4809 --kg-json /tmp/kg-resource-probe/c-language-active-kg-v1.json --grounding-file /tmp/kg-resource-probe/c-language-route-a-grounding-filtered-expanded-best-v3.json --grounding-threshold 0.60 --auto`：成功
+  - **契约**：Client API 契约改变：`否` / Agent API 契约改变：`否`。
+
 - `2026-06-10` `Route A 真实样本闭环 no-go`
   - **真实执行**：开发库 `duagent.course_knowledge_graphs` 已应用版本化迁移；C 语言课程 `6c698badb60a4809` 旧目录版 KG 为 `version=1`，`116` nodes / `115` edges。Agent CLI 对 catalog `b2444963f0e54587` 真实 Qdrant chunks 导出 `/tmp/kg-resource-probe/c-language-route-a-grounding.json`。
   - **结果**：`body_top1_score>=0.70` 的节点只有 `22/116=18.97%`，median `0.6618`，未达到跑前固定成功线 `>=70%`。Backend CLI 创建 Route A 新 KG `1801d8e677d04a43`，`version=2,is_active=1`，`22` nodes / `2` edges，`metrics.body_support_pass_ratio=0.1896551724137931`。

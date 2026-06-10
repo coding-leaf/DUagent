@@ -244,6 +244,73 @@ def test_filters_appendix_listing_and_bare_index_terms() -> None:
     assert [result.chunk_id for result in results] == [None, None]
 
 
+def test_filters_mixed_index_page_sequences_and_sparse_dotted_pages() -> None:
+    embedding = FakeEmbeddingProvider()
+    store = FakeVectorStore(
+        {
+            float(len("变量与算术表达式")): [
+                VectorSearchResult(
+                    text=(
+                        "expression order of evaluation（表达式的求值次序），52，200 "
+                        "expression parenthesized（用括号括起来的表达式），201 "
+                        "external variable（外部变量），40，83"
+                    ),
+                    score=0.92,
+                    payload={"chunk_id": "english-index", "source_file": "chapter1.pdf"},
+                ),
+                VectorSearchResult(
+                    text="变量与算术表达式用于说明 C 语言中变量声明、赋值、算术运算和表达式求值的基本规则。",
+                    score=0.72,
+                    payload={"chunk_id": "body", "source_file": "chapter1.pdf"},
+                ),
+            ],
+            float(len("文件复制")): [
+                VectorSearchResult(
+                    text=".....................................30 1.5.1. 文件复制 ................................................ 31",
+                    score=0.9,
+                    payload={"chunk_id": "sparse-dotted", "source_file": "chapter1.pdf"},
+                ),
+                VectorSearchResult(
+                    text="文件复制示例通过反复调用 getchar 和 putchar，把输入中的每个字符复制到输出。",
+                    score=0.71,
+                    payload={"chunk_id": "copy-body", "source_file": "chapter1.pdf"},
+                ),
+            ],
+            float(len("入门")): [
+                VectorSearchResult(
+                    text="...................................................................252 索引 ..............................................",
+                    score=0.88,
+                    payload={"chunk_id": "trailing-index", "source_file": "chapter1.pdf"},
+                ),
+                VectorSearchResult(
+                    text="本章介绍 C 语言程序设计入门所需的基本元素，包括变量、表达式、循环和函数。",
+                    score=0.69,
+                    payload={"chunk_id": "intro-body", "source_file": "chapter1.pdf"},
+                ),
+            ],
+        }
+    )
+
+    results = asyncio.run(
+        score_kg_body_grounding(
+            "course-1",
+            [
+                {"id": "n1", "name": "变量与算术表达式"},
+                {"id": "n2", "name": "文件复制"},
+                {"id": "n3", "name": "入门"},
+            ],
+            embedding,
+            vector_store=store,
+        )
+    )
+
+    assert [(result.node_id, result.chunk_id, result.body_top1_score) for result in results] == [
+        ("n1", "body", 0.72),
+        ("n2", "copy-body", 0.71),
+        ("n3", "intro-body", 0.69),
+    ]
+
+
 def test_unsupported_when_no_body_candidate_or_score_below_threshold() -> None:
     embedding = FakeEmbeddingProvider()
     store = FakeVectorStore(

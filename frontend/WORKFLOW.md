@@ -20,6 +20,11 @@
 
 ## 最近验证
 
+- 2026-06-11：KG residual TOC/index 过滤漏网小补丁完成：
+  - 按补点决策文件中的 `filter_review_first` 结论，增强 Agent Service KG grounding 过滤，新增英文索引页码串、单行稀疏点线页码、`索引/目录 + 点线/页码` 噪声识别。
+  - TDD 覆盖：`expression ...，52，200` 这类英文索引、`...30 1.5.1 文件复制 ...31` 单行点线目录、`252 索引 ...` 尾部索引残留均会 fallback 到下一个正文候选。
+  - 真实 C 语言样本复验：`/tmp/kg-resource-probe/c-language-route-a-grounding-filtered-expanded-best-v3.json`；原 7 个 `residual_toc_or_index_noise` 节点均换成非索引候选，但整体 `>=0.70` 仍为 `57/116=49.14%`，说明过滤漏网已清理，下一步仍需正文补点/聚类。
+  - 验证：Agent `./.venv/bin/pytest tests/test_kg_body_grounding.py tests/test_kg_body_grounding_tool.py tests/test_vector_store.py -q` 20/20 passed。
 - 2026-06-10：KG 正文候选过滤 + query 扩展探针完成：
   - Agent Service `memory/kg_body_grounding.py` 增强目录/索引噪声过滤，新增点线页码目录、附录目录/索引识别；`tools/kg_body_grounding.py` 新增可选 `--query-expansion`，默认行为不变。
   - query 扩展策略不是替换单节点名，而是同时检索 `node.name` 和 `chapter + node_name + 相邻节点名`，取最高正文候选，避免已支持节点回退。

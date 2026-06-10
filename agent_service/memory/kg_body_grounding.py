@@ -226,6 +226,15 @@ def _is_toc_like_chunk(text: str, payload: dict[str, Any]) -> bool:
     if _has_dotted_page_listing(text):
         return True
 
+    if _has_marker_with_dotted_page_noise(normalized):
+        return True
+
+    if _has_sparse_dotted_page_reference(normalized):
+        return True
+
+    if _has_index_term_page_sequence(normalized):
+        return True
+
     if _looks_like_appendix_listing(text):
         return True
 
@@ -246,6 +255,24 @@ def _has_dotted_page_listing(text: str) -> bool:
 
 def _is_dotted_page_line(line: str) -> bool:
     return bool(re.search(r"\S\s*[.·•]{3,}\s*\d{1,4}\s*$", line))
+
+
+def _has_marker_with_dotted_page_noise(text: str) -> bool:
+    return bool(
+        re.search(r"(目录|索引|contents|index)", text, re.IGNORECASE)
+        and re.search(r"[.·•]{5,}|\b\d{1,4}\b", text)
+    )
+
+
+def _has_sparse_dotted_page_reference(text: str) -> bool:
+    return bool(re.search(r"[.·•]{5,}\s*\d{1,4}\s+\d+([.、]\d+)*[.、]?\s*\S+.*[.·•]{5,}\s*\d{1,4}", text))
+
+
+def _has_index_term_page_sequence(text: str) -> bool:
+    if sum(text.count(char) for char in "。.!！？?") >= 2:
+        return False
+    references = re.findall(r"[A-Za-z][A-Za-z\s-]{2,}[^。！？?]{0,40}[，,]\s*\d{1,4}(?:[，,]\s*\d{1,4})*", text)
+    return len(references) >= 2 and len(re.findall(r"\d{1,4}", text)) >= 3
 
 
 def _looks_like_appendix_listing(text: str) -> bool:

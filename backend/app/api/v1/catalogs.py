@@ -601,18 +601,19 @@ async def admin_delete_catalog_material(
         )
 
     material.is_deleted = True
-    remaining_count = (
-        await db.execute(
-            select(func.count())
-            .select_from(CourseCatalogMaterial)
-            .where(
-                CourseCatalogMaterial.catalog_id == catalog.id,
-                CourseCatalogMaterial.is_deleted == False,
-                CourseCatalogMaterial.id != material.id,
-            )
+    remaining_result = await db.execute(
+        select(
+            func.count(CourseCatalogMaterial.id),
+            func.coalesce(func.sum(CourseCatalogMaterial.chunk_count), 0),
+        ).where(
+            CourseCatalogMaterial.catalog_id == catalog.id,
+            CourseCatalogMaterial.is_deleted == False,
+            CourseCatalogMaterial.id != material.id,
         )
-    ).scalar() or 0
-    catalog.material_count = remaining_count
+    )
+    remaining_count, remaining_chunks = remaining_result.one()
+    catalog.material_count = int(remaining_count or 0)
+    catalog.chunk_count = int(remaining_chunks or 0)
     if catalog.knowledge_status in {"ready", "partial"}:
         catalog.knowledge_status = "dirty"
     catalog.last_error = None

@@ -39,7 +39,7 @@ async def _seed_catalog(
     material_statuses: list[str] | None = None,
     material_chunk_counts: list[int] | None = None,
 ) -> str:
-    statuses = material_statuses or ["ingested"]
+    statuses = ["ingested"] if material_statuses is None else material_statuses
     chunks = material_chunk_counts or [catalog_chunk_count]
     async with async_session_factory() as db:
         db.add(
@@ -103,6 +103,25 @@ async def test_recheck_reports_repairable_when_dirty_catalog_has_ingested_chunks
     assert result.qdrant_chunk_count == 3
     assert result.reasons == []
     assert probe.catalog_ids == [catalog_id]
+
+
+@pytest.mark.asyncio
+async def test_recheck_does_not_repair_dirty_catalog_without_active_materials():
+    catalog_id = await _seed_catalog(
+        catalog_chunk_count=5,
+        material_statuses=[],
+        material_chunk_counts=[],
+    )
+    probe = StaticProbe(True)
+
+    async with async_session_factory() as db:
+        result = await recheck_catalog_knowledge_status(db, catalog_id, qdrant_probe=probe)
+
+    assert result.repairable is False
+    assert result.material_count == 0
+    assert result.material_chunk_count == 0
+    assert "materials_missing" in result.reasons
+    assert "material_chunks_missing" in result.reasons
 
 
 @pytest.mark.asyncio

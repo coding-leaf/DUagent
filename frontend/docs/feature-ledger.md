@@ -49,7 +49,7 @@
 4. 学生端按当前教学班 `course_id` 查看资源列表和详情；有课程但暂无资源时显示“课程资源正在准备中 / 请稍后查看”。
 5. 真实验收证据：资源库 `89f51dfbdedc4995` 入库 task `d0b234d74df94822` completed，`chunk_count=1`；资源生成 task `39dfbd5feb9a4cb7` completed，fan-out 到教学班 `59360ad8b8f445b7`，学生端可见并打开资源详情。
 6. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
-7. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 资源评估 probe 已接入，但真实 C course 当前无 LearningPath 记录，需先生成 / 刷新 LearningPath 再评估节点资源挂载效果。
+7. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 资源评估 probe 已接入，但管理员删除/重入库后真实 C catalog 出现历史不一致状态：当前未删除 material `chunk_count=0`，catalog 仍显示 `ready/ready` 且 `chunk_count=665`；已修复未来删除资料时的 chunk 重算逻辑，继续 LearningPath 前需先修正开发库这条 C 样本数据或重新上传有效资料并入库。
 
 ## 页面真实调用核查
 
@@ -136,20 +136,20 @@
 
 ## 当前下一步队列
 
-1. **C 样本 LearningPath 生成 / 刷新**
-   C 语言样本已通过 KG-node 资源生成和 KG-Resource 正式探针复验：`108/108` active KG 节点 `candidate_count>0`，但真实 course `6c698badb60a4809` 当前 `learning_paths` 记录数为 `0`。下一步先用现有后端 refresh / Agent 链路生成 LearningPath，再复跑 LearningPath-KG 资源命中 probe。
+1. **C 样本 catalog 数据一致性恢复**
+   删除资料后 chunk 重算逻辑已修复，但真实 C catalog `b2444963f0e54587` 已处于历史不一致状态：未删除 material `chunk_count=0`、catalog `chunk_count=665` 且 `knowledge_status=ready`。下一步先修正这条开发库数据或重新上传有效资料并入库，确认 repair check 不再出现 `material_chunks_missing`。
 
-2. **LearningPath ready gate 设计**
+2. **C 样本 LearningPath 生成 / 刷新**
+   C 语言样本已通过 KG-node 资源生成和 KG-Resource 正式探针复验：`108/108` active KG 节点 `candidate_count>0`，但真实 course `6c698badb60a4809` 当前 `learning_paths` 记录数为 `0`。catalog 数据恢复后，再用现有后端 refresh / Agent 链路生成 LearningPath，并复跑 LearningPath-KG 资源命中 probe。
+
+3. **LearningPath ready gate 设计**
    在 C 样本 LearningPath 生成并完成节点资源挂载效果评估后，再设计 KG 状态、错误码、降级策略、前端提示和是否允许刷新。不能直接复用 CourseCatalog chunk-only ready gate。
 
-3. **#29 AI Chat 检索能力独立 spec**
+4. **#29 AI Chat 检索能力独立 spec**
    按已定口径，后续 Chat spec 必须从“先验证 Agent 检索能力”开始，不先加 UI。
 
-4. **#28 Admin 用户停用状态契约**
+5. **#28 Admin 用户停用状态契约**
    如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
-
-5. **真实联调运行态固化**
-   Agent Service 启动必须带共享上传目录 `COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`；否则 Admin 入库会失败为 `material does not exist`。后续可考虑把该检查纳入 readiness 或启动脚本。
 
 ## 纠偏记录
 
@@ -168,6 +168,7 @@
 - 2026-06-11 KG-Resource 对齐探针复验：`b2444963f0e54587` / `6c698badb60a4809` 已具备正式探针条件并导出 108 行 KG 节点候选，但 `108/108` 节点 `candidate_count=0`。零命中原因是当前资源元数据仍为 `chapter=课程整体`、`knowledge_point=综合知识点`，不是新版 active KG 未生效；下一步转为资源生成 metadata / KG 映射设计。
 - 2026-06-11 KG-node 资源生成闭环：新增维护工具先 recheck/repair C catalog 的 `knowledge_status dirty -> ready`，确认非删除资料全 ingested、chunk 正常且 Qdrant 可查；随后 Admin 资源生成接口不传 `chapter/knowledge_point`，自动选 10 个 active KG 核心节点生成资源，父任务 `d364a3a0af294dfa` 完成且 `10/10` 子任务成功。复跑 KG-Resource probe 后 `108/108` active KG 节点 `candidate_count>0`，资源 metadata 与 KG 节点对齐问题已在 C 样本闭环验证。
 - 2026-06-11 LearningPath-KG 资源命中评估基线：新增只读 probe 后跑真实 C 样本，报告 `/tmp/learning-path-resource-probe-c-language.json` 显示 `active_kg_node_count=108`、`resource_count=84`、`kg_tagged_resource_count=80`，但 `learning_path_id=null`、`learning_path_node_count=0`；只读 MySQL 复核该 course 当前无非删除 LearningPath，因此不能直接评估 ready gate，下一步必须先生成 / 刷新 LearningPath。
+- 2026-06-11 Admin 删除资料一致性修复：删除 CourseCatalog material 后现在会按剩余未删除 material 重算 `catalog.chunk_count`，避免删除最后一个有效资料后 catalog 仍保留历史 chunk 并误判 ready。真实 C catalog 已存在的历史不一致数据不会被代码自动回填，需单独修正或重新入库。
 
 ## 更新规则
 

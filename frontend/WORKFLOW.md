@@ -20,6 +20,12 @@
 
 ## 最近验证
 
+- 2026-06-11：Admin 删除 CourseCatalog 资料后 catalog chunk/status 一致性修复：
+  - 根因：`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}` 只软删除 material 并重算 `material_count`，没有按剩余未删除 material 重算 `catalog.chunk_count`；旧测试还固化了“删除资料不改变 chunk_count”的错误期望。
+  - 修复：删除资料后按剩余未删除 `CourseCatalogMaterial.chunk_count` 重新计算 `catalog.chunk_count`，并保持 `ready/partial -> dirty` 的状态转换；不改入库流程，不清理 Qdrant，不新增 Client API。
+  - 测试：更新 Admin 删除资料回归，要求删除最后一个带 chunk 的有效资料后 `material_count=0`、`knowledge_status=dirty`、`chunk_count=0`；补充 repair recheck 测试，确认无有效 material 时 `repairable=false` 且原因包含 `materials_missing/material_chunks_missing`。
+  - 验证：`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py::test_admin_soft_deletes_material_marks_catalog_dirty_and_recalculates_chunks tests/test_course_catalog_knowledge_repair.py -q -p no:cacheprovider` 6/6 passed。
+  - 真实 C catalog 只读 check：`b2444963f0e54587` 当前仍是历史不一致数据，`knowledge_status=ready`、`catalog_chunk_count=665`，但未删除 material `material_chunk_count=0`；repair check 返回 `repairable=false`，原因 `knowledge_status_not_dirty`、`material_chunks_missing`。后续继续 LearningPath 前，需要单独修正开发库这条数据或重新上传有效资料并入库。
 - 2026-06-11：LearningPath-KG 资源命中评估 probe 接入并跑真实 C 样本基线：
   - 新增 Backend 只读评估服务 `app/services/learning_path_resource_probe.py`，复用现有 LearningPath 节点资源接口口径：LearningPath 节点按 `node_id` 匹配 active KG 节点，知识点资源按 `Resource.knowledge_point == node_name`，章节材料按 active KG `chapter`，练习按 `QuizQuestion.knowledge_point == node_name`。
   - 新增 CLI `tools/probe_learning_path_resources.py`，支持 `--catalog-id`、`--course-id`、`--user-id`、`--out` 导出 JSON，用于 LearningPath ready gate 前的只读评估。

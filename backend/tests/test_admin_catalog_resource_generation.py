@@ -947,7 +947,7 @@ async def test_admin_soft_deletes_resource_and_hides_from_reads():
 
 
 @pytest.mark.asyncio
-async def test_admin_soft_deletes_material_marks_catalog_dirty_without_changing_chunks():
+async def test_admin_soft_deletes_material_marks_catalog_dirty_and_recalculates_chunks():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")
     catalog_id = await _seed_ready_catalog(chunk_count=7)
@@ -976,11 +976,11 @@ async def test_admin_soft_deletes_material_marks_catalog_dirty_without_changing_
     status_data = status_response.json()["data"]
     assert status_data["material_count"] == 0
     assert status_data["knowledge_status"] == "dirty"
-    assert status_data["chunk_count"] == 7
+    assert status_data["chunk_count"] == 0
     assert missing_response.status_code == 404
     assert missing_response.json()["detail"]["code"] == 40411
     async with async_session_factory() as db:
         material = await db.get(CourseCatalogMaterial, "material-admin-gen")
         catalog = await db.get(CourseCatalog, catalog_id)
         assert material.is_deleted is True
-        assert catalog.chunk_count == 7
+        assert catalog.chunk_count == 0

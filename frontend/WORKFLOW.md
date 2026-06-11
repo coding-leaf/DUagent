@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+- 2026-06-11：开发库业务数据清空并保留管理员账号：
+  - 按用户确认执行开发环境清库，用于重新导入 C 语言样本并排除历史 dirty/chunk/Qdrant 残留干扰。
+  - MySQL `duagent` 清空业务表：`course_catalogs`、`course_catalog_materials`、`course_offerings`、`courses`、`resources`、`course_knowledge_graphs`、`learning_paths`、`async_tasks`、Quiz/Profile/Evaluation/Conversation 等均精确 `COUNT(*)=0`。
+  - `users` 表保留所有 `role='admin'` 且未删除账号，当前剩余 `42` 个管理员用户；未保留教师/学生/注册邀请码。
+  - Qdrant 已删除 `course_knowledge_v1_1024` collection，`GET /collections` 返回空列表。
+  - `backend/storage/course_catalogs` 下旧上传资料目录已清空。
+  - 注意：首次核验 `information_schema.tables.table_rows` 仍显示旧估算值，这是 InnoDB 统计延迟；后续用逐表 `COUNT(*)` 确认为 0。
+  - 下一步：重启 Backend/Agent 后，用保留的 admin 账号重新创建 C catalog、上传资料、入库、生成 KG、生成 KG-node 资源，再生成 / 评估 LearningPath。
 - 2026-06-11：Admin 删除 CourseCatalog 资料后 catalog chunk/status 一致性修复：
   - 根因：`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}` 只软删除 material 并重算 `material_count`，没有按剩余未删除 material 重算 `catalog.chunk_count`；旧测试还固化了“删除资料不改变 chunk_count”的错误期望。
   - 修复：删除资料后按剩余未删除 `CourseCatalogMaterial.chunk_count` 重新计算 `catalog.chunk_count`，并保持 `ready/partial -> dirty` 的状态转换；不改入库流程，不清理 Qdrant，不新增 Client API。

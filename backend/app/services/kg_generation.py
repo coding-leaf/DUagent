@@ -23,6 +23,94 @@ from app.services.kg_body_grounding import (
 class KGGenerationInputError(ValueError):
     """Raised when KG generation input cannot produce a valid graph."""
 
+    def __init__(self, message: str, *, error_code: str = "kg_invalid_input"):
+        self.error_code = error_code
+        super().__init__(message)
+
+
+def _chunk_text_from_payload(payload: dict[str, Any]) -> str:
+    for key in ("content", "chunk_text", "text"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _truncate_chunk(text: str, max_chars: int = 1200) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+
+async def build_catalog_kg_context(
+    catalog_id: str,
+    *,
+    limit: int = 24,
+    max_chars: int = 18000,
+) -> str:
+    """Build KG generation context from catalog knowledge chunks stored in Qdrant."""
+    qdrant_url = os.environ.get("QDRANT_URL", "http://127.0.0.1:6333").rstrip("/")
+    collection = os.environ.get(
+        "QDRANT_COURSE_KNOWLEDGE_COLLECTION",
+        "course_knowledge_v1_1024",
+    )
+    payload = {
+        "filter": {
+            "must": [
+                {"key": "course_id", "match": {"value": catalog_id}},
+            ],
+        },
+        "limit": limit,
+        "with_payload": True,
+        "with_vector": False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{qdrant_url}/collections/{collection}/points/scroll",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        raise KGGenerationInputError(
+            "Failed to read catalog knowledge chunks",
+            error_code="kg_context_empty",
+        ) from exc
+
+    points = data.get("result", {}).get("points", [])
+    if not isinstance(points, list):
+        points = []
+
+    chunks: list[str] = []
+    used_chars = 0
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        point_payload = point.get("payload")
+        if not isinstance(point_payload, dict):
+            continue
+        text = _truncate_chunk(_chunk_text_from_payload(point_payload))
+        if not text:
+            continue
+        if used_chars + len(text) > max_chars:
+            remaining = max_chars - used_chars
+            if remaining <= 200:
+                break
+            text = _truncate_chunk(text, remaining)
+        chunks.append(text)
+        used_chars += len(text)
+        if used_chars >= max_chars:
+            break
+
+    if not chunks:
+        raise KGGenerationInputError(
+            "No catalog knowledge chunks found for KG generation",
+            error_code="kg_context_empty",
+        )
+    return "\n---\n".join(chunks)
+
 
 async def generate_kg_from_llm(outline: str) -> dict[str, Any]:
     """Call the configured LLM to extract a course KG JSON payload from outline text."""
@@ -33,7 +121,7 @@ async def generate_kg_from_llm(outline: str) -> dict[str, Any]:
         raise KGGenerationInputError("LLM_API_KEY environment variable is not set")
 
     prompt = f"""You are a professional educational design expert.
-Please extract a course knowledge graph from the given syllabus/outline.
+Please extract a course knowledge graph from the given course material chunks or syllabus/outline.
 Your output must be a valid JSON object containing "nodes" and "edges".
 
 Requirements for nodes:
@@ -44,7 +132,7 @@ Requirements for edges:
 - Represent prerequisite relationships between nodes.
 - Must contain fields: "from" (the prerequisite node ID) and "to" (the target node ID).
 
-Outline text:
+Course material context:
 \"\"\"
 {outline}
 \"\"\"
@@ -270,6 +358,7 @@ async def generate_knowledge_graph_version(
     *,
     course_id: str,
     source_type: str,
+    catalog_id: str | None = None,
     outline_text: str | None = None,
     kg_json: dict[str, Any] | None = None,
     kg_file: Path | None = None,
@@ -277,7 +366,20 @@ async def generate_knowledge_graph_version(
     grounding_threshold: float = USABLE_SUPPORT_THRESHOLD,
     activate: bool = True,
 ) -> dict[str, Any]:
-    if source_type == "outline_text":
+    if source_type == "catalog_chunks":
+        source_catalog_id = (catalog_id or "").strip()
+        if not source_catalog_id:
+            raise KGGenerationInputError("catalog_id is required for catalog_chunks")
+        context = await build_catalog_kg_context(source_catalog_id)
+        nodes, edges = validate_kg_json_payload(await generate_kg_from_llm(context))
+        graph_source_type = "catalog_chunks"
+        generation_strategy = "catalog_chunks_llm"
+        metrics: dict[str, Any] = {
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "context_char_count": len(context),
+        }
+    elif source_type == "outline_text":
         outline = (outline_text or "").strip()
         if not outline:
             raise KGGenerationInputError("outline_text is required")

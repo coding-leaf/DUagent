@@ -61,6 +61,10 @@ async def _reset_db():
 async def _seed_catalog_and_course(
     catalog_id: str = "catalog-kg-gen",
     course_id: str = "course-kg-gen",
+    *,
+    status: str = "draft",
+    knowledge_status: str = "draft",
+    chunk_count: int = 0,
 ) -> tuple[str, str]:
     async with async_session_factory() as db:
         db.add(
@@ -76,9 +80,9 @@ async def _seed_catalog_and_course(
             CourseCatalog(
                 id=catalog_id,
                 title="KG Catalog",
-                status="draft",
-                knowledge_status="draft",
-                chunk_count=0,
+                status=status,
+                knowledge_status=knowledge_status,
+                chunk_count=chunk_count,
             )
         )
         db.add(
@@ -349,9 +353,55 @@ async def test_admin_catalog_kg_generation_rejects_missing_course_offering():
 
 
 @pytest.mark.asyncio
+async def test_admin_catalog_kg_generation_rejects_catalog_chunks_when_knowledge_not_ready():
+    await _reset_db()
+    catalog_id, _ = await _seed_catalog_and_course(
+        status="ready",
+        knowledge_status="draft",
+        chunk_count=3,
+    )
+    await _seed_user("admin-kg-gen", "admin")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+            headers=_auth_headers("admin-kg-gen", "admin"),
+            json={},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["data"]["error_code"] == "knowledge_base_not_ready"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_kg_generation_rejects_catalog_chunks_when_empty():
+    await _reset_db()
+    catalog_id, _ = await _seed_catalog_and_course(
+        status="ready",
+        knowledge_status="ready",
+        chunk_count=0,
+    )
+    await _seed_user("admin-kg-gen", "admin")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+            headers=_auth_headers("admin-kg-gen", "admin"),
+            json={},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["data"]["error_code"] == "knowledge_base_empty"
+
+
+@pytest.mark.asyncio
 async def test_admin_catalog_kg_generation_rejects_duplicate_processing_task():
     await _reset_db()
-    catalog_id, course_id = await _seed_catalog_and_course()
+    catalog_id, course_id = await _seed_catalog_and_course(
+        status="ready",
+        knowledge_status="ready",
+        chunk_count=3,
+    )
     await _seed_user("admin-kg-gen", "admin")
     async with async_session_factory() as db:
         db.add(
@@ -380,7 +430,11 @@ async def test_admin_catalog_kg_generation_rejects_duplicate_processing_task():
 @pytest.mark.asyncio
 async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
     await _reset_db()
-    catalog_id, course_id = await _seed_catalog_and_course()
+    catalog_id, course_id = await _seed_catalog_and_course(
+        status="ready",
+        knowledge_status="ready",
+        chunk_count=3,
+    )
     await _seed_user("admin-kg-gen", "admin")
 
     with patch(
@@ -393,8 +447,8 @@ async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
             "version": 1,
             "node_count": 1,
             "edge_count": 0,
-            "source_type": "outline_llm",
-            "generation_strategy": "legacy_outline",
+            "source_type": "catalog_chunks",
+            "generation_strategy": "catalog_chunks_llm",
             "metrics": {},
             "activated": True,
         }
@@ -402,7 +456,7 @@ async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
                 headers=_auth_headers("admin-kg-gen", "admin"),
-                json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
+                json={},
             )
 
         assert response.status_code == 202, response.text
@@ -420,15 +474,16 @@ async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
         assert task.error_code is None
         assert task.result["catalog_id"] == catalog_id
         assert task.result["course_id"] == course_id
-        assert task.result["source_type"] == "outline_llm"
+        assert task.result["source_type"] == "catalog_chunks"
         assert task.result["activate"] is True
         assert task.result["graph_id"] == "graph-task-kg"
         assert task.result["version"] == 1
 
     mock_generate.assert_awaited_once_with(
         course_id=course_id,
-        source_type="outline_text",
-        outline_text="第 1 章 绪论",
+        source_type="catalog_chunks",
+        catalog_id=catalog_id,
+        outline_text=None,
         kg_json=None,
         activate=True,
     )

@@ -2737,7 +2737,7 @@
           "CourseCatalogs"
         ],
         "summary": "管理员触发课程资源库知识图谱生成",
-        "description": "Admin-only。基于大纲文本或 KG JSON 创建新的 course_knowledge_graphs 版本。该接口不触发学生个性化 LearningPath 刷新，也不要求 CourseCatalog chunk ready。",
+        "description": "Admin-only。默认基于 CourseCatalog 已入库知识切片自动创建新的 course_knowledge_graphs active 版本；请求体可为空，等价于 source_type=catalog_chunks, activate=true。kg_json 保留为后端调试兼容能力，Admin UI 不暴露。该接口不触发学生个性化 LearningPath 刷新。",
         "parameters": [
           {
             "name": "catalog_id",
@@ -2749,7 +2749,7 @@
           }
         ],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -4679,27 +4679,26 @@
       },
       "AdminCatalogKnowledgeGraphGenerationRequest": {
         "type": "object",
-        "required": [
-          "source_type"
-        ],
         "properties": {
           "source_type": {
             "type": "string",
             "enum": [
+              "catalog_chunks",
               "outline_text",
               "kg_json"
             ],
-            "description": "生成输入类型"
+            "default": "catalog_chunks",
+            "description": "生成输入类型。默认 catalog_chunks，从资源库已入库知识切片自动生成 KG；kg_json 为后端调试兼容；outline_text 为历史兼容。"
           },
           "outline_text": {
             "type": "string",
             "nullable": true,
-            "description": "source_type=outline_text 时必填，课程大纲文本"
+            "description": "source_type=outline_text 时必填，课程大纲文本；Admin UI 不暴露"
           },
           "kg_json": {
             "type": "object",
             "nullable": true,
-            "description": "source_type=kg_json 时必填，包含 nodes 和 edges 的知识图谱 JSON"
+            "description": "source_type=kg_json 时必填，包含 nodes 和 edges 的知识图谱 JSON；后端调试兼容能力，Admin UI 不暴露"
           },
           "activate": {
             "type": "boolean",

@@ -98,13 +98,6 @@ const createGenerationForm = () => ({
   resource_types: []
 });
 
-const createKnowledgeGraphForm = () => ({
-  source_type: 'outline_text',
-  outline_text: '',
-  kg_json: '{\n  "nodes": [],\n  "edges": []\n}',
-  activate: true
-});
-
 const normalizeTask = (task, fallbackId, fallbackType = 'course_catalog_ingestion') => ({
   id: task?.id || task?.task_id || fallbackId || '',
   task_id: task?.task_id || fallbackId || '',
@@ -132,7 +125,6 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const [generationTask, setGenerationTask] = useState(null);
   const [generationTaskError, setGenerationTaskError] = useState('');
   const [knowledgeGraphStatus, setKnowledgeGraphStatus] = useState(null);
-  const [knowledgeGraphForm, setKnowledgeGraphForm] = useState(createKnowledgeGraphForm);
   const [knowledgeGraphGenerating, setKnowledgeGraphGenerating] = useState(false);
   const [knowledgeGraphTask, setKnowledgeGraphTask] = useState(null);
   const [knowledgeGraphTaskError, setKnowledgeGraphTaskError] = useState('');
@@ -308,7 +300,6 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setGenerationForm(createGenerationForm());
     setKnowledgeGraphStatus(null);
     setKnowledgeGraphGenerating(false);
-    setKnowledgeGraphForm(createKnowledgeGraphForm());
     activeTaskRef.current = null;
     generationTaskRef.current = null;
     knowledgeGraphTaskRef.current = null;
@@ -535,7 +526,12 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const hasReadyKnowledge = (knowledgeStatus?.status || catalog?.status) === 'ready'
     && (knowledgeReadyStatus === 'ready' || knowledgeReadyStatus === 'partial')
     && summary.chunk_count > 0;
+  const hasActiveKnowledgeGraph = Boolean(knowledgeGraphStatus?.active_graph);
+  const hasExplicitResourceTarget = Boolean(
+    generationForm.chapter.trim() || generationForm.knowledge_point.trim()
+  );
   const generationDisabled = !hasReadyKnowledge
+    || (!hasActiveKnowledgeGraph && !hasExplicitResourceTarget)
     || generationForm.resource_types.length === 0
     || generationProcessing
     || generating
@@ -547,20 +543,15 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     || knowledgeGraphGenerating;
   const materialDeleteDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating || knowledgeGraphProcessing || knowledgeGraphGenerating;
   const resourceDeleteDisabled = generationProcessing || generating;
-  const knowledgeGraphOutlineInvalid = knowledgeGraphForm.source_type === 'outline_text'
-    && !knowledgeGraphForm.outline_text.trim();
-  const knowledgeGraphJsonInvalid = knowledgeGraphForm.source_type === 'kg_json'
-    && !knowledgeGraphForm.kg_json.trim();
   const knowledgeGraphGenerationDisabled = knowledgeGraphProcessing
     || knowledgeGraphGenerating
+    || !hasReadyKnowledge
     || catalogIngesting
     || uploading
     || ingesting
     || taskProcessing
     || generationProcessing
-    || generating
-    || knowledgeGraphOutlineInvalid
-    || knowledgeGraphJsonInvalid;
+    || generating;
 
   const handleUpload = async (event) => {
     const files = Array.from(event.target.files || []);
@@ -655,10 +646,6 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     });
   };
 
-  const handleKnowledgeGraphFieldChange = (field, value) => {
-    setKnowledgeGraphForm((prev) => ({ ...prev, [field]: value }));
-  };
-
   const handleStartKnowledgeGraphGeneration = async () => {
     if (!catalogId || knowledgeGraphGenerationDisabled) return;
 
@@ -671,23 +658,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setKnowledgeGraphTaskError('');
     setError('');
     try {
-      const payload = {
-        source_type: knowledgeGraphForm.source_type,
-        activate: knowledgeGraphForm.activate
-      };
-      if (knowledgeGraphForm.source_type === 'outline_text') {
-        payload.outline_text = knowledgeGraphForm.outline_text.trim();
-      } else {
-        try {
-          payload.kg_json = JSON.parse(knowledgeGraphForm.kg_json);
-        } catch {
-          setKnowledgeGraphTaskError('KG JSON 格式不合法');
-          setKnowledgeGraphGenerating(false);
-          return;
-        }
-      }
-
-      const res = await adminService.startCourseCatalogKnowledgeGraphGeneration(operationCatalogId, payload);
+      const res = await adminService.startCourseCatalogKnowledgeGraphGeneration(operationCatalogId);
       if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
       const task = normalizeTask(res.data, res.data?.task_id, 'kg_generation');
       knowledgeGraphTaskRef.current = task;
@@ -892,73 +863,6 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
               )}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <label className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                knowledgeGraphForm.source_type === 'outline_text'
-                  ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
-                  : 'border-slate-200 bg-white text-slate-600'
-              } ${knowledgeGraphProcessing || knowledgeGraphGenerating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                <input
-                  type="radio"
-                  name="kg-source-type"
-                  value="outline_text"
-                  checked={knowledgeGraphForm.source_type === 'outline_text'}
-                  disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
-                  onChange={() => handleKnowledgeGraphFieldChange('source_type', 'outline_text')}
-                  className="h-4 w-4 accent-cyan-600"
-                />
-                大纲文本
-              </label>
-              <label className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                knowledgeGraphForm.source_type === 'kg_json'
-                  ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
-                  : 'border-slate-200 bg-white text-slate-600'
-              } ${knowledgeGraphProcessing || knowledgeGraphGenerating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                <input
-                  type="radio"
-                  name="kg-source-type"
-                  value="kg_json"
-                  checked={knowledgeGraphForm.source_type === 'kg_json'}
-                  disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
-                  onChange={() => handleKnowledgeGraphFieldChange('source_type', 'kg_json')}
-                  className="h-4 w-4 accent-cyan-600"
-                />
-                KG JSON
-              </label>
-              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={knowledgeGraphForm.activate}
-                  disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
-                  onChange={(event) => handleKnowledgeGraphFieldChange('activate', event.target.checked)}
-                  className="h-4 w-4 accent-cyan-600"
-                />
-                设为 active
-              </label>
-            </div>
-
-            {knowledgeGraphForm.source_type === 'outline_text' ? (
-              <textarea
-                data-testid="catalog-kg-outline"
-                rows={5}
-                placeholder="粘贴课程大纲文本"
-                value={knowledgeGraphForm.outline_text}
-                onChange={(event) => handleKnowledgeGraphFieldChange('outline_text', event.target.value)}
-                disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
-                className="mt-3 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
-              />
-            ) : (
-              <textarea
-                data-testid="catalog-kg-json"
-                rows={6}
-                placeholder="粘贴 KG JSON"
-                value={knowledgeGraphForm.kg_json}
-                onChange={(event) => handleKnowledgeGraphFieldChange('kg_json', event.target.value)}
-                disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
-                className="mt-3 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs outline-none transition-colors focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
-              />
-            )}
-
             <div data-testid="catalog-kg-task-status" className="mt-4">
               {knowledgeGraphTask ? (
                 <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
@@ -995,7 +899,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                   {knowledgeGraphTaskError
                     || (knowledgeGraphStatus?.last_generation_task?.task_id
                       ? `最近图谱任务 ${knowledgeGraphStatus.last_generation_task.task_id}`
-                      : '输入大纲或 KG JSON 后可刷新 active 图谱。')}
+                      : '知识库就绪后可根据已入库切片刷新 active 图谱。')}
                 </div>
               )}
             </div>
@@ -1165,6 +1069,16 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
             {!hasReadyKnowledge && (
               <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 知识库就绪且存在知识切片后才能生成学习资源。
+              </div>
+            )}
+            {hasReadyKnowledge && hasActiveKnowledgeGraph && !hasExplicitResourceTarget && (
+              <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                将按 KG 节点自动生成并挂载资源。
+              </div>
+            )}
+            {hasReadyKnowledge && !hasActiveKnowledgeGraph && !hasExplicitResourceTarget && (
+              <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                先刷新 active 知识图谱后，才能按 KG 节点自动生成资源。
               </div>
             )}
 

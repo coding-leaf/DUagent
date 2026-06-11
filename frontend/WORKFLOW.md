@@ -13,13 +13,19 @@
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
 - 当前最高优先级：为 C 语言样本生成 / 刷新 LearningPath 后，复跑 LearningPath-KG 资源命中评估；KG-node 资源生成已在 C 语言样本完成真实闭环，正式探针从 `108/108 candidate_count=0` 变为 `108/108 candidate_count>0`。
-- 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、手动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
+- 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、基于知识切片自动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
 - 当前待设计阻塞点：LearningPath / KG ready gate 仍后置；真实库 C 课程当前无 LearningPath 记录，需先生成 / 刷新路径，再评估学生学习路径节点资源挂载效果。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
+- 2026-06-12：Admin 自动 KG 与资源挂载主流程调整：
+  - Backend `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations` 支持空请求体，默认 `source_type=catalog_chunks`、`activate=true`，从 Qdrant `course_knowledge_v1_1024` 按 catalog_id scroll 读取知识切片，拼接上下文后复用 LLM KG 生成与版本落库。
+  - 自动 KG 增加前置校验：必须已绑定 CourseOffering，资源库 `knowledge_status in ready/partial` 且 `chunk_count > 0`；新增 / 同步错误码 `knowledge_base_not_ready`、`knowledge_base_empty`、`kg_context_empty`、`llm_kg_generation_failed`。
+  - Frontend `CourseCatalogDrawer.jsx` 移除“大纲文本 / KG JSON / 设为 active”主流程输入，保留“刷新图谱”、active KG 摘要和任务状态；生成学习资源区在有 active KG 且未手动填目标时提示“将按 KG 节点自动生成并挂载资源”，无 active KG 时禁用默认自动生成。
+  - Client API OpenAPI 与 Markdown 已同步：KG generation 请求体改为可空，`catalog_chunks` 为默认来源；`kg_json` 保留后端调试兼容但不在 Admin UI 暴露。
+  - 验证：Backend MySQL `tests/test_admin_catalog_kg_generation.py` 15/15 passed；Backend MySQL KG + 资源生成回归 `tests/test_admin_catalog_kg_generation.py tests/test_admin_catalog_resource_generation.py` 38/38 passed；Frontend `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning；Playwright `Admin course catalog KG generation|Admin course catalog resource generation` 2/2 passed；OpenAPI JSON 语法检查通过。
 - 2026-06-12：Admin 预置账号登录修复：
   - 根因确认：`schema.sql` 中 `admin@admin.com / Admin123456` 的预置 bcrypt hash 与注释密码不匹配，`verify_password("Admin123456", schema_hash)` 返回 false；当前开发库手动插入账号复用了这条错误 hash。
   - 额外数据问题：当前 MySQL `duagent.users` 中 `admin@admin.com` 曾为 `is_active=0`，即使密码修对也会被禁用检查拒绝。
@@ -34,6 +40,11 @@
   - Frontend `CourseCatalogDrawer.jsx` 新增“知识图谱”区：打开抽屉加载 active KG 状态，可输入大纲文本或 KG JSON 手动刷新 active KG，独立轮询 `kg_generation` task，完成后刷新图谱摘要。
   - 本轮不接学生个性化图谱刷新，不把 KG 生成塞进资源生成接口；Admin 需要先刷新 KG，再按现有资源生成入口生成 KG-node 资源。
   - 验证：Backend MySQL `tests/test_admin_catalog_kg_generation.py` 13/13 passed；Backend MySQL 资源生成 / KG 版本回归 23 passed / 1 skipped；CLI 回归 `tests/test_generate_kg.py` 11/11 passed，MySQL combo 28 passed；Frontend `npm run test:e2e -- e2e/specs.spec.js -g "Admin course catalog KG generation"` 1/1 passed；`Admin course catalog resource generation` 1/1 passed；`Admin course catalog ingestion` 1/1 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+- 2026-06-11：KG 生成入口产品记录：
+  - 当前 Admin 资源生成接口不会自动生成 KG；不传 `chapter/knowledge_point` 时只消费绑定教学班已有 active KG，并自动选择核心 KG 节点生成资源。
+  - 清库重导后，若 catalog 已入库 ready 且已绑定教学班，但 `course_knowledge_graphs` 没有 active KG，资源生成会返回父任务失败 `kg_not_ready / 课程知识图谱未就绪`。
+  - 后续产品化建议不是在资源生成里静默补 KG，而是新增独立 Admin “生成知识图谱”入口和任务状态：先 KG generation，完成后再允许 KG-node 资源生成；这样任务边界、失败提示和重复点击幂等更清晰。
+  - 本轮手动处理：新 C catalog `dbf6306dbe8746be` 已 ready，绑定 course `cc451af9bdb24f51`；LLM 大纲抽取命令因模型调用失败未生成，随后用旧 C 语言 KG JSON `/tmp/kg-resource-probe/c-language-active-kg-v1.json` 导入新 course，创建 active KG `bf9b8704e2da4ec1`，`116` nodes / `115` edges。
 - 2026-06-11：开发库业务数据清空并保留管理员账号：
   - 按用户确认执行开发环境清库，用于重新导入 C 语言样本并排除历史 dirty/chunk/Qdrant 残留干扰。
   - MySQL `duagent` 清空业务表：`course_catalogs`、`course_catalog_materials`、`course_offerings`、`courses`、`resources`、`course_knowledge_graphs`、`learning_paths`、`async_tasks`、Quiz/Profile/Evaluation/Conversation 等均精确 `COUNT(*)=0`。

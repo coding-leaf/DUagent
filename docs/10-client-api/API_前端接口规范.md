@@ -665,18 +665,24 @@ POST /api/v1/admin/course-catalogs/:catalog_id/knowledge-graphs/generations
 
 **权限：** 仅 admin
 
-**说明：** 基于大纲文本或 KG JSON 创建新的 `course_knowledge_graphs` 版本。该接口不触发学生个性化 LearningPath 刷新，也不要求 CourseCatalog `chunk_count > 0`；资源生成仍单独要求知识库 ready/chunk gate。
+**说明：** 默认基于 CourseCatalog 已入库知识切片自动创建新的 `course_knowledge_graphs` active 版本。请求体可为空，等价于 `{"source_type":"catalog_chunks","activate":true}`。该接口不触发学生个性化 LearningPath 刷新。`kg_json` 保留为后端调试兼容能力，Admin UI 不暴露；`outline_text` 为历史兼容能力。
 
-**请求体 `application/json`：**
+**请求体 `application/json`：可为空**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| source_type | string | 是 | outline_text / kg_json |
-| outline_text | string | 条件必填 | `source_type=outline_text` 时必填，课程大纲文本 |
-| kg_json | object | 条件必填 | `source_type=kg_json` 时必填，包含 nodes 和 edges |
+| source_type | string | 否 | catalog_chunks / outline_text / kg_json，默认 catalog_chunks |
+| outline_text | string | 条件必填 | `source_type=outline_text` 时必填，课程大纲文本；Admin UI 不暴露 |
+| kg_json | object | 条件必填 | `source_type=kg_json` 时必填，包含 nodes 和 edges；后端调试兼容能力，Admin UI 不暴露 |
 | activate | boolean | 否 | 生成后是否设为 active 版本，默认 true |
 
-大纲文本请求示例：
+默认自动请求示例：
+
+```json
+{}
+```
+
+大纲文本兼容请求示例：
 
 ```json
 {
@@ -686,7 +692,7 @@ POST /api/v1/admin/course-catalogs/:catalog_id/knowledge-graphs/generations
 }
 ```
 
-KG JSON 请求示例：
+KG JSON 调试请求示例：
 
 ```json
 {
@@ -713,10 +719,13 @@ KG JSON 请求示例：
 
 | error_code | 说明 |
 |------|------|
+| knowledge_base_not_ready | 课程资源库知识库未处于 ready/partial |
+| knowledge_base_empty | 课程资源库知识切片为空 |
 | offering_missing | 课程资源库尚未绑定 CourseOffering |
 | kg_task_running | 已有同一资源库 KG 生成任务进行中 |
+| kg_context_empty | 无法从知识库切片构建 KG 上下文 |
 | kg_invalid_input | 输入大纲或 KG JSON 无法生成有效图谱 |
-| kg_llm_failed | LLM 调用或生成过程失败 |
+| llm_kg_generation_failed | LLM 调用或生成过程失败 |
 
 ### 5.7 课程资源库生成资源与软删除
 

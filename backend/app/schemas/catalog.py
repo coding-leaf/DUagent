@@ -54,7 +54,7 @@ class CourseOfferingCreateRequest(BaseModel):
 
 
 class CatalogKnowledgeGraphGenerationRequest(BaseModel):
-    source_type: Literal["outline_text", "kg_json"]
+    source_type: Literal["catalog_chunks", "outline_text", "kg_json"] = "catalog_chunks"
     outline_text: Optional[str] = None
     kg_json: Optional[dict] = None
     activate: bool = True
@@ -62,6 +62,14 @@ class CatalogKnowledgeGraphGenerationRequest(BaseModel):
     @model_validator(mode="after")
     def validate_matching_payload(self):
         outline_text = (self.outline_text or "").strip()
+        if self.source_type == "catalog_chunks":
+            if outline_text:
+                raise ValueError("outline_text must be omitted when source_type=catalog_chunks")
+            if self.kg_json is not None:
+                raise ValueError("kg_json must be omitted when source_type=catalog_chunks")
+            self.outline_text = None
+            return self
+
         if self.source_type == "outline_text":
             if not outline_text:
                 raise ValueError("outline_text is required when source_type=outline_text")

@@ -478,8 +478,8 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
             graph_id: 'kg-e2e-v2',
             course_id: 'class-e2e',
             version: 2,
-            source_type: 'outline_text',
-            generation_strategy: 'route_b_llm',
+            source_type: 'catalog_chunks',
+            generation_strategy: 'catalog_chunks_llm',
             node_count: 3,
             edge_count: 2,
             is_active: true,
@@ -500,12 +500,8 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
 
     await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/knowledge-graphs/generations', async (route) => {
       kgGenerationStarted = true;
-      const payload = route.request().postDataJSON();
-      expect(payload).toEqual({
-        source_type: 'outline_text',
-        activate: true,
-        outline_text: '第 1 章 绪论\n第 2 章 指针',
-      });
+      const rawPayload = route.request().postData();
+      expect(rawPayload === null || rawPayload === '' || rawPayload === '{}').toBeTruthy();
       await route.fulfill(jsonResponse({
         code: 202,
         message: 'accepted',
@@ -538,8 +534,11 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await expect(page.getByTestId('catalog-drawer')).toBeVisible();
     await expect(page.getByRole('heading', { name: '知识图谱' })).toBeVisible();
     await expect(page.getByText('暂无 active 知识图谱。')).toBeVisible();
+    await expect(page.getByTestId('catalog-kg-outline')).toHaveCount(0);
+    await expect(page.getByTestId('catalog-kg-json')).toHaveCount(0);
+    await expect(page.getByText('大纲文本')).toHaveCount(0);
+    await expect(page.getByText('KG JSON')).toHaveCount(0);
 
-    await page.getByTestId('catalog-kg-outline').fill('第 1 章 绪论\n第 2 章 指针');
     await expect(page.getByTestId('catalog-start-kg-generation')).toBeEnabled();
     await page.getByTestId('catalog-start-kg-generation').click();
 

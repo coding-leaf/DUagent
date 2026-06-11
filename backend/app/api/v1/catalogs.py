@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,6 +156,28 @@ def _course_offering_missing() -> HTTPException:
     )
 
 
+def _kg_knowledge_base_not_ready() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": 40917,
+            "message": "课程资料尚未完成入库",
+            "data": {"error_code": "knowledge_base_not_ready"},
+        },
+    )
+
+
+def _kg_knowledge_base_empty() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": 40918,
+            "message": "课程知识库为空",
+            "data": {"error_code": "knowledge_base_empty"},
+        },
+    )
+
+
 async def _first_catalog_offering(db: AsyncSession, catalog_id: str) -> CourseOffering | None:
     result = await db.execute(
         select(CourseOffering)
@@ -209,6 +231,7 @@ async def _run_catalog_kg_generation_background(task_id: str) -> None:
             service_result = await generate_knowledge_graph_version(
                 course_id=str(task_context.get("course_id") or task.course_id or ""),
                 source_type=str(task_context.get("source_type") or ""),
+                catalog_id=task_context.get("catalog_id"),
                 outline_text=task_context.get("outline_text"),
                 kg_json=task_context.get("kg_json"),
                 activate=bool(task_context.get("activate", True)),
@@ -223,7 +246,7 @@ async def _run_catalog_kg_generation_background(task_id: str) -> None:
         except KGGenerationInputError as exc:
             task.status = "failed"
             task.progress = 100
-            task.error_code = "kg_invalid_input"
+            task.error_code = getattr(exc, "error_code", "kg_invalid_input")
             task.error_message = str(exc)[:500]
             task.completed_at = _now_utc()
             task.result = task_context
@@ -232,7 +255,7 @@ async def _run_catalog_kg_generation_background(task_id: str) -> None:
             logger.exception("Catalog KG generation task failed unexpectedly: %s", task_id)
             task.status = "failed"
             task.progress = 100
-            task.error_code = "kg_llm_failed"
+            task.error_code = "llm_kg_generation_failed"
             task.error_message = str(exc)[:500]
             task.completed_at = _now_utc()
             task.result = task_context
@@ -895,10 +918,11 @@ async def admin_start_catalog_ingestion(
 @router.post("/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations", status_code=202)
 async def admin_generate_catalog_knowledge_graph(
     catalog_id: str,
-    req: CatalogKnowledgeGraphGenerationRequest,
+    req: CatalogKnowledgeGraphGenerationRequest | None = Body(default=None),
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    req = req or CatalogKnowledgeGraphGenerationRequest()
     catalog = await _get_admin_catalog_or_404(db, catalog_id)
     offering = await _first_catalog_offering(db, catalog.id)
     if offering is None:
@@ -910,6 +934,12 @@ async def admin_generate_catalog_knowledge_graph(
                 "data": {"error_code": "offering_missing"},
             },
         )
+
+    if req.source_type == "catalog_chunks":
+        if catalog.knowledge_status not in {"ready", "partial"}:
+            raise _kg_knowledge_base_not_ready()
+        if (catalog.chunk_count or 0) <= 0:
+            raise _kg_knowledge_base_empty()
 
     duplicate_result = await db.execute(
         select(AsyncTask)

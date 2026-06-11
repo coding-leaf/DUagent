@@ -1,15 +1,30 @@
 import os
 import sys
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlparse
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
 
-os.environ["DATABASE_URL"] = os.environ.get(
-    "TEST_DATABASE_URL",
-    "mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_test?charset=utf8mb4",
-)
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+if not TEST_DATABASE_URL.startswith("mysql+"):
+    pytest.skip("requires TEST_DATABASE_URL=mysql+...", allow_module_level=True)
+
+parsed_test_url = urlparse(TEST_DATABASE_URL)
+test_database_name = parsed_test_url.path.strip("/")
+if test_database_name == "duagent":
+    pytest.skip("refusing to use the real duagent database", allow_module_level=True)
+if not (
+    any(marker in test_database_name.lower() for marker in ("test", "pytest"))
+    or test_database_name.startswith("admin_catalog_kg_generation")
+):
+    pytest.skip(
+        "refusing to use a database not marked as test/pytest/admin_catalog_kg_generation",
+        allow_module_level=True,
+    )
+
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -22,6 +37,8 @@ from app.models.user import User
 from app.services.kg_generation import (
     KGGenerationInputError,
     generate_knowledge_graph_version,
+    load_grounding_matches,
+    load_kg_json_file,
     validate_kg_json_payload,
 )
 
@@ -102,6 +119,26 @@ def test_validate_kg_json_payload_removes_dangling_edges():
     )
     assert nodes == [{"id": "pointer", "name": "指针", "chapter": "第 6 章"}]
     assert edges == []
+
+
+def test_load_kg_json_file_wraps_malformed_json(tmp_path):
+    kg_file = tmp_path / "kg.json"
+    kg_file.write_text("{bad json", encoding="utf-8")
+
+    with pytest.raises(KGGenerationInputError) as exc:
+        load_kg_json_file(kg_file)
+
+    assert "Invalid KG JSON file" in str(exc.value)
+
+
+def test_load_grounding_matches_wraps_malformed_json(tmp_path):
+    grounding_file = tmp_path / "grounding.json"
+    grounding_file.write_text("{bad json", encoding="utf-8")
+
+    with pytest.raises(KGGenerationInputError) as exc:
+        load_grounding_matches(grounding_file)
+
+    assert "Invalid grounding JSON file" in str(exc.value)
 
 
 @pytest.mark.asyncio

@@ -90,7 +90,10 @@ Ensure that the output contains ONLY the valid JSON object without any markdown 
             lines = lines[:-1]
         content = "\n".join(lines).strip()
 
-    data = json.loads(content)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise KGGenerationInputError("Invalid LLM KG JSON response") from exc
     if not isinstance(data, dict):
         raise KGGenerationInputError("LLM response must be a JSON object")
     return data
@@ -154,12 +157,18 @@ def validate_kg_json_payload(
 def load_kg_json_file(
     kg_file: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    data = json.loads(kg_file.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(kg_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise KGGenerationInputError("Invalid KG JSON file") from exc
     return validate_kg_json_payload(data)
 
 
 def load_grounding_matches(grounding_file: Path) -> list[GroundingMatch]:
-    data = json.loads(grounding_file.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(grounding_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise KGGenerationInputError("Invalid grounding JSON file") from exc
     results = data.get("results") if isinstance(data, dict) else data
     if not isinstance(results, list):
         raise KGGenerationInputError("Grounding file must contain a results list")

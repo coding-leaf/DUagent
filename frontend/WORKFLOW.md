@@ -12,14 +12,21 @@
 ## 当前施工状态
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
-- 当前最高优先级：LearningPath 读取 active KG 与节点资源挂载效果评估；KG-node 资源生成已在 C 语言样本完成真实闭环，正式探针从 `108/108 candidate_count=0` 变为 `108/108 candidate_count>0`。
+- 当前最高优先级：为 C 语言样本生成 / 刷新 LearningPath 后，复跑 LearningPath-KG 资源命中评估；KG-node 资源生成已在 C 语言样本完成真实闭环，正式探针从 `108/108 candidate_count=0` 变为 `108/108 candidate_count>0`。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
-- 当前待设计阻塞点：LearningPath / KG ready gate 仍后置；先评估 active KG 节点质量和学生学习路径节点资源挂载效果，再决定是否进入 ready gate 设计。
+- 当前待设计阻塞点：LearningPath / KG ready gate 仍后置；真实库 C 课程当前无 LearningPath 记录，需先生成 / 刷新路径，再评估学生学习路径节点资源挂载效果。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
+- 2026-06-11：LearningPath-KG 资源命中评估 probe 接入并跑真实 C 样本基线：
+  - 新增 Backend 只读评估服务 `app/services/learning_path_resource_probe.py`，复用现有 LearningPath 节点资源接口口径：LearningPath 节点按 `node_id` 匹配 active KG 节点，知识点资源按 `Resource.knowledge_point == node_name`，章节材料按 active KG `chapter`，练习按 `QuizQuestion.knowledge_point == node_name`。
+  - 新增 CLI `tools/probe_learning_path_resources.py`，支持 `--catalog-id`、`--course-id`、`--user-id`、`--out` 导出 JSON，用于 LearningPath ready gate 前的只读评估。
+  - 单测覆盖：active KG 两个节点、LearningPath 三个节点，其中两个匹配 KG，一个路径独有；确认非删除资源、章节资源、练习、KG tag 汇总和空节点统计正确。
+  - 真实 C catalog `b2444963f0e54587` / course `6c698badb60a4809` 已跑基线报告 `/tmp/learning-path-resource-probe-c-language.json`：`active_kg_node_count=108`、`resource_count=84`、`kg_tagged_resource_count=80`，但 `learning_path_id=null`、`learning_path_node_count=0`。
+  - 只读 MySQL 复核：该 course 当前 `learning_paths` 非删除记录数为 `0`；因此当前不能判定 LearningPath 节点资源挂载质量，也不能进入 LearningPath ready gate 设计。
+  - 验证：`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/learning_path_resource_probe_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_learning_path_resource_probe.py -q -p no:cacheprovider` 1/1 passed；CLI `--help` 通过；真实只读 probe 命令通过。
 - 2026-06-11：CourseCatalog knowledge_status repair + KG-node 资源生成真实闭环：
   - 新增 Backend 维护能力：`app/services/course_catalog_knowledge_repair.py` 和 `tools/repair_course_catalog_knowledge_status.py`，支持只读 recheck 与 `repair --apply`；只在 `status=ready`、`knowledge_status=dirty`、非删除资料全部 `ingested`、catalog/material chunk 正常、Qdrant 能按 catalog_id 查到 chunk 时执行 `dirty -> ready`。
   - 不修改第 527 行新增资料标 dirty 逻辑；该逻辑属于新增资料后的正确状态转换。本轮未新增 Client API，未改 OpenAPI。

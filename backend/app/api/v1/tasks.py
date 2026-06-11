@@ -32,6 +32,7 @@ async def get_task_status(
     if task.user_id and task.user_id != current_user.id:
         allowed_admin_task = current_user.role == "admin" and task.task_type in {
             "course_catalog_ingestion",
+            "kg_generation",
             "resource_generation",
         }
         if not allowed_admin_task:

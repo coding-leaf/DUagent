@@ -1,10 +1,12 @@
 import os
 import sys
+import asyncio
 from unittest.mock import AsyncMock, patch
 from urllib.parse import urlparse
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
@@ -30,9 +32,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db.base import Base
 from app.db.session import async_session_factory, engine
+from app.main import app
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course
-from app.models.others import CourseKnowledgeGraph
+from app.models.others import AsyncTask, CourseKnowledgeGraph
 from app.models.user import User
 from app.services.kg_generation import (
     KGGenerationInputError,
@@ -97,6 +100,39 @@ async def _seed_catalog_and_course(
         )
         await db.commit()
     return catalog_id, course_id
+
+
+def _auth_headers(user_id: str, role: str) -> dict:
+    from app.core.security import create_token
+
+    token = create_token(user_id, role)
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def _seed_user(user_id: str, role: str) -> None:
+    async with async_session_factory() as db:
+        db.add(
+            User(
+                id=user_id,
+                email=f"{user_id}@example.com",
+                username=user_id,
+                password_hash="x",
+                role=role,
+            )
+        )
+        await db.commit()
+
+
+async def _wait_for_task_completion(task_id: str, timeout: float = 1.5) -> AsyncTask:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        async with async_session_factory() as db:
+            task = await db.get(AsyncTask, task_id)
+            if task is not None and task.status in {"completed", "failed"}:
+                return task
+        if asyncio.get_running_loop().time() >= deadline:
+            raise AssertionError(f"task {task_id} did not complete in time")
+        await asyncio.sleep(0.05)
 
 
 def test_validate_kg_json_payload_rejects_missing_node_name():
@@ -246,3 +282,182 @@ async def test_generate_outline_text_uses_llm_and_creates_version():
     assert result["source_type"] == "outline_llm"
     assert result["generation_strategy"] == "legacy_outline"
     assert result["node_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_get_catalog_kg_status_returns_empty_summary_with_course_id():
+    await _reset_db()
+    catalog_id, course_id = await _seed_catalog_and_course()
+    await _seed_user("admin-kg-gen", "admin")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs",
+            headers=_auth_headers("admin-kg-gen", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {
+        "catalog_id": catalog_id,
+        "course_id": course_id,
+        "active_graph": None,
+        "last_generation_task": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_non_admin_cannot_start_catalog_kg_generation():
+    await _reset_db()
+    catalog_id, _ = await _seed_catalog_and_course()
+    await _seed_user("teacher-kg-api", "teacher")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+            headers=_auth_headers("teacher-kg-api", "teacher"),
+            json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
+        )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_kg_generation_rejects_missing_course_offering():
+    await _reset_db()
+    await _seed_user("admin-kg-gen", "admin")
+    async with async_session_factory() as db:
+        db.add(
+            CourseCatalog(
+                id="catalog-no-offering",
+                title="No Offering Catalog",
+                status="draft",
+                knowledge_status="draft",
+                chunk_count=0,
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/admin/course-catalogs/catalog-no-offering/knowledge-graphs/generations",
+            headers=_auth_headers("admin-kg-gen", "admin"),
+            json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["data"]["error_code"] == "offering_missing"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_kg_generation_rejects_duplicate_processing_task():
+    await _reset_db()
+    catalog_id, course_id = await _seed_catalog_and_course()
+    await _seed_user("admin-kg-gen", "admin")
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id="task-kg-running",
+                task_type="kg_generation",
+                status="processing",
+                user_id="admin-kg-gen",
+                course_id=course_id,
+                result={"catalog_id": catalog_id, "course_id": course_id},
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+            headers=_auth_headers("admin-kg-gen", "admin"),
+            json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["data"]["error_code"] == "kg_task_running"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
+    await _reset_db()
+    catalog_id, course_id = await _seed_catalog_and_course()
+    await _seed_user("admin-kg-gen", "admin")
+
+    with patch(
+        "app.api.v1.catalogs.generate_knowledge_graph_version",
+        new_callable=AsyncMock,
+    ) as mock_generate:
+        mock_generate.return_value = {
+            "course_id": course_id,
+            "graph_id": "graph-task-kg",
+            "version": 1,
+            "node_count": 1,
+            "edge_count": 0,
+            "source_type": "outline_llm",
+            "generation_strategy": "legacy_outline",
+            "metrics": {},
+            "activated": True,
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+                headers=_auth_headers("admin-kg-gen", "admin"),
+                json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
+            )
+
+        assert response.status_code == 202, response.text
+        data = response.json()["data"]
+        assert data["catalog_id"] == catalog_id
+        assert data["status"] == "processing"
+        task_id = data["task_id"]
+
+        task = await _wait_for_task_completion(task_id)
+        assert task.task_type == "kg_generation"
+        assert task.user_id == "admin-kg-gen"
+        assert task.course_id == course_id
+        assert task.status == "completed"
+        assert task.progress == 100
+        assert task.error_code is None
+        assert task.result["catalog_id"] == catalog_id
+        assert task.result["course_id"] == course_id
+        assert task.result["source_type"] == "outline_llm"
+        assert task.result["activate"] is True
+        assert task.result["graph_id"] == "graph-task-kg"
+        assert task.result["version"] == 1
+
+    mock_generate.assert_awaited_once_with(
+        course_id=course_id,
+        source_type="outline_text",
+        outline_text="第 1 章 绪论",
+        kg_json=None,
+        activate=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_can_poll_kg_generation_task_owned_by_other_admin():
+    await _reset_db()
+    catalog_id, course_id = await _seed_catalog_and_course()
+    await _seed_user("admin-owner", "admin")
+    await _seed_user("admin-reader", "admin")
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id="task-kg-admin",
+                task_type="kg_generation",
+                status="processing",
+                user_id="admin-owner",
+                course_id=course_id,
+                result={"catalog_id": catalog_id, "course_id": course_id},
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/tasks/task-kg-admin",
+            headers=_auth_headers("admin-reader", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["task_type"] == "kg_generation"

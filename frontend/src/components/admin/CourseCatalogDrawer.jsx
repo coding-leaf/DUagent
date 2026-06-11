@@ -98,6 +98,13 @@ const createGenerationForm = () => ({
   resource_types: []
 });
 
+const createKnowledgeGraphForm = () => ({
+  source_type: 'outline_text',
+  outline_text: '',
+  kg_json: '{\n  "nodes": [],\n  "edges": []\n}',
+  activate: true
+});
+
 const normalizeTask = (task, fallbackId, fallbackType = 'course_catalog_ingestion') => ({
   id: task?.id || task?.task_id || fallbackId || '',
   task_id: task?.task_id || fallbackId || '',
@@ -124,17 +131,24 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const [generating, setGenerating] = useState(false);
   const [generationTask, setGenerationTask] = useState(null);
   const [generationTaskError, setGenerationTaskError] = useState('');
+  const [knowledgeGraphStatus, setKnowledgeGraphStatus] = useState(null);
+  const [knowledgeGraphForm, setKnowledgeGraphForm] = useState(createKnowledgeGraphForm);
+  const [knowledgeGraphGenerating, setKnowledgeGraphGenerating] = useState(false);
+  const [knowledgeGraphTask, setKnowledgeGraphTask] = useState(null);
+  const [knowledgeGraphTaskError, setKnowledgeGraphTaskError] = useState('');
   const [deletingMaterialIds, setDeletingMaterialIds] = useState(() => new Set());
   const [deletingResourceIds, setDeletingResourceIds] = useState(() => new Set());
   const requestSeqRef = useRef(0);
   const isMountedRef = useRef(false);
   const activeTaskRef = useRef(null);
   const generationTaskRef = useRef(null);
+  const knowledgeGraphTaskRef = useRef(null);
   const catalogIdRef = useRef(null);
   const openRef = useRef(false);
   const uploadOperationSeqRef = useRef(0);
   const ingestionOperationSeqRef = useRef(0);
   const generationOperationSeqRef = useRef(0);
+  const knowledgeGraphOperationSeqRef = useRef(0);
   const authoritativeTerminalTaskIdsRef = useRef(new Set());
 
   const catalogId = catalog?.id;
@@ -146,6 +160,10 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   useEffect(() => {
     generationTaskRef.current = generationTask;
   }, [generationTask]);
+
+  useEffect(() => {
+    knowledgeGraphTaskRef.current = knowledgeGraphTask;
+  }, [knowledgeGraphTask]);
 
   useEffect(() => {
     catalogIdRef.current = catalogId;
@@ -161,6 +179,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       uploadOperationSeqRef.current += 1;
       ingestionOperationSeqRef.current += 1;
       generationOperationSeqRef.current += 1;
+      knowledgeGraphOperationSeqRef.current += 1;
       authoritativeTerminalTaskIds.clear();
     };
   }, []);
@@ -190,6 +209,13 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     && generationOperationSeqRef.current === operationSeq
   ), []);
 
+  const canWriteKnowledgeGraphOperation = useCallback((operationSeq, operationCatalogId) => (
+    isMountedRef.current
+    && openRef.current
+    && catalogIdRef.current === operationCatalogId
+    && knowledgeGraphOperationSeqRef.current === operationSeq
+  ), []);
+
   const refreshDetails = useCallback(async () => {
     if (!catalogId || !open) return false;
 
@@ -198,17 +224,20 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setLoading(true);
     setError('');
     try {
-      const [materialsRes, statusRes, resourcesRes] = await Promise.all([
+      const [materialsRes, statusRes, resourcesRes, knowledgeGraphRes] = await Promise.all([
         adminService.getCourseCatalogMaterials(catalogId),
         adminService.getCourseCatalogStatus(catalogId),
-        adminService.getCourseCatalogResources(catalogId, { page: 1, page_size: 50 })
+        adminService.getCourseCatalogResources(catalogId, { page: 1, page_size: 50 }),
+        adminService.getCourseCatalogKnowledgeGraphStatus(catalogId)
       ]);
       if (!canWriteRequest(requestSeq)) return false;
 
       const incomingStatus = statusRes.data || null;
+      const incomingKnowledgeGraphStatus = knowledgeGraphRes.data || null;
       setMaterials(materialsRes.data?.materials || []);
       setResources(resourcesRes.data?.resources || []);
       setKnowledgeStatus(incomingStatus);
+      setKnowledgeGraphStatus(incomingKnowledgeGraphStatus);
 
       const isIncomingIngesting = incomingStatus?.status === 'ingesting'
         || incomingStatus?.knowledge_status === 'ingesting';
@@ -238,6 +267,16 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
           }, incomingTaskId);
         });
       }
+
+      const incomingKgTask = incomingKnowledgeGraphStatus?.last_generation_task;
+      if (incomingKgTask?.task_id && incomingKgTask.status === 'processing') {
+        setKnowledgeGraphTask((prev) => {
+          if (prev?.task_id === incomingKgTask.task_id && prev.status === 'processing') return prev;
+          setKnowledgeGraphGenerating(true);
+          setKnowledgeGraphTaskError('');
+          return normalizeTask(incomingKgTask, incomingKgTask.task_id, 'kg_generation');
+        });
+      }
       return true;
     } catch (err) {
       console.error('course catalog drawer refresh error', err);
@@ -247,6 +286,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       setMaterials([]);
       setResources([]);
       setKnowledgeStatus(null);
+      setKnowledgeGraphStatus(null);
       return false;
     } finally {
       if (canWriteRequest(requestSeq)) {
@@ -266,13 +306,19 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     setIngesting(false);
     setGenerating(false);
     setGenerationForm(createGenerationForm());
+    setKnowledgeGraphStatus(null);
+    setKnowledgeGraphGenerating(false);
+    setKnowledgeGraphForm(createKnowledgeGraphForm());
     activeTaskRef.current = null;
     generationTaskRef.current = null;
+    knowledgeGraphTaskRef.current = null;
     authoritativeTerminalTaskIdsRef.current.clear();
     setActiveTask(null);
     setTaskError('');
     setGenerationTask(null);
     setGenerationTaskError('');
+    setKnowledgeGraphTask(null);
+    setKnowledgeGraphTaskError('');
     setDeletingMaterialIds(new Set());
     setDeletingResourceIds(new Set());
     refreshDetails();
@@ -283,6 +329,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       uploadOperationSeqRef.current += 1;
       ingestionOperationSeqRef.current += 1;
       generationOperationSeqRef.current += 1;
+      knowledgeGraphOperationSeqRef.current += 1;
       authoritativeTerminalTaskIds.clear();
     };
   }, [catalogId, open, refreshDetails]);
@@ -400,6 +447,62 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     };
   }, [generationTask?.status, generationTask?.task_id, onChanged, open, refreshDetails]);
 
+  useEffect(() => {
+    if (
+      !open
+      || !knowledgeGraphTask?.task_id
+      || knowledgeGraphTask.status === 'completed'
+      || knowledgeGraphTask.status === 'failed'
+    ) return;
+
+    let cancelled = false;
+    let timeoutId;
+
+    const handleTerminalTask = async (task) => {
+      if (cancelled) return;
+      setKnowledgeGraphGenerating(false);
+      if (task.status === 'failed') {
+        setKnowledgeGraphTaskError(task.error_message || '知识图谱生成失败');
+      }
+      const refreshed = await refreshDetails();
+      if (!cancelled && refreshed && onChanged) {
+        onChanged();
+      }
+    };
+
+    const pollTask = async () => {
+      try {
+        const res = await taskService.getTaskStatus(knowledgeGraphTask.task_id);
+        if (cancelled) return;
+
+        const task = normalizeTask(res.data, knowledgeGraphTask.task_id, 'kg_generation');
+        knowledgeGraphTaskRef.current = task;
+        setKnowledgeGraphTask(task);
+        setKnowledgeGraphTaskError('');
+
+        if (task.status === 'completed' || task.status === 'failed') {
+          await handleTerminalTask(task);
+        } else if (!cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('course catalog knowledge graph generation task poll error', err);
+        const detail = getErrorMessage(err, '');
+        setKnowledgeGraphTaskError(detail ? `图谱任务状态查询失败：${detail}，正在重试` : '图谱任务状态查询失败，正在重试');
+        if (!cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
+        }
+      }
+    };
+
+    timeoutId = setTimeout(pollTask, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [knowledgeGraphTask?.status, knowledgeGraphTask?.task_id, onChanged, open, refreshDetails]);
+
   const summary = useMemo(() => ({
     material_count: knowledgeStatus?.material_count ?? catalog?.material_count ?? catalog?.materials_count ?? materials.length,
     chunk_count: knowledgeStatus?.chunk_count ?? catalog?.chunk_count ?? 0,
@@ -415,6 +518,8 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const taskProcessing = activeTask?.status === 'processing';
   const taskTerminal = activeTask?.status === 'completed' || activeTask?.status === 'failed';
   const generationProcessing = generationTask?.status === 'processing';
+  const knowledgeGraphProcessing = knowledgeGraphTask?.status === 'processing'
+    || knowledgeGraphStatus?.last_generation_task?.status === 'processing';
   const sameTerminalKnowledgeTask = taskTerminal
     && activeTask?.task_id
     && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id
@@ -424,8 +529,8 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     || knowledgeStatus?.status === 'ingesting'
     || knowledgeStatus?.knowledge_status === 'ingesting'
   );
-  const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating;
-  const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting || generationProcessing || generating;
+  const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating || knowledgeGraphProcessing || knowledgeGraphGenerating;
+  const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting || generationProcessing || generating || knowledgeGraphProcessing || knowledgeGraphGenerating;
   const knowledgeReadyStatus = knowledgeStatus?.knowledge_status || catalog?.knowledge_status;
   const hasReadyKnowledge = (knowledgeStatus?.status || catalog?.status) === 'ready'
     && (knowledgeReadyStatus === 'ready' || knowledgeReadyStatus === 'partial')
@@ -437,9 +542,25 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     || catalogIngesting
     || uploading
     || ingesting
-    || taskProcessing;
-  const materialDeleteDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating;
+    || taskProcessing
+    || knowledgeGraphProcessing
+    || knowledgeGraphGenerating;
+  const materialDeleteDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating || knowledgeGraphProcessing || knowledgeGraphGenerating;
   const resourceDeleteDisabled = generationProcessing || generating;
+  const knowledgeGraphOutlineInvalid = knowledgeGraphForm.source_type === 'outline_text'
+    && !knowledgeGraphForm.outline_text.trim();
+  const knowledgeGraphJsonInvalid = knowledgeGraphForm.source_type === 'kg_json'
+    && !knowledgeGraphForm.kg_json.trim();
+  const knowledgeGraphGenerationDisabled = knowledgeGraphProcessing
+    || knowledgeGraphGenerating
+    || catalogIngesting
+    || uploading
+    || ingesting
+    || taskProcessing
+    || generationProcessing
+    || generating
+    || knowledgeGraphOutlineInvalid
+    || knowledgeGraphJsonInvalid;
 
   const handleUpload = async (event) => {
     const files = Array.from(event.target.files || []);
@@ -532,6 +653,51 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
           : [...prev.resource_types, type]
       };
     });
+  };
+
+  const handleKnowledgeGraphFieldChange = (field, value) => {
+    setKnowledgeGraphForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleStartKnowledgeGraphGeneration = async () => {
+    if (!catalogId || knowledgeGraphGenerationDisabled) return;
+
+    const operationCatalogId = catalogId;
+    const operationSeq = knowledgeGraphOperationSeqRef.current + 1;
+    knowledgeGraphOperationSeqRef.current = operationSeq;
+    if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
+
+    setKnowledgeGraphGenerating(true);
+    setKnowledgeGraphTaskError('');
+    setError('');
+    try {
+      const payload = {
+        source_type: knowledgeGraphForm.source_type,
+        activate: knowledgeGraphForm.activate
+      };
+      if (knowledgeGraphForm.source_type === 'outline_text') {
+        payload.outline_text = knowledgeGraphForm.outline_text.trim();
+      } else {
+        try {
+          payload.kg_json = JSON.parse(knowledgeGraphForm.kg_json);
+        } catch {
+          setKnowledgeGraphTaskError('KG JSON 格式不合法');
+          setKnowledgeGraphGenerating(false);
+          return;
+        }
+      }
+
+      const res = await adminService.startCourseCatalogKnowledgeGraphGeneration(operationCatalogId, payload);
+      if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
+      const task = normalizeTask(res.data, res.data?.task_id, 'kg_generation');
+      knowledgeGraphTaskRef.current = task;
+      setKnowledgeGraphTask(task);
+    } catch (err) {
+      console.error('course catalog knowledge graph generation start error', err);
+      if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
+      setKnowledgeGraphTaskError(getErrorMessage(err, '知识图谱生成启动失败'));
+      setKnowledgeGraphGenerating(false);
+    }
   };
 
   const handleStartGeneration = async () => {
@@ -671,6 +837,168 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                 <div className="mt-1 text-2xl font-bold text-slate-900">{value ?? 0}</div>
               </div>
             ))}
+          </section>
+
+          <section className="mb-5 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">知识图谱</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {knowledgeGraphStatus?.course_id ? `绑定教学班 ${knowledgeGraphStatus.course_id}` : '尚未绑定教学班'}
+                </p>
+              </div>
+              <button
+                data-testid="catalog-start-kg-generation"
+                type="button"
+                onClick={handleStartKnowledgeGraphGeneration}
+                disabled={knowledgeGraphGenerationDisabled}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  knowledgeGraphGenerationDisabled
+                    ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                    : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
+                }`}
+              >
+                <span className={`material-symbols-outlined text-[18px] ${knowledgeGraphProcessing ? 'animate-spin' : ''}`}>
+                  {knowledgeGraphProcessing ? 'progress_activity' : 'account_tree'}
+                </span>
+                {knowledgeGraphProcessing || knowledgeGraphGenerating ? '刷新中' : '刷新图谱'}
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">
+              {knowledgeGraphStatus?.active_graph ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-slate-500">当前版本</div>
+                    <div className="mt-1 font-semibold text-slate-900">v{knowledgeGraphStatus.active_graph.version}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-500">节点 / 边</div>
+                    <div className="mt-1 font-semibold text-slate-900">
+                      {knowledgeGraphStatus.active_graph.node_count ?? 0} / {knowledgeGraphStatus.active_graph.edge_count ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-500">来源</div>
+                    <div className="mt-1 font-semibold text-slate-900">{knowledgeGraphStatus.active_graph.source_type || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-500">创建时间</div>
+                    <div className="mt-1 font-semibold text-slate-900">{formatDateTime(knowledgeGraphStatus.active_graph.created_at)}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-slate-500">暂无 active 知识图谱。</div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <label className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                knowledgeGraphForm.source_type === 'outline_text'
+                  ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
+                  : 'border-slate-200 bg-white text-slate-600'
+              } ${knowledgeGraphProcessing || knowledgeGraphGenerating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                <input
+                  type="radio"
+                  name="kg-source-type"
+                  value="outline_text"
+                  checked={knowledgeGraphForm.source_type === 'outline_text'}
+                  disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
+                  onChange={() => handleKnowledgeGraphFieldChange('source_type', 'outline_text')}
+                  className="h-4 w-4 accent-cyan-600"
+                />
+                大纲文本
+              </label>
+              <label className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                knowledgeGraphForm.source_type === 'kg_json'
+                  ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
+                  : 'border-slate-200 bg-white text-slate-600'
+              } ${knowledgeGraphProcessing || knowledgeGraphGenerating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                <input
+                  type="radio"
+                  name="kg-source-type"
+                  value="kg_json"
+                  checked={knowledgeGraphForm.source_type === 'kg_json'}
+                  disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
+                  onChange={() => handleKnowledgeGraphFieldChange('source_type', 'kg_json')}
+                  className="h-4 w-4 accent-cyan-600"
+                />
+                KG JSON
+              </label>
+              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={knowledgeGraphForm.activate}
+                  disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
+                  onChange={(event) => handleKnowledgeGraphFieldChange('activate', event.target.checked)}
+                  className="h-4 w-4 accent-cyan-600"
+                />
+                设为 active
+              </label>
+            </div>
+
+            {knowledgeGraphForm.source_type === 'outline_text' ? (
+              <textarea
+                data-testid="catalog-kg-outline"
+                rows={5}
+                placeholder="粘贴课程大纲文本"
+                value={knowledgeGraphForm.outline_text}
+                onChange={(event) => handleKnowledgeGraphFieldChange('outline_text', event.target.value)}
+                disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
+                className="mt-3 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
+              />
+            ) : (
+              <textarea
+                data-testid="catalog-kg-json"
+                rows={6}
+                placeholder="粘贴 KG JSON"
+                value={knowledgeGraphForm.kg_json}
+                onChange={(event) => handleKnowledgeGraphFieldChange('kg_json', event.target.value)}
+                disabled={knowledgeGraphProcessing || knowledgeGraphGenerating}
+                className="mt-3 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs outline-none transition-colors focus:border-cyan-500 disabled:bg-slate-50 disabled:text-slate-400"
+              />
+            )}
+
+            <div data-testid="catalog-kg-task-status" className="mt-4">
+              {knowledgeGraphTask ? (
+                <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">task_id</span>
+                    <span className="break-all font-mono text-xs text-slate-800">{knowledgeGraphTask.task_id || '—'}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">status</span>
+                    <span className={`rounded border px-2 py-0.5 text-xs font-bold ${getBadgeClass(knowledgeGraphTask.status)}`}>
+                      {formatTaskStatus(knowledgeGraphTask.status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between text-xs text-slate-500">
+                      <span>progress</span>
+                      <span>{knowledgeGraphTask.progress ?? 0}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-cyan-500 transition-all"
+                        style={{ width: `${Math.max(0, Math.min(100, knowledgeGraphTask.progress ?? 0))}%` }}
+                      />
+                    </div>
+                  </div>
+                  {(knowledgeGraphTask.error_message || knowledgeGraphTaskError) && (
+                    <div className="break-words rounded bg-red-50 px-2 py-1 text-xs text-red-700">
+                      {knowledgeGraphTask.error_message || knowledgeGraphTaskError}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                  {knowledgeGraphTaskError
+                    || (knowledgeGraphStatus?.last_generation_task?.task_id
+                      ? `最近图谱任务 ${knowledgeGraphStatus.last_generation_task.task_id}`
+                      : '输入大纲或 KG JSON 后可刷新 active 图谱。')}
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="mb-5 rounded-lg border border-slate-200 bg-white p-4">

@@ -65,6 +65,14 @@ export const adminService = {
     return apiClient.post(`/admin/course-catalogs/${catalogId}/resources/generations`, data);
   },
 
+  getCourseCatalogKnowledgeGraphStatus: async (catalogId) => {
+    return apiClient.get(`/admin/course-catalogs/${catalogId}/knowledge-graphs`);
+  },
+
+  startCourseCatalogKnowledgeGraphGeneration: async (catalogId, data) => {
+    return apiClient.post(`/admin/course-catalogs/${catalogId}/knowledge-graphs/generations`, data);
+  },
+
   deleteResource: async (resourceId) => {
     return apiClient.delete(`/admin/resources/${resourceId}`);
   }

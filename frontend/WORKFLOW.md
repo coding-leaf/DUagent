@@ -13,13 +13,20 @@
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
 - 当前最高优先级：为 C 语言样本生成 / 刷新 LearningPath 后，复跑 LearningPath-KG 资源命中评估；KG-node 资源生成已在 C 语言样本完成真实闭环，正式探针从 `108/108 candidate_count=0` 变为 `108/108 candidate_count>0`。
-- 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
+- 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、手动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
 - 当前待设计阻塞点：LearningPath / KG ready gate 仍后置；真实库 C 课程当前无 LearningPath 记录，需先生成 / 刷新路径，再评估学生学习路径节点资源挂载效果。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
+- 2026-06-11：Admin 课程资源库 KG 生成入口接入完成：
+  - Backend 新增 Admin KG 生成服务与接口：`GET /admin/course-catalogs/{catalog_id}/knowledge-graphs`、`POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`，通过 `CourseOffering` 解析绑定 course，创建 `kg_generation` AsyncTask，任务完成后写入新的 `course_knowledge_graphs` 版本。
+  - CLI `tools/generate_knowledge_graph.py` 已复用同一套 KG 生成 / 校验 / 保存服务，避免 CLI 与 Admin API 双实现漂移。
+  - Client API OpenAPI 与 Markdown 已补齐 KG status / generation 契约，并把 `kg_generation` 纳入 `/tasks/{task_id}` 轮询任务类型。
+  - Frontend `CourseCatalogDrawer.jsx` 新增“知识图谱”区：打开抽屉加载 active KG 状态，可输入大纲文本或 KG JSON 手动刷新 active KG，独立轮询 `kg_generation` task，完成后刷新图谱摘要。
+  - 本轮不接学生个性化图谱刷新，不把 KG 生成塞进资源生成接口；Admin 需要先刷新 KG，再按现有资源生成入口生成 KG-node 资源。
+  - 验证：Backend MySQL `tests/test_admin_catalog_kg_generation.py` 13/13 passed；Backend MySQL 资源生成 / KG 版本回归 23 passed / 1 skipped；CLI 回归 `tests/test_generate_kg.py` 11/11 passed，MySQL combo 28 passed；Frontend `npm run test:e2e -- e2e/specs.spec.js -g "Admin course catalog KG generation"` 1/1 passed；`Admin course catalog resource generation` 1/1 passed；`Admin course catalog ingestion` 1/1 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
 - 2026-06-11：开发库业务数据清空并保留管理员账号：
   - 按用户确认执行开发环境清库，用于重新导入 C 语言样本并排除历史 dirty/chunk/Qdrant 残留干扰。
   - MySQL `duagent` 清空业务表：`course_catalogs`、`course_catalog_materials`、`course_offerings`、`courses`、`resources`、`course_knowledge_graphs`、`learning_paths`、`async_tasks`、Quiz/Profile/Evaluation/Conversation 等均精确 `COUNT(*)=0`。

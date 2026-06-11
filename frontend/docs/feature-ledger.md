@@ -44,7 +44,7 @@
 当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成。Admin 资源库入库、Admin 资源库级资源生成、教师绑定 ready CourseCatalog、学生消费 fan-out 资源、教师只读确认本班资源已经形成第一版前端闭环：
 
 1. CourseCatalog 管理、资料上传、入库向量化已经从 Admin UI 到 Backend/Agent 入库链路打通。
-2. Admin 可在资源库抽屉中触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源。
+2. Admin 可在资源库抽屉中手动刷新课程知识图谱，触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源。
 3. 教师创建教学班时绑定已就绪 CourseCatalog，并能在教师端查看绑定资源库状态、本班学习资源列表和资源详情。
 4. 学生端按当前教学班 `course_id` 查看资源列表和详情；有课程但暂无资源时显示“课程资源正在准备中 / 请稍后查看”。
 5. 真实验收证据：资源库 `89f51dfbdedc4995` 入库 task `d0b234d74df94822` completed，`chunk_count=1`；资源生成 task `39dfbd5feb9a4cb7` completed，fan-out 到教学班 `59360ad8b8f445b7`，学生端可见并打开资源详情。
@@ -71,7 +71,7 @@
 | `TeacherConsole.jsx` | 查看班级、绑定资源库状态、本班学习资源、学生列表、班级洞察 | `GET /courses`、`GET /resources`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 教师端只读确认本班资源，可跳转资源详情；不提供生成/上传/删除资源入口。 |
 | `TeacherStudentReport.jsx` | 查看单个学生学习报告 | `GET /teaching/classes/{class_id}/students/{student_id}/learning` | ✅ 已可操作 | `overall_score` 真实口径仍待设计，前端不展示硬编码分。 |
 | `AdminConsole.jsx` | 管理用户、查看日志、创建/查看课程资源库 | `GET /admin/users`、`DELETE /admin/users/{user_id}`、`GET /admin/logs/agent`、`GET /admin/logs/operations`、`GET/POST /admin/course-catalogs` | ✅ 已可操作 | 用户停用状态持久展示仍缺契约字段。 |
-| `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态、触发资源库级学习资源生成、查看生成资源、软删除资料/资源 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}`、`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`、`DELETE /admin/resources/{resource_id}` | ✅ 已可操作 | Admin 资料导入、向量化、资源生成和软删除的核心入口。 |
+| `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态、手动刷新课程知识图谱、触发资源库级学习资源生成、查看生成资源、软删除资料/资源 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}`、`GET /admin/course-catalogs/{catalog_id}/knowledge-graphs`、`POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`、`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`、`DELETE /admin/resources/{resource_id}` | ✅ 已可操作 | Admin 资料导入、向量化、KG 刷新、资源生成和软删除的核心入口。 |
 | 无页面入口 | 资源生成 | `POST /resources/generate` | 🚫 前端不接入 | 历史接口 / 废弃候选；教师端不提供生成资源入口，不作为当前 UI 或联调主线。 |
 | 无页面入口 | Quiz 生成 | `POST /quiz/generate` | 🚫 前端不接入 | 历史接口 / 废弃候选；练习页不引导触发生题，不作为当前 UI 或联调主线。 |
 
@@ -98,6 +98,7 @@
 | 10 | CourseCatalog 三表 + 教学班绑定 | ✅ 已可操作 | `CourseCatalog`、`CourseCatalogMaterial`、`CourseOffering` 已支撑 Admin 建资源库、教师开班绑定资源库 | 无当前阻塞。 |
 | 11 | Admin 资料上传 / 登记 | ✅ 已可操作 | Admin 抽屉可上传 `txt/md/pdf`，Backend 保存文件并创建 `CourseCatalogMaterial` | 部署时不要提交上传文件或 storage 产物。 |
 | 12 | Admin 触发入库向量化 | ✅ 已可操作 | Admin 点击入库后，Backend 创建 `course_catalog_ingestion` task，Agent 切片、embedding、Qdrant upsert，Backend 回写 `chunk_count/knowledge_status`，前端轮询刷新 | 建议做一次部署级 live smoke，确认真实 Qdrant/storage/provider 配置。 |
+| 13A | Admin 手动刷新课程知识图谱 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`，支持大纲文本或 KG JSON，独立轮询 `kg_generation` task，完成后刷新 active KG 摘要 | 不触发学生个性化 LearningPath 刷新；资源生成仍是独立入口。 |
 | 13 | Admin 资源库级学习资源生成 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/resources/generations`，按资源类型触发生成，独立轮询 `resource_generation` task，完成后刷新生成资源列表 | 建议做一次部署级 live smoke，确认 Agent 返回资源、Backend fan-out 和前端刷新一致。 |
 | 14 | Admin 资料 / 生成资源软删除 | ✅ 已可操作 | Admin 抽屉调用资料和资源 DELETE 接口；资料删除后可显示 `dirty`，资源删除后从生成资源列表消失 | 软删除不删除文件、Qdrant chunks 或 Agent 产物。 |
 | 15 | 学生 / 教师消费 fan-out 学习资源 | ✅ 已可操作 | 学生 Dashboard 按教学班读取资源；教师端只读查看绑定资源库状态、本班资源列表和详情；无资源分别显示准备中 / 联系管理员生成 | 第一版按班存、按班读；不展示 Admin 原始资料，不做历史资源自动回补。 |

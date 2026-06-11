@@ -276,6 +276,32 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
       }));
     });
 
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/knowledge-graphs(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          catalog_id: 'catalog-e2e',
+          course_id: 'class-e2e',
+          active_graph: null,
+          last_generation_task: null,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/resources(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+        },
+      }));
+    });
+
     await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/ingestions', async (route) => {
       ingestionStarted = true;
       await route.fulfill(jsonResponse({
@@ -326,6 +352,202 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
 
     await expect(page.getByTestId('catalog-task-status').getByText('已完成')).toBeVisible({ timeout: 7000 });
     expect(taskPollCount).toBeGreaterThanOrEqual(2);
+  });
+
+  test('Admin course catalog KG generation refreshes active graph from declared endpoint', async ({ page }) => {
+    let kgGenerationStarted = false;
+    let kgTaskPollCount = 0;
+
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-admin-token');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'admin-e2e',
+          email: 'admin@example.com',
+          username: 'Admin E2E',
+          role: 'admin',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/users**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: { users: [] },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/logs/**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: { logs: [] },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          catalogs: [{
+            id: 'catalog-e2e',
+            title: 'E2E 资源库',
+            description: 'KG 生成回归测试',
+            status: 'ready',
+            knowledge_status: 'ready',
+            material_count: 1,
+            chunk_count: 6,
+            created_at: '2026-06-11T08:00:00Z',
+          }],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/materials(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          materials: [{
+            id: 'material-e2e',
+            filename: 'outline.md',
+            source_type: 'file',
+            file_size: 256,
+            status: 'ingested',
+            chunk_count: 6,
+            created_at: '2026-06-11T08:01:00Z',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/knowledge-status', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          status: 'ready',
+          knowledge_status: 'ready',
+          material_count: 1,
+          chunk_count: 6,
+          pending_material_count: 0,
+          failed_material_count: 0,
+          last_ingestion_task_id: null,
+          last_ingestion_status: null,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/resources(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/knowledge-graphs(\?.*)?$/, async (route) => {
+      const completed = kgGenerationStarted && kgTaskPollCount >= 2;
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          catalog_id: 'catalog-e2e',
+          course_id: 'class-e2e',
+          active_graph: completed ? {
+            graph_id: 'kg-e2e-v2',
+            course_id: 'class-e2e',
+            version: 2,
+            source_type: 'outline_text',
+            generation_strategy: 'route_b_llm',
+            node_count: 3,
+            edge_count: 2,
+            is_active: true,
+            created_at: '2026-06-11T08:05:00Z',
+          } : null,
+          last_generation_task: kgGenerationStarted ? {
+            task_id: 'kg-task-e2e',
+            status: completed ? 'completed' : 'processing',
+            progress: completed ? 100 : 35,
+            error_code: null,
+            error_message: '',
+            created_at: '2026-06-11T08:04:00Z',
+            completed_at: completed ? '2026-06-11T08:05:00Z' : null,
+          } : null,
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/admin/course-catalogs/catalog-e2e/knowledge-graphs/generations', async (route) => {
+      kgGenerationStarted = true;
+      const payload = route.request().postDataJSON();
+      expect(payload).toEqual({
+        source_type: 'outline_text',
+        activate: true,
+        outline_text: '第 1 章 绪论\n第 2 章 指针',
+      });
+      await route.fulfill(jsonResponse({
+        code: 202,
+        message: 'accepted',
+        data: {
+          task_id: 'kg-task-e2e',
+          catalog_id: 'catalog-e2e',
+          status: 'processing',
+        },
+      }, 202));
+    });
+
+    await page.route('**/api/v1/tasks/kg-task-e2e', async (route) => {
+      kgTaskPollCount += 1;
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          task_id: 'kg-task-e2e',
+          task_type: 'kg_generation',
+          status: kgTaskPollCount >= 2 ? 'completed' : 'processing',
+          progress: kgTaskPollCount >= 2 ? 100 : 35,
+        },
+      }));
+    });
+
+    await page.goto('/admin');
+    await page.getByRole('button', { name: '课程资源库' }).click();
+    await page.getByRole('button', { name: '管理资料' }).click();
+
+    await expect(page.getByTestId('catalog-drawer')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '知识图谱' })).toBeVisible();
+    await expect(page.getByText('暂无 active 知识图谱。')).toBeVisible();
+
+    await page.getByTestId('catalog-kg-outline').fill('第 1 章 绪论\n第 2 章 指针');
+    await expect(page.getByTestId('catalog-start-kg-generation')).toBeEnabled();
+    await page.getByTestId('catalog-start-kg-generation').click();
+
+    await expect(page.getByTestId('catalog-kg-task-status').getByText('处理中')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('catalog-kg-task-status').getByText('已完成')).toBeVisible({ timeout: 7000 });
+    await expect(page.getByText('v2')).toBeVisible();
+    await expect(page.getByText('3 / 2')).toBeVisible();
+    expect(kgTaskPollCount).toBeGreaterThanOrEqual(2);
   });
 
   test('Admin course catalog resource generation and soft delete uses declared admin endpoints', async ({ page }) => {
@@ -450,6 +672,29 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
           failed_material_count: 0,
           last_ingestion_task_id: null,
           last_ingestion_status: null,
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/admin\/course-catalogs\/catalog-e2e\/knowledge-graphs(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          catalog_id: 'catalog-e2e',
+          course_id: 'class-e2e',
+          active_graph: {
+            graph_id: 'kg-e2e-v1',
+            course_id: 'class-e2e',
+            version: 1,
+            source_type: 'outline_text',
+            generation_strategy: 'route_b_llm',
+            node_count: 2,
+            edge_count: 1,
+            is_active: true,
+            created_at: '2026-06-09T08:30:00Z',
+          },
+          last_generation_task: null,
         },
       }));
     });

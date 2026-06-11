@@ -49,7 +49,7 @@
 4. 学生端按当前教学班 `course_id` 查看资源列表和详情；有课程但暂无资源时显示“课程资源正在准备中 / 请稍后查看”。
 5. 真实验收证据：资源库 `89f51dfbdedc4995` 入库 task `d0b234d74df94822` completed，`chunk_count=1`；资源生成 task `39dfbd5feb9a4cb7` completed，fan-out 到教学班 `59360ad8b8f445b7`，学生端可见并打开资源详情。
 6. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
-7. LearningPath 展示可操作，但刷新和 KG ready gate 仍未收口，需要单独设计。
+7. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 展示可操作，但刷新和 KG ready gate 仍未收口，需要先评估 active KG 节点资源挂载效果。
 
 ## 页面真实调用核查
 
@@ -116,8 +116,8 @@
 | # | 功能 | 状态 | 已实现内容 | 下一步 |
 | --- | --- | --- | --- | --- |
 | 20 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源 | 刷新入口和 KG ready gate 另见 #22。 |
-| 21 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先完成正文支撑型 KG 生成和资源对齐验证，再决定是否接刷新 UI。 |
-| 22 | KG ready gate | 📋 后置待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成；真实探针已证明现有目录版 KG 正文支撑不足 | 待 KG 生成方式返工并通过正文对账 / 资源对齐后，再设计 KG 状态、错误码、降级策略、前端提示。 |
+| 21 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先评估 active KG 读取结果和节点资源挂载效果，再决定是否接刷新 UI。 |
+| 22 | KG ready gate | 📋 后置待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成；C 语言样本已通过正文支撑与资源候选探针，但 ready gate 口径还未设计 | 待 LearningPath 节点资源挂载评估后，再设计 KG 状态、错误码、降级策略、前端提示。 |
 | 23 | 学生画像展示 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile`，并展示 `/users/me` 基础资料 | 字段扩展必须走契约。 |
 | 24 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
 | 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
@@ -136,11 +136,11 @@
 
 ## 当前下一步队列
 
-1. **资源生成 metadata 与 KG 节点对齐设计**
-   Route A 可用支撑阈值版 active KG 已生成并通过 KG-Resource 正式探针底盘条件，但探针导出 `108/108` 节点 `candidate_count=0`。当前 4 个资源全部是 `chapter=课程整体`、`knowledge_point=综合知识点`，与 KG 具体章节/知识点体系不一致。下一步应设计资源生成时如何写入可匹配的 `chapter/knowledge_point` 或资源到 KG 节点的映射，不应先进入 LearningPath ready gate。
+1. **LearningPath 读取 active KG 结果评估**
+   C 语言样本已通过 KG-node 资源生成和 KG-Resource 正式探针复验：`108/108` active KG 节点 `candidate_count>0`。下一步评估 LearningPath 读取 `route_a_prune_usable_060` active KG 的节点质量、节点资源挂载结果和学生端展示效果；不要先做 KG ready gate 或刷新 UI。
 
-2. **LearningPath 读取 active KG 结果评估**
-   在资源 metadata / KG 节点映射方案完成并通过 KG-Resource 对齐探针后，再评估 LearningPath 读取 `route_a_prune_usable_060` active KG 的节点质量与资源挂载结果；不要先做 KG ready gate 或刷新 UI。
+2. **LearningPath ready gate 设计**
+   在 active KG 读取和节点资源挂载效果评估后，再设计 KG 状态、错误码、降级策略、前端提示和是否允许刷新。不能直接复用 CourseCatalog chunk-only ready gate。
 
 3. **#29 AI Chat 检索能力独立 spec**
    按已定口径，后续 Chat spec 必须从“先验证 Agent 检索能力”开始，不先加 UI。
@@ -166,6 +166,7 @@
 - 2026-06-10 过滤与 query 扩展探针复验：增强目录/点线页码/附录索引过滤后，真实 C 语言样本 baseline `22/116=18.97%` 变为 `18/116=15.52%`，说明过滤主要纠正误判，不直接提分；开启 `node.name + chapter/node_name/相邻节点名` 双 query 取最优后提升到 `57/116=49.14%`，49 个边缘节点中 23 个过线，但仍未达到 `>=70%`。下一步进入正文补点 / 正文聚类。
 - 2026-06-11 Route A 可用阈值版本通过：Backend Route A 裁剪默认线从 `0.70` 调整为 `0.60`，开发库 C 语言样本生成 active KG `version=3`、`108/116` nodes、`100` edges，分档为 `strong=57`、`good=34`、`weak_but_usable=17`、`unsupported=8`。`weak_but_usable` 可进入 active KG，但后续 ready gate 不得把它当成 strong 支撑；`metrics.pruned_nodes` 仍保留完整 detail 列表，未来大图需考虑限长或外部诊断产物。
 - 2026-06-11 KG-Resource 对齐探针复验：`b2444963f0e54587` / `6c698badb60a4809` 已具备正式探针条件并导出 108 行 KG 节点候选，但 `108/108` 节点 `candidate_count=0`。零命中原因是当前资源元数据仍为 `chapter=课程整体`、`knowledge_point=综合知识点`，不是新版 active KG 未生效；下一步转为资源生成 metadata / KG 映射设计。
+- 2026-06-11 KG-node 资源生成闭环：新增维护工具先 recheck/repair C catalog 的 `knowledge_status dirty -> ready`，确认非删除资料全 ingested、chunk 正常且 Qdrant 可查；随后 Admin 资源生成接口不传 `chapter/knowledge_point`，自动选 10 个 active KG 核心节点生成资源，父任务 `d364a3a0af294dfa` 完成且 `10/10` 子任务成功。复跑 KG-Resource probe 后 `108/108` active KG 节点 `candidate_count>0`，资源 metadata 与 KG 节点对齐问题已在 C 样本闭环验证。
 
 ## 更新规则
 

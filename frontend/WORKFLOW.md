@@ -12,14 +12,22 @@
 ## 当前施工状态
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
-- 当前最高优先级：KG 生成方式返工前置收口；先做 KG 版本 / 回滚基础设施，再按“目录骨架 + 正文 chunk 验证 / 补充”的路线 A 返工 KG 生成。
+- 当前最高优先级：LearningPath 读取 active KG 与节点资源挂载效果评估；KG-node 资源生成已在 C 语言样本完成真实闭环，正式探针从 `108/108 candidate_count=0` 变为 `108/108 candidate_count>0`。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
-- 当前待设计阻塞点：KG 版本 / 回滚、正文支撑型 KG 生成；LearningPath / KG ready gate 后置，不能在 KG 可靠性和资源对齐未通过前推进。
+- 当前待设计阻塞点：LearningPath / KG ready gate 仍后置；先评估 active KG 节点质量和学生学习路径节点资源挂载效果，再决定是否进入 ready gate 设计。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
+- 2026-06-11：CourseCatalog knowledge_status repair + KG-node 资源生成真实闭环：
+  - 新增 Backend 维护能力：`app/services/course_catalog_knowledge_repair.py` 和 `tools/repair_course_catalog_knowledge_status.py`，支持只读 recheck 与 `repair --apply`；只在 `status=ready`、`knowledge_status=dirty`、非删除资料全部 `ingested`、catalog/material chunk 正常、Qdrant 能按 catalog_id 查到 chunk 时执行 `dirty -> ready`。
+  - 不修改第 527 行新增资料标 dirty 逻辑；该逻辑属于新增资料后的正确状态转换。本轮未新增 Client API，未改 OpenAPI。
+  - 真实 C catalog `b2444963f0e54587` 只读检查：`material_count=2`、`ingested_material_count=2`、`material_chunk_count=663`、`catalog_chunk_count=665`、Qdrant probe 命中，`repairable=true`。
+  - 已执行 `repair --apply`：`knowledge_status dirty -> ready`，不删除材料、不重建、不重复入库。
+  - 调用 Admin 资源库级资源生成接口，不传 `chapter/knowledge_point`，父任务 `d364a3a0af294dfa` 进入 `kg_node_targets` 模式，选中 10 个 KG 核心节点，fan-out course `6c698badb60a4809`；最终父任务 `completed`，`completed_child_count=10`、`failed_child_count=0`、`successful_node_count=10`。
+  - KG-Resource probe 导出 `/tmp/kg-resource-probe-after-repair-generation.json` 共 `108` 行；汇总结果 `gt0=108`、`zero=0`、`max=4`，即 active KG 节点候选从全 0 变为全量有候选。
+  - 验证：`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/course_catalog_repair_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_course_catalog_knowledge_repair.py -q -p no:cacheprovider` 4/4 passed；`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py tests/test_course_catalog_knowledge_repair.py -q -p no:cacheprovider` 27/27 passed。
 - 2026-06-11：Route A 可用阈值版 KG-Resource 对齐探针复验：
   - 重新盘点 `/tmp/kg-resource-probe/inventory-after-route-a-usable.json`：C 语言 catalog `b2444963f0e54587` / course `6c698badb60a4809` 已具备正式探针条件，`chunk_count=665`、`kg_node_count=108`、`resource_count=4`、`eligible_for_formal_probe=true`。
   - 导出正式探针 `/tmp/kg-resource-probe/c-language-route-a-usable-kg-resource-probe.csv`，共 `108` 行，全部来自 active KG。

@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:////tmp/admin_catalog_kg_generation.db",
+    "mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_test?charset=utf8mb4",
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

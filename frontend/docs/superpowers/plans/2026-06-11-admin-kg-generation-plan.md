@@ -64,7 +64,7 @@ from sqlalchemy import select
 
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:////tmp/admin_catalog_kg_generation.db",
+    "mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_test?charset=utf8mb4",
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -182,7 +182,7 @@ async def test_generate_outline_text_uses_llm_and_creates_version():
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/admin_catalog_kg_generation_task1.db ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_task1?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'app.services.kg_generation'`.
@@ -452,7 +452,7 @@ async def generate_knowledge_graph_version(
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/admin_catalog_kg_generation_task1.db ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_task1?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
 ```
 
 Expected: PASS for service tests added in this task.
@@ -640,7 +640,7 @@ async def test_admin_can_poll_kg_generation_task_owned_by_admin():
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/admin_catalog_kg_generation_task2.db ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_task2?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
 ```
 
 Expected: FAIL with 404 for the new Admin KG endpoints.
@@ -969,7 +969,7 @@ allowed_admin_task = current_user.role == "admin" and task.task_type in {
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/admin_catalog_kg_generation_task2.db ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_task2?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
 ```
 
 Expected: PASS.
@@ -979,7 +979,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/admin_catalog_resource_generation_regression.db ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_resource_generation_regression?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider
 ```
 
 Expected: PASS.
@@ -1159,7 +1159,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/kg_cli_service_regression.db ../.venv/bin/python -m pytest tests/test_generate_kg.py tests/test_course_knowledge_graph_versions.py tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_cli_service_regression?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_generate_kg.py tests/test_course_knowledge_graph_versions.py tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider
 ```
 
 Expected: PASS.
@@ -1940,7 +1940,7 @@ git commit -m "接入管理员KG生成抽屉入口"
 Run:
 
 ```bash
-cd ../backend && TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/admin_kg_final_backend.db ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py tests/test_admin_catalog_resource_generation.py tests/test_generate_kg.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider
+cd ../backend && TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_kg_final_backend?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py tests/test_admin_catalog_resource_generation.py tests/test_generate_kg.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider
 ```
 
 Expected: PASS.

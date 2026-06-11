@@ -17,6 +17,8 @@ from app.models.user import User
 from app.schemas.catalog import CourseCatalogCreateRequest, CourseCatalogMaterialCreateRequest
 from app.schemas.operations import CatalogResourceGenerateRequest
 from app.services.agent_client import AgentClient, AgentServiceError, agent_client
+from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.kg_resource_targets import select_core_resource_targets
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ ingestion_agent_client = AgentClient(timeout=300.0)
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
+KG_RESOURCE_TARGET_LIMIT = 10
 
 
 def _catalog_item(catalog: CourseCatalog) -> dict:
@@ -105,6 +108,21 @@ def _remove_material_dir(target_path: Path) -> None:
 def _webhook_url(request: Request) -> str:
     base = str(request.base_url).rstrip("/")
     return f"{base}/api/v1/webhooks/agent"
+
+
+def _is_explicit_resource_target(req: CatalogResourceGenerateRequest) -> bool:
+    return bool((req.chapter or "").strip() or (req.knowledge_point or "").strip())
+
+
+async def _active_kg_for_catalog_generation(
+    db: AsyncSession,
+    fanout_course_ids: list[str],
+):
+    for course_id in fanout_course_ids:
+        kg = await get_active_knowledge_graph(db, course_id)
+        if kg is not None:
+            return kg
+    return None
 
 
 def _course_material_missing() -> HTTPException:
@@ -864,6 +882,150 @@ async def admin_generate_catalog_resources(
     if not fanout_course_ids:
         raise _course_offering_missing()
 
+    resource_types = req.resource_types
+
+    if not _is_explicit_resource_target(req):
+        kg = await _active_kg_for_catalog_generation(db, fanout_course_ids)
+        if kg is None:
+            task = AsyncTask(
+                task_type="resource_generation",
+                status="failed",
+                progress=100,
+                user_id=current_user.id,
+                course_id=None,
+                result={
+                    "catalog_id": catalog.id,
+                    "catalog_title": catalog.title,
+                    "fanout_course_ids": fanout_course_ids,
+                    "mode": "kg_node_targets",
+                    "resource_types": resource_types,
+                },
+                error_code="kg_not_ready",
+                error_message="课程知识图谱未就绪",
+                completed_at=_now_utc(),
+            )
+            db.add(task)
+            await db.commit()
+            return {
+                "code": 202,
+                "message": "accepted",
+                "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
+            }
+
+        selection = select_core_resource_targets(
+            kg.nodes if isinstance(kg.nodes, list) else [],
+            max_targets=KG_RESOURCE_TARGET_LIMIT,
+        )
+        target_nodes = selection["targets"]
+        if not target_nodes:
+            task = AsyncTask(
+                task_type="resource_generation",
+                status="failed",
+                progress=100,
+                user_id=current_user.id,
+                course_id=None,
+                result={
+                    "catalog_id": catalog.id,
+                    "catalog_title": catalog.title,
+                    "fanout_course_ids": fanout_course_ids,
+                    "mode": "kg_node_targets",
+                    "resource_types": resource_types,
+                    "target_node_count": 0,
+                    "total_child_count": 0,
+                    "selection_degraded": selection["selection_degraded"],
+                    "selection_degraded_reason": selection["degraded_reason"],
+                },
+                error_code="kg_target_empty",
+                error_message="没有可用于资源挂载的 KG 节点",
+                completed_at=_now_utc(),
+            )
+            db.add(task)
+            await db.commit()
+            return {
+                "code": 202,
+                "message": "accepted",
+                "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
+            }
+
+        parent = AsyncTask(
+            task_type="resource_generation",
+            status="processing",
+            progress=10,
+            user_id=current_user.id,
+            course_id=None,
+            result={
+                "catalog_id": catalog.id,
+                "catalog_title": catalog.title,
+                "fanout_course_ids": fanout_course_ids,
+                "mode": "kg_node_targets",
+                "knowledge_status": catalog.knowledge_status,
+                "degraded": catalog.knowledge_status == "partial",
+                "chunk_count": catalog.chunk_count or 0,
+                "resource_types": resource_types,
+                "target_node_count": len(target_nodes),
+                "total_child_count": len(target_nodes),
+                "target_nodes": target_nodes,
+                "selection_degraded": selection["selection_degraded"],
+                "selection_degraded_reason": selection["degraded_reason"],
+                "completed_child_count": 0,
+                "failed_child_count": 0,
+                "successful_node_count": 0,
+                "failed_node_count": 0,
+            },
+        )
+        db.add(parent)
+        await db.flush()
+        await db.refresh(parent)
+
+        children: list[AsyncTask] = []
+        for target_node in target_nodes:
+            child = AsyncTask(
+                task_type="resource_generation",
+                status="processing",
+                progress=10,
+                user_id=current_user.id,
+                course_id=None,
+                result={
+                    "catalog_id": catalog.id,
+                    "catalog_title": catalog.title,
+                    "parent_task_id": parent.id,
+                    "fanout_course_ids": fanout_course_ids,
+                    "mode": "kg_node_target",
+                    "target_node": target_node,
+                    "resource_types": resource_types,
+                },
+            )
+            db.add(child)
+            children.append(child)
+        await db.flush()
+
+        for child in children:
+            target_node = child.result["target_node"]
+            payload = {
+                "task_id": child.id,
+                "user_id": current_user.id,
+                "course_id": catalog.id,
+                "chapter": target_node["chapter"],
+                "knowledge_point": target_node["node_name"],
+                "resource_types": resource_types,
+                "webhook_url": _webhook_url(request),
+            }
+            try:
+                await agent_client.post_json("/agent/v1/resources/generate", payload)
+            except AgentServiceError as e:
+                child.status = "failed"
+                child.error_code = str(e.agent_code or "agent_error")
+                child.error_message = e.message
+                child.progress = 100
+                child.completed_at = _now_utc()
+
+        await db.commit()
+        return {
+            "code": 202,
+            "message": "accepted",
+            "data": {"task_id": parent.id, "catalog_id": catalog.id, "status": "processing"},
+        }
+
     task_result = {
         "catalog_id": catalog.id,
         "catalog_title": catalog.title,
@@ -871,7 +1033,7 @@ async def admin_generate_catalog_resources(
         "knowledge_status": catalog.knowledge_status,
         "degraded": catalog.knowledge_status == "partial",
         "chunk_count": catalog.chunk_count or 0,
-        "resource_types": req.resource_types,
+        "resource_types": resource_types,
     }
     if req.chapter:
         task_result["chapter"] = req.chapter
@@ -894,7 +1056,7 @@ async def admin_generate_catalog_resources(
         "task_id": task.id,
         "user_id": current_user.id,
         "course_id": catalog.id,
-        "resource_types": req.resource_types,
+        "resource_types": resource_types,
         "webhook_url": _webhook_url(request),
     }
     if req.chapter:

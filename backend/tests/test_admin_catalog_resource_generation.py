@@ -18,7 +18,7 @@ from app.db.session import async_session_factory, engine
 from app.main import app
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
 from app.models.course import Course
-from app.models.others import AsyncTask, Resource
+from app.models.others import AsyncTask, CourseKnowledgeGraph, Resource
 from app.models.user import User
 
 
@@ -110,6 +110,35 @@ async def _seed_bound_class(
     return class_id
 
 
+async def _seed_active_kg(
+    course_id: str,
+    nodes: list[dict],
+    edges: list[dict] | None = None,
+) -> str:
+    async with async_session_factory() as db:
+        graph = CourseKnowledgeGraph(
+            id=f"kg-{course_id}",
+            course_id=course_id,
+            version=1,
+            is_active=True,
+            source_type="route_a_body_grounded",
+            generation_strategy="route_a_prune_usable_060",
+            nodes=nodes,
+            edges=edges or [],
+            metrics={
+                "support_band_counts": {
+                    "strong": 1,
+                    "good": 1,
+                    "weak_but_usable": 0,
+                    "unsupported": 0,
+                }
+            },
+        )
+        db.add(graph)
+        await db.commit()
+        return graph.id
+
+
 async def _count_tasks(catalog_id: str) -> int:
     async with async_session_factory() as db:
         result = await db.execute(
@@ -167,6 +196,82 @@ async def test_admin_catalog_generation_creates_task_and_sends_catalog_id_to_age
         assert task.result["fanout_course_ids"] == [class_a, class_b]
         assert task.result["chapter"] == "树"
         assert task.result["knowledge_point"] == "二叉树"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_generation_without_metadata_creates_parent_and_child_tasks_from_active_kg():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    await _seed_active_kg(
+        class_a,
+        [
+            {
+                "id": "node-1",
+                "name": "变量",
+                "chapter": "第一章",
+                "support_band": "strong",
+                "body_top1_score": 0.82,
+            },
+            {
+                "id": "node-2",
+                "name": "指针",
+                "chapter": "第二章",
+                "support_band": "good",
+                "body_top1_score": 0.67,
+            },
+        ],
+    )
+
+    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        mock_agent.return_value = {"task_id": "accepted"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
+                headers=_auth_headers("admin-admin-gen", "admin"),
+                json={"resource_types": ["document"]},
+            )
+
+    assert response.status_code == 202, response.text
+    parent_task_id = response.json()["data"]["task_id"]
+    assert mock_agent.await_count == 2
+    payloads = [call.args[1] for call in mock_agent.await_args_list]
+    assert [payload["course_id"] for payload in payloads] == [catalog_id, catalog_id]
+    assert [(payload["chapter"], payload["knowledge_point"]) for payload in payloads] == [
+        ("第一章", "变量"),
+        ("第二章", "指针"),
+    ]
+
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, parent_task_id)
+        assert parent is not None
+        assert parent.status == "processing"
+        assert parent.result["mode"] == "kg_node_targets"
+        assert parent.result["fanout_course_ids"] == [class_a]
+        assert parent.result["target_node_count"] == 2
+        assert parent.result["total_child_count"] == 2
+        assert parent.result["selection_degraded"] is False
+
+        result = await db.execute(select(AsyncTask).where(AsyncTask.id != parent_task_id))
+        children = sorted(
+            result.scalars().all(),
+            key=lambda task: task.result["target_node"]["node_id"],
+        )
+        assert len(children) == 2
+        assert [child.result["parent_task_id"] for child in children] == [
+            parent_task_id,
+            parent_task_id,
+        ]
+        assert [child.result["target_node"]["node_name"] for child in children] == [
+            "变量",
+            "指针",
+        ]
+        assert [child.result["fanout_course_ids"] for child in children] == [
+            [class_a],
+            [class_a],
+        ]
 
 
 @pytest.mark.asyncio

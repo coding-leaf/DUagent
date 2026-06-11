@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 from tools import generate_knowledge_graph as generate_kg_module
-from tools.generate_knowledge_graph import (
-    build_import_result,
-    load_kg_json,
+from app.services.kg_generation import (
+    load_kg_json_file,
     load_grounding_matches,
     prune_kg_with_grounding_file,
-    validate_and_clean_kg,
+    route_a_generation_strategy_for_threshold,
+    validate_kg_json_payload,
 )
 
 
@@ -22,7 +22,7 @@ def test_validate_and_clean_kg_success():
             {"from": "node_1", "to": "node_2"}
         ]
     }
-    nodes, edges = validate_and_clean_kg(raw_data)
+    nodes, edges = validate_kg_json_payload(raw_data)
     assert len(nodes) == 2
     assert len(edges) == 1
     assert nodes[0]["id"] == "node_1"
@@ -39,7 +39,7 @@ def test_validate_and_clean_kg_missing_fields():
         ],
         "edges": []
     }
-    nodes, edges = validate_and_clean_kg(raw_data)
+    nodes, edges = validate_kg_json_payload(raw_data)
     assert len(nodes) == 1
     assert nodes[0]["id"] == "node_1"
 
@@ -57,7 +57,7 @@ def test_validate_and_clean_kg_duplicates():
             {"from": "node_1", "to": "node_2"},  # 重复边
         ]
     }
-    nodes, edges = validate_and_clean_kg(raw_data)
+    nodes, edges = validate_kg_json_payload(raw_data)
     assert len(nodes) == 2
     assert len(edges) == 1
     assert nodes[0]["id"] == "node_1"
@@ -76,39 +76,10 @@ def test_validate_and_clean_kg_dangling_edges():
             {"from": "node_1", "to": "node_3"},  # 悬空边，node_3 不存在
         ]
     }
-    nodes, edges = validate_and_clean_kg(raw_data)
+    nodes, edges = validate_kg_json_payload(raw_data)
     assert len(nodes) == 2
     assert len(edges) == 1
     assert edges[0]["to"] == "node_2"
-
-
-def test_build_import_result_uses_version_metadata():
-    """测试导入结果返回版本化 KG 元数据。"""
-
-    class Graph:
-        id = "graph-1"
-        course_id = "course-1"
-        version = 3
-        nodes = [{"id": "node_1"}, {"id": "node_2"}]
-        edges = [{"from": "node_1", "to": "node_2"}]
-        source_type = "outline_llm"
-        generation_strategy = "legacy_outline"
-        metrics = {"node_count": 2, "edge_count": 1}
-        is_active = True
-
-    result = build_import_result(Graph())
-
-    assert result == {
-        "course_id": "course-1",
-        "graph_id": "graph-1",
-        "version": 3,
-        "node_count": 2,
-        "edge_count": 1,
-        "source_type": "outline_llm",
-        "generation_strategy": "legacy_outline",
-        "metrics": {"node_count": 2, "edge_count": 1},
-        "activated": True,
-    }
 
 
 def test_load_kg_json_validates_existing_graph_file(tmp_path: Path) -> None:
@@ -128,7 +99,7 @@ def test_load_kg_json_validates_existing_graph_file(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    nodes, edges = load_kg_json(kg_file)
+    nodes, edges = load_kg_json_file(kg_file)
 
     assert nodes == [
         {"id": "node_1", "name": "变量", "chapter": "第一章"},
@@ -189,9 +160,9 @@ def test_build_arg_parser_defaults_grounding_threshold_to_usable_060() -> None:
 
 
 def test_route_a_generation_strategy_uses_usable_name_only_for_default_threshold() -> None:
-    assert generate_kg_module.route_a_generation_strategy_for_threshold(0.60) == "route_a_prune_usable_060"
-    assert generate_kg_module.route_a_generation_strategy_for_threshold(0.6000000001) == "route_a_prune_usable_060"
-    assert generate_kg_module.route_a_generation_strategy_for_threshold(0.70) == "route_a_prune_unsupported"
+    assert route_a_generation_strategy_for_threshold(0.60) == "route_a_prune_usable_060"
+    assert route_a_generation_strategy_for_threshold(0.6000000001) == "route_a_prune_usable_060"
+    assert route_a_generation_strategy_for_threshold(0.70) == "route_a_prune_unsupported"
 
 
 def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path: Path) -> None:

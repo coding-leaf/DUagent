@@ -137,6 +137,13 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-11` `KG 资源 metadata 对齐真实探针阻塞记录`
+  - **尝试**：检查真实 C 语言 catalog `b2444963f0e54587` 与绑定课程 `6c698badb60a4809`，Agent Service `8002` 健康，active KG 为 `27c3acb1e98a49d1`、`version=3`、`route_a_prune_usable_060`、`108` nodes / `100` edges。
+  - **阻塞**：catalog 当前 `status=ready`、`knowledge_status=dirty`、`chunk_count=665`；Admin 资源生成接口要求 `knowledge_status in {"ready","partial"}`，因此不会进入 KG-node 默认资源生成分支。
+  - **补充证据**：当前非删除 materials 均为 `ingested`，没有 `uploaded/failed` 待入库材料；`POST /admin/course-catalogs/{catalog_id}/ingestions` 按现有逻辑会因“没有待入库资料”拒绝，不能通过正常入库接口恢复 ready。
+  - **处理决定**：本轮不直接写 MySQL 把 `dirty` 改成 `ready`，也不绕过 API gate 手工造任务；正式 KG-Resource probe 暂不运行。
+  - **下一步**：需要先补一个受控的 catalog knowledge status repair/recheck 能力，或由用户确认允许对该 catalog 做一次性状态修复后，再触发 KG-node 默认资源生成并重跑 inventory/probe。
+
 - `2026-06-11` `KG 资源生成 metadata 对齐实现`
   - **完成**：Admin catalog resource generation 在未显式传 `chapter/knowledge_point` 时读取绑定教学班课程的 active KG，选择核心 KG 节点子集，创建父 `resource_generation` 任务与 KG-node 子任务；显式 metadata 请求保持旧单目标语义。
   - **完成**：Agent 资源生成仍使用现有 `/agent/v1/resources/generate` 契约，`course_id` 继续传 catalog id 以匹配 CourseCatalog 知识库 Qdrant payload；每个子任务 payload 使用 KG 节点 `chapter/node_name`。

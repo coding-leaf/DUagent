@@ -20,6 +20,13 @@
 
 ## 最近验证
 
+- 2026-06-12：Admin 预置账号登录修复：
+  - 根因确认：`schema.sql` 中 `admin@admin.com / Admin123456` 的预置 bcrypt hash 与注释密码不匹配，`verify_password("Admin123456", schema_hash)` 返回 false；当前开发库手动插入账号复用了这条错误 hash。
+  - 额外数据问题：当前 MySQL `duagent.users` 中 `admin@admin.com` 曾为 `is_active=0`，即使密码修对也会被禁用检查拒绝。
+  - 修复：替换 `schema.sql` 预置 admin hash，并对开发库 `admin@admin.com` 更新 `password_hash`、`is_active=1`、`is_deleted=0`、`role='admin'`。
+  - 回归：新增 `tests/test_security_password_hash.py`，覆盖当前 bcrypt backend 下 `hash_password -> verify_password` 和 schema 预置 hash 必须匹配 `Admin123456`。
+  - 说明：`passlib==1.7.4` + `bcrypt==4.1.3` 仍会打印 `bcrypt.__about__` warning，但当前验证显示有效 hash 可正常通过，不是本次登录失败主因；后续如要消除日志噪声，可单独评估 pin `bcrypt<4.1` 或迁移密码库。
+  - 验证：Backend `../.venv/bin/python -m pytest tests/test_security_password_hash.py -q -p no:cacheprovider` 2/2 passed；ASGITransport + MySQL `duagent` 真实调用 `/auth/captcha` + `/auth/login`，`admin@admin.com / Admin123456` 返回 `login_status=200`、`role=admin`、`has_token=True`。
 - 2026-06-11：Admin 课程资源库 KG 生成入口接入完成：
   - Backend 新增 Admin KG 生成服务与接口：`GET /admin/course-catalogs/{catalog_id}/knowledge-graphs`、`POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`，通过 `CourseOffering` 解析绑定 course，创建 `kg_generation` AsyncTask，任务完成后写入新的 `course_knowledge_graphs` 版本。
   - CLI `tools/generate_knowledge_graph.py` 已复用同一套 KG 生成 / 校验 / 保存服务，避免 CLI 与 Admin API 双实现漂移。

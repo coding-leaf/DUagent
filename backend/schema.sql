@@ -458,7 +458,7 @@ CREATE TABLE operation_logs (
 -- ============================================================
 INSERT INTO users (id, username, email, password_hash, real_name, role, create_by)
 VALUES ('admin000000000000000000000001', 'admin', 'admin@admin.com',
-        '$2b$12$LJ3m4ys3GZfnYMz8kVsKaOTSxGHLfEhCgJwW3MlFJrpPqk0mPQYSu',
+        '$2b$12$k4zj0wRQqBBbfYHl3YGhJOjYhdXZijOubyMDT1Lk2OmuDP1D5kOcm',
         '系统管理员', 'admin', 'system');
 -- Password: Admin123456 (bcrypt hash — replace with actual hash after first run)
 

@@ -171,6 +171,58 @@ async def test_generate_kg_json_creates_active_version_without_chunk_ready_gate(
 
 
 @pytest.mark.asyncio
+async def test_generate_kg_json_links_second_active_version_to_parent_graph():
+    await _reset_db()
+    _, course_id = await _seed_catalog_and_course()
+
+    await generate_knowledge_graph_version(
+        course_id=course_id,
+        source_type="kg_json",
+        kg_json={
+            "nodes": [{"id": "pointer", "name": "指针", "chapter": "第 6 章"}],
+            "edges": [],
+        },
+        activate=True,
+    )
+
+    async with async_session_factory() as db:
+        first_graph = (await db.execute(select(CourseKnowledgeGraph))).scalar_one()
+        first_graph_id = first_graph.id
+        first_graph_version = first_graph.version
+        first_graph_is_active = first_graph.is_active
+
+    result = await generate_knowledge_graph_version(
+        course_id=course_id,
+        source_type="kg_json",
+        kg_json={
+            "nodes": [{"id": "array", "name": "数组", "chapter": "第 5 章"}],
+            "edges": [],
+        },
+        activate=True,
+    )
+
+    assert first_graph_version == 1
+    assert first_graph_is_active is True
+    assert result["version"] == 2
+
+    async with async_session_factory() as db:
+        graphs = (
+            await db.execute(
+                select(CourseKnowledgeGraph)
+                .where(CourseKnowledgeGraph.course_id == course_id)
+                .order_by(CourseKnowledgeGraph.version.asc())
+            )
+        ).scalars().all()
+
+    first_graph, second_graph = graphs
+    assert second_graph.id == result["graph_id"]
+    assert second_graph.is_active is True
+    assert second_graph.parent_graph_id == first_graph_id
+    assert first_graph.id == first_graph_id
+    assert first_graph.is_active is False
+
+
+@pytest.mark.asyncio
 async def test_generate_outline_text_uses_llm_and_creates_version():
     await _reset_db()
     _, course_id = await _seed_catalog_and_course()

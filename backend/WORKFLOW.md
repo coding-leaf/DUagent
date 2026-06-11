@@ -137,6 +137,19 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-11` `KG 资源生成 metadata 对齐实现`
+  - **完成**：Admin catalog resource generation 在未显式传 `chapter/knowledge_point` 时读取绑定教学班课程的 active KG，选择核心 KG 节点子集，创建父 `resource_generation` 任务与 KG-node 子任务；显式 metadata 请求保持旧单目标语义。
+  - **完成**：Agent 资源生成仍使用现有 `/agent/v1/resources/generate` 契约，`course_id` 继续传 catalog id 以匹配 CourseCatalog 知识库 Qdrant payload；每个子任务 payload 使用 KG 节点 `chapter/node_name`。
+  - **完成**：Webhook 对 KG-node 子任务用 `task.result.target_node` 覆盖 `Resource.chapter/knowledge_point`，追加 `kg_node:*` / `support_band:*` 诊断 tags，并在每次子任务完成/失败后基于 DB 子任务状态重算父任务 `completed/degraded/failed`。
+  - **完成**：无 active KG 时创建 failed 父任务 `kg_not_ready`；active KG 无可用节点时创建 failed 父任务 `kg_target_empty`；全部子任务失败时父任务 `failed`，内部错误码为 `all_children_failed`（适配 `AsyncTask.error_code VARCHAR(20)`）。
+  - **测试维护**：`test_admin_catalog_resource_generation.py` 在 MySQL 下每个 async 测试后 dispose engine，避免 aiomysql 连接跨 event loop 复用；`test_kg_resource_alignment_probe.py` 清库补齐 `course_catalog_materials` 与 `async_tasks`，满足 MySQL 外键。
+  - **验证**：
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py::test_webhook_kg_node_child_overrides_agent_metadata_and_updates_parent_completed tests/test_admin_catalog_resource_generation.py::test_webhook_parent_aggregation_marks_degraded_when_one_child_failed tests/test_admin_catalog_resource_generation.py::test_webhook_parent_aggregation_marks_failed_when_all_children_failed -q -p no:cacheprovider`：3 passed
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py::test_admin_catalog_generation_without_metadata_fails_parent_when_no_active_kg tests/test_admin_catalog_resource_generation.py::test_admin_catalog_generation_without_metadata_fails_parent_when_no_usable_targets -q -p no:cacheprovider`：2 passed
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/kg_version_service_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_kg_resource_targets.py tests/test_admin_catalog_resource_generation.py tests/test_node_resources.py tests/test_kg_resource_alignment_probe.py tests/test_course_knowledge_graph_versions.py -q -p no:cacheprovider`：46 passed
+  - **契约**：Client API 契约改变：`否` / Agent API 契约改变：`否`。
+  - **剩余风险**：尚未在真实 C 语言 catalog 上触发 KG-node 默认资源生成并重跑正式 KG-Resource probe；因此暂不推进 LearningPath ready gate。
+
 - `2026-06-11` `Route A 可用正文支撑阈值实现`
   - **完成**：Backend Route A 裁剪默认阈值从 `0.70` 改为 `0.60`；显式传入其他阈值时仍按传入阈值裁剪，`body_support_pass_ratio` 保持兼容语义。
   - **完成**：`filter_supported_knowledge_graph()` 新增固定 `0.60/0.65/0.70` 支撑分档 metrics；`strong/good/weak_but_usable/unsupported` count 均按全部 candidate nodes 统计，不只统计 kept nodes。

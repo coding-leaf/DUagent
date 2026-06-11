@@ -3,6 +3,7 @@ import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -20,6 +21,12 @@ from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffer
 from app.models.course import Course
 from app.models.others import AsyncTask, CourseKnowledgeGraph, Resource
 from app.models.user import User
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _dispose_db_engine_after_test():
+    yield
+    await engine.dispose()
 
 
 async def _reset_db():
@@ -275,6 +282,68 @@ async def test_admin_catalog_generation_without_metadata_creates_parent_and_chil
 
 
 @pytest.mark.asyncio
+async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_active_kg():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+
+    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
+                headers=_auth_headers("admin-admin-gen", "admin"),
+                json={"resource_types": ["document"]},
+            )
+
+    assert response.status_code == 202, response.text
+    mock_agent.assert_not_awaited()
+    async with async_session_factory() as db:
+        task = await db.get(AsyncTask, response.json()["data"]["task_id"])
+        assert task.status == "failed"
+        assert task.error_code == "kg_not_ready"
+        assert task.error_message == "课程知识图谱未就绪"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_usable_targets():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    await _seed_active_kg(
+        class_a,
+        [
+            {
+                "id": "bad",
+                "name": "目录",
+                "chapter": "附录",
+                "support_band": "unsupported",
+                "body_top1_score": 0.40,
+            }
+        ],
+    )
+
+    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
+                headers=_auth_headers("admin-admin-gen", "admin"),
+                json={"resource_types": ["document"]},
+            )
+
+    assert response.status_code == 202, response.text
+    mock_agent.assert_not_awaited()
+    async with async_session_factory() as db:
+        task = await db.get(AsyncTask, response.json()["data"]["task_id"])
+        assert task.status == "failed"
+        assert task.error_code == "kg_target_empty"
+        assert task.error_message == "没有可用于资源挂载的 KG 节点"
+
+
+@pytest.mark.asyncio
 async def test_admin_catalog_generation_rejects_no_bound_classes_without_task():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")
@@ -457,6 +526,199 @@ async def test_webhook_fanout_writes_resources_to_bound_classes():
 
 
 @pytest.mark.asyncio
+async def test_webhook_kg_node_child_overrides_agent_metadata_and_updates_parent_completed():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+
+    async with async_session_factory() as db:
+        parent = AsyncTask(
+            id="parent-kg-node",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            course_id=None,
+            result={
+                "catalog_id": catalog_id,
+                "fanout_course_ids": [class_a],
+                "mode": "kg_node_targets",
+                "total_child_count": 1,
+                "target_node_count": 1,
+                "completed_child_count": 0,
+                "failed_child_count": 0,
+                "successful_node_count": 0,
+                "failed_node_count": 0,
+            },
+        )
+        child = AsyncTask(
+            id="child-kg-node",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            course_id=None,
+            result={
+                "catalog_id": catalog_id,
+                "parent_task_id": parent.id,
+                "fanout_course_ids": [class_a],
+                "mode": "kg_node_target",
+                "target_node": {
+                    "node_id": "node-pointer",
+                    "node_name": "指针",
+                    "chapter": "第二章",
+                    "support_band": "good",
+                    "body_top1_score": 0.67,
+                },
+                "resource_types": ["document"],
+            },
+        )
+        db.add_all([parent, child])
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/agent",
+            headers=_webhook_headers(),
+            json={
+                "task_id": "child-kg-node",
+                "task_type": "resource_generation",
+                "status": "completed",
+                "result": {
+                    "resources": [
+                        {
+                            "title": "Pointer Doc",
+                            "type": "document",
+                            "description": "doc",
+                            "content": "doc content",
+                            "chapter": "课程整体",
+                            "knowledge_point": "综合知识点",
+                            "tags": ["agent"],
+                        }
+                    ]
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        result = await db.execute(select(Resource).where(Resource.title == "Pointer Doc"))
+        resource = result.scalar_one()
+        assert resource.course_id == class_a
+        assert resource.chapter == "第二章"
+        assert resource.knowledge_point == "指针"
+        assert "kg_node:node-pointer" in resource.tags
+        assert "support_band:good" in resource.tags
+
+        parent = await db.get(AsyncTask, "parent-kg-node")
+        assert parent.status == "completed"
+        assert parent.progress == 100
+        assert parent.result["completed_child_count"] == 1
+        assert parent.result["failed_child_count"] == 0
+        assert parent.result["successful_node_count"] == 1
+        assert parent.result["failed_node_count"] == 0
+        assert parent.result.get("degraded") is False
+
+
+@pytest.mark.asyncio
+async def test_webhook_parent_aggregation_marks_degraded_when_one_child_failed():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    async with async_session_factory() as db:
+        parent = AsyncTask(
+            id="parent-degraded",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            result={"mode": "kg_node_targets", "total_child_count": 2},
+        )
+        completed_child = AsyncTask(
+            id="child-completed",
+            task_type="resource_generation",
+            status="completed",
+            user_id="admin-admin-gen",
+            result={"mode": "kg_node_target", "parent_task_id": "parent-degraded"},
+        )
+        failed_child = AsyncTask(
+            id="child-failed",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            result={"mode": "kg_node_target", "parent_task_id": "parent-degraded"},
+        )
+        db.add_all([parent, completed_child, failed_child])
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/agent",
+            headers=_webhook_headers(),
+            json={
+                "task_id": "child-failed",
+                "task_type": "resource_generation",
+                "status": "failed",
+                "error_code": "agent_error",
+                "error_message": "model failed",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, "parent-degraded")
+        assert parent.status == "completed"
+        assert parent.result["degraded"] is True
+        assert parent.result["completed_child_count"] == 1
+        assert parent.result["failed_child_count"] == 1
+        assert parent.result["successful_node_count"] == 1
+        assert parent.result["failed_node_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_webhook_parent_aggregation_marks_failed_when_all_children_failed():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    async with async_session_factory() as db:
+        parent = AsyncTask(
+            id="parent-failed",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            result={"mode": "kg_node_targets", "total_child_count": 1},
+        )
+        child = AsyncTask(
+            id="child-failed-only",
+            task_type="resource_generation",
+            status="processing",
+            user_id="admin-admin-gen",
+            result={"mode": "kg_node_target", "parent_task_id": "parent-failed"},
+        )
+        db.add_all([parent, child])
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/agent",
+            headers=_webhook_headers(),
+            json={
+                "task_id": "child-failed-only",
+                "task_type": "resource_generation",
+                "status": "failed",
+                "error_code": "agent_error",
+                "error_message": "model failed",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, "parent-failed")
+        assert parent.status == "failed"
+        assert parent.progress == 100
+        assert parent.error_code == "all_children_failed"
+        assert parent.result["completed_child_count"] == 0
+        assert parent.result["failed_child_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_webhook_rejects_empty_generated_resources_without_marking_success():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")
@@ -551,6 +813,8 @@ async def test_teacher_cannot_poll_admin_catalog_resource_generation_task():
 async def test_teacher_can_poll_own_legacy_resource_generation_task():
     await _reset_db()
     await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
     async with async_session_factory() as db:
         db.add(
             AsyncTask(

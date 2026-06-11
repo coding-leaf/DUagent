@@ -16,9 +16,9 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 
 from app.db.session import async_session_factory, engine, init_db
-from app.models.catalog import CourseCatalog, CourseOffering
+from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
 from app.models.course import Course, CourseEnrollment
-from app.models.others import CourseKnowledgeGraph, LearningPath, Resource
+from app.models.others import AsyncTask, CourseKnowledgeGraph, LearningPath, Resource
 from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.services.kg_resource_alignment_probe import (
@@ -49,8 +49,10 @@ async def clean_db():
             LearningPath,
             CourseKnowledgeGraph,
             CourseOffering,
+            CourseCatalogMaterial,
             CourseCatalog,
             CourseEnrollment,
+            AsyncTask,
             Course,
             User,
         ]:
@@ -67,8 +69,10 @@ async def clean_db():
             LearningPath,
             CourseKnowledgeGraph,
             CourseOffering,
+            CourseCatalogMaterial,
             CourseCatalog,
             CourseEnrollment,
+            AsyncTask,
             Course,
             User,
         ]:

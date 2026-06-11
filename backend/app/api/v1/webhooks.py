@@ -60,6 +60,110 @@ def _validate_resource_generation_result(result: dict | None) -> list[dict]:
     return resources
 
 
+def _target_node_from_task(task: AsyncTask) -> dict | None:
+    """Return KG target metadata for a KG-node child task."""
+    if not isinstance(task.result, dict):
+        return None
+    if task.result.get("mode") != "kg_node_target":
+        return None
+    target_node = task.result.get("target_node")
+    if not isinstance(target_node, dict):
+        return None
+    chapter = str(target_node.get("chapter") or "").strip()
+    node_name = str(target_node.get("node_name") or "").strip()
+    if not chapter or not node_name:
+        return None
+    return target_node
+
+
+def _metadata_for_resource(task: AsyncTask, resource: dict) -> tuple[str, str, list]:
+    target_node = _target_node_from_task(task)
+    tags = list(resource["tags"])
+    if target_node is None:
+        return resource["chapter"], resource["knowledge_point"], tags
+
+    node_id = str(target_node.get("node_id") or "").strip()
+    support_band = str(target_node.get("support_band") or "").strip()
+    diagnostic_tags = []
+    if node_id:
+        diagnostic_tags.append(f"kg_node:{node_id}")
+    if support_band:
+        diagnostic_tags.append(f"support_band:{support_band}")
+    for tag in diagnostic_tags:
+        if tag not in tags:
+            tags.append(tag)
+
+    return str(target_node["chapter"]), str(target_node["node_name"]), tags
+
+
+async def _recompute_parent_resource_generation_task(
+    db: AsyncSession,
+    child_task: AsyncTask,
+) -> None:
+    if not isinstance(child_task.result, dict):
+        return
+    parent_task_id = child_task.result.get("parent_task_id")
+    if not parent_task_id:
+        return
+
+    parent_result = await db.execute(
+        select(AsyncTask)
+        .where(
+            AsyncTask.id == str(parent_task_id),
+            AsyncTask.task_type == "resource_generation",
+            AsyncTask.is_deleted == False,
+        )
+        .with_for_update()
+    )
+    parent = parent_result.scalar_one_or_none()
+    if parent is None or parent.status in {"completed", "failed"}:
+        return
+
+    tasks_result = await db.execute(
+        select(AsyncTask).where(
+            AsyncTask.task_type == "resource_generation",
+            AsyncTask.is_deleted == False,
+        )
+    )
+    children = [
+        item
+        for item in tasks_result.scalars().all()
+        if isinstance(item.result, dict)
+        and item.result.get("parent_task_id") == str(parent_task_id)
+    ]
+    completed_count = sum(1 for item in children if item.status == "completed")
+    failed_count = sum(1 for item in children if item.status == "failed")
+    processing_count = max(0, len(children) - completed_count - failed_count)
+
+    current_parent_result = parent.result if isinstance(parent.result, dict) else {}
+    total_count = int(current_parent_result.get("total_child_count") or len(children))
+    updated_result = {
+        **current_parent_result,
+        "completed_child_count": completed_count,
+        "failed_child_count": failed_count,
+        "processing_child_count": processing_count,
+        "successful_node_count": completed_count,
+        "failed_node_count": failed_count,
+    }
+
+    finished_count = completed_count + failed_count
+    if finished_count < total_count:
+        parent.result = updated_result
+        return
+
+    parent.progress = 100
+    parent.completed_at = datetime.now(timezone.utc)
+    if completed_count > 0:
+        parent.status = "completed"
+        updated_result["degraded"] = failed_count > 0
+    else:
+        parent.status = "failed"
+        parent.error_code = "all_children_failed"
+        parent.error_message = "所有 KG 节点资源生成子任务均失败"
+        updated_result["degraded"] = True
+    parent.result = updated_result
+
+
 @router.post("/agent")
 async def agent_webhook(
     req: AgentWebhookRequest,
@@ -114,15 +218,16 @@ async def agent_webhook(
 
         for target_course_id in target_course_ids:
             for r in resources_data:
+                chapter, knowledge_point, tags = _metadata_for_resource(task, r)
                 resource = Resource(
                     id=uuid.uuid4().hex[:16],
                     course_id=target_course_id,
                     title=r["title"],
                     type=r["type"],
                     description=r["description"],
-                    tags=r["tags"],
-                    chapter=r["chapter"],
-                    knowledge_point=r["knowledge_point"],
+                    tags=tags,
+                    chapter=chapter,
+                    knowledge_point=knowledge_point,
                     content=r["content"],
                     url="",
                     create_by=task.user_id,
@@ -138,13 +243,16 @@ async def agent_webhook(
         }
         task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
+        await _recompute_parent_resource_generation_task(db, task)
     elif req.status == "failed":
         if not req.error_message or not req.error_message.strip():
             raise _bad_webhook_request("failed 回调必须包含 error_message")
         task.status = "failed"
         task.error_code = req.error_code or ""
         task.error_message = req.error_message or ""
+        task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
+        await _recompute_parent_resource_generation_task(db, task)
     await db.flush()
 
     return {"code": 200, "message": "success", "data": {}}

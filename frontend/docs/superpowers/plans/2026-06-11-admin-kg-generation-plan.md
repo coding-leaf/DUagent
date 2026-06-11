@@ -784,7 +784,7 @@ async def _last_kg_task_for_catalog(db: AsyncSession, catalog_id: str) -> AsyncT
     return result.scalar_one_or_none()
 ```
 
-If SQLite tests do not support `as_string()` consistently, replace `_task_catalog_id_expr()` with a dialect helper used only in one place:
+Keep the JSON predicate centralized in `_task_catalog_id_expr()` and verify it against MySQL. If `as_string()` does not produce the expected MySQL SQL, replace only this helper with the MySQL JSON extraction expression used by the project:
 
 ```python
 from sqlalchemy import func
@@ -794,7 +794,7 @@ def _task_catalog_id_expr():
     return func.json_extract(AsyncTask.result, "$.catalog_id")
 ```
 
-Use whichever expression passes both SQLite tests and MySQL probe tests.
+Use the expression that passes the MySQL tests; do not add alternate database fallbacks.
 
 Add background runner:
 

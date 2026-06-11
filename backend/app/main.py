@@ -13,11 +13,12 @@ from app.core.config import settings
 from app.db.session import init_db
 
 
-async def _recover_orphaned_refresh_tasks() -> None:
-    """启动时将残留的 refresh 类 processing 任务标记为 failed。
+async def _recover_orphaned_background_tasks() -> None:
+    """启动时将残留的进程内后台 processing 任务标记为 failed。
 
-    只覆盖 profile_refresh / evaluation_refresh / learning_path_refresh，
-    这三类使用 asyncio.create_task，进程重启后协程丢失。
+    只覆盖使用 asyncio.create_task 且没有外部恢复机制的任务：
+    profile_refresh / evaluation_refresh / learning_path_refresh / kg_generation。
+    进程重启后这些协程会丢失。
     resource_generation / quiz_generation 不在此范围。
     """
     import logging
@@ -28,14 +29,19 @@ async def _recover_orphaned_refresh_tasks() -> None:
     from app.models.others import AsyncTask
 
     logger = logging.getLogger(__name__)
-    _refresh_types = ["profile_refresh", "evaluation_refresh", "learning_path_refresh"]
+    _recoverable_task_types = [
+        "profile_refresh",
+        "evaluation_refresh",
+        "learning_path_refresh",
+        "kg_generation",
+    ]
 
     async with async_session_factory() as db:
         result = await db.execute(
             sql_update(AsyncTask)
             .where(
                 AsyncTask.status == "processing",
-                AsyncTask.task_type.in_(_refresh_types),
+                AsyncTask.task_type.in_(_recoverable_task_types),
             )
             .values(
                 status="failed",
@@ -47,7 +53,7 @@ async def _recover_orphaned_refresh_tasks() -> None:
         await db.commit()
         if result.rowcount:
             logger.warning(
-                "Startup recovery: marked %d orphaned refresh tasks as failed",
+                "Startup recovery: marked %d orphaned background tasks as failed",
                 result.rowcount,
             )
 
@@ -55,7 +61,7 @@ async def _recover_orphaned_refresh_tasks() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    await _recover_orphaned_refresh_tasks()
+    await _recover_orphaned_background_tasks()
     yield
 
 

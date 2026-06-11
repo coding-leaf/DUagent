@@ -2689,6 +2689,106 @@
         }
       }
     },
+    "/admin/course-catalogs/{catalog_id}/knowledge-graphs": {
+      "get": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员查看课程资源库知识图谱状态",
+        "description": "Admin-only。返回 CourseCatalog 当前绑定 CourseOffering 的 course_id、active KG 摘要和最近一次 kg_generation 任务状态。没有 active KG 时 active_graph 为 null。",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCatalogKnowledgeGraphStatusResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "非管理员访问"
+          },
+          "404": {
+            "description": "课程资源库不存在"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations": {
+      "post": {
+        "tags": [
+          "CourseCatalogs"
+        ],
+        "summary": "管理员触发课程资源库知识图谱生成",
+        "description": "Admin-only。基于大纲文本或 KG JSON 创建新的 course_knowledge_graphs 版本。该接口不触发学生个性化 LearningPath 刷新，也不要求 CourseCatalog chunk ready。",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCatalogKnowledgeGraphGenerationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "已接受",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCatalogKnowledgeGraphGenerationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "非管理员访问"
+          },
+          "404": {
+            "description": "课程资源库不存在"
+          },
+          "409": {
+            "description": "尚未绑定教学班或已有 KG 生成任务进行中；业务码 offering_missing / kg_task_running"
+          },
+          "422": {
+            "description": "source_type 或输入内容不合法"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/course-catalogs/{catalog_id}/resources": {
       "get": {
         "tags": [
@@ -4577,6 +4677,173 @@
           }
         }
       },
+      "AdminCatalogKnowledgeGraphGenerationRequest": {
+        "type": "object",
+        "required": [
+          "source_type"
+        ],
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "outline_text",
+              "kg_json"
+            ],
+            "description": "生成输入类型"
+          },
+          "outline_text": {
+            "type": "string",
+            "nullable": true,
+            "description": "source_type=outline_text 时必填，课程大纲文本"
+          },
+          "kg_json": {
+            "type": "object",
+            "nullable": true,
+            "description": "source_type=kg_json 时必填，包含 nodes 和 edges 的知识图谱 JSON"
+          },
+          "activate": {
+            "type": "boolean",
+            "default": true,
+            "description": "生成后是否设为 active 版本"
+          }
+        }
+      },
+      "AdminCatalogKnowledgeGraphGenerationResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 202
+          },
+          "message": {
+            "type": "string",
+            "example": "accepted"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string"
+              },
+              "catalog_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "example": "processing"
+              }
+            }
+          }
+        }
+      },
+      "AdminCatalogKnowledgeGraphStatusResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AdminCatalogKnowledgeGraphStatusData"
+          }
+        }
+      },
+      "AdminCatalogKnowledgeGraphStatusData": {
+        "type": "object",
+        "properties": {
+          "catalog_id": {
+            "type": "string"
+          },
+          "course_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "active_graph": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AdminCatalogKnowledgeGraphSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_generation_task": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AdminCatalogKnowledgeGraphTaskSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AdminCatalogKnowledgeGraphSummary": {
+        "type": "object",
+        "properties": {
+          "graph_id": {
+            "type": "string"
+          },
+          "course_id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "node_count": {
+            "type": "integer"
+          },
+          "edge_count": {
+            "type": "integer"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "generation_strategy": {
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminCatalogKnowledgeGraphTaskSummary": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "progress": {
+            "type": "integer"
+          },
+          "error_code": {
+            "type": "string",
+            "nullable": true
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "completed_at": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "TaskStatus": {
         "type": "object",
         "properties": {
@@ -4590,6 +4857,7 @@
               "evaluation_refresh",
               "profile_refresh",
               "learning_path_refresh",
+              "kg_generation",
               "quiz_generation",
               "resource_generation",
               "course_catalog_ingestion"
@@ -4611,7 +4879,7 @@
           },
           "result": {
             "type": "object",
-            "description": "任务结果摘要。course_catalog_ingestion 完成后前端刷新资料列表和知识库状态；evaluation/profile/learning_path 刷新可返回 updated_at，前端再调用对应 GET 读取最新结果。resource_generation / quiz_generation 为历史生成任务类型，当前前端契约不提供对应触发入口。",
+            "description": "任务结果摘要。course_catalog_ingestion 完成后前端刷新资料列表和知识库状态；kg_generation 完成后前端刷新知识图谱状态；evaluation/profile/learning_path 刷新可返回 updated_at，前端再调用对应 GET 读取最新结果。resource_generation / quiz_generation 为历史生成任务类型，当前前端契约不提供对应触发入口。",
             "properties": {
               "resource_ids": {
                 "type": "array",

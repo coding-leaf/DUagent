@@ -620,9 +620,107 @@ GET /api/v1/admin/logs/operations
 
 分页字段位于 `data` 内：`total`, `page`, `page_size`
 
-### 5.6 课程资源库生成资源与软删除
+### 5.6 课程资源库知识图谱生成
 
-#### 5.6.1 管理员触发课程资源库学习资源生成
+#### 5.6.1 管理员查看课程资源库知识图谱状态
+
+```
+GET /api/v1/admin/course-catalogs/:catalog_id/knowledge-graphs
+```
+
+**权限：** 仅 admin
+
+**说明：** 返回当前资源库通过 `CourseOffering` 绑定的 `course_id`、active KG 摘要和最近一次 `kg_generation` 任务状态。没有 active KG 时 `active_graph=null`。
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| catalog_id | string | 课程资源库 ID |
+| course_id | string | 通过 CourseOffering 解析出的教学班 / course ID；未绑定时为 null |
+| active_graph | object | 当前 active KG 摘要；没有时为 null |
+| active_graph.graph_id | string | KG ID |
+| active_graph.course_id | string | KG 写入的教学班 / course ID |
+| active_graph.version | integer | KG 版本号 |
+| active_graph.node_count | integer | 节点数 |
+| active_graph.edge_count | integer | 边数 |
+| active_graph.source_type | string | 来源类型 |
+| active_graph.generation_strategy | string | 生成策略 |
+| active_graph.is_active | boolean | 是否 active |
+| active_graph.created_at | string | 创建时间 |
+| last_generation_task | object | 最近一次 KG 生成任务；没有时为 null |
+| last_generation_task.task_id | string | 任务 ID |
+| last_generation_task.status | string | processing / completed / failed |
+| last_generation_task.progress | integer | 进度 |
+| last_generation_task.error_code | string | 错误码 |
+| last_generation_task.error_message | string | 错误信息 |
+| last_generation_task.created_at | string | 创建时间 |
+| last_generation_task.completed_at | string | 完成时间，未完成时为 null |
+
+#### 5.6.2 管理员触发课程资源库知识图谱生成
+
+```
+POST /api/v1/admin/course-catalogs/:catalog_id/knowledge-graphs/generations
+```
+
+**权限：** 仅 admin
+
+**说明：** 基于大纲文本或 KG JSON 创建新的 `course_knowledge_graphs` 版本。该接口不触发学生个性化 LearningPath 刷新，也不要求 CourseCatalog `chunk_count > 0`；资源生成仍单独要求知识库 ready/chunk gate。
+
+**请求体 `application/json`：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| source_type | string | 是 | outline_text / kg_json |
+| outline_text | string | 条件必填 | `source_type=outline_text` 时必填，课程大纲文本 |
+| kg_json | object | 条件必填 | `source_type=kg_json` 时必填，包含 nodes 和 edges |
+| activate | boolean | 否 | 生成后是否设为 active 版本，默认 true |
+
+大纲文本请求示例：
+
+```json
+{
+  "source_type": "outline_text",
+  "outline_text": "课程大纲文本",
+  "activate": true
+}
+```
+
+KG JSON 请求示例：
+
+```json
+{
+  "source_type": "kg_json",
+  "kg_json": {
+    "nodes": [
+      { "id": "pointer", "name": "指针", "chapter": "第 6 章 指针" }
+    ],
+    "edges": []
+  },
+  "activate": true
+}
+```
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| task_id | string | 异步任务 ID |
+| catalog_id | string | 课程资源库 ID |
+| status | string | 任务状态，创建后为 processing |
+
+**错误码：**
+
+| error_code | 说明 |
+|------|------|
+| offering_missing | 课程资源库尚未绑定 CourseOffering |
+| kg_task_running | 已有同一资源库 KG 生成任务进行中 |
+| kg_invalid_input | 输入大纲或 KG JSON 无法生成有效图谱 |
+| kg_llm_failed | LLM 调用或生成过程失败 |
+
+### 5.7 课程资源库生成资源与软删除
+
+#### 5.7.1 管理员触发课程资源库学习资源生成
 
 ```
 POST /api/v1/admin/course-catalogs/:catalog_id/resources/generations
@@ -659,7 +757,7 @@ POST /api/v1/admin/course-catalogs/:catalog_id/resources/generations
 | 40915 | 课程资源库尚未绑定教学班 |
 | 42210 | 资源类型为空或不合法 |
 
-#### 5.6.2 管理员课程资源库生成资源列表
+#### 5.7.2 管理员课程资源库生成资源列表
 
 ```
 GET /api/v1/admin/course-catalogs/:catalog_id/resources
@@ -695,7 +793,7 @@ GET /api/v1/admin/course-catalogs/:catalog_id/resources
 
 分页字段位于 `data` 内：`total`, `page`, `page_size`
 
-#### 5.6.3 管理员软删除学习资源
+#### 5.7.3 管理员软删除学习资源
 
 ```
 DELETE /api/v1/admin/resources/:resource_id
@@ -1403,6 +1501,7 @@ GET /api/v1/tutoring/conversations/:id
 - 前端每 1-3 秒轮询一次；`processing` 继续等，`completed` 后跳转或重新调用业务 GET，`failed` 显示错误。
 - Backend 查询任务表时必须带上当前登录用户校验归属；无权访问按 404 处理。
 - `course_catalog_ingestion` 完成后前端刷新资料列表和知识库状态。
+- `kg_generation` 完成后前端刷新课程资源库知识图谱状态。
 - `evaluation_refresh` / `profile_refresh` / `learning_path_refresh` 完成后通过 `result.updated_at` 表示已写入最新快照，前端再调用对应 GET 读取最新结果。
 - `resource_generation` / `quiz_generation` 为历史生成任务类型；当前前端契约不提供对应触发入口。
 
@@ -1415,13 +1514,17 @@ GET /api/v1/tasks/:task_id
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | task_id | string | 任务 ID |
-| task_type | string | 任务类型：evaluation_refresh / profile_refresh / learning_path_refresh / quiz_generation / resource_generation |
+| task_type | string | 任务类型：evaluation_refresh / profile_refresh / learning_path_refresh / kg_generation / quiz_generation / resource_generation / course_catalog_ingestion |
 | status | string | 状态：processing / completed / failed |
 | progress | integer | 进度百分比 0-100（部分任务支持） |
 | result | object | 任务结果摘要（completed 时有值） |
 | result.resource_ids | array | `resource_generation` 完成后可返回新资源 ID 列表 |
 | result.question_ids | array | `quiz_generation` 完成后可返回新题目 ID 列表 |
 | result.updated_at | string | `evaluation_refresh` / `profile_refresh` / `learning_path_refresh` 完成后可返回更新时间；前端再调用对应 GET 读取最新结果 |
+| result.graph_id | string | `kg_generation` 完成后可返回新 KG ID |
+| result.version | integer | `kg_generation` 完成后可返回新 KG 版本 |
+| result.node_count | integer | `kg_generation` 完成后可返回节点数 |
+| result.edge_count | integer | `kg_generation` 完成后可返回边数 |
 | error_code | string | 错误码（failed 时可选） |
 | error_message | string | 错误信息（failed 时有值） |
 | created_at | string | 创建时间 |

@@ -129,16 +129,6 @@ def _is_explicit_resource_target(req: CatalogResourceGenerateRequest) -> bool:
     return bool((req.chapter or "").strip() or (req.knowledge_point or "").strip())
 
 
-async def _active_kg_for_catalog_generation(
-    db: AsyncSession,
-    fanout_course_ids: list[str],
-):
-    for course_id in fanout_course_ids:
-        kg = await get_active_knowledge_graph(db, course_id)
-        if kg is not None:
-            return kg
-    return None
-
 
 def _course_material_missing() -> HTTPException:
     return HTTPException(
@@ -1172,7 +1162,7 @@ async def admin_generate_catalog_resources(
     resource_types = req.resource_types
 
     if not _is_explicit_resource_target(req):
-        kg = await _active_kg_for_catalog_generation(db, fanout_course_ids)
+        kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id or "")
         if kg is None:
             task = AsyncTask(
                 task_type="resource_generation",

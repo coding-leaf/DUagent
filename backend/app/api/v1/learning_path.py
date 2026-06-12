@@ -445,7 +445,36 @@ async def get_node_resources(
     node_name = node_id
     chapter = ""
 
-    # 1. 查找用户在该课程的最新学习路径
+    # 1. 查 KG（通过 CourseOffering → Catalog → kg_host_course_id）
+    kg = None
+    offering_result = await db.execute(
+        select(CourseOffering).where(
+            CourseOffering.id == course_id,
+            CourseOffering.is_deleted == False,
+        )
+    )
+    offering = offering_result.scalar_one_or_none()
+    if offering is not None:
+        catalog_result = await db.execute(
+            select(CourseCatalog).where(
+                CourseCatalog.id == offering.catalog_id,
+                CourseCatalog.is_deleted == False,
+            )
+        )
+        catalog = catalog_result.scalar_one_or_none()
+        if catalog is not None and catalog.kg_host_course_id:
+            kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
+
+    # 2. 从 KG 获取 node_name 和 chapter
+    if kg and kg.nodes:
+        kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
+        for kg_node in kg_nodes:
+            if isinstance(kg_node, dict) and kg_node.get("id") == node_id:
+                node_name = kg_node.get("name", node_id)
+                chapter = kg_node.get("chapter", "")
+                break
+
+    # 3. 查找用户在该课程的最新 LearningPath（LP 中的 node_name 优先于 KG）
     lp_result = await db.execute(
         select(LearningPath)
         .where(
@@ -460,16 +489,7 @@ async def get_node_resources(
         nodes = lp.nodes if isinstance(lp.nodes, list) else []
         for node in nodes:
             if isinstance(node, dict) and node.get("id") == node_id:
-                node_name = node.get("name", node_id)
-                break
-
-    # 2. 从知识图谱获取 chapter（schema 约定 [{id, name, chapter}]）
-    kg = await get_active_knowledge_graph(db, course_id)
-    if kg and kg.nodes:
-        kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
-        for kg_node in kg_nodes:
-            if isinstance(kg_node, dict) and kg_node.get("id") == node_id:
-                chapter = kg_node.get("chapter", "")
+                node_name = node.get("name", node_name)
                 break
 
     # 3. weak_point_tutorials: Resource 按 knowledge_point 匹配

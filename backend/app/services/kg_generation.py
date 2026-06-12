@@ -159,6 +159,7 @@ Ensure that the output contains ONLY the valid JSON object without any markdown 
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1,
+        "max_tokens": 32768,
         "response_format": {"type": "json_object"},
     }
 

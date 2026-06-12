@@ -16,6 +16,7 @@ from app.db.session import async_session_factory
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
 from app.models.course import Course
 from app.models.others import AsyncTask, Resource
+from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.schemas.catalog import (
     CatalogKnowledgeGraphGenerationRequest,
@@ -1361,6 +1362,194 @@ async def admin_generate_catalog_resources(
         "code": 202,
         "message": "accepted",
         "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
+    }
+
+
+@router.post("/admin/course-catalogs/{catalog_id}/quiz/generations", status_code=202)
+async def admin_generate_catalog_quiz(
+    catalog_id: str,
+    request: Request,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin 批量生成保底题库：遍历 active KG 全部节点，每节点调 Agent 出题落库。"""
+    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    if catalog.status != "ready":
+        raise _course_material_missing()
+    if catalog.knowledge_status not in {"ready", "partial"}:
+        raise _course_material_missing()
+    if (catalog.chunk_count or 0) <= 0:
+        raise _knowledge_base_empty()
+
+    offerings_result = await db.execute(
+        select(CourseOffering)
+        .where(
+            CourseOffering.catalog_id == catalog.id,
+            CourseOffering.is_deleted == False,
+        )
+        .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
+    )
+    offerings = offerings_result.scalars().all()
+    if not offerings:
+        raise _course_offering_missing()
+
+    fanout_course_ids = [offering.id for offering in offerings]
+
+    kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id or "")
+    if kg is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": 40917,
+                "message": "课程知识图谱未就绪",
+                "data": {"error_code": "kg_not_ready"},
+            },
+        )
+
+    kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
+    if not kg_nodes:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": 40918,
+                "message": "课程知识图谱节点为空",
+                "data": {"error_code": "kg_nodes_empty"},
+            },
+        )
+
+    # 重复生成前软删除旧保底题
+    for cid in fanout_course_ids:
+        await db.execute(
+            update(QuizQuestion)
+            .where(
+                QuizQuestion.course_id == cid,
+                QuizQuestion.source == "baseline",
+                QuizQuestion.is_deleted == False,
+            )
+            .values(is_deleted=True)
+        )
+
+    parent = AsyncTask(
+        task_type="quiz_generation",
+        status="processing",
+        progress=10,
+        user_id=current_user.id,
+        course_id=None,
+        result={
+            "catalog_id": catalog.id,
+            "catalog_title": catalog.title,
+            "fanout_course_ids": fanout_course_ids,
+            "total_node_count": len(kg_nodes),
+            "completed_node_count": 0,
+            "failed_node_count": 0,
+            "total_question_count": 0,
+        },
+    )
+    db.add(parent)
+    await db.flush()
+    await db.refresh(parent)
+
+    children: list[AsyncTask] = []
+    for kg_node in kg_nodes:
+        node_name = kg_node.get("name", "")
+        chapter = kg_node.get("chapter", "")
+        child = AsyncTask(
+            task_type="quiz_generation",
+            status="processing",
+            progress=10,
+            user_id=current_user.id,
+            course_id=fanout_course_ids[0],
+            result={
+                "catalog_id": catalog.id,
+                "parent_task_id": parent.id,
+                "node_name": node_name,
+                "chapter": chapter,
+                "course_ids": fanout_course_ids,
+            },
+        )
+        db.add(child)
+        children.append(child)
+    await db.flush()
+
+    for child in children:
+        node_name = child.result["node_name"]
+        chapter = child.result.get("chapter") or ""
+        payload = {
+            "task_id": child.id,
+            "user_id": current_user.id,
+            "course_id": child.course_id,
+            "chapter": chapter,
+            "knowledge_point": node_name,
+            "question_types": [
+                "single_choice", "single_choice", "single_choice",
+                "multi_choice", "multi_choice", "multi_choice", "multi_choice",
+            ],
+            "count": 7,
+            "difficulty": "medium",
+            "source": "baseline",
+        }
+        try:
+            data = await agent_client.post_json(
+                "/agent/v1/assessment/generate-questions",
+                payload,
+            )
+            questions = data.get("questions") if isinstance(data, dict) else []
+            for cid in (child.result.get("course_ids") or fanout_course_ids):
+                for q in (questions if isinstance(questions, list) else []):
+                    async with async_session_factory() as recovery_db:
+                        recovery_db.add(QuizQuestion(
+                            course_id=cid,
+                            chapter=chapter,
+                            knowledge_point=node_name,
+                            type=q.get("type", "single_choice"),
+                            source="baseline",
+                            personalized=False,
+                            difficulty="medium",
+                            content=q.get("content", ""),
+                            options=q.get("options", []),
+                            correct_answer=str(q.get("answer", "")),
+                            explanation=q.get("explanation", ""),
+                        ))
+                        await recovery_db.commit()
+            child.status = "completed"
+            child.progress = 100
+            child.completed_at = _now_utc()
+            child.result = {**child.result, "question_count": len(questions) if isinstance(questions, list) else 0}
+        except AgentServiceError as e:
+            child.status = "failed"
+            child.progress = 100
+            child.error_code = str(e.agent_code or "agent_error")
+            child.error_message = e.message
+            child.completed_at = _now_utc()
+        except Exception as e:
+            child.status = "failed"
+            child.progress = 100
+            child.error_code = "unexpected_error"
+            child.error_message = str(e)[:500]
+            child.completed_at = _now_utc()
+
+    # 汇总父任务
+    completed = sum(1 for c in children if c.status == "completed")
+    failed = sum(1 for c in children if c.status == "failed")
+    total_qs = sum(
+        (c.result.get("question_count") if isinstance(c.result, dict) else 0)
+        for c in children if c.status == "completed"
+    )
+    parent.status = "completed" if failed == 0 else "failed"
+    parent.progress = 100
+    parent.completed_at = _now_utc()
+    parent.result = {
+        **parent.result,
+        "completed_node_count": completed,
+        "failed_node_count": failed,
+        "total_question_count": total_qs,
+    }
+    await db.commit()
+
+    return {
+        "code": 202,
+        "message": "accepted",
+        "data": {"task_id": parent.id, "catalog_id": catalog.id, "status": "processing"},
     }
 
 

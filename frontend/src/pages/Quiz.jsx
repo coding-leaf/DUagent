@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
 import { useCourse } from '../context/CourseContext';
 
 export default function Quiz() {
   const navigate = useNavigate();
   const { activeCourseId } = useCourse();
+  const [searchParams] = useSearchParams();
+  const nodeId = searchParams.get('node_id');
   const [quizData, setQuizData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -17,7 +19,7 @@ export default function Quiz() {
       if (!activeCourseId) return;
       try {
         setLoading(true);
-        const res = await quizService.getQuestions(activeCourseId, 'tree');
+        const res = await quizService.getQuestions(activeCourseId, nodeId || undefined);
         if (res.code === 200) {
           setQuizData(res.data);
         }

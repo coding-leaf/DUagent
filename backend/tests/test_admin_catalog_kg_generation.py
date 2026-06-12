@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
 if not TEST_DATABASE_URL.startswith("mysql+"):
@@ -404,9 +404,19 @@ async def test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_
     async with async_session_factory() as db:
         catalog = await db.get(CourseCatalog, "catalog-no-offering")
         host_course = await db.get(Course, "host-course-existing")
+        task = (
+            await db.execute(
+                select(AsyncTask)
+                .where(AsyncTask.task_type == "kg_generation")
+                .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
 
     assert catalog.kg_host_course_id == "host-course-existing"
     assert host_course is not None
+    assert task.course_id == "host-course-existing"
+    assert task.result["course_id"] == "host-course-existing"
 
 
 @pytest.mark.asyncio
@@ -450,11 +460,21 @@ async def test_catalog_kg_generation_creates_hidden_host_course_when_no_offering
     async with async_session_factory() as db:
         catalog = await db.get(CourseCatalog, catalog_id)
         host_course = await db.get(Course, catalog.kg_host_course_id)
+        task = (
+            await db.execute(
+                select(AsyncTask)
+                .where(AsyncTask.task_type == "kg_generation")
+                .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
+                .limit(1)
+            )
+        ).scalar_one()
 
     assert catalog.kg_host_course_id is not None
     assert host_course is not None
     assert host_course.teacher_id == "admin-admin-gen"
     assert host_course.name.startswith("[KG HOST]")
+    assert task.course_id == host_course.id
+    assert task.result["course_id"] == host_course.id
 
 
 @pytest.mark.asyncio
@@ -476,6 +496,19 @@ async def test_admin_catalog_kg_generation_rejects_catalog_chunks_when_knowledge
 
     assert response.status_code == 409
     assert response.json()["detail"]["data"]["error_code"] == "knowledge_base_not_ready"
+
+    async with async_session_factory() as db:
+        catalog = await db.get(CourseCatalog, catalog_id)
+        host_course_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Course)
+                .where(Course.name.like("[KG HOST]%"))
+            )
+        ).scalar_one()
+
+    assert catalog.kg_host_course_id is None
+    assert host_course_count == 0
 
 
 @pytest.mark.asyncio

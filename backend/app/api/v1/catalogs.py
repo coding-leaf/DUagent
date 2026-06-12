@@ -950,11 +950,6 @@ async def admin_generate_catalog_knowledge_graph(
 ):
     req = req or CatalogKnowledgeGraphGenerationRequest()
     catalog = await _get_admin_catalog_or_404(db, catalog_id)
-    host_course = await _get_or_create_catalog_kg_host_course(
-        db,
-        catalog,
-        actor_user_id=current_user.id,
-    )
 
     if req.source_type == "catalog_chunks":
         if catalog.knowledge_status not in {"ready", "partial"}:
@@ -982,6 +977,12 @@ async def admin_generate_catalog_knowledge_graph(
                 "data": {"error_code": "kg_task_running"},
             },
         )
+
+    host_course = await _get_or_create_catalog_kg_host_course(
+        db,
+        catalog,
+        actor_user_id=current_user.id,
+    )
 
     task_result = {
         "catalog_id": catalog.id,

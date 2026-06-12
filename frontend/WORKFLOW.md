@@ -20,6 +20,12 @@
 
 ## 最近验证
 
+- 2026-06-12：Admin KG 刷新补齐 backend LLM 配置读取：
+  - 根因确认：`backend/app/services/kg_generation.py` 直接读取 `os.environ["LLM_API_KEY"]`，而不是统一走 backend `Settings`；在某些启动方式下即使 `backend/.env` 有值，`kg_generation` 后台任务仍会因为进程环境未导出 `LLM_API_KEY` 而失败，前端显示 `task_id=94f2e75b5d3a4fe9`、`status=失败`、`progress=100%`。
+  - 修复：`backend/app/core/config.py` 补齐 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`，`backend/app/services/kg_generation.py` 改为优先读进程环境、缺失时回退到 backend `settings`；`start_all.sh` 启动 backend 前增加 `. ./.env` 导出，避免本地联调再次因环境未注入而失败。
+  - TDD：新增 `backend/tests/test_generate_kg.py::test_generate_kg_from_llm_uses_backend_settings_when_env_missing`，先验证现状无 `settings` 入口会失败，再以最小实现修复。
+  - 契约：未修改 Client API、未修改 Agent API、未新增字段或错误码。
+  - 验证：Backend `../.venv/bin/python -m pytest tests/test_generate_kg.py -q -p no:cacheprovider` 12/12 passed；Backend MySQL `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_kg_generation_task1?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py -q -p no:cacheprovider` 15/15 passed；Frontend `npm run build` 通过，仍有既有 Vite chunk size warning。
 - 2026-06-12：Admin 自动 KG 与资源挂载主流程调整：
   - Backend `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations` 支持空请求体，默认 `source_type=catalog_chunks`、`activate=true`，从 Qdrant `course_knowledge_v1_1024` 按 catalog_id scroll 读取知识切片，拼接上下文后复用 LLM KG 生成与版本落库。
   - 自动 KG 增加前置校验：必须已绑定 CourseOffering，资源库 `knowledge_status in ready/partial` 且 `chunk_count > 0`；新增 / 同步错误码 `knowledge_base_not_ready`、`knowledge_base_empty`、`kg_context_empty`、`llm_kg_generation_failed`。

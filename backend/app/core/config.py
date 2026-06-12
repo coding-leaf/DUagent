@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Agent service (internal)
     AGENT_SERVICE_URL: str = "http://localhost:8002"
 
+    # LLM provider used by backend-side KG generation
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.deepseek.com"
+    LLM_MODEL: str = "deepseek-chat"
+
     # CourseCatalog local material storage
     COURSE_CATALOG_STORAGE_ROOT: str = "storage/course_catalogs"
     COURSE_CATALOG_MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
-    model_config = {"env_file": ".env", "case_sensitive": True}
+    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 
 
 settings = Settings()

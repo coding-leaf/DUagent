@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings
 from app.db.session import async_session_factory
 from app.services.course_knowledge_graphs import (
     create_knowledge_graph_version,
@@ -114,9 +115,9 @@ async def build_catalog_kg_context(
 
 async def generate_kg_from_llm(outline: str) -> dict[str, Any]:
     """Call the configured LLM to extract a course KG JSON payload from outline text."""
-    api_key = os.environ.get("LLM_API_KEY")
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
-    model = os.environ.get("LLM_MODEL", "deepseek-chat")
+    api_key = os.environ.get("LLM_API_KEY") or settings.LLM_API_KEY
+    base_url = os.environ.get("LLM_BASE_URL") or settings.LLM_BASE_URL
+    model = os.environ.get("LLM_MODEL") or settings.LLM_MODEL
     if not api_key:
         raise KGGenerationInputError("LLM_API_KEY environment variable is not set")
 

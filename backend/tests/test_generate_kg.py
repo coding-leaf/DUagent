@@ -1,8 +1,10 @@
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from tools import generate_knowledge_graph as generate_kg_module
 from app.services.kg_generation import (
+    generate_kg_from_llm,
     load_kg_json_file,
     load_grounding_matches,
     prune_kg_with_grounding_file,
@@ -163,6 +165,35 @@ def test_route_a_generation_strategy_uses_usable_name_only_for_default_threshold
     assert route_a_generation_strategy_for_threshold(0.60) == "route_a_prune_usable_060"
     assert route_a_generation_strategy_for_threshold(0.6000000001) == "route_a_prune_usable_060"
     assert route_a_generation_strategy_for_threshold(0.70) == "route_a_prune_unsupported"
+
+
+@pytest.mark.asyncio
+async def test_generate_kg_from_llm_uses_backend_settings_when_env_missing(monkeypatch) -> None:
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+
+    with patch("app.services.kg_generation.settings.LLM_API_KEY", "settings-key"), patch(
+        "app.services.kg_generation.settings.LLM_BASE_URL", "https://settings.example"
+    ), patch("app.services.kg_generation.settings.LLM_MODEL", "settings-model"), patch(
+        "app.services.kg_generation.httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": '{"nodes":[],"edges":[]}'}}]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        result = await generate_kg_from_llm("课程内容")
+
+    assert result == {"nodes": [], "edges": []}
+    called_url = mock_post.await_args.args[0]
+    called_payload = mock_post.await_args.kwargs["json"]
+    called_headers = mock_post.await_args.kwargs["headers"]
+    assert called_url == "https://settings.example/chat/completions"
+    assert called_payload["model"] == "settings-model"
+    assert called_headers["Authorization"] == "Bearer settings-key"
 
 
 def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path: Path) -> None:

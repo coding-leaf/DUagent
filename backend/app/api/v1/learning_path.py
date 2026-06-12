@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.db.session import async_session_factory
 from app.models.course import CourseEnrollment
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.others import AsyncTask, Evaluation, LearningPath, Resource, UserProfile
 from app.models.quiz import QuizQuestion
 from app.models.user import User
@@ -90,6 +91,80 @@ def _topo_sort_kg_nodes(
     return [node_map[nid] for nid in sorted_ids if nid in node_map]
 
 
+async def _synthesize_kg_fallback_path(
+    db: AsyncSession,
+    course_id: str,
+) -> dict | None:
+    """从 active KG 合成学习路径骨架。
+
+    查找链: CourseOffering(id=course_id) → catalog_id →
+            CourseCatalog → kg_host_course_id → active KG.
+    返回 KG 节点（拓扑排序）+ 边，全部 status="recommended"。
+    如果任一环节查不到，返回 None。
+    """
+    # 1. CourseOffering → catalog_id
+    offering_result = await db.execute(
+        select(CourseOffering).where(
+            CourseOffering.id == course_id,
+            CourseOffering.is_deleted == False,
+        )
+    )
+    offering = offering_result.scalar_one_or_none()
+    if offering is None:
+        return None
+
+    # 2. CourseCatalog → kg_host_course_id
+    catalog_result = await db.execute(
+        select(CourseCatalog).where(
+            CourseCatalog.id == offering.catalog_id,
+            CourseCatalog.is_deleted == False,
+        )
+    )
+    catalog = catalog_result.scalar_one_or_none()
+    if catalog is None or not catalog.kg_host_course_id:
+        return None
+
+    # 3. Active KG
+    kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
+    if kg is None:
+        return None
+
+    kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
+    if not kg_nodes:
+        return None
+
+    kg_edges = kg.edges if isinstance(kg.edges, list) else []
+
+    # 4. Topo sort
+    sorted_nodes = _topo_sort_kg_nodes(kg_nodes, kg_edges)
+
+    # 5. Assemble nodes with status/mastery/order
+    assembled_nodes = []
+    for idx, node in enumerate(sorted_nodes):
+        assembled_nodes.append({
+            "id": node.get("id", ""),
+            "name": node.get("name", ""),
+            "chapter": node.get("chapter", ""),
+            "order": idx + 1,
+            "status": "recommended",
+            "mastery": 0,
+        })
+
+    first_node = assembled_nodes[0]
+
+    return {
+        "course_id": course_id,
+        "nodes": assembled_nodes,
+        "edges": kg_edges,
+        "current_position": {
+            "node_id": first_node["id"],
+            "node_name": first_node["name"],
+        },
+        "source": "kg_fallback",
+        "generated_at": kg.create_time.isoformat() if kg.create_time else None,
+    }
+
+
 @router.get("")
 async def get_learning_path(
     course_id: str = Query(...),
@@ -109,6 +184,9 @@ async def get_learning_path(
     lp = result.scalars().first()
 
     if lp is None:
+        fallback = await _synthesize_kg_fallback_path(db, course_id)
+        if fallback is not None:
+            return {"code": 200, "message": "success", "data": fallback}
         return {
             "code": 200,
             "message": "success",
@@ -117,6 +195,7 @@ async def get_learning_path(
                 "nodes": [],
                 "edges": [],
                 "current_position": None,
+                "source": "kg_fallback",
                 "generated_at": None,
             },
         }
@@ -132,6 +211,7 @@ async def get_learning_path(
                 "node_id": lp.current_node_id,
                 "node_name": lp.current_node_name,
             } if lp.current_node_id else None,
+            "source": "learning_path",
             "generated_at": lp.generated_at.isoformat() if lp.generated_at else None,
         },
     }

@@ -13,8 +13,10 @@ from app.models.others import AsyncTask
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.schemas.operations import QuizGenerateRequest, QuizSubmitRequest
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services import quiz_service
+from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.course_catalog_gate import resolve_generation_catalog
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ async def get_questions(
     knowledge_point: str = Query(None),
     type: str = Query(None),
     source: str = Query(None),
+    node_id: str = Query(None),
     limit: int = Query(10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -59,6 +62,35 @@ async def get_questions(
         query = query.where(QuizQuestion.type == type)
     if source:
         query = query.where(QuizQuestion.source == source)
+
+    if node_id:
+        kg_node_name = node_id
+        kg = await get_active_knowledge_graph(db, course_id)
+        if kg is None:
+            offering_result = await db.execute(
+                select(CourseOffering).where(
+                    CourseOffering.id == course_id,
+                    CourseOffering.is_deleted == False,
+                )
+            )
+            offering = offering_result.scalar_one_or_none()
+            if offering is not None:
+                catalog_result = await db.execute(
+                    select(CourseCatalog).where(
+                        CourseCatalog.id == offering.catalog_id,
+                        CourseCatalog.is_deleted == False,
+                    )
+                )
+                catalog = catalog_result.scalar_one_or_none()
+                if catalog is not None and catalog.kg_host_course_id:
+                    kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
+        if kg and kg.nodes:
+            kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
+            for kg_node in kg_nodes:
+                if isinstance(kg_node, dict) and kg_node.get("id") == node_id:
+                    kg_node_name = kg_node.get("name", node_id)
+                    break
+        query = query.where(QuizQuestion.knowledge_point == kg_node_name)
 
     result = await db.execute(query.limit(limit))
     questions = result.scalars().all()

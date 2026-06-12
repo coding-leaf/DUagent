@@ -587,6 +587,8 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await expect(page.getByTestId('catalog-drawer')).toBeVisible();
     await expect(page.getByRole('heading', { name: '知识图谱' })).toBeVisible();
     await expect(page.getByText('暂无 active 知识图谱。')).toBeVisible();
+    await expect(page.getByText('当前资源库暂无 active 知识图谱')).toBeVisible();
+    await expect(page.getByText('当前尚未被教学班使用')).toHaveCount(0);
     await expect(page.getByTestId('catalog-kg-outline')).toHaveCount(0);
     await expect(page.getByTestId('catalog-kg-json')).toHaveCount(0);
     await expect(page.getByText('大纲文本')).toHaveCount(0);
@@ -597,6 +599,7 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
 
     await expect(page.getByTestId('catalog-kg-task-status').getByText('处理中')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('catalog-kg-task-status').getByText('已完成')).toBeVisible({ timeout: 7000 });
+    await expect(page.getByText('当前显示的是该资源库的 active 知识图谱')).toBeVisible();
     await expect(page.getByText('v2')).toBeVisible();
     await expect(page.getByText('3 / 2')).toBeVisible();
     expect(kgTaskPollCount).toBeGreaterThanOrEqual(2);

@@ -815,7 +815,9 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
               <div>
                 <h3 className="text-sm font-bold text-slate-900">知识图谱</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {knowledgeGraphStatus?.course_id ? `当前被教学班 ${knowledgeGraphStatus.course_id} 使用` : '当前尚未被教学班使用'}
+                  {knowledgeGraphStatus?.active_graph
+                    ? '当前显示的是该资源库的 active 知识图谱'
+                    : '当前资源库暂无 active 知识图谱'}
                 </p>
               </div>
               <button

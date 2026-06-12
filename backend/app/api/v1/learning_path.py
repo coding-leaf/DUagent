@@ -155,7 +155,7 @@ async def _synthesize_kg_fallback_path(
     return {
         "course_id": course_id,
         "nodes": assembled_nodes,
-        "edges": kg_edges,
+        "edges": kg_edges or [],
         "current_position": {
             "node_id": first_node["id"],
             "node_name": first_node["name"],

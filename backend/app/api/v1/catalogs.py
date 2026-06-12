@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
@@ -36,6 +37,8 @@ SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
 KG_RESOURCE_TARGET_LIMIT = 10
+HOST_COURSE_NAME_PREFIX = "[KG HOST] "
+COURSE_NAME_MAX_LENGTH = 100
 
 
 def _catalog_item(catalog: CourseCatalog) -> dict:
@@ -198,22 +201,50 @@ async def _get_or_create_catalog_kg_host_course(
     *,
     actor_user_id: str,
 ) -> Course:
-    if catalog.kg_host_course_id:
-        existing = await db.get(Course, catalog.kg_host_course_id)
+    catalog_id = catalog.id
+    locked_catalog = (
+        await db.execute(
+            select(CourseCatalog)
+            .where(
+                CourseCatalog.id == catalog_id,
+                CourseCatalog.is_deleted == False,
+            )
+            .with_for_update()
+        )
+    ).scalar_one()
+
+    if locked_catalog.kg_host_course_id:
+        existing = await db.get(Course, locked_catalog.kg_host_course_id)
         if existing is not None and not existing.is_deleted:
+            catalog.kg_host_course_id = existing.id
             return existing
 
     host_course = Course(
-        name=f"[KG HOST] {catalog.title}",
-        description=f"System host course for catalog {catalog.id} knowledge graphs",
-        course_code=f"KGH{catalog.id[:8].upper()}",
+        name=_catalog_kg_host_course_name(locked_catalog.title),
+        description=f"System host course for catalog {locked_catalog.id} knowledge graphs",
+        course_code=f"KGH{uuid4().hex[:8].upper()}",
         teacher_id=actor_user_id,
     )
-    db.add(host_course)
-    await db.flush()
-    catalog.kg_host_course_id = host_course.id
-    await db.flush()
-    return host_course
+    try:
+        db.add(host_course)
+        await db.flush()
+        locked_catalog.kg_host_course_id = host_course.id
+        catalog.kg_host_course_id = host_course.id
+        await db.flush()
+        return host_course
+    except IntegrityError:
+        await db.rollback()
+        reloaded_catalog = await db.get(CourseCatalog, catalog_id)
+        if reloaded_catalog is not None and reloaded_catalog.kg_host_course_id:
+            existing = await db.get(Course, reloaded_catalog.kg_host_course_id)
+            if existing is not None and not existing.is_deleted:
+                return existing
+        raise
+
+
+def _catalog_kg_host_course_name(title: str) -> str:
+    max_title_length = max(COURSE_NAME_MAX_LENGTH - len(HOST_COURSE_NAME_PREFIX), 0)
+    return f"{HOST_COURSE_NAME_PREFIX}{(title or '')[:max_title_length]}"
 
 
 def _knowledge_graph_summary(graph) -> dict:

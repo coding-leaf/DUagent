@@ -55,8 +55,10 @@ async def _dispose_db_engine_after_test():
 
 async def _reset_db():
     async with engine.begin() as conn:
+        await conn.exec_driver_sql("SET FOREIGN_KEY_CHECKS=0")
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+        await conn.exec_driver_sql("SET FOREIGN_KEY_CHECKS=1")
 
 
 async def _seed_catalog_and_course(
@@ -481,6 +483,129 @@ async def test_catalog_kg_generation_creates_hidden_host_course_when_no_offering
             course_id=host_course.id,
             source_type="catalog_chunks",
             catalog_id=catalog_id,
+            outline_text=None,
+            kg_json=None,
+            activate=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_catalog_kg_generation_creates_hidden_host_course_with_long_catalog_title():
+    await _reset_db()
+    await _seed_user("admin-host-title", "admin")
+    catalog_id = "catalog-host-title"
+    long_title = "T" * 100
+    async with async_session_factory() as db:
+        db.add(
+            CourseCatalog(
+                id=catalog_id,
+                title=long_title,
+                status="ready",
+                knowledge_status="ready",
+                chunk_count=5,
+            )
+        )
+        await db.commit()
+
+    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+        async def _long_title_result(**kwargs):
+            return {
+                "course_id": kwargs["course_id"],
+                "graph_id": "graph-long-title",
+                "version": 1,
+                "node_count": 1,
+                "edge_count": 0,
+                "source_type": "catalog_chunks",
+                "generation_strategy": "catalog_chunks_llm",
+                "metrics": {},
+                "activated": True,
+            }
+
+        mock_generate.side_effect = _long_title_result
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+                headers=_auth_headers("admin-host-title", "admin"),
+                json={},
+            )
+
+        assert response.status_code == 202, response.text
+        task_id = response.json()["data"]["task_id"]
+        task = await _wait_for_task_completion(task_id)
+
+        async with async_session_factory() as db:
+            catalog = await db.get(CourseCatalog, catalog_id)
+            host_course = await db.get(Course, catalog.kg_host_course_id)
+
+        assert host_course is not None
+        assert host_course.name.startswith("[KG HOST] ")
+        assert len(host_course.name) <= 100
+        assert task.course_id == host_course.id
+        assert task.result["course_id"] == host_course.id
+        mock_generate.assert_awaited_once_with(
+            course_id=host_course.id,
+            source_type="catalog_chunks",
+            catalog_id=catalog_id,
+            outline_text=None,
+            kg_json=None,
+            activate=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_catalog_kg_generation_truncates_hidden_host_course_name_for_long_catalog_title():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    long_title = "超长资源库标题" * 20
+    async with async_session_factory() as db:
+        db.add(
+            CourseCatalog(
+                id="catalog-host-course-long-title",
+                title=long_title,
+                status="ready",
+                knowledge_status="ready",
+                chunk_count=5,
+            )
+        )
+        await db.commit()
+
+    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+        async def _create_result(**kwargs):
+            return {
+                "course_id": kwargs["course_id"],
+                "graph_id": "graph-long-title",
+                "version": 1,
+                "node_count": 1,
+                "edge_count": 0,
+                "source_type": "catalog_chunks",
+                "generation_strategy": "catalog_chunks_llm",
+                "metrics": {},
+                "activated": True,
+            }
+
+        mock_generate.side_effect = _create_result
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/admin/course-catalogs/catalog-host-course-long-title/knowledge-graphs/generations",
+                headers=_auth_headers("admin-admin-gen", "admin"),
+                json={},
+            )
+
+        assert response.status_code == 202, response.text
+        task = await _wait_for_task_completion(response.json()["data"]["task_id"])
+
+        async with async_session_factory() as db:
+            catalog = await db.get(CourseCatalog, "catalog-host-course-long-title")
+            host_course = await db.get(Course, catalog.kg_host_course_id)
+
+        assert host_course is not None
+        assert host_course.name.startswith("[KG HOST] ")
+        assert len(host_course.name) <= 100
+        assert task.course_id == host_course.id
+        mock_generate.assert_awaited_once_with(
+            course_id=host_course.id,
+            source_type="catalog_chunks",
+            catalog_id="catalog-host-course-long-title",
             outline_text=None,
             kg_json=None,
             activate=True,

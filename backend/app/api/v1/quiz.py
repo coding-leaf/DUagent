@@ -51,7 +51,7 @@ async def get_questions(
     query = select(QuizQuestion).where(
         QuizQuestion.course_id == course_id,
         QuizQuestion.is_deleted == False,
-        (QuizQuestion.source == "common")
+        (QuizQuestion.source.in_(["common", "baseline"]))
         | ((QuizQuestion.source == "personalized") & (QuizQuestion.owner_user_id == current_user.id)),
     )
     if chapter:

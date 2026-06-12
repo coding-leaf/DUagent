@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from urllib.parse import urlparse
 
@@ -255,9 +256,20 @@ async def test_generate_kg_json_links_second_active_version_to_parent_graph():
         ).scalars().all()
 
     first_graph, second_graph = graphs
+    assert first_graph.id == first_graph_id
+    assert first_graph.is_active is False
     assert second_graph.id == result["graph_id"]
     assert second_graph.is_active is True
     assert second_graph.parent_graph_id == first_graph_id
+
+
+def test_catalog_kg_host_course_migration_declares_column_index_and_fk():
+    migration = Path(__file__).resolve().parent.parent / "migrations" / "2026-06-12-add-catalog-kg-host-course-id.sql"
+    sql = migration.read_text(encoding="utf-8")
+
+    assert "ADD COLUMN kg_host_course_id VARCHAR(32) NULL" in sql
+    assert "ADD INDEX idx_course_catalog_kg_host_course_id (kg_host_course_id)" in sql
+    assert "ADD CONSTRAINT fk_course_catalog_kg_host_course" in sql
 
 
 @pytest.mark.asyncio

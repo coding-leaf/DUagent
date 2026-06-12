@@ -381,17 +381,20 @@ async def test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_
         await db.commit()
 
     with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
-        mock_generate.return_value = {
-            "course_id": "host-course-existing",
-            "graph_id": "graph-reuse",
-            "version": 1,
-            "node_count": 1,
-            "edge_count": 0,
-            "source_type": "catalog_chunks",
-            "generation_strategy": "catalog_chunks_llm",
-            "metrics": {},
-            "activated": True,
-        }
+        async def _reuse_result(**kwargs):
+            return {
+                "course_id": kwargs["course_id"],
+                "graph_id": "graph-reuse",
+                "version": 1,
+                "node_count": 1,
+                "edge_count": 0,
+                "source_type": "catalog_chunks",
+                "generation_strategy": "catalog_chunks_llm",
+                "metrics": {},
+                "activated": True,
+            }
+
+        mock_generate.side_effect = _reuse_result
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/admin/course-catalogs/catalog-no-offering/knowledge-graphs/generations",
@@ -399,19 +402,21 @@ async def test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_
                 json={},
             )
 
-    assert response.status_code == 202, response.text
+        assert response.status_code == 202, response.text
+        task_id = response.json()["data"]["task_id"]
+        task = await _wait_for_task_completion(task_id)
+        mock_generate.assert_awaited_once_with(
+            course_id="host-course-existing",
+            source_type="catalog_chunks",
+            catalog_id="catalog-no-offering",
+            outline_text=None,
+            kg_json=None,
+            activate=True,
+        )
 
     async with async_session_factory() as db:
         catalog = await db.get(CourseCatalog, "catalog-no-offering")
         host_course = await db.get(Course, "host-course-existing")
-        task = (
-            await db.execute(
-                select(AsyncTask)
-                .where(AsyncTask.task_type == "kg_generation")
-                .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
-                .limit(1)
-            )
-        ).scalar_one()
 
     assert catalog.kg_host_course_id == "host-course-existing"
     assert host_course is not None
@@ -437,17 +442,20 @@ async def test_catalog_kg_generation_creates_hidden_host_course_when_no_offering
     catalog_id = "catalog-host-course"
 
     with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
-        mock_generate.return_value = {
-            "course_id": "host-course-generated",
-            "graph_id": "graph-1",
-            "version": 1,
-            "node_count": 1,
-            "edge_count": 0,
-            "source_type": "catalog_chunks",
-            "generation_strategy": "catalog_chunks_llm",
-            "metrics": {},
-            "activated": True,
-        }
+        async def _create_result(**kwargs):
+            return {
+                "course_id": kwargs["course_id"],
+                "graph_id": "graph-1",
+                "version": 1,
+                "node_count": 1,
+                "edge_count": 0,
+                "source_type": "catalog_chunks",
+                "generation_strategy": "catalog_chunks_llm",
+                "metrics": {},
+                "activated": True,
+            }
+
+        mock_generate.side_effect = _create_result
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
@@ -455,26 +463,28 @@ async def test_catalog_kg_generation_creates_hidden_host_course_when_no_offering
                 json={},
             )
 
-    assert response.status_code == 202, response.text
+        assert response.status_code == 202, response.text
+        task_id = response.json()["data"]["task_id"]
+        task = await _wait_for_task_completion(task_id)
 
-    async with async_session_factory() as db:
-        catalog = await db.get(CourseCatalog, catalog_id)
-        host_course = await db.get(Course, catalog.kg_host_course_id)
-        task = (
-            await db.execute(
-                select(AsyncTask)
-                .where(AsyncTask.task_type == "kg_generation")
-                .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
-                .limit(1)
-            )
-        ).scalar_one()
+        async with async_session_factory() as db:
+            catalog = await db.get(CourseCatalog, catalog_id)
+            host_course = await db.get(Course, catalog.kg_host_course_id)
 
-    assert catalog.kg_host_course_id is not None
-    assert host_course is not None
-    assert host_course.teacher_id == "admin-admin-gen"
-    assert host_course.name.startswith("[KG HOST]")
-    assert task.course_id == host_course.id
-    assert task.result["course_id"] == host_course.id
+        assert catalog.kg_host_course_id is not None
+        assert host_course is not None
+        assert host_course.teacher_id == "admin-admin-gen"
+        assert host_course.name.startswith("[KG HOST]")
+        assert task.course_id == host_course.id
+        assert task.result["course_id"] == host_course.id
+        mock_generate.assert_awaited_once_with(
+            course_id=host_course.id,
+            source_type="catalog_chunks",
+            catalog_id=catalog_id,
+            outline_text=None,
+            kg_json=None,
+            activate=True,
+        )
 
 
 @pytest.mark.asyncio
@@ -563,6 +573,19 @@ async def test_admin_catalog_kg_generation_rejects_duplicate_processing_task():
 
     assert response.status_code == 409
     assert response.json()["detail"]["data"]["error_code"] == "kg_task_running"
+
+    async with async_session_factory() as db:
+        catalog = await db.get(CourseCatalog, catalog_id)
+        host_course_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Course)
+                .where(Course.name.like("[KG HOST]%"))
+            )
+        ).scalar_one()
+
+    assert catalog.kg_host_course_id is None
+    assert host_course_count == 0
 
 
 @pytest.mark.asyncio

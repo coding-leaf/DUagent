@@ -1,8 +1,10 @@
 import apiClient from '../client';
 
 export const quizService = {
-  getQuestions(courseId, chapter) {
-    return apiClient.get('/quiz/questions', { params: { course_id: courseId, chapter } });
+  getQuestions(courseId, nodeId) {
+    const params = { course_id: courseId };
+    if (nodeId) params.node_id = nodeId;
+    return apiClient.get('/quiz/questions', { params });
   },
   submitQuiz(data) {
     return apiClient.post('/quiz/submit', data);

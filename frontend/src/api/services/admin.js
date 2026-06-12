@@ -75,5 +75,9 @@ export const adminService = {
 
   deleteResource: async (resourceId) => {
     return apiClient.delete(`/admin/resources/${resourceId}`);
-  }
+  },
+
+  startQuizGeneration: async (catalogId) => {
+    return apiClient.post(`/admin/course-catalogs/${catalogId}/quiz/generations`);
+  },
 };

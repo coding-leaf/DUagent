@@ -1494,23 +1494,24 @@ async def admin_generate_catalog_quiz(
                 payload,
             )
             questions = data.get("questions") if isinstance(data, dict) else []
+            new_questions: list[QuizQuestion] = []
             for cid in (child.result.get("course_ids") or fanout_course_ids):
                 for q in (questions if isinstance(questions, list) else []):
-                    async with async_session_factory() as recovery_db:
-                        recovery_db.add(QuizQuestion(
-                            course_id=cid,
-                            chapter=chapter,
-                            knowledge_point=node_name,
-                            type=q.get("type", "single_choice"),
-                            source="baseline",
-                            personalized=False,
-                            difficulty="medium",
-                            content=q.get("content", ""),
-                            options=q.get("options", []),
-                            correct_answer=str(q.get("answer", "")),
-                            explanation=q.get("explanation", ""),
-                        ))
-                        await recovery_db.commit()
+                    new_questions.append(QuizQuestion(
+                        course_id=cid,
+                        chapter=chapter,
+                        knowledge_point=node_name,
+                        type=q.get("type", "single_choice"),
+                        source="baseline",
+                        personalized=False,
+                        difficulty="medium",
+                        content=q.get("content", ""),
+                        options=q.get("options", []),
+                        correct_answer=str(q.get("answer", "")),
+                        explanation=q.get("explanation", ""),
+                    ))
+            for q in new_questions:
+                db.add(q)
             child.status = "completed"
             child.progress = 100
             child.completed_at = _now_utc()
@@ -1535,7 +1536,7 @@ async def admin_generate_catalog_quiz(
         (c.result.get("question_count") if isinstance(c.result, dict) else 0)
         for c in children if c.status == "completed"
     )
-    parent.status = "completed" if failed == 0 else "failed"
+    parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
     parent.progress = 100
     parent.completed_at = _now_utc()
     parent.result = {

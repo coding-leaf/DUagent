@@ -13,6 +13,7 @@ from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
 from app.db.session import async_session_factory
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
+from app.models.course import Course
 from app.models.others import AsyncTask, Resource
 from app.models.user import User
 from app.schemas.catalog import (
@@ -189,6 +190,30 @@ async def _first_catalog_offering(db: AsyncSession, catalog_id: str) -> CourseOf
         .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
     )
     return result.scalars().first()
+
+
+async def _get_or_create_catalog_kg_host_course(
+    db: AsyncSession,
+    catalog: CourseCatalog,
+    *,
+    actor_user_id: str,
+) -> Course:
+    if catalog.kg_host_course_id:
+        existing = await db.get(Course, catalog.kg_host_course_id)
+        if existing is not None and not existing.is_deleted:
+            return existing
+
+    host_course = Course(
+        name=f"[KG HOST] {catalog.title}",
+        description=f"System host course for catalog {catalog.id} knowledge graphs",
+        course_code=f"KGH{catalog.id[:8].upper()}",
+        teacher_id=actor_user_id,
+    )
+    db.add(host_course)
+    await db.flush()
+    catalog.kg_host_course_id = host_course.id
+    await db.flush()
+    return host_course
 
 
 def _knowledge_graph_summary(graph) -> dict:
@@ -925,16 +950,11 @@ async def admin_generate_catalog_knowledge_graph(
 ):
     req = req or CatalogKnowledgeGraphGenerationRequest()
     catalog = await _get_admin_catalog_or_404(db, catalog_id)
-    offering = await _first_catalog_offering(db, catalog.id)
-    if offering is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": 40915,
-                "message": "课程资源库尚未绑定教学班",
-                "data": {"error_code": "offering_missing"},
-            },
-        )
+    host_course = await _get_or_create_catalog_kg_host_course(
+        db,
+        catalog,
+        actor_user_id=current_user.id,
+    )
 
     if req.source_type == "catalog_chunks":
         if catalog.knowledge_status not in {"ready", "partial"}:
@@ -965,7 +985,7 @@ async def admin_generate_catalog_knowledge_graph(
 
     task_result = {
         "catalog_id": catalog.id,
-        "course_id": offering.id,
+        "course_id": host_course.id,
         "source_type": req.source_type,
         "activate": req.activate,
     }
@@ -979,7 +999,7 @@ async def admin_generate_catalog_knowledge_graph(
         status="processing",
         progress=10,
         user_id=current_user.id,
-        course_id=offering.id,
+        course_id=host_course.id,
         result=task_result,
     )
     db.add(task)

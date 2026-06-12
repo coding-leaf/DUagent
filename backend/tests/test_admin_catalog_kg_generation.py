@@ -383,6 +383,54 @@ async def test_admin_catalog_kg_generation_rejects_missing_course_offering():
 
 
 @pytest.mark.asyncio
+async def test_catalog_kg_generation_creates_hidden_host_course_when_no_offering():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    async with async_session_factory() as db:
+        db.add(
+            CourseCatalog(
+                id="catalog-host-course",
+                title="Host Course Catalog",
+                status="ready",
+                knowledge_status="ready",
+                chunk_count=5,
+            )
+        )
+        await db.commit()
+    catalog_id = "catalog-host-course"
+
+    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+        mock_generate.return_value = {
+            "course_id": "host-course-generated",
+            "graph_id": "graph-1",
+            "version": 1,
+            "node_count": 1,
+            "edge_count": 0,
+            "source_type": "catalog_chunks",
+            "generation_strategy": "catalog_chunks_llm",
+            "metrics": {},
+            "activated": True,
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+                headers=_auth_headers("admin-admin-gen", "admin"),
+                json={},
+            )
+
+    assert response.status_code == 202, response.text
+
+    async with async_session_factory() as db:
+        catalog = await db.get(CourseCatalog, catalog_id)
+        host_course = await db.get(Course, catalog.kg_host_course_id)
+
+    assert catalog.kg_host_course_id is not None
+    assert host_course is not None
+    assert host_course.teacher_id == "admin-admin-gen"
+    assert host_course.name.startswith("[KG HOST]")
+
+
+@pytest.mark.asyncio
 async def test_admin_catalog_kg_generation_rejects_catalog_chunks_when_knowledge_not_ready():
     await _reset_db()
     catalog_id, _ = await _seed_catalog_and_course(

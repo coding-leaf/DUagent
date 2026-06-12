@@ -109,6 +109,27 @@ async def _seed_catalog_and_course(
     return catalog_id, course_id
 
 
+async def _seed_ready_catalog(
+    catalog_id: str = "catalog-kg-ready",
+    *,
+    status: str = "ready",
+    knowledge_status: str = "ready",
+    chunk_count: int = 1,
+) -> str:
+    async with async_session_factory() as db:
+        db.add(
+            CourseCatalog(
+                id=catalog_id,
+                title="KG Ready Catalog",
+                status=status,
+                knowledge_status=knowledge_status,
+                chunk_count=chunk_count,
+            )
+        )
+        await db.commit()
+    return catalog_id
+
+
 def _auth_headers(user_id: str, role: str) -> dict:
     from app.core.security import create_token
 
@@ -342,6 +363,48 @@ async def test_admin_get_catalog_kg_status_returns_empty_summary_with_course_id(
 
 
 @pytest.mark.asyncio
+async def test_catalog_kg_status_reads_active_graph_from_host_course():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    catalog_id = await _seed_ready_catalog(status="ready", knowledge_status="ready", chunk_count=5)
+
+    async with async_session_factory() as db:
+        catalog = await db.get(CourseCatalog, catalog_id)
+        host_course = Course(
+            id="host-course-status",
+            name="[KG HOST] Catalog",
+            course_code="KGHSTATUS",
+            teacher_id="admin-admin-gen",
+        )
+        db.add(host_course)
+        await db.flush()
+        catalog.kg_host_course_id = host_course.id
+        db.add(
+            CourseKnowledgeGraph(
+                id="kg-host-status",
+                course_id=host_course.id,
+                version=1,
+                is_active=True,
+                source_type="manual_import",
+                generation_strategy="manual_kg_json",
+                nodes=[{"id": "n1", "name": "指针", "chapter": "第六章"}],
+                edges=[],
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs",
+            headers=_auth_headers("admin-admin-gen", "admin"),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["course_id"] == "host-course-status"
+    assert response.json()["data"]["active_graph"]["graph_id"] == "kg-host-status"
+
+
+@pytest.mark.asyncio
 async def test_non_admin_cannot_start_catalog_kg_generation():
     await _reset_db()
     catalog_id, _ = await _seed_catalog_and_course()
@@ -427,7 +490,7 @@ async def test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_
 
 
 @pytest.mark.asyncio
-async def test_catalog_kg_generation_creates_hidden_host_course_when_no_offering():
+async def test_catalog_kg_generation_without_offering_returns_202_not_40915():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")
     async with async_session_factory() as db:

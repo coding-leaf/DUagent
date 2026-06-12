@@ -858,13 +858,12 @@ async def admin_get_catalog_knowledge_graph_status(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await _get_admin_catalog_or_404(db, catalog_id)
-    offering = await _first_catalog_offering(db, catalog.id)
-
-    active_graph = None
-    if offering is not None:
-        graph = await get_active_knowledge_graph(db, offering.id)
-        if graph is not None:
-            active_graph = _knowledge_graph_summary(graph)
+    host_course = await _get_or_create_catalog_kg_host_course(
+        db,
+        catalog,
+        actor_user_id=current_user.id,
+    )
+    graph = await get_active_knowledge_graph(db, host_course.id)
 
     task_result = await db.execute(
         select(AsyncTask)
@@ -883,8 +882,8 @@ async def admin_get_catalog_knowledge_graph_status(
         "message": "success",
         "data": {
             "catalog_id": catalog.id,
-            "course_id": offering.id if offering is not None else None,
-            "active_graph": active_graph,
+            "course_id": host_course.id,
+            "active_graph": _knowledge_graph_summary(graph) if graph else None,
             "last_generation_task": (
                 _knowledge_graph_task_summary(last_generation_task)
                 if last_generation_task is not None

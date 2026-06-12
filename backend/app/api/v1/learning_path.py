@@ -43,6 +43,53 @@ async def _release_learning_path_lock(db: AsyncSession, lock_name: str) -> None:
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
+def _topo_sort_kg_nodes(
+    nodes: list[dict],
+    edges: list[dict],
+) -> list[dict]:
+    """Kahn topological sort of KG nodes based on edges.
+
+    Returns nodes ordered so that prerequisites come before dependents.
+    Falls back to original array order if edges is empty.
+    """
+    if not nodes:
+        return []
+    if not edges:
+        return list(nodes)
+
+    node_ids = {n["id"] for n in nodes}
+    in_degree: dict[str, int] = {n["id"]: 0 for n in nodes}
+    adj: dict[str, list[str]] = {n["id"]: [] for n in nodes}
+
+    for edge in edges:
+        from_id = edge.get("from", "")
+        to_id = edge.get("to", "")
+        if from_id in node_ids and to_id in node_ids:
+            adj[from_id].append(to_id)
+            in_degree[to_id] = in_degree.get(to_id, 0) + 1
+
+    # Start with nodes that have zero in-degree, in original array order
+    queue = [n["id"] for n in nodes if in_degree.get(n["id"], 0) == 0]
+    sorted_ids: list[str] = []
+    while queue:
+        node_id = queue.pop(0)
+        sorted_ids.append(node_id)
+        for neighbor in adj.get(node_id, []):
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    # Append any remaining nodes not reached (cycles or missing edge refs)
+    sorted_set = set(sorted_ids)
+    for n in nodes:
+        if n["id"] not in sorted_set:
+            sorted_ids.append(n["id"])
+
+    # Map back to node dicts preserving all fields
+    node_map = {n["id"]: dict(n) for n in nodes}
+    return [node_map[nid] for nid in sorted_ids if nid in node_map]
+
+
 @router.get("")
 async def get_learning_path(
     course_id: str = Query(...),

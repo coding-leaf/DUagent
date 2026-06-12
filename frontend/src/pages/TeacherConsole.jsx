@@ -32,6 +32,8 @@ export default function TeacherConsole() {
   const [resources, setResources] = useState([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [resourcesError, setResourcesError] = useState(null);
+  const [pendingCreatedClassId, setPendingCreatedClassId] = useState(null);
+  const [copiedCourseCode, setCopiedCourseCode] = useState(false);
 
   // 获取教学班列表
   const refreshClasses = useCallback(async (silent = false) => {
@@ -42,6 +44,9 @@ export default function TeacherConsole() {
         const newClasses = res.data || [];
         setClasses(newClasses);
         setActiveClass(prev => {
+          if (pendingCreatedClassId && newClasses.some(c => c.id === pendingCreatedClassId)) {
+            return pendingCreatedClassId;
+          }
           if (newClasses.length > 0 && !newClasses.find(c => c.id === prev)) {
             return newClasses[0].id;
           }
@@ -51,9 +56,10 @@ export default function TeacherConsole() {
     } catch (e) {
       console.error(e);
     } finally {
+      if (pendingCreatedClassId) setPendingCreatedClassId(null);
       if (!silent) setClassesLoading(false);
     }
-  }, []);
+  }, [pendingCreatedClassId]);
 
   useEffect(() => {
     refreshClasses(); // eslint-disable-line react-hooks/set-state-in-effect
@@ -117,6 +123,22 @@ export default function TeacherConsole() {
     };
   }, [activeClass]);
 
+  const handleCopyCourseCode = async () => {
+    if (!activeClassInfo?.course_code) return;
+    try {
+      await navigator.clipboard.writeText(activeClassInfo.course_code);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = activeClassInfo.course_code;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopiedCourseCode(true);
+    setTimeout(() => setCopiedCourseCode(false), 2000);
+  };
+
   if (classesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -140,7 +162,11 @@ export default function TeacherConsole() {
         <CreateCourseDialog
           open={showCreateDialog}
           onClose={() => { setShowCreateDialog(false); refreshClasses(); }}
-          onCreated={() => {}}
+          onCreated={(createdClass) => {
+            if (createdClass?.id) {
+              setPendingCreatedClassId(createdClass.id);
+            }
+          }}
         />
       </>
     );
@@ -217,6 +243,9 @@ export default function TeacherConsole() {
                   {cls.catalog_title && (
                     <p className="text-xs text-outline mb-1 line-clamp-1">资源库：{cls.catalog_title}</p>
                   )}
+                  {cls.course_code && (
+                    <p className="text-xs font-medium text-cyan-700 mb-1">课程码：{cls.course_code}</p>
+                  )}
                   <p className="text-sm text-outline">{cls.students} 名学生</p>
                 </button>
               ))}
@@ -227,9 +256,23 @@ export default function TeacherConsole() {
           <section className="mb-margin" data-testid="teacher-resource-section">
             <div className="bg-white rounded-xl border border-outline-variant shadow-sm overflow-hidden">
               <div className="px-md py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">library_books</span>
-                  <h3 className="font-h3 text-xl text-on-surface">本班学习资源</h3>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary">library_books</span>
+                    <h3 className="font-h3 text-xl text-on-surface">本班学习资源</h3>
+                  </div>
+                  {activeClassInfo?.course_code && (
+                    <div className="flex items-center gap-2 text-xs text-outline">
+                      <span className="font-semibold text-slate-600">课程码：{activeClassInfo.course_code}</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyCourseCode}
+                        className="rounded-md bg-cyan-50 px-2 py-1 font-semibold text-cyan-700 hover:bg-cyan-100 transition-colors"
+                      >
+                        {copiedCourseCode ? '已复制' : '复制'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <span className="text-xs font-semibold text-outline">
                   {activeClassInfo?.catalog_title
@@ -486,7 +529,11 @@ export default function TeacherConsole() {
       <CreateCourseDialog
         open={showCreateDialog}
         onClose={() => { setShowCreateDialog(false); refreshClasses(); }}
-        onCreated={() => {}}
+        onCreated={(createdClass) => {
+          if (createdClass?.id) {
+            setPendingCreatedClassId(createdClass.id);
+          }
+        }}
       />
     </div>
   );

@@ -29,6 +29,7 @@ asyncio.run(init_db())
 
 from app.main import app
 from app.models.user import RegistrationCode
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course, CourseEnrollment
 from app.models.others import Resource
 
@@ -115,9 +116,39 @@ async def test():
         r2 = await client.post("/api/v1/courses", json={"name": "Student2 Course"}, headers=tea_headers)
         assert r2.status_code == 201
         course2_data = r2.json()["data"]
+        course2_id = course2_data["id"]
         course2_code = course2_data.get("course_code", course2_data.get("code", ""))
         join2_r = await client.post("/api/v1/courses/join", json={"course_code": course2_code}, headers=stu2_headers)
         assert join2_r.status_code == 200, f"Join course2 failed: {join2_r.status_code} {join2_r.json()}"
+
+        async with async_session_factory() as db:
+            db.add(
+                CourseCatalog(
+                    id="catalog_shared_test",
+                    title="Shared Catalog",
+                    status="ready",
+                    knowledge_status="ready",
+                    material_count=1,
+                    chunk_count=3,
+                )
+            )
+            db.add_all([
+                CourseOffering(
+                    id=course_id,
+                    name="Resource Test Course",
+                    catalog_id="catalog_shared_test",
+                    teacher_id=tea_id,
+                    class_code=course_code,
+                ),
+                CourseOffering(
+                    id=course2_id,
+                    name="Student2 Course",
+                    catalog_id="catalog_shared_test",
+                    teacher_id=tea_id,
+                    class_code=course2_code,
+                ),
+            ])
+            await db.commit()
 
         # Insert resources directly via DB
         doc_id = f"res_doc{uuid.uuid4().hex[:8]}"
@@ -125,6 +156,7 @@ async def test():
         code_id = f"res_code{uuid.uuid4().hex[:8]}"
         mindmap_id = f"res_mm{uuid.uuid4().hex[:8]}"
         video_id = f"res_vid{uuid.uuid4().hex[:8]}"
+        shared_id = f"res_shared{uuid.uuid4().hex[:8]}"
 
         sample_content = "这是一段测试正文内容。" * 60  # ~600 chars
 
@@ -140,6 +172,9 @@ async def test():
                          type="mindmap", content=None, chapter="ch4"),
                 Resource(id=video_id, course_id=course_id, title="Video Resource",
                          type="video", content=None, chapter="ch5"),
+                Resource(id=shared_id, course_id=course_id, catalog_id="catalog_shared_test",
+                         title="Shared Catalog Resource", type="document", content="shared doc content",
+                         chapter="共享章节", knowledge_point="共享知识点"),
             ]
             db.add_all(resources)
             await db.commit()
@@ -176,6 +211,10 @@ async def test():
         # teacher who created the course can access
         r = await client.get(f"/api/v1/resources/{doc_id}", headers=tea_headers)
         chk("200 teacher can access", r.status_code == 200)
+
+        # student2 is enrolled in another class bound to the same catalog — should also get 200
+        r = await client.get(f"/api/v1/resources/{shared_id}", headers=stu2_headers)
+        chk("200 shared catalog resource visible across bound classes", r.status_code == 200)
 
         # =============================================
         # 4. 200 — document type returns content_preview

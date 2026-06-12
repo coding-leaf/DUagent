@@ -465,7 +465,7 @@ def _webhook_headers() -> dict:
 
 
 @pytest.mark.asyncio
-async def test_webhook_fanout_writes_resources_to_bound_classes():
+async def test_webhook_writes_shared_catalog_resource_visible_to_all_bound_classes():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")
     await _seed_user("teacher-admin-gen", "teacher")
@@ -516,13 +516,25 @@ async def test_webhook_fanout_writes_resources_to_bound_classes():
     async with async_session_factory() as db:
         result = await db.execute(select(Resource).where(Resource.title == "Catalog Doc"))
         resources = result.scalars().all()
-        assert sorted(resource.course_id for resource in resources) == [class_a, class_b]
-        assert len(resources) == 2
+        assert len(resources) == 1
+        assert resources[0].course_id == class_a
+        assert resources[0].catalog_id == catalog_id
         task = await db.get(AsyncTask, "task-admin-gen")
         assert task.result["catalog_id"] == catalog_id
         assert task.result["fanout_course_ids"] == [class_a, class_b]
         assert task.result["resource_count"] == 1
         assert task.result["agent_result"]["resources"][0]["title"] == "Catalog Doc"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        class_b_resources = await client.get(
+            f"/api/v1/resources?course_id={class_b}",
+            headers=_auth_headers("teacher-admin-gen", "teacher"),
+        )
+
+    assert class_b_resources.status_code == 200, class_b_resources.text
+    payload = class_b_resources.json()["data"]
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["resources"]] == [resources[0].id]
 
 
 @pytest.mark.asyncio
@@ -605,6 +617,7 @@ async def test_webhook_kg_node_child_overrides_agent_metadata_and_updates_parent
         result = await db.execute(select(Resource).where(Resource.title == "Pointer Doc"))
         resource = result.scalar_one()
         assert resource.course_id == class_a
+        assert resource.catalog_id == catalog_id
         assert resource.chapter == "第二章"
         assert resource.knowledge_point == "指针"
         assert "kg_node:node-pointer" in resource.tags
@@ -851,6 +864,7 @@ async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
             Resource(
                 id="resource-a",
                 course_id=class_a,
+                catalog_id=catalog_id,
                 title="Doc A",
                 type="document",
                 description="a",
@@ -862,6 +876,7 @@ async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
             Resource(
                 id="resource-b",
                 course_id=class_b,
+                catalog_id=catalog_id,
                 title="Doc B",
                 type="document",
                 description="b",
@@ -873,6 +888,7 @@ async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
             Resource(
                 id="resource-deleted",
                 course_id=class_a,
+                catalog_id=catalog_id,
                 title="Deleted",
                 type="document",
                 description="d",

@@ -204,6 +204,8 @@ async def agent_webhook(
     if req.status == "completed":
         # --- resource_generation: write result.resources to SQL ---
         resources_data = _validate_resource_generation_result(req.result)
+        task_result = task.result if isinstance(task.result, dict) else {}
+        catalog_id = str(task_result.get("catalog_id") or "").strip() or None
         fanout_course_ids = []
         if isinstance(task.result, dict):
             raw_fanout_course_ids = task.result.get("fanout_course_ids") or []
@@ -212,29 +214,28 @@ async def agent_webhook(
                     str(course_id) for course_id in raw_fanout_course_ids if course_id
                 ]
 
-        target_course_ids = fanout_course_ids or ([task.course_id] if task.course_id else [])
-        if not target_course_ids:
+        primary_course_id = task.course_id or (fanout_course_ids[0] if fanout_course_ids else None)
+        if not primary_course_id:
             raise _bad_webhook_request("resource_generation 任务缺少 course_id")
 
-        for target_course_id in target_course_ids:
-            for r in resources_data:
-                chapter, knowledge_point, tags = _metadata_for_resource(task, r)
-                resource = Resource(
-                    id=uuid.uuid4().hex[:16],
-                    course_id=target_course_id,
-                    title=r["title"],
-                    type=r["type"],
-                    description=r["description"],
-                    tags=tags,
-                    chapter=chapter,
-                    knowledge_point=knowledge_point,
-                    content=r["content"],
-                    url="",
-                    create_by=task.user_id,
-                )
-                db.add(resource)
+        for r in resources_data:
+            chapter, knowledge_point, tags = _metadata_for_resource(task, r)
+            resource = Resource(
+                id=uuid.uuid4().hex[:16],
+                course_id=primary_course_id,
+                catalog_id=catalog_id,
+                title=r["title"],
+                type=r["type"],
+                description=r["description"],
+                tags=tags,
+                chapter=chapter,
+                knowledge_point=knowledge_point,
+                content=r["content"],
+                url="",
+                create_by=task.user_id,
+            )
+            db.add(resource)
 
-        task_result = task.result if isinstance(task.result, dict) else {}
         task.status = "completed"
         task.result = {
             **task_result,

@@ -15,6 +15,7 @@ from app.models.quiz import QuizSession
 from app.models.user import User
 from app.schemas.ai_features import ProfileInitializeRequest, RefreshRequest
 from app.services.agent_client import AgentServiceError, agent_client
+from app.services.resource_scope import resolve_course_resource_scope, resource_scope_clause
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
@@ -150,6 +151,7 @@ async def get_profile(
 async def _assemble_profile_payload(user_id: str, course_id: str, db: AsyncSession) -> dict:
     """组装调用 Agent /profile/generate 所需的 payload。从 SQL 聚合评估、练习、资源使用、近期活跃数据。"""
     payload: dict = {"user_id": user_id, "course_id": course_id}
+    resource_scope = await resolve_course_resource_scope(db, course_id)
 
     # evaluation_data: 最近一次学习效果评估
     ev_result = await db.execute(
@@ -186,7 +188,9 @@ async def _assemble_profile_payload(user_id: str, course_id: str, db: AsyncSessi
     for t in types:
         c_result = await db.execute(
             select(func.count(Resource.id)).where(
-                Resource.course_id == course_id, Resource.type == t, Resource.is_deleted == False
+                resource_scope_clause(course_id, resource_scope.catalog_id),
+                Resource.type == t,
+                Resource.is_deleted == False,
             )
         )
         counts[f"{t}_count"] = c_result.scalar() or 0

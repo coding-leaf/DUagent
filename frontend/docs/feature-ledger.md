@@ -41,13 +41,13 @@
 
 ## 当前主线结论
 
-当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成。Admin 资源库入库、Admin 资源库级资源生成、教师绑定 ready CourseCatalog、学生消费 fan-out 资源、教师只读确认本班资源已经形成第一版前端闭环：
+当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成。Admin 资源库入库、Admin 资源库级资源生成、教师绑定 ready CourseCatalog、学生按教学班上下文消费资源库共享资源、教师只读确认绑定资源库资源已经形成当前前端闭环：
 
 1. CourseCatalog 管理、资料上传、入库向量化已经从 Admin UI 到 Backend/Agent 入库链路打通。
 2. Admin 可在资源库抽屉中基于已入库知识切片自动刷新课程知识图谱，触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源。
 3. 教师创建教学班时绑定已就绪 CourseCatalog，并能在教师端查看绑定资源库状态、本班学习资源列表和资源详情。
-4. 学生端按当前教学班 `course_id` 查看资源列表和详情；有课程但暂无资源时显示“课程资源正在准备中 / 请稍后查看”。
-5. 真实验收证据：资源库 `89f51dfbdedc4995` 入库 task `d0b234d74df94822` completed，`chunk_count=1`；资源生成 task `39dfbd5feb9a4cb7` completed，fan-out 到教学班 `59360ad8b8f445b7`，学生端可见并打开资源详情。
+4. 学生端按当前教学班 `course_id` 解析绑定 `catalog_id` 后查看共享资源列表和详情；有课程但暂无资源时显示“课程资源正在准备中 / 请稍后查看”。
+5. 当前实现口径：新生成资源归属 `CourseCatalog`，同一资源库绑定多个教学班后可共享读取；legacy 按班级存储的旧资源继续兼容当前教学班读取，但不自动跨班共享。
 6. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
 7. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 资源评估 probe 已接入，但管理员删除/重入库后真实 C catalog 出现历史不一致状态：当前未删除 material `chunk_count=0`，catalog 仍显示 `ready/ready` 且 `chunk_count=665`；已修复未来删除资料时的 chunk 重算逻辑，继续 LearningPath 前需先修正开发库这条 C 样本数据或重新上传有效资料并入库。
 
@@ -68,7 +68,7 @@
 | `AIChat.jsx` | 查看会话、历史消息、SSE 对话 | `GET /tutoring/conversations`、`GET /tutoring/conversations/{id}`、`POST /tutoring/chat` | ✅ 已可操作 | 已兼容对象型 `knowledge_points` 防白屏。 |
 | `LearningPath.jsx` | 查看学习路径、查看节点资源 | `GET /learning-path`、`GET /learning-path/nodes/{node_id}/resources` | ✅ 已可操作 | 没有调用 `refreshLearningPath()`。 |
 | `LearningEffects.jsx` | 查看学习效果 | `GET /evaluation` | ✅ 已可操作 | 没有调用 `refreshEvaluation()`。 |
-| `TeacherConsole.jsx` | 查看班级、绑定资源库状态、本班学习资源、学生列表、班级洞察 | `GET /courses`、`GET /resources`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 教师端只读确认本班资源，可跳转资源详情；不提供生成/上传/删除资源入口。 |
+| `TeacherConsole.jsx` | 查看班级、绑定资源库状态、当前教学班上下文下的共享资源、课程码、学生列表、班级洞察 | `GET /courses`、`GET /resources`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 教师端只读确认绑定资源库资源，可跳转资源详情并复制课程码；不提供生成/上传/删除资源入口。 |
 | `TeacherStudentReport.jsx` | 查看单个学生学习报告 | `GET /teaching/classes/{class_id}/students/{student_id}/learning` | ✅ 已可操作 | `overall_score` 真实口径仍待设计，前端不展示硬编码分。 |
 | `AdminConsole.jsx` | 管理用户、查看日志、创建/查看课程资源库 | `GET /admin/users`、`DELETE /admin/users/{user_id}`、`GET /admin/logs/agent`、`GET /admin/logs/operations`、`GET/POST /admin/course-catalogs` | ✅ 已可操作 | 用户停用状态持久展示仍缺契约字段。 |
 | `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态、基于知识切片自动刷新课程知识图谱、触发资源库级学习资源生成、查看生成资源、软删除资料/资源 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}`、`GET /admin/course-catalogs/{catalog_id}/knowledge-graphs`、`POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`、`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`、`DELETE /admin/resources/{resource_id}` | ✅ 已可操作 | Admin 资料导入、向量化、自动 KG 刷新、资源生成和软删除的核心入口；UI 不暴露大纲文本 / KG JSON 调试输入。 |
@@ -99,9 +99,9 @@
 | 11 | Admin 资料上传 / 登记 | ✅ 已可操作 | Admin 抽屉可上传 `txt/md/pdf`，Backend 保存文件并创建 `CourseCatalogMaterial` | 部署时不要提交上传文件或 storage 产物。 |
 | 12 | Admin 触发入库向量化 | ✅ 已可操作 | Admin 点击入库后，Backend 创建 `course_catalog_ingestion` task，Agent 切片、embedding、Qdrant upsert，Backend 回写 `chunk_count/knowledge_status`，前端轮询刷新 | 建议做一次部署级 live smoke，确认真实 Qdrant/storage/provider 配置。 |
 | 13A | Admin 自动刷新课程知识图谱 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`，默认空请求体，Backend 基于资源库已入库知识切片自动生成 active KG，独立轮询 `kg_generation` task，完成后刷新 active KG 摘要 | 不触发学生个性化 LearningPath 刷新；`kg_json` 仅保留后端调试兼容，Admin UI 不暴露。 |
-| 13 | Admin 资源库级学习资源生成 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/resources/generations`，按资源类型触发生成，独立轮询 `resource_generation` task，完成后刷新生成资源列表 | 建议做一次部署级 live smoke，确认 Agent 返回资源、Backend fan-out 和前端刷新一致。 |
+| 13 | Admin 资源库级学习资源生成 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/resources/generations`，按资源类型触发生成，独立轮询 `resource_generation` task，完成后刷新生成资源列表 | 当前新生成资源以 `catalog_id` 为主归属写入共享资源；建议做一次部署级 live smoke，确认 Agent 返回资源、共享资源落库和前端刷新一致。 |
 | 14 | Admin 资料 / 生成资源软删除 | ✅ 已可操作 | Admin 抽屉调用资料和资源 DELETE 接口；资料删除后可显示 `dirty`，资源删除后从生成资源列表消失 | 软删除不删除文件、Qdrant chunks 或 Agent 产物。 |
-| 15 | 学生 / 教师消费 fan-out 学习资源 | ✅ 已可操作 | 学生 Dashboard 按教学班读取资源；教师端只读查看绑定资源库状态、本班资源列表和详情；无资源分别显示准备中 / 联系管理员生成 | 第一版按班存、按班读；不展示 Admin 原始资料，不做历史资源自动回补。 |
+| 15 | 学生 / 教师消费资源库共享学习资源 | ✅ 已可操作 | 学生 Dashboard 和教师资源区都按当前教学班 `course_id` 解析绑定资源库后读取共享资源；无资源分别显示准备中 / 联系管理员生成 | 新生成资源按资源库存储并跨绑定教学班共享；legacy 按班资源仅兼容当前教学班读取。 |
 | 16 | 历史生成接口 CourseCatalog ready gate | ✅ 后端闭环 + 🚫 前端不接入 | `/resources/generate` 和 `/quiz/generate` 曾共用 ready gate：`status=ready`、`knowledge_status=ready|partial`、`chunk_count>0` | 不再驱动教师端 / 学生端 UI 或下一步主线；保留为历史后端能力 / 废弃候选背景。 |
 
 ### 三、历史生成接口 / 前端不接入
@@ -160,7 +160,7 @@
 - Admin 课程资源库导入和向量化已经实现，不应再误判为“只做了后端”或“没接 UI”。
 - `refreshLearningPath()`、`refreshEvaluation()`、`refreshProfile()`、`quizService.getHistory()` 这类方法存在不等于用户功能可操作；必须看页面是否调用。
 - 后续更新本账本时，必须优先写用户入口和真实调用，再写文件证据。
-- 2026-06-09 资源消费闭环归档：第一版采用按班存 / 按班读；学生端消费 fan-out 学习资源，教师端只读确认绑定资源库和本班资源。资源库中心模式登记为已知演进方向，仅当出现一个 catalog 绑定多个班且需要历史资源同步 / 复用 / 统一更新删除的真实需求时再做接口级重构。
+- 2026-06-09 资源消费闭环归档：最初版本采用按班存 / 按班读；该口径已在 2026-06-12 切换为“教学班绑定资源库、资源按资源库共享读取”，legacy 按班资源仅保留兼容读取。
 - 2026-06-10 KG 方向纠偏：现有 CLI 目录版 KG 已在真实 catalog `b2444963f0e54587` / course `6c698badb60a4809` 生成 `116` 节点，但排除目录型 chunk 后仅 `25/116=21.6%` 节点达到正文支撑阈值；同时正文资料密度足够（知识型正文 `465/613=75.9%`）。因此下一步不是审核 / 签字或 KG ready gate，而是先做 KG 版本 / 回滚，再按“目录骨架 + 正文 chunk 验证 / 补充”的路线 A 返工 KG 生成。
 - 2026-06-10 Route A 真实闭环：KG 版本 / 回滚和两段式工具链已完成；开发库 C 语言样本生成 Route A `version=2`，但只保留 `22/116=18.97%` 节点、`2` 条边，未达到跑前固定成功线 `>=70%`。结论是工具链可跑通，但 KG 生成未完成；下一步改生成策略，不能进入 KG ready gate、资源继承 KG 节点名或审核流程。
 - 2026-06-10 Route A no-go 归因：失败不是资料缺失；主要问题是 47 个节点仍命中目录/索引/点线页码噪声，49 个节点落在 `0.65-0.70` 边缘区，说明正文候选过滤和单节点名 query 都不够稳。下一步先做过滤与 query 扩展探针，再决定正文补点或正文聚类。

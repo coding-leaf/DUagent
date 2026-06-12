@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
@@ -25,6 +25,7 @@ from app.services.agent_client import AgentClient, AgentServiceError, agent_clie
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.kg_generation import KGGenerationInputError, generate_knowledge_graph_version
 from app.services.kg_resource_targets import select_core_resource_targets
+from app.services.resource_scope import resource_scope_clause
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 logger = logging.getLogger(__name__)
@@ -1012,17 +1013,12 @@ async def admin_list_catalog_resources(
         )
     )
     course_ids = list(offering_result.scalars().all())
-    if not course_ids:
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {"resources": [], "total": 0, "page": page, "page_size": page_size},
-        }
 
-    query = select(Resource).where(
-        Resource.course_id.in_(course_ids),
-        Resource.is_deleted == False,
-    )
+    query = select(Resource).where(Resource.is_deleted == False)
+    if course_ids:
+        query = query.where(or_(*(resource_scope_clause(course_id, catalog_id) for course_id in course_ids)))
+    else:
+        query = query.where(Resource.catalog_id == catalog_id)
     if type:
         query = query.where(Resource.type == type)
 

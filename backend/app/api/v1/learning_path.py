@@ -15,6 +15,7 @@ from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.resource_scope import ensure_course_resource_access, resolve_course_resource_scope, resource_scope_clause
 from app.schemas.ai_features import RefreshRequest
 
 logger = logging.getLogger(__name__)
@@ -311,20 +312,8 @@ async def get_node_resources(
     从 LearningPath.nodes 中查找节点名称，从 Resource/QuizQuestion 表中
     按 knowledge_point 和 chapter 匹配资源并分组返回。
     """
-    # 课程权限校验：学生需已加入课程
-    if current_user.role == "student":
-        check = await db.execute(
-            select(CourseEnrollment).where(
-                CourseEnrollment.student_id == current_user.id,
-                CourseEnrollment.course_id == course_id,
-                CourseEnrollment.is_deleted == False,
-            )
-        )
-        if not check.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"code": 40300, "message": "未加入该课程", "data": None},
-            )
+    await ensure_course_resource_access(db, current_user, course_id)
+    resource_scope = await resolve_course_resource_scope(db, course_id)
 
     node_name = node_id
     chapter = ""
@@ -361,7 +350,7 @@ async def get_node_resources(
     res_result = await db.execute(
         select(Resource)
         .where(
-            Resource.course_id == course_id,
+            resource_scope_clause(course_id, resource_scope.catalog_id),
             Resource.knowledge_point == node_name,
             Resource.is_deleted == False,
         )
@@ -396,7 +385,7 @@ async def get_node_resources(
         ch_result = await db.execute(
             select(Resource)
             .where(
-                Resource.course_id == course_id,
+                resource_scope_clause(course_id, resource_scope.catalog_id),
                 Resource.chapter == chapter,
                 Resource.is_deleted == False,
             )

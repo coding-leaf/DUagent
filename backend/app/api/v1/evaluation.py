@@ -14,6 +14,7 @@ from app.models.others import AsyncTask, Evaluation, Resource
 from app.models.quiz import QuizSession
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
+from app.services.resource_scope import resolve_course_resource_scope, resource_scope_clause
 from app.schemas.ai_features import RefreshRequest
 
 logger = logging.getLogger(__name__)
@@ -93,11 +94,12 @@ async def _assemble_evaluation_payload(
 ) -> dict:
     """组装调用 Agent /evaluation/generate 所需的 payload。"""
     payload: dict = {"user_id": user_id, "course_id": course_id}
+    resource_scope = await resolve_course_resource_scope(db, course_id)
 
     # learning_progress (简化：按课程资源章节统计)
     chapters_r = await db.execute(
         select(Resource.chapter, func.count(Resource.id))
-        .where(Resource.course_id == course_id, Resource.is_deleted == False)
+        .where(resource_scope_clause(course_id, resource_scope.catalog_id), Resource.is_deleted == False)
         .group_by(Resource.chapter)
     )
     chapter_progress = [
@@ -129,7 +131,9 @@ async def _assemble_evaluation_payload(
     for t in types:
         c_r = await db.execute(
             select(func.count(Resource.id)).where(
-                Resource.course_id == course_id, Resource.type == t, Resource.is_deleted == False
+                resource_scope_clause(course_id, resource_scope.catalog_id),
+                Resource.type == t,
+                Resource.is_deleted == False,
             )
         )
         by_type[t] = c_r.scalar() or 0

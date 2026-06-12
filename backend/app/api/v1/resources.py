@@ -8,11 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
 from app.models.others import AsyncTask, Resource
-from app.models.course import Course, CourseEnrollment
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_catalog_gate import resolve_generation_catalog
+from app.services.resource_scope import (
+    ensure_course_resource_access,
+    resolve_course_resource_scope,
+    resource_scope_clause,
+    user_can_access_catalog_resources,
+)
 
 router = APIRouter(prefix="/api/v1/resources", tags=["resources"])
 
@@ -27,7 +32,13 @@ async def list_resources(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Resource).where(Resource.course_id == course_id, Resource.is_deleted == False)
+    await ensure_course_resource_access(db, current_user, course_id)
+    scope = await resolve_course_resource_scope(db, course_id)
+
+    query = select(Resource).where(
+        resource_scope_clause(course_id, scope.catalog_id),
+        Resource.is_deleted == False,
+    )
     if type:
         query = query.where(Resource.type == type)
     if keyword:
@@ -76,24 +87,11 @@ async def get_resource_detail(
     if resource is None:
         raise HTTPException(status_code=404, detail="Resource not found")
 
-    # 校验当前用户是否有该资源所属课程的访问权限
-    course_r = await db.execute(
-        select(Course).where(Course.id == resource.course_id, Course.is_deleted == False)
-    )
-    course = course_r.scalar_one_or_none()
-    if course is None:
-        raise HTTPException(status_code=404, detail="Resource not found")
-
-    if course.teacher_id != current_user.id:
-        enrollment_r = await db.execute(
-            select(CourseEnrollment).where(
-                CourseEnrollment.course_id == course.id,
-                CourseEnrollment.student_id == current_user.id,
-                CourseEnrollment.is_deleted == False,
-            )
-        )
-        if enrollment_r.scalar_one_or_none() is None:
-            raise HTTPException(status_code=403, detail="No access to this course")
+    if resource.catalog_id:
+        if not await user_can_access_catalog_resources(db, current_user, resource.catalog_id):
+            raise HTTPException(status_code=403, detail="No access to this resource")
+    else:
+        await ensure_course_resource_access(db, current_user, resource.course_id)
 
     preview = None
     if resource.type in ("document", "reading") and resource.content:

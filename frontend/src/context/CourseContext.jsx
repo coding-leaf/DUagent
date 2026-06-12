@@ -38,6 +38,9 @@ export function CourseProvider({ children }) {
         if (targetCourseId) {
           setActiveCourseId(targetCourseId);
           localStorage.setItem('course_id', targetCourseId);
+        } else {
+          setActiveCourseId(null);
+          localStorage.removeItem('course_id');
         }
       }
     } catch (err) {

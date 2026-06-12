@@ -118,6 +118,59 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await expect(page.getByTestId('resources-empty').getByText('请稍后查看')).toBeVisible();
   });
 
+  test('Student dashboard clears stale course context when current user has no courses', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-student-token');
+      localStorage.setItem('course_id', 'stale-course-e2e');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'student-empty-e2e',
+          email: 'student@example.com',
+          username: 'Student E2E',
+          role: 'student',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [],
+        },
+      }));
+    });
+
+    let resourceRequestCount = 0;
+    await page.route(/\/api\/v1\/resources(\?.*)?$/, async (route) => {
+      resourceRequestCount += 1;
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          resources: [],
+          total: 0,
+          page: 1,
+          page_size: 50,
+        },
+      }));
+    });
+
+    await page.goto('/dashboard');
+
+    await expect(page.getByText('暂无课程')).toBeVisible();
+    await expect(page.getByText('请先加入一门课程')).toBeVisible();
+    await expect(page.getByTestId('resources-empty')).toHaveCount(0);
+    expect(resourceRequestCount).toBe(0);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('course_id'))).toBe(null);
+  });
+
   test('UseCase 2: Student switches course -> views learning path & quiz', async ({ page }) => {
     // 1. Log in student
     await loginUser(page, 's@t.com', 'Abc12345');
@@ -922,6 +975,7 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
             id: 'class-resource-e2e',
             name: '一班',
             description: '数据结构',
+            course_code: 'JOIN123',
             student_count: 1,
             catalog_id: 'catalog-e2e',
             catalog_title: 'E2E 资源库',
@@ -1007,6 +1061,7 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
 
     await expect(page.getByTestId('teacher-resource-section')).toBeVisible();
     await expect(page.getByTestId('teacher-resource-section').getByText('绑定资源库：E2E 资源库')).toBeVisible();
+    await expect(page.getByTestId('teacher-resource-section').getByText('课程码：JOIN123')).toBeVisible();
     await expect(page.getByTestId('teacher-resource-card').getByText('二叉树讲义')).toBeVisible();
 
     await page.getByTestId('teacher-resource-card').click();

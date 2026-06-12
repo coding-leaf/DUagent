@@ -815,7 +815,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
               <div>
                 <h3 className="text-sm font-bold text-slate-900">知识图谱</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {knowledgeGraphStatus?.course_id ? `绑定教学班 ${knowledgeGraphStatus.course_id}` : '尚未绑定教学班'}
+                  {knowledgeGraphStatus?.course_id ? `当前被教学班 ${knowledgeGraphStatus.course_id} 使用` : '当前尚未被教学班使用'}
                 </p>
               </div>
               <button
@@ -1006,7 +1006,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">生成学习资源</h3>
-                <p className="mt-1 text-xs text-slate-500">基于已入库知识为当前绑定教学班生成资源。</p>
+                <p className="mt-1 text-xs text-slate-500">基于已入库知识生成资源库共享资源；绑定该资源库的教学班都会读取到这批资源。</p>
               </div>
               <button
                 type="button"

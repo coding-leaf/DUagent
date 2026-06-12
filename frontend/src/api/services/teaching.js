@@ -12,6 +12,7 @@ export const teachingService = {
           id: c.id,
           name: c.name,
           topic: c.description || c.name,
+          course_code: c.course_code || '',
           students: c.student_count || 0,
           catalog_id: c.catalog_id,
           catalog_title: c.catalog_title

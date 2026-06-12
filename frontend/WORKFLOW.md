@@ -20,6 +20,18 @@
 
 ## 最近验证
 
+- 2026-06-12：资源消费模型切换为资源库中心共享：
+  - Backend `Resource` 新增 `catalog_id` 归属字段；Admin 资源库级生成和教师历史 `/resources/generate` 的 webhook 落库不再按 `fanout_course_ids` 为每个教学班写多份资源，而是只写一份资源库共享资源，`course_id` 仅保留首个绑定教学班作为兼容字段。
+  - `GET /resources`、`GET /resources/{id}`、`GET /learning-path/nodes/{node_id}/resources`、evaluation/profile 里的资源统计统一改为：先校验当前 `course_id` 的教学班访问权限，再解析绑定 `catalog_id`，优先读取 `Resource.catalog_id = catalog_id` 的共享资源，同时兼容当前教学班下 `catalog_id IS NULL` 的 legacy 资源。
+  - Admin 资源列表改为聚合资源库共享资源，并兼容同 catalog 绑定班级下仍未迁移的 legacy 资源。
+  - Frontend `TeacherConsole.jsx` 持久展示课程码并提供复制入口；`CourseContext.jsx` 在当前用户无课程时清空 `activeCourseId` 和本地 `course_id`，修复未加入课程学生因残留上下文误见资源的问题；Admin 抽屉文案从“绑定教学班”改为“当前被教学班使用/资源库共享资源”。
+  - 迁移文件：`backend/migrations/2026-06-12-add-resource-catalog-id.sql`。
+  - 契约注意：本轮修改了 Backend 资源读取/归属语义，但按工作区约束未改 `../docs/10-client-api/*`；当前代码与外部 Client API 文档存在待同步漂移。
+  - 验证：
+    - Frontend `npm run test:e2e -- e2e/specs.spec.js -g "Student dashboard clears stale course context when current user has no courses|Teacher console shows catalog-bound class resources and opens detail"` 2/2 passed。
+    - Frontend `npm run lint` 通过。
+    - Frontend `npm run build` 通过，仍有既有 Vite chunk size warning。
+    - Backend `../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py tests/test_resource_detail.py tests/test_node_resources.py -q -p no:cacheprovider` 26/26 passed。
 - 2026-06-12：Admin KG 刷新补齐 backend LLM 配置读取：
   - 根因确认：`backend/app/services/kg_generation.py` 直接读取 `os.environ["LLM_API_KEY"]`，而不是统一走 backend `Settings`；在某些启动方式下即使 `backend/.env` 有值，`kg_generation` 后台任务仍会因为进程环境未导出 `LLM_API_KEY` 而失败，前端显示 `task_id=94f2e75b5d3a4fe9`、`status=失败`、`progress=100%`。
   - 修复：`backend/app/core/config.py` 补齐 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`，`backend/app/services/kg_generation.py` 改为优先读进程环境、缺失时回退到 backend `settings`；`start_all.sh` 启动 backend 前增加 `. ./.env` 导出，避免本地联调再次因环境未注入而失败。

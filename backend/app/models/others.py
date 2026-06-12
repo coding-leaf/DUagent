@@ -16,6 +16,7 @@ class Resource(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
+    catalog_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("course_catalogs.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -226,3 +226,5 @@ async def test_learning_path_kg_fallback_no_course_offering_returns_empty():
         assert data["source"] == "kg_fallback"
         assert data["nodes"] == []
         assert data["current_position"] is None
+        assert data["edges"] == []
+        assert data["generated_at"] is None

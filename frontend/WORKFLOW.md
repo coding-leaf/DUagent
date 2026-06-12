@@ -20,11 +20,22 @@
 
 ## 最近验证
 
+- 2026-06-12：资源库 KG 宿主课兼容层落地：
+  - Backend `CourseCatalog` 新增 `kg_host_course_id`，通过 `backend/migrations/2026-06-12-add-catalog-kg-host-course-id.sql` 持久化资源库对应的隐藏宿主课。
+  - Admin `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations` 不再要求资源库先绑定真实教学班；当资源库尚无宿主课时，Backend 会创建或复用隐藏宿主课，并基于该宿主课生成 active KG。
+  - Admin `GET /admin/course-catalogs/{catalog_id}/knowledge-graphs` 改为按资源库宿主课读取 active KG 和任务状态；未绑定教学班的新资源库不再固定显示“资源库尚未绑定教学班 / 暂无 active 知识图谱”。
+  - Backend `/courses` 教师列表、学生列表和 `POST /courses/join` 已显式过滤 KG 宿主课，避免隐藏宿主课出现在真实课程流、课程码加入流和学生可见课程列表中。
+  - Frontend `CourseCatalogDrawer.jsx` 的 KG 区文案改为资源库中心口径：空态显示“当前资源库暂无 active 知识图谱”，生成完成后显示“当前显示的是该资源库的 active 知识图谱”。
+  - 验证：
+    - Backend MySQL `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/host_course_transition_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_kg_generation.py::test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_offering tests/test_admin_catalog_kg_generation.py::test_catalog_kg_generation_without_offering_returns_202_not_40915 tests/test_admin_catalog_kg_generation.py::test_catalog_kg_generation_creates_hidden_host_course_with_long_catalog_title tests/test_admin_catalog_kg_generation.py::test_catalog_kg_generation_truncates_hidden_host_course_name_for_long_catalog_title tests/test_admin_catalog_kg_generation.py::test_admin_catalog_kg_generation_rejects_duplicate_processing_task tests/test_admin_catalog_kg_generation.py::test_catalog_kg_status_reads_active_graph_from_host_course tests/test_courses_async.py -q -p no:cacheprovider` 7/7 passed。
+    - Frontend `npm run test:e2e -- e2e/specs.spec.js -g "Admin course catalog KG generation refreshes active graph from declared endpoint"` 1/1 passed。
+    - Frontend `npm run lint` 通过。
+    - Frontend `npm run build` 通过，仍有既有 Vite chunk size warning。
 - 2026-06-12：资源消费模型切换为资源库中心共享：
   - Backend `Resource` 新增 `catalog_id` 归属字段；Admin 资源库级生成和教师历史 `/resources/generate` 的 webhook 落库不再按 `fanout_course_ids` 为每个教学班写多份资源，而是只写一份资源库共享资源，`course_id` 仅保留首个绑定教学班作为兼容字段。
   - `GET /resources`、`GET /resources/{id}`、`GET /learning-path/nodes/{node_id}/resources`、evaluation/profile 里的资源统计统一改为：先校验当前 `course_id` 的教学班访问权限，再解析绑定 `catalog_id`，优先读取 `Resource.catalog_id = catalog_id` 的共享资源，同时兼容当前教学班下 `catalog_id IS NULL` 的 legacy 资源。
   - Admin 资源列表改为聚合资源库共享资源，并兼容同 catalog 绑定班级下仍未迁移的 legacy 资源。
-  - Frontend `TeacherConsole.jsx` 持久展示课程码并提供复制入口；`CourseContext.jsx` 在当前用户无课程时清空 `activeCourseId` 和本地 `course_id`，修复未加入课程学生因残留上下文误见资源的问题；Admin 抽屉文案从“绑定教学班”改为“当前被教学班使用/资源库共享资源”。
+  - Frontend `TeacherConsole.jsx` 持久展示课程码并提供复制入口；`CourseContext.jsx` 在当前用户无课程时清空 `activeCourseId` 和本地 `course_id`，修复未加入课程学生因残留上下文误见资源的问题；Admin 资源区文案改为“教学班绑定资源库 / 资源库共享资源”口径。
   - 迁移文件：`backend/migrations/2026-06-12-add-resource-catalog-id.sql`。
   - 契约注意：本轮修改了 Backend 资源读取/归属语义，但按工作区约束未改 `../docs/10-client-api/*`；当前代码与外部 Client API 文档存在待同步漂移。
   - 验证：

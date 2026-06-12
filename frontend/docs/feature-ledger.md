@@ -44,12 +44,13 @@
 当前主线不是继续补页面字段，也不是让教师端触发资源 / Quiz 生成。Admin 资源库入库、Admin 资源库级资源生成、教师绑定 ready CourseCatalog、学生按教学班上下文消费资源库共享资源、教师只读确认绑定资源库资源已经形成当前前端闭环：
 
 1. CourseCatalog 管理、资料上传、入库向量化已经从 Admin UI 到 Backend/Agent 入库链路打通。
-2. Admin 可在资源库抽屉中基于已入库知识切片自动刷新课程知识图谱，触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源。
+2. Admin 可在资源库抽屉中基于已入库知识切片自动刷新课程知识图谱，触发资源库级学习资源生成、查看生成资源列表，并软删除资料或生成资源；知识图谱生成/读取已改为走资源库隐藏宿主课，不再要求先绑定真实教学班。
 3. 教师创建教学班时绑定已就绪 CourseCatalog，并能在教师端查看绑定资源库状态、本班学习资源列表和资源详情。
 4. 学生端按当前教学班 `course_id` 解析绑定 `catalog_id` 后查看共享资源列表和详情；有课程但暂无资源时显示“课程资源正在准备中 / 请稍后查看”。
 5. 当前实现口径：新生成资源归属 `CourseCatalog`，同一资源库绑定多个教学班后可共享读取；legacy 按班级存储的旧资源继续兼容当前教学班读取，但不自动跨班共享。
-6. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
-7. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 资源评估 probe 已接入，但管理员删除/重入库后真实 C catalog 出现历史不一致状态：当前未删除 material `chunk_count=0`，catalog 仍显示 `ready/ready` 且 `chunk_count=665`；已修复未来删除资料时的 chunk 重算逻辑，继续 LearningPath 前需先修正开发库这条 C 样本数据或重新上传有效资料并入库。
+6. 资源库 KG 宿主课是当前接受的长期兼容层：它只承载资源库知识图谱，不出现在教师/学生课程列表，也不能通过课程码加入。
+7. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
+8. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 资源评估 probe 已接入，但管理员删除/重入库后真实 C catalog 出现历史不一致状态：当前未删除 material `chunk_count=0`，catalog 仍显示 `ready/ready` 且 `chunk_count=665`；已修复未来删除资料时的 chunk 重算逻辑，继续 LearningPath 前需先修正开发库这条 C 样本数据或重新上传有效资料并入库。
 
 ## 页面真实调用核查
 
@@ -71,7 +72,7 @@
 | `TeacherConsole.jsx` | 查看班级、绑定资源库状态、当前教学班上下文下的共享资源、课程码、学生列表、班级洞察 | `GET /courses`、`GET /resources`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 教师端只读确认绑定资源库资源，可跳转资源详情并复制课程码；不提供生成/上传/删除资源入口。 |
 | `TeacherStudentReport.jsx` | 查看单个学生学习报告 | `GET /teaching/classes/{class_id}/students/{student_id}/learning` | ✅ 已可操作 | `overall_score` 真实口径仍待设计，前端不展示硬编码分。 |
 | `AdminConsole.jsx` | 管理用户、查看日志、创建/查看课程资源库 | `GET /admin/users`、`DELETE /admin/users/{user_id}`、`GET /admin/logs/agent`、`GET /admin/logs/operations`、`GET/POST /admin/course-catalogs` | ✅ 已可操作 | 用户停用状态持久展示仍缺契约字段。 |
-| `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态、基于知识切片自动刷新课程知识图谱、触发资源库级学习资源生成、查看生成资源、软删除资料/资源 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}`、`GET /admin/course-catalogs/{catalog_id}/knowledge-graphs`、`POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`、`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`、`DELETE /admin/resources/{resource_id}` | ✅ 已可操作 | Admin 资料导入、向量化、自动 KG 刷新、资源生成和软删除的核心入口；UI 不暴露大纲文本 / KG JSON 调试输入。 |
+| `CourseCatalogDrawer.jsx` | 上传资料、触发入库向量化、轮询任务、查看知识库状态、基于知识切片自动刷新课程知识图谱、触发资源库级学习资源生成、查看生成资源、软删除资料/资源 | `GET /materials`、`GET /knowledge-status`、`POST /materials/upload`、`POST /ingestions`、`GET /tasks/{task_id}`、`GET /admin/course-catalogs/{catalog_id}/knowledge-graphs`、`POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`、`GET /admin/course-catalogs/{catalog_id}/resources`、`POST /admin/course-catalogs/{catalog_id}/resources/generations`、`DELETE /admin/course-catalogs/{catalog_id}/materials/{material_id}`、`DELETE /admin/resources/{resource_id}` | ✅ 已可操作 | Admin 资料导入、向量化、自动 KG 刷新、资源生成和软删除的核心入口；KG 生成/状态读取可在未绑定真实教学班时通过隐藏宿主课完成，UI 不暴露大纲文本 / KG JSON 调试输入。 |
 | 无页面入口 | 资源生成 | `POST /resources/generate` | 🚫 前端不接入 | 历史接口 / 废弃候选；教师端不提供生成资源入口，不作为当前 UI 或联调主线。 |
 | 无页面入口 | Quiz 生成 | `POST /quiz/generate` | 🚫 前端不接入 | 历史接口 / 废弃候选；练习页不引导触发生题，不作为当前 UI 或联调主线。 |
 
@@ -82,7 +83,7 @@
 | # | 功能 | 状态 | 已实现内容 | 下一步 |
 | --- | --- | --- | --- | --- |
 | 1 | Auth 登录 / 注册 / 验证码 / 鉴权恢复 | ✅ 已可操作 | 登录、注册、验证码、`/users/me`、用户资料更新已接真实 API | 后续扩展用户字段必须先同步 OpenAPI。 |
-| 2 | 课程列表 / 加入课程 / 教师创建教学班 | ✅ 已可操作 | 学生/教师课程列表、加入课程、创建教学班、绑定 ready CourseCatalog | 无当前阻塞。 |
+| 2 | 课程列表 / 加入课程 / 教师创建教学班 | ✅ 已可操作 | 学生/教师课程列表、加入课程、创建教学班、绑定 ready CourseCatalog；隐藏 KG 宿主课已从真实课程流中过滤 | 无当前阻塞。 |
 | 3 | 学生 Dashboard 资源列表 | ✅ 已可操作 | 按当前课程拉取 `GET /resources`；有课程但无资源显示“课程资源正在准备中 / 请稍后查看” | 资源内容质量依赖 #11。 |
 | 4 | 资源详情 / 正文 / Mermaid 渲染 | ✅ 已可操作 | `GET /resources/{id}` 返回内容，前端按类型展示；学生和教师均可从资源列表进入详情 | 资源内容质量依赖 #11。 |
 | 5 | Quiz 取题 / 提交 / 结果 | ✅ 已可操作 | `GET /quiz/questions`、`POST /quiz/submit`、`GET /quiz/result` | Quiz 历史入口另见 #6。 |
@@ -98,7 +99,7 @@
 | 10 | CourseCatalog 三表 + 教学班绑定 | ✅ 已可操作 | `CourseCatalog`、`CourseCatalogMaterial`、`CourseOffering` 已支撑 Admin 建资源库、教师开班绑定资源库 | 无当前阻塞。 |
 | 11 | Admin 资料上传 / 登记 | ✅ 已可操作 | Admin 抽屉可上传 `txt/md/pdf`，Backend 保存文件并创建 `CourseCatalogMaterial` | 部署时不要提交上传文件或 storage 产物。 |
 | 12 | Admin 触发入库向量化 | ✅ 已可操作 | Admin 点击入库后，Backend 创建 `course_catalog_ingestion` task，Agent 切片、embedding、Qdrant upsert，Backend 回写 `chunk_count/knowledge_status`，前端轮询刷新 | 建议做一次部署级 live smoke，确认真实 Qdrant/storage/provider 配置。 |
-| 13A | Admin 自动刷新课程知识图谱 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`，默认空请求体，Backend 基于资源库已入库知识切片自动生成 active KG，独立轮询 `kg_generation` task，完成后刷新 active KG 摘要 | 不触发学生个性化 LearningPath 刷新；`kg_json` 仅保留后端调试兼容，Admin UI 不暴露。 |
+| 13A | Admin 自动刷新课程知识图谱 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations`，默认空请求体，Backend 基于资源库已入库知识切片自动生成 active KG，独立轮询 `kg_generation` task，完成后刷新 active KG 摘要；未绑定真实教学班时由隐藏 KG 宿主课承载图谱版本与状态读取 | 不触发学生个性化 LearningPath 刷新；`kg_json` 仅保留后端调试兼容，Admin UI 不暴露。 |
 | 13 | Admin 资源库级学习资源生成 | ✅ 已可操作 | Admin 抽屉调用 `POST /admin/course-catalogs/{catalog_id}/resources/generations`，按资源类型触发生成，独立轮询 `resource_generation` task，完成后刷新生成资源列表 | 当前新生成资源以 `catalog_id` 为主归属写入共享资源；建议做一次部署级 live smoke，确认 Agent 返回资源、共享资源落库和前端刷新一致。 |
 | 14 | Admin 资料 / 生成资源软删除 | ✅ 已可操作 | Admin 抽屉调用资料和资源 DELETE 接口；资料删除后可显示 `dirty`，资源删除后从生成资源列表消失 | 软删除不删除文件、Qdrant chunks 或 Agent 产物。 |
 | 15 | 学生 / 教师消费资源库共享学习资源 | ✅ 已可操作 | 学生 Dashboard 和教师资源区都按当前教学班 `course_id` 解析绑定资源库后读取共享资源；无资源分别显示准备中 / 联系管理员生成 | 新生成资源按资源库存储并跨绑定教学班共享；legacy 按班资源仅兼容当前教学班读取。 |

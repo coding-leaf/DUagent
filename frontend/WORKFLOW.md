@@ -267,6 +267,22 @@
 - **前端**: 零改动
 - **Commit**: `a052c38` `9040d26` `9406747` `8907d51` `3783958`
 
+## 2026-06-13 Admin 批量生成保底题库
+
+- **问题**: `quiz_questions` 表 0 题，Quiz 页面无题可答
+- **方案**: Admin 在 CourseCatalogDrawer 一键批量生成（按 KG 全部节点，每节点 7 题），学生按节点进入答题
+- **改动**:
+  - `backend/app/api/v1/catalogs.py`: 新增 `POST /admin/course-catalogs/{id}/quiz/generations` 端点
+  - `backend/app/api/v1/quiz.py`: `GET /quiz/questions` 加 `node_id` filter，source 过滤加 `baseline`
+  - `frontend/src/api/services/admin.js`: `startQuizGeneration()`
+  - `frontend/src/api/services/quiz.js`: `getQuestions` 改为 `(courseId, nodeId)` 签名
+  - `frontend/src/pages/LearningPath.jsx`: "进入练习" 链接带 `node_id`
+  - `frontend/src/pages/Quiz.jsx`: 从 URL 读取 `node_id` 传给 API
+  - `frontend/src/components/admin/CourseCatalogDrawer.jsx`: 新增"生成题库"按钮 + 轮询
+  - `backend/tests/test_learning_path_fallback.py`: 新增 quiz node_id 过滤测试
+- **验证**: `pytest tests/test_learning_path_fallback.py -v` 9 passed
+- **Commit**: `f426ff6` `66fca5d` `6e30ab6` `04f282d` `3a54ec8` `15c2b12` `16525b9` `3f35a34`
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

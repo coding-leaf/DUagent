@@ -64,8 +64,9 @@
 | `StudentProfile.jsx` | 查看学生画像、修改指导级别 | `GET /profile`、`PUT /users/me` | ✅ 已可操作 | 没有调用 `profileService.refreshProfile()`。 |
 | `Dashboard.jsx` | 查看课程资源列表；有课程但无资源时显示准备中空态 | `GET /resources` | ✅ 已可操作 | 按当前教学班 `course_id` 读取资源；不展示 Admin 原始资料。 |
 | `ResourceDetail.jsx` | 查看资源详情、正文、代码、Mermaid mindmap | `GET /resources/{id}` | ✅ 已可操作 | Mermaid 渲染是前端展示能力。 |
-| `Quiz.jsx` | 获取题目并提交答案 | `GET /quiz/questions`、`POST /quiz/submit` | ✅ 已可操作 | 提交后后台诊断失败不阻塞结果。 |
-| `PracticeResult.jsx` | 查看练习结果 | `GET /quiz/result` | ✅ 已可操作 | `quizService.getHistory()` 当前无页面入口。 |
+| `Quiz.jsx` | 按节点/自由模式获取题目并提交答案 | `GET /quiz/questions?node_id=xxx`、`POST /quiz/submit` | ✅ 已可操作 | 支持节点模式（LearningPath 带 node_id 进入）和自由模式；后台诊断失败不阻塞结果。 |
+| `PracticeResult.jsx` | 查看练习结果 | `GET /quiz/result` | ✅ 已可操作 | 做完留在结果页，手动返回。 |
+| `LearningPath.jsx` | "进入练习"带节点上下文 | `/quiz?course_id=xxx&node_id=yyy` | ✅ 已可操作 | 从节点面板点"进入练习"跳转 Quiz。 |
 | `AIChat.jsx` | 查看会话、历史消息、SSE 对话 | `GET /tutoring/conversations`、`GET /tutoring/conversations/{id}`、`POST /tutoring/chat` | ✅ 已可操作 | 已兼容对象型 `knowledge_points` 防白屏。 |
 | `LearningPath.jsx` | 查看学习路径、查看节点资源 | `GET /learning-path`、`GET /learning-path/nodes/{node_id}/resources` | ✅ 已可操作 | 没有调用 `refreshLearningPath()`。 |
 | `LearningEffects.jsx` | 查看学习效果 | `GET /evaluation` | ✅ 已可操作 | 没有调用 `refreshEvaluation()`。 |
@@ -86,8 +87,8 @@
 | 2 | 课程列表 / 加入课程 / 教师创建教学班 | ✅ 已可操作 | 学生/教师课程列表、加入课程、创建教学班、绑定 ready CourseCatalog；隐藏 KG 宿主课已从真实课程流中过滤 | 无当前阻塞。 |
 | 3 | 学生 Dashboard 资源列表 | ✅ 已可操作 | 按当前课程拉取 `GET /resources`；有课程但无资源显示“课程资源正在准备中 / 请稍后查看” | 资源内容质量依赖 #11。 |
 | 4 | 资源详情 / 正文 / Mermaid 渲染 | ✅ 已可操作 | `GET /resources/{id}` 返回内容，前端按类型展示；学生和教师均可从资源列表进入详情 | 资源内容质量依赖 #11。 |
-| 5 | Quiz 取题 / 提交 / 结果 | ✅ 已可操作 | `GET /quiz/questions`、`POST /quiz/submit`、`GET /quiz/result` | Quiz 历史入口另见 #6。 |
-| 6 | Quiz 历史 | ⚠️ 前端无入口 | `quizService.getHistory()` 存在，对应 `/quiz/history` | 决定是否需要页面入口；不需要则登记为未接 UI。 |
+| 5 | Quiz 取题 / 提交 / 结果 | ✅ 已可操作 | Admin 批量生成保底题库 + `GET /quiz/questions` 加 `node_id` filter，节点/自由两模式 | 保底题 source=baseline 全员可见；个性化题阶段二后置。 |
+| 5A | Admin 批量生成保底题库 | ✅ 已可操作 | CourseCatalogDrawer 一键生成（按 KG 全部节点，每节点 3 单选+4 多选），`POST /admin/course-catalogs/{id}/quiz/generations` | 保底题库已闭环，答题链路可走通。 |
 | 7 | AI Chat SSE | ✅ 已可操作 | 会话列表、历史消息、SSE 流式对话已接真实 API | 后续审查 `knowledge_points[]` 元素类型契约。 |
 | 8 | 教师班级 / 资源 / 学生 / Insights | ✅ 已可操作 | 教师端课程、绑定资源库状态、本班学习资源、学生列表、班级洞察已接真实 API | 教师端资源区只读，不提供生成/上传/删除资源入口；复杂指标必须先契约设计。 |
 | 9 | 管理员用户 / 日志 | ✅ 已可操作 | 用户列表、停用、Agent 日志、系统日志已接真实 API | 停用状态持久展示见 #28。 |
@@ -170,6 +171,7 @@
 - 2026-06-11 KG-Resource 对齐探针复验：`b2444963f0e54587` / `6c698badb60a4809` 已具备正式探针条件并导出 108 行 KG 节点候选，但 `108/108` 节点 `candidate_count=0`。零命中原因是当前资源元数据仍为 `chapter=课程整体`、`knowledge_point=综合知识点`，不是新版 active KG 未生效；下一步转为资源生成 metadata / KG 映射设计。
 - 2026-06-11 KG-node 资源生成闭环：新增维护工具先 recheck/repair C catalog 的 `knowledge_status dirty -> ready`，确认非删除资料全 ingested、chunk 正常且 Qdrant 可查；随后 Admin 资源生成接口不传 `chapter/knowledge_point`，自动选 10 个 active KG 核心节点生成资源，父任务 `d364a3a0af294dfa` 完成且 `10/10` 子任务成功。复跑 KG-Resource probe 后 `108/108` active KG 节点 `candidate_count>0`，资源 metadata 与 KG 节点对齐问题已在 C 样本闭环验证。
 - 2026-06-11 LearningPath-KG 资源命中评估基线：新增只读 probe 后跑真实 C 样本，报告 `/tmp/learning-path-resource-probe-c-language.json` 显示 `active_kg_node_count=108`、`resource_count=84`、`kg_tagged_resource_count=80`，但 `learning_path_id=null`、`learning_path_node_count=0`；只读 MySQL 复核该 course 当前无非删除 LearningPath，因此不能直接评估 ready gate，下一步必须先生成 / 刷新 LearningPath。
+- 2026-06-13 Admin 批量生成保底题库：CourseCatalogDrawer 新增"生成题库"按钮，一键为全部 KG 节点生成保底题库（source=baseline, 3 单选+4 多选/节点）。`GET /quiz/questions` 加 `node_id` 支持节点模式答题，source 过滤加 `baseline`。LearningPath "进入练习"带 node_id，Quiz 页面支持从 URL 读取节点参数。
 - 2026-06-12 LearningPath KG Fallback：`GET /learning-path` 无 LP 记录时不再返回空，而是从 active KG 拓扑排序合成路径骨架（全 recommended）。KG fallback 已闭环，不再阻塞学习路径页面展示；Agent 个性化生成后置，不删除历史 refresh 端点但当前不需要接 UI。
 - 2026-06-11 Admin 删除资料一致性修复：删除 CourseCatalog material 后现在会按剩余未删除 material 重算 `catalog.chunk_count`，避免删除最后一个有效资料后 catalog 仍保留历史 chunk 并误判 ready。真实 C catalog 已存在的历史不一致数据不会被代码自动回填，需单独修正或重新入库。
 

@@ -1365,6 +1365,126 @@ async def admin_generate_catalog_resources(
     }
 
 
+async def _run_quiz_generation_background(
+    parent_id: str,
+    child_task_ids: list[str],
+    fanout_course_ids: list[str],
+) -> None:
+    """后台异步：遍历子任务调 Agent 出题落库，完成后汇总父任务。"""
+    async with async_session_factory() as db:
+        child_futures = []
+        for child_id in child_task_ids:
+            child_futures.append(_generate_quiz_for_child(db, child_id, fanout_course_ids))
+
+        # 并发执行所有子任务
+        results = await asyncio.gather(*child_futures, return_exceptions=True)
+
+        # 汇总父任务
+        parent_result = await db.execute(
+            select(AsyncTask).where(AsyncTask.id == parent_id, AsyncTask.is_deleted == False)
+        )
+        parent = parent_result.scalar_one_or_none()
+        if parent is None:
+            logger.error("Quiz generation parent task missing: %s", parent_id)
+            return
+
+        completed = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "completed")
+        failed = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "failed")
+        total_qs = sum(
+            (r.get("question_count") or 0)
+            for r in results if isinstance(r, dict) and r.get("status") == "completed"
+        )
+        parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
+        parent.progress = 100
+        parent.completed_at = _now_utc()
+        parent.result = {
+            **parent.result,
+            "completed_node_count": completed,
+            "failed_node_count": failed,
+            "total_question_count": total_qs,
+        }
+        await db.commit()
+
+
+async def _generate_quiz_for_child(
+    db: AsyncSession,
+    child_id: str,
+    fanout_course_ids: list[str],
+) -> dict:
+    """处理单个 quiz 子任务：调 Agent 出题落库，更新子 task。"""
+    child_result = await db.execute(
+        select(AsyncTask).where(AsyncTask.id == child_id, AsyncTask.is_deleted == False)
+    )
+    child = child_result.scalar_one_or_none()
+    if child is None:
+        return {"status": "failed", "error": "child task not found"}
+
+    child_data = child.result or {}
+    node_name = child_data.get("node_name", "")
+    chapter = child_data.get("chapter") or ""
+    course_ids = child_data.get("course_ids") or fanout_course_ids
+
+    payload = {
+        "task_id": child.id,
+        "user_id": child.user_id or "",
+        "course_id": child.course_id or "",
+        "chapter": chapter,
+        "knowledge_point": node_name,
+        "question_types": [
+            "single_choice", "single_choice", "single_choice",
+            "multi_choice", "multi_choice", "multi_choice", "multi_choice",
+        ],
+        "count": 7,
+        "difficulty": "medium",
+        "source": "baseline",
+    }
+
+    try:
+        data = await agent_client.post_json(
+            "/agent/v1/assessment/generate-questions",
+            payload,
+        )
+        questions = data.get("questions") if isinstance(data, dict) else []
+        new_questions: list[QuizQuestion] = []
+        for cid in course_ids:
+            for q in (questions if isinstance(questions, list) else []):
+                new_questions.append(QuizQuestion(
+                    course_id=cid,
+                    chapter=chapter,
+                    knowledge_point=node_name,
+                    type=q.get("type", "single_choice"),
+                    source="baseline",
+                    personalized=False,
+                    difficulty="medium",
+                    content=q.get("content", ""),
+                    options=q.get("options", []),
+                    correct_answer=str(q.get("answer", "")),
+                    explanation=q.get("explanation", ""),
+                ))
+        for q in new_questions:
+            db.add(q)
+
+        child.status = "completed"
+        child.progress = 100
+        child.completed_at = _now_utc()
+        child.result = {**child_data, "question_count": len(questions) if isinstance(questions, list) else 0}
+        return {"status": "completed", "question_count": len(questions) if isinstance(questions, list) else 0}
+    except AgentServiceError as e:
+        child.status = "failed"
+        child.progress = 100
+        child.error_code = str(e.agent_code or "agent_error")
+        child.error_message = e.message
+        child.completed_at = _now_utc()
+        return {"status": "failed", "error": e.message}
+    except Exception as e:
+        child.status = "failed"
+        child.progress = 100
+        child.error_code = "unexpected_error"
+        child.error_message = str(e)[:500]
+        child.completed_at = _now_utc()
+        return {"status": "failed", "error": str(e)[:500]}
+
+
 @router.post("/admin/course-catalogs/{catalog_id}/quiz/generations", status_code=202)
 async def admin_generate_catalog_quiz(
     catalog_id: str,
@@ -1372,7 +1492,7 @@ async def admin_generate_catalog_quiz(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin 批量生成保底题库：遍历 active KG 全部节点，每节点调 Agent 出题落库。"""
+    """Admin 批量生成保底题库：遍历 active KG 全部节点，异步调 Agent 出题落库。"""
     catalog = await _get_admin_catalog_or_404(db, catalog_id)
     if catalog.status != "ready":
         raise _course_material_missing()
@@ -1449,7 +1569,7 @@ async def admin_generate_catalog_quiz(
     await db.flush()
     await db.refresh(parent)
 
-    children: list[AsyncTask] = []
+    child_task_ids: list[str] = []
     for kg_node in kg_nodes:
         node_name = kg_node.get("name", "")
         chapter = kg_node.get("chapter", "")
@@ -1468,84 +1588,17 @@ async def admin_generate_catalog_quiz(
             },
         )
         db.add(child)
-        children.append(child)
-    await db.flush()
+        await db.flush()
+        child_task_ids.append(child.id)
 
-    for child in children:
-        node_name = child.result["node_name"]
-        chapter = child.result.get("chapter") or ""
-        payload = {
-            "task_id": child.id,
-            "user_id": current_user.id,
-            "course_id": child.course_id,
-            "chapter": chapter,
-            "knowledge_point": node_name,
-            "question_types": [
-                "single_choice", "single_choice", "single_choice",
-                "multi_choice", "multi_choice", "multi_choice", "multi_choice",
-            ],
-            "count": 7,
-            "difficulty": "medium",
-            "source": "baseline",
-        }
-        try:
-            data = await agent_client.post_json(
-                "/agent/v1/assessment/generate-questions",
-                payload,
-            )
-            questions = data.get("questions") if isinstance(data, dict) else []
-            new_questions: list[QuizQuestion] = []
-            for cid in (child.result.get("course_ids") or fanout_course_ids):
-                for q in (questions if isinstance(questions, list) else []):
-                    new_questions.append(QuizQuestion(
-                        course_id=cid,
-                        chapter=chapter,
-                        knowledge_point=node_name,
-                        type=q.get("type", "single_choice"),
-                        source="baseline",
-                        personalized=False,
-                        difficulty="medium",
-                        content=q.get("content", ""),
-                        options=q.get("options", []),
-                        correct_answer=str(q.get("answer", "")),
-                        explanation=q.get("explanation", ""),
-                    ))
-            for q in new_questions:
-                db.add(q)
-            child.status = "completed"
-            child.progress = 100
-            child.completed_at = _now_utc()
-            child.result = {**child.result, "question_count": len(questions) if isinstance(questions, list) else 0}
-        except AgentServiceError as e:
-            child.status = "failed"
-            child.progress = 100
-            child.error_code = str(e.agent_code or "agent_error")
-            child.error_message = e.message
-            child.completed_at = _now_utc()
-        except Exception as e:
-            child.status = "failed"
-            child.progress = 100
-            child.error_code = "unexpected_error"
-            child.error_message = str(e)[:500]
-            child.completed_at = _now_utc()
-
-    # 汇总父任务
-    completed = sum(1 for c in children if c.status == "completed")
-    failed = sum(1 for c in children if c.status == "failed")
-    total_qs = sum(
-        (c.result.get("question_count") if isinstance(c.result, dict) else 0)
-        for c in children if c.status == "completed"
-    )
-    parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
-    parent.progress = 100
-    parent.completed_at = _now_utc()
-    parent.result = {
-        **parent.result,
-        "completed_node_count": completed,
-        "failed_node_count": failed,
-        "total_question_count": total_qs,
-    }
     await db.commit()
+
+    # 后台异步执行 Agent 调用 + 写库
+    asyncio.create_task(_run_quiz_generation_background(
+        parent_id=parent.id,
+        child_task_ids=child_task_ids,
+        fanout_course_ids=fanout_course_ids,
+    ))
 
     return {
         "code": 202,

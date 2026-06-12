@@ -16,6 +16,10 @@ def _gen_course_code() -> str:
     return uuid.uuid4().hex[:8].upper()
 
 
+def _catalog_kg_host_course_filter():
+    return Course.description.like("System host course for catalog % knowledge graphs")
+
+
 async def _catalog_summary(db: AsyncSession, course_id: str) -> tuple[str, str]:
     offering_result = await db.execute(
         select(CourseOffering).where(
@@ -46,7 +50,11 @@ async def list_courses(
 ):
     if current_user.role == "teacher":
         result = await db.execute(
-            select(Course).where(Course.teacher_id == current_user.id, Course.is_deleted == False)
+            select(Course).where(
+                Course.teacher_id == current_user.id,
+                Course.is_deleted == False,
+                ~_catalog_kg_host_course_filter(),
+            )
         )
         courses = result.scalars().all()
     else:
@@ -60,7 +68,11 @@ async def list_courses(
         course_ids = [e.course_id for e in enrollments]
         if course_ids:
             result = await db.execute(
-                select(Course).where(Course.id.in_(course_ids), Course.is_deleted == False)
+                select(Course).where(
+                    Course.id.in_(course_ids),
+                    Course.is_deleted == False,
+                    ~_catalog_kg_host_course_filter(),
+                )
             )
         else:
             result = None
@@ -162,7 +174,11 @@ async def join_course(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Course).where(Course.course_code == req.course_code, Course.is_deleted == False)
+        select(Course).where(
+            Course.course_code == req.course_code,
+            Course.is_deleted == False,
+            ~_catalog_kg_host_course_filter(),
+        )
     )
     course = result.scalar_one_or_none()
     if course is None:

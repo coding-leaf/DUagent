@@ -105,6 +105,7 @@ const normalizeTask = (task, fallbackId, fallbackType = 'course_catalog_ingestio
   status: task?.status || 'processing',
   progress: task?.progress ?? 0,
   error_message: task?.error_message || '',
+  result: task?.result || null,
   created_at: task?.created_at,
   completed_at: task?.completed_at
 });
@@ -128,6 +129,8 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   const [knowledgeGraphGenerating, setKnowledgeGraphGenerating] = useState(false);
   const [knowledgeGraphTask, setKnowledgeGraphTask] = useState(null);
   const [knowledgeGraphTaskError, setKnowledgeGraphTaskError] = useState('');
+  const [quizGenerating, setQuizGenerating] = useState(false);
+  const [quizGenTask, setQuizGenTask] = useState(null);
   const [deletingMaterialIds, setDeletingMaterialIds] = useState(() => new Set());
   const [deletingResourceIds, setDeletingResourceIds] = useState(() => new Set());
   const requestSeqRef = useRef(0);
@@ -494,6 +497,28 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
     };
   }, [knowledgeGraphTask?.status, knowledgeGraphTask?.task_id, onChanged, open, refreshDetails]);
 
+  useEffect(() => {
+    if (!quizGenTask?.task_id || quizGenTask.status === 'completed' || quizGenTask.status === 'failed') return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const res = await taskService.getTaskStatus(quizGenTask.task_id);
+        const task = normalizeTask(res.data, quizGenTask.task_id, 'quiz_generation');
+        if (!active) return;
+        setQuizGenTask(task);
+        if (task.status === 'completed' || task.status === 'failed') {
+          setQuizGenerating(false);
+          if (onChanged) onChanged();
+        }
+      } catch (err) {
+        console.error('Quiz generation task poll error:', err);
+        if (active) setQuizGenerating(false);
+      }
+    };
+    const timer = setInterval(poll, 2000);
+    return () => { active = false; clearInterval(timer); };
+  }, [quizGenTask?.task_id, quizGenTask?.status, onChanged]);
+
   const summary = useMemo(() => ({
     material_count: knowledgeStatus?.material_count ?? catalog?.material_count ?? catalog?.materials_count ?? materials.length,
     chunk_count: knowledgeStatus?.chunk_count ?? catalog?.chunk_count ?? 0,
@@ -700,6 +725,21 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
       setGenerating(false);
     }
   };
+
+  const handleStartQuizGeneration = useCallback(async () => {
+    if (!catalog || quizGenerating) return;
+    setQuizGenerating(true);
+    setQuizGenTask(null);
+    try {
+      const res = await adminService.startQuizGeneration(catalog.id);
+      if (res.code === 202) {
+        setQuizGenTask({ task_id: res.data.task_id, status: 'processing', progress: 10 });
+      }
+    } catch (err) {
+      console.error('Failed to start quiz generation:', err);
+      setQuizGenerating(false);
+    }
+  }, [catalog, quizGenerating]);
 
   const handleDeleteMaterial = async (material) => {
     if (!catalogId || !material?.id || materialDeleteDisabled || deletingMaterialIds.has(material.id)) return;
@@ -1122,6 +1162,50 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
               )}
             </div>
           </section>
+
+            <div className="my-6 border-t border-slate-200" />
+
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">生成保底题库</h3>
+                <p className="mt-1 text-xs text-slate-500">按 KG 全部节点生成保底题库（每节点 3 单选 + 4 多选）。</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartQuizGeneration}
+                disabled={quizGenerating || !hasReadyKnowledge || !hasActiveKnowledgeGraph}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  quizGenerating || !hasReadyKnowledge || !hasActiveKnowledgeGraph
+                    ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                    : 'cursor-pointer bg-emerald-600 text-white hover:bg-emerald-700'
+                }`}
+              >
+                <span className={`material-symbols-outlined text-[18px] ${quizGenerating ? 'animate-spin' : ''}`}>
+                  {quizGenerating ? 'progress_activity' : 'quiz'}
+                </span>
+                {quizGenerating ? '生成中' : '生成题库'}
+              </button>
+            </div>
+
+            {(quizGenTask?.status === 'processing' || quizGenTask?.status === 'completed' || quizGenTask?.status === 'failed') && (
+              <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex h-2 w-2 rounded-full ${
+                    quizGenTask.status === 'completed' ? 'bg-emerald-500' :
+                    quizGenTask.status === 'failed' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'
+                  }`}></span>
+                  <span className="text-xs text-slate-700 font-medium">
+                    题库生成 {quizGenTask.status === 'completed' ? '完成' : quizGenTask.status === 'failed' ? '失败' : '进行中'}
+                    {quizGenTask.status === 'completed' && quizGenTask.result?.total_question_count
+                      ? `（${quizGenTask.result.completed_node_count}/${quizGenTask.result.total_node_count} 节点，共 ${quizGenTask.result.total_question_count} 题）`
+                      : ''}
+                  </span>
+                </div>
+                {quizGenTask.status === 'failed' && quizGenTask.error_message && (
+                  <div className="mt-2 text-xs text-red-600">{quizGenTask.error_message}</div>
+                )}
+              </div>
+            )}
 
           <section className="mb-5 rounded-lg border border-slate-200 bg-white">
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">

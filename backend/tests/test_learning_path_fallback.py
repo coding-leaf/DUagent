@@ -107,6 +107,7 @@ from app.main import app  # noqa: E402
 from app.models.catalog import CourseCatalog, CourseOffering  # noqa: E402
 from app.models.others import CourseKnowledgeGraph  # noqa: E402
 from app.models.user import RegistrationCode  # noqa: E402
+from app.models.quiz import QuizQuestion  # noqa: E402
 from httpx import AsyncClient, ASGITransport  # noqa: E402
 
 
@@ -228,3 +229,61 @@ async def test_learning_path_kg_fallback_no_course_offering_returns_empty():
         assert data["current_position"] is None
         assert data["edges"] == []
         assert data["generated_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_quiz_questions_node_id_filter_returns_node_questions():
+    """GET /quiz/questions?node_id=xxx should return only that node's questions."""
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        suffix = uuid.uuid4().hex[:8]
+        reg_code = f"qzfb_{suffix}"
+        email = f"qznode_{suffix[:6]}@t.com"
+        username = f"qznode_{suffix[:6]}"
+
+        async with async_session_factory() as db:
+            db.add(RegistrationCode(code=reg_code, role="student"))
+            await db.commit()
+
+        ct_token, ct_ans = await _captcha_answer(client)
+        r = await client.post("/api/v1/auth/register", json={
+            "registration_code": reg_code, "email": email, "password": "Abc12345",
+            "username": username, "captcha_token": ct_token, "captcha_code": ct_ans,
+        })
+        assert r.status_code == 201
+        user_id = r.json()["data"]["user_id"]
+
+        ct_token, ct_ans = await _captcha_answer(client)
+        r = await client.post("/api/v1/auth/login", json={
+            "email": email, "password": "Abc12345",
+            "captcha_token": ct_token, "captcha_code": ct_ans,
+        })
+        headers = {"Authorization": f"Bearer {r.json()['data']['token']}"}
+
+        catalog_id = f"qzcat_{suffix[:8]}"
+        host_course_id = f"qzhc_{suffix[:8]}"
+        course_id = f"qzco_{suffix[:8]}"
+
+        async with async_session_factory() as db:
+            db.add(CourseCatalog(id=catalog_id, title="QZ Catalog", kg_host_course_id=host_course_id))
+            db.add(CourseOffering(id=course_id, name="QZ Class", catalog_id=catalog_id,
+                                  teacher_id=user_id, class_code=f"QZ{suffix[:4].upper()}"))
+            await db.flush()
+            db.add(CourseKnowledgeGraph(course_id=host_course_id, version=1, is_active=True,
+                source_type="catalog_chunks", generation_strategy="catalog_chunks_llm",
+                nodes=[{"id":"n1","name":"Node1","chapter":"Ch1"}],
+                edges=[]))
+            db.add(QuizQuestion(course_id=course_id, chapter="Ch1", knowledge_point="Node1",
+                type="single_choice", source="common", content="Q1 for Node1",
+                correct_answer="A", options={"A":"x","B":"y"}))
+            db.add(QuizQuestion(course_id=course_id, chapter="Ch1", knowledge_point="OtherNode",
+                type="single_choice", source="common", content="Q2 for Other",
+                correct_answer="B", options={"A":"x","B":"y"}))
+            await db.commit()
+
+        r = await client.get(f"/api/v1/quiz/questions?course_id={course_id}&node_id=n1", headers=headers)
+        assert r.status_code == 200
+        questions = r.json()["data"]["questions"]
+        assert len(questions) == 1
+        assert questions[0]["content"] == "Q1 for Node1"

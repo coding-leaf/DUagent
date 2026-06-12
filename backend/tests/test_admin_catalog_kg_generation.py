@@ -356,30 +356,57 @@ async def test_non_admin_cannot_start_catalog_kg_generation():
 
 
 @pytest.mark.asyncio
-async def test_admin_catalog_kg_generation_rejects_missing_course_offering():
+async def test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_offering():
     await _reset_db()
     await _seed_user("admin-kg-gen", "admin")
     async with async_session_factory() as db:
+        host_course = Course(
+            id="host-course-existing",
+            name="[KG HOST] Existing Catalog",
+            course_code="KGHNOOFF1",
+            teacher_id="admin-kg-gen",
+        )
+        db.add(host_course)
+        await db.flush()
         db.add(
             CourseCatalog(
                 id="catalog-no-offering",
                 title="No Offering Catalog",
-                status="draft",
-                knowledge_status="draft",
-                chunk_count=0,
+                status="ready",
+                knowledge_status="ready",
+                chunk_count=3,
+                kg_host_course_id=host_course.id,
             )
         )
         await db.commit()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post(
-            "/api/v1/admin/course-catalogs/catalog-no-offering/knowledge-graphs/generations",
-            headers=_auth_headers("admin-kg-gen", "admin"),
-            json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
-        )
+    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+        mock_generate.return_value = {
+            "course_id": "host-course-existing",
+            "graph_id": "graph-reuse",
+            "version": 1,
+            "node_count": 1,
+            "edge_count": 0,
+            "source_type": "catalog_chunks",
+            "generation_strategy": "catalog_chunks_llm",
+            "metrics": {},
+            "activated": True,
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/admin/course-catalogs/catalog-no-offering/knowledge-graphs/generations",
+                headers=_auth_headers("admin-kg-gen", "admin"),
+                json={},
+            )
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["data"]["error_code"] == "offering_missing"
+    assert response.status_code == 202, response.text
+
+    async with async_session_factory() as db:
+        catalog = await db.get(CourseCatalog, "catalog-no-offering")
+        host_course = await db.get(Course, "host-course-existing")
+
+    assert catalog.kg_host_course_id == "host-course-existing"
+    assert host_course is not None
 
 
 @pytest.mark.asyncio

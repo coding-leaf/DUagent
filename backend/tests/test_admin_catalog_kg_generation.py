@@ -556,7 +556,7 @@ async def test_catalog_kg_generation_creates_hidden_host_course_with_long_catalo
 async def test_catalog_kg_generation_truncates_hidden_host_course_name_for_long_catalog_title():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")
-    long_title = "超长资源库标题" * 20
+    long_title = "L" * 100
     async with async_session_factory() as db:
         db.add(
             CourseCatalog(

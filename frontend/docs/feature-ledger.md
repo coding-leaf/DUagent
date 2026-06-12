@@ -117,9 +117,9 @@
 
 | # | 功能 | 状态 | 已实现内容 | 下一步 |
 | --- | --- | --- | --- | --- |
-| 20 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源；Backend 已有只读 LearningPath-KG 资源命中 probe | C 语言真实 course 当前无 LearningPath 记录，需先生成 / 刷新后再评估节点资源挂载。 |
-| 21 | LearningPath 刷新 | ⚠️ 前端无入口 + 📋 待设计 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；刷新依赖 KG | 先用 C 样本触发后端刷新 / 生成路径并跑 probe，再决定是否接刷新 UI。 |
-| 22 | KG ready gate | 📋 后置待设计 | 当前 CourseCatalog ready gate 是 chunk-only，不适合直接决定 LearningPath 生成；C 语言样本已通过正文支撑和 KG-node 资源候选探针，但 LearningPath 实例仍缺失 | 待 C 样本 LearningPath 生成并完成节点资源挂载评估后，再设计 KG 状态、错误码、降级策略、前端提示。 |
+| 20 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源；无 LP 记录时从 active KG 拓扑排序合成路径骨架（source="kg_fallback"），全节点 recommended | KG fallback 已闭环，不再依赖 Agent 个性化生成来显示基础路径。 |
+| 21 | LearningPath 刷新 | ⚠️ 前端无入口 + ⏸️ 暂缓 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；KG fallback 已覆盖基础展示 | 当前阶段不需要接刷新 UI；如未来需要 Agent 个性化路径，再评估。 |
+| 22 | KG ready gate | ⏸️ 暂缓 | KG fallback 已让 LearningPath 可用，不再阻塞主流程 | 待 Agent 个性化路径设计后再定。 |
 | 23 | 学生画像展示 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile`，并展示 `/users/me` 基础资料 | 字段扩展必须走契约。 |
 | 24 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
 | 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
@@ -138,20 +138,20 @@
 
 ## 当前下一步队列
 
-1. **C 样本 catalog 数据一致性恢复**
-   删除资料后 chunk 重算逻辑已修复，但真实 C catalog `b2444963f0e54587` 已处于历史不一致状态：未删除 material `chunk_count=0`、catalog `chunk_count=665` 且 `knowledge_status=ready`。下一步先修正这条开发库数据或重新上传有效资料并入库，确认 repair check 不再出现 `material_chunks_missing`。
+1. **#29 AI Chat 检索能力独立 spec**
+   按已定口径，后续 Chat spec 必须从”先验证 Agent 检索能力”开始，不先加 UI。
 
-2. **C 样本 LearningPath 生成 / 刷新**
-   C 语言样本已通过 KG-node 资源生成和 KG-Resource 正式探针复验：`108/108` active KG 节点 `candidate_count>0`，但真实 course `6c698badb60a4809` 当前 `learning_paths` 记录数为 `0`。catalog 数据恢复后，再用现有后端 refresh / Agent 链路生成 LearningPath，并复跑 LearningPath-KG 资源命中 probe。
-
-3. **LearningPath ready gate 设计**
-   在 C 样本 LearningPath 生成并完成节点资源挂载效果评估后，再设计 KG 状态、错误码、降级策略、前端提示和是否允许刷新。不能直接复用 CourseCatalog chunk-only ready gate。
-
-4. **#29 AI Chat 检索能力独立 spec**
-   按已定口径，后续 Chat spec 必须从“先验证 Agent 检索能力”开始，不先加 UI。
-
-5. **#28 Admin 用户停用状态契约**
+2. **#28 Admin 用户停用状态契约**
    如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
+
+3. **C 样本 catalog 数据一致性恢复**
+   删除资料后 chunk 重算逻辑已修复，但真实 C catalog 已处于历史不一致状态。下一步先修正这条开发库数据或重新上传有效资料并入库。
+
+4. **LearningPath 节点资源挂载验证**
+   KG fallback 已让学习路径页面可显示骨架，下一步验证真实 C 样本的节点资源（weak_point_tutorials/exercises/chapter_materials）是否能在页面上正确展示。当前 resources 表挂载到 KG 节点的数据可能仍缺。
+
+5. **Profile / Evaluation refresh 入口决策**
+   决定 `profileService.refreshProfile()` 和 `learningService.refreshEvaluation()` 是否接前端刷新按钮，或删除误导性 service。
 
 ## 纠偏记录
 
@@ -170,6 +170,7 @@
 - 2026-06-11 KG-Resource 对齐探针复验：`b2444963f0e54587` / `6c698badb60a4809` 已具备正式探针条件并导出 108 行 KG 节点候选，但 `108/108` 节点 `candidate_count=0`。零命中原因是当前资源元数据仍为 `chapter=课程整体`、`knowledge_point=综合知识点`，不是新版 active KG 未生效；下一步转为资源生成 metadata / KG 映射设计。
 - 2026-06-11 KG-node 资源生成闭环：新增维护工具先 recheck/repair C catalog 的 `knowledge_status dirty -> ready`，确认非删除资料全 ingested、chunk 正常且 Qdrant 可查；随后 Admin 资源生成接口不传 `chapter/knowledge_point`，自动选 10 个 active KG 核心节点生成资源，父任务 `d364a3a0af294dfa` 完成且 `10/10` 子任务成功。复跑 KG-Resource probe 后 `108/108` active KG 节点 `candidate_count>0`，资源 metadata 与 KG 节点对齐问题已在 C 样本闭环验证。
 - 2026-06-11 LearningPath-KG 资源命中评估基线：新增只读 probe 后跑真实 C 样本，报告 `/tmp/learning-path-resource-probe-c-language.json` 显示 `active_kg_node_count=108`、`resource_count=84`、`kg_tagged_resource_count=80`，但 `learning_path_id=null`、`learning_path_node_count=0`；只读 MySQL 复核该 course 当前无非删除 LearningPath，因此不能直接评估 ready gate，下一步必须先生成 / 刷新 LearningPath。
+- 2026-06-12 LearningPath KG Fallback：`GET /learning-path` 无 LP 记录时不再返回空，而是从 active KG 拓扑排序合成路径骨架（全 recommended）。KG fallback 已闭环，不再阻塞学习路径页面展示；Agent 个性化生成后置，不删除历史 refresh 端点但当前不需要接 UI。
 - 2026-06-11 Admin 删除资料一致性修复：删除 CourseCatalog material 后现在会按剩余未删除 material 重算 `catalog.chunk_count`，避免删除最后一个有效资料后 catalog 仍保留历史 chunk 并误判 ready。真实 C catalog 已存在的历史不一致数据不会被代码自动回填，需单独修正或重新入库。
 
 ## 更新规则

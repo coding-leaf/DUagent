@@ -253,6 +253,20 @@
 - Admin CourseCatalog 入库和资源生成真实验收需要 Backend、Agent Service、MySQL、Qdrant/storage、embedding provider 配置同时可用。
 - Agent Service 必须带共享上传目录运行：`COURSE_CATALOG_STORAGE_ROOT=/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs`。缺失时入库会失败为 `material does not exist`。
 
+## 2026-06-12 LearningPath KG Fallback
+
+- **问题**: `learning_paths` 表为空（0 行），`GET /learning-path` 永远返回空 `{nodes:[]}`，LearningPath 页面始终空白
+- **方案**: 无 LP 记录时，从 active KG 拓扑排序合成路径骨架，全节点 recommended
+- **改动**:
+  - `backend/app/api/v1/learning_path.py`: 新增 `_topo_sort_kg_nodes()`（Kahn 拓扑排序）+ `_synthesize_kg_fallback_path()`（Offering→Catalog→KG 链合成），修改 `get_learning_path()` 空 LP 分支加 fallback 调用；LP 分支加 `source` 字段
+  - `backend/app/services/kg_generation.py`: 加 `max_tokens: 32768` 防止 deepseek-v4-flash 无限生成
+  - `backend/app/api/v1/catalogs.py`: `admin_generate_catalog_resources` 查 KG 改为用 `catalog.kg_host_course_id`（修复 CourseOffering.id 无法匹配 KG 的 bug）；删除死代码 `_active_kg_for_catalog_generation()`
+  - `backend/tests/test_learning_path_fallback.py`: 6 单元测试 + 2 集成测试，全部通过
+  - DB: `ALTER TABLE course_catalogs ADD COLUMN kg_host_course_id VARCHAR(32)`（修复 commit f1981ce 遗漏的迁移）
+- **验证**: `pytest tests/test_learning_path_fallback.py -v` 8 passed
+- **前端**: 零改动
+- **Commit**: `a052c38` `9040d26` `9406747` `8907d51` `3783958`
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

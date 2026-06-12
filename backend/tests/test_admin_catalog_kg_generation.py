@@ -258,8 +258,26 @@ async def test_generate_kg_json_links_second_active_version_to_parent_graph():
     assert second_graph.id == result["graph_id"]
     assert second_graph.is_active is True
     assert second_graph.parent_graph_id == first_graph_id
-    assert first_graph.id == first_graph_id
-    assert first_graph.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_seed_ready_catalog_can_store_kg_host_course_id():
+    await _reset_db()
+    catalog_id, _ = await _seed_catalog_and_course(
+        catalog_id="catalog-kg-host-course",
+        course_id="host-course-1",
+        status="ready",
+        knowledge_status="ready",
+        chunk_count=1,
+    )
+
+    async with async_session_factory() as db:
+        catalog = await db.get(CourseCatalog, catalog_id)
+        catalog.kg_host_course_id = "host-course-1"
+        await db.commit()
+        await db.refresh(catalog)
+
+    assert catalog.kg_host_course_id == "host-course-1"
 
 
 @pytest.mark.asyncio

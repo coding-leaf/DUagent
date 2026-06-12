@@ -24,6 +24,9 @@ class CourseCatalog(Base):
     last_ingestion_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    kg_host_course_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("courses.id"), nullable=True
+    )
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)

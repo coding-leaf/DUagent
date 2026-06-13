@@ -58,6 +58,13 @@ def _build_react_user_message(
     strategy=None,
 ) -> str:
     profile = request.user_profile
+    # weak chunk 上浮：含 knowledge_weak 词条的 chunk 优先排前（稳定排序，不丢弃任何 chunk）
+    weak_terms = {w.strip() for w in (profile.knowledge_weak or []) if w.strip()}
+    chunks = list(retrieval_context.course_knowledge_chunks)
+    if weak_terms:
+        chunks.sort(key=lambda c: 0 if any(t in c for t in weak_terms) else 1)
+    retrieval_context = retrieval_context.model_copy(update={"course_knowledge_chunks": chunks})
+
     context_lines = [
         f"用户ID：{request.user_id}",
         f"课程ID：{request.course_id or '全局'}",

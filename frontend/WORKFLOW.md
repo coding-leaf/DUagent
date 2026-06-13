@@ -21,6 +21,18 @@
 ## 最近验证
 
 ### 2026-06-14
+- AIChat 页面侧边栏响应式折叠与滑出抽屉重构完成：
+  - 问题分析：原侧边栏采用固定隐藏/显示样式，导致移动端完全无法访问历史记录与学习资源，且在桌面端无法由用户收拢以获得更宽的聊天窗口。
+  - 修复：
+    1. 引入 4 个 React 状态量：`leftCollapsed` (左收起)、`rightCollapsed` (右收起)、`leftDrawerOpen` (左侧滑栏打开)、`rightDrawerOpen` (右侧滑栏打开)。
+    2. 顶部 Header 栏添加 Hamburger 和 `menu_book` 按钮，分别作为左右侧滑栏的呼出开关。
+    3. 左右侧边栏 `<aside>` 容器重构：结合 Tailwind CSS 实现平滑的折叠与滑出动画，使用内部包裹容器 `min-w-[256px]` / `min-w-[288px]` 隔离宽度变化导致的内容挤压，折叠时隐藏边框和阴影。
+    4. 增加 Backdrop 遮罩层以支持点击空白处关闭侧滑栏；新增选取历史会话、重置新建对话时的自动关闭 Drawer 联动。
+  - 契约说明：纯前端布局优化，不涉及 API 契约漂移。
+  - 验证：
+    - `npm run lint` 通过。
+    - `npm run build` 成功。
+
 - Tutoring 快速链路 + 异步 review 事件重构完成。
   - 已完成：删除同步 LLM critic、chat fallback、策略 LLM 分支；`generate_tutoring_sse_events` 改为 Retrieval -> ReAct -> 规则 Guard -> 最多一次 ReAct 重试 -> 规则兜底；`done` 之后按规则审查结果可选发送 `review` 事件。
   - 个性化：ReAct prompt 保持长期记忆优先于课程知识；含 `knowledge_weak` 词条的 course chunk 稳定上浮，不丢 chunk。

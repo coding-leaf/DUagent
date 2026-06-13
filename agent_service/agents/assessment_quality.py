@@ -364,8 +364,10 @@ def _review_difficulty_by_rules(
 
 
 def _question_text(question: GeneratedQuestion) -> str:
+    option_texts = " ".join(str(opt.text or "") for opt in (question.options or []))
     return _normalize_text(" ".join([
         str(question.content or ""),
+        option_texts,
         str(question.explanation or ""),
         str(question.difficulty or ""),
     ]))

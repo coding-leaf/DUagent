@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from agent_service.api.v1 import tutoring as tutoring_api
-from agent_service.agents.tutoring import generate_tutoring_model_response
+from agent_service.agents.tutoring import TutoringModelResponse
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
 
@@ -43,8 +43,9 @@ def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
         if line.startswith("data: ")
     ]
     payload_events = _non_status_events(events)
-    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
-    assert payload_events[-1]["message_id"] == "msg_user-1_new"
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done", "review"]
+    assert payload_events[-2]["message_id"] == "msg_user-1_new"
+    assert payload_events[-1]["type"] == "review"
     assert events[0]["type"] == "status"
 
 
@@ -128,7 +129,7 @@ def test_tutoring_chat_degrades_when_ai_retrieval_fails(monkeypatch) -> None:
     ]
 
     payload_events = _non_status_events(events)
-    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done", "review"]
     assert payload_events[0]["content"].startswith("我会先拆成更小的步骤来讲。")
     assert payload_events[1]["knowledge_points"][0]["name"] == "导数"
 
@@ -246,9 +247,15 @@ def test_tutoring_chat_emits_only_model_chunk_when_model_succeeds(monkeypatch) -
             self.embedding = object()
             self.chat = self
 
-        async def complete(self, messages):
-            calls["messages"] = messages
-            return "链式法则用于复合函数求导，要从外层函数开始乘以内层导数。"
+        model = object()
+        formatter = object()
+
+    async def fake_react(request_arg, retrieval_context, chat_provider, **kwargs):
+        calls["request"] = request_arg
+        return TutoringModelResponse(
+            model_text="链式法则用于复合函数求导，要从外层函数开始乘以内层导数。",
+            knowledge_point_names=["链式法则"],
+        )
 
     async def fake_build_context(request_arg, embedding_provider, vector_store=None, limit=3):
         return TutoringRetrievalContext(
@@ -265,6 +272,7 @@ def test_tutoring_chat_emits_only_model_chunk_when_model_succeeds(monkeypatch) -
         "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
         fake_build_context,
     )
+    monkeypatch.setattr("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", fake_react)
     _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
@@ -278,7 +286,7 @@ def test_tutoring_chat_emits_only_model_chunk_when_model_succeeds(monkeypatch) -
     payload_events = _non_status_events(events)
     assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
     assert payload_events[0]["content"] == "链式法则用于复合函数求导，要从外层函数开始乘以内层导数。"
-    assert calls["messages"][-1].role == "user"
+    assert calls["request"] == request
 
 
 def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> None:
@@ -294,12 +302,15 @@ def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> Non
             self.embedding = object()
             self.chat = self
 
-        async def complete(self, messages):
-            return (
-                "链式法则先看外层函数，再乘以内层导数。"
-                "\n<agent_result>{\"knowledge_points\":[\"链式法则\",\"复合函数\"],"
-                "\"suggestion\":\"先确认外层函数，再检查内层导数。\"}</agent_result>"
-            )
+        model = object()
+        formatter = object()
+
+    async def fake_react(*args, **kwargs):
+        return TutoringModelResponse(
+            model_text="链式法则先看外层函数，再乘以内层导数。",
+            knowledge_point_names=["链式法则", "复合函数"],
+            suggestion_text="先确认外层函数，再检查内层导数。",
+        )
 
     async def fake_build_context(request_arg, embedding_provider, vector_store=None, limit=3):
         return TutoringRetrievalContext(
@@ -307,7 +318,7 @@ def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> Non
             course_id="course-1",
             query_text="链式法则怎么用？",
             include_course_knowledge=True,
-            knowledge_points=["导数"],
+            knowledge_points=["链式法则"],
             user_memory_facts=["用户容易把内外层顺序写反"],
             course_knowledge_chunks=["链式法则用于复合函数求导"],
         )
@@ -316,6 +327,7 @@ def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> Non
         "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
         fake_build_context,
     )
+    monkeypatch.setattr("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", fake_react)
     _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
@@ -345,10 +357,16 @@ def test_tutoring_chat_streams_diagram_event_when_present(monkeypatch) -> None:
             self.embedding = object()
             self.chat = self
 
-        async def complete(self, messages):
-            return (
-                '{"model_text":"这是树", "knowledge_points":["二叉树"], "suggestion":"看图", "diagram":"graph TD; A-->B;"}'
-            )
+        model = object()
+        formatter = object()
+
+    async def fake_react(*args, **kwargs):
+        return TutoringModelResponse(
+            model_text="这是树",
+            knowledge_point_names=["二叉树"],
+            suggestion_text="看图",
+            diagram="graph TD; A-->B;",
+        )
 
     async def fake_build_context(request_arg, embedding_provider, vector_store=None, limit=3):
         return TutoringRetrievalContext(
@@ -365,6 +383,7 @@ def test_tutoring_chat_streams_diagram_event_when_present(monkeypatch) -> None:
         "agent_service.memory.tutoring_retrieval.build_tutoring_retrieval_context_with_ai",
         fake_build_context,
     )
+    monkeypatch.setattr("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", fake_react)
     _patch_providers(monkeypatch, FakeProviders())
 
     response = asyncio.run(tutoring_api.tutoring_chat(request))
@@ -422,49 +441,7 @@ def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
     ]
 
     payload_events = _non_status_events(events)
-    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
-
-
-def test_build_model_response_uses_chat_provider_without_react_agent(monkeypatch) -> None:
-    request = TutoringChatRequest(
-        user_id="user-1",
-        course_id="course-1",
-        message="链式法则怎么用？",
-        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
-    )
-    context = TutoringRetrievalContext(
-        user_id="user-1",
-        course_id="course-1",
-        query_text="链式法则怎么用？",
-        include_course_knowledge=True,
-        knowledge_points=["导数"],
-        user_memory_facts=[],
-        course_knowledge_chunks=[],
-    )
-
-    class FakeChatProvider:
-        model = object()
-        formatter = object()
-
-        async def complete(self, messages):
-            return (
-                '{"model_text":"chat 单路径回答",'
-                '"knowledge_points":["链式法则"],'
-                '"suggestion":"继续做同类题。"}'
-            )
-
-    class FakeProviders:
-        chat = FakeChatProvider()
-        embedding = object()
-
-    response = asyncio.run(
-        generate_tutoring_model_response(request, context, FakeChatProvider())
-    )
-
-    assert response is not None
-    assert response.model_text == "chat 单路径回答"
-    assert response.knowledge_point_names == ["链式法则"]
-    assert response.suggestion_text == "继续做同类题。"
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done", "review"]
 
 
 async def _consume_response_body(body_iterator) -> str:

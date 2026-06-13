@@ -1,6 +1,6 @@
 """基于 AgentScope ReActAgent 的 tutoring 适配器，提供 reasoning loop + knowledge + toolkit + memory。
 
-失败时降级到现有 generate_tutoring_model_response() → rule-based fallback。
+失败时降级到规则兜底。
 """
 
 from agentscope.agent import ReActAgent
@@ -42,12 +42,12 @@ class TutorReActAgent:
         )
 
     async def generate(self, user_message: str) -> str | None:
-        """调用 ReActAgent 生成回答，输入用户消息文本，输出模型回复或 None（失败降级）。"""
+        """调用 ReActAgent 生成回答，输入用户消息文本，输出模型回复或 None（失败走规则兜底）。"""
         try:
             result = await self._agent(
                 Msg(name="user", role="user", content=user_message),
             )
             return result.get_text_content()
         except Exception:
-            logger.warning("TutorReActAgent.generate 调用失败，降级到 fallback", exc_info=True)
+            logger.warning("TutorReActAgent.generate 调用失败，降级到规则兜底", exc_info=True)
             return None

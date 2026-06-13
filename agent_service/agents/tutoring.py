@@ -1,11 +1,7 @@
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any
 
-from pydantic import BaseModel, Field
-
-from agent_service.core.ai import ChatProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext, build_tutoring_retrieval_context
 from agent_service.schemas.tutoring import (
@@ -14,18 +10,6 @@ from agent_service.schemas.tutoring import (
     TutoringChatRequest,
     TutoringUserProfile,
 )
-
-
-class _TutoringStructuredOutput(BaseModel):
-    """AgentScope structured output schema for tutoring chat JSON path.
-
-    不暴露到 schemas/，不泄漏 AgentScope 类型到 API 层。
-    """
-
-    model_text: str | None = None
-    knowledge_points: list[str] = Field(default_factory=list)
-    suggestion: str | None = None
-    diagram: str | None = None
 
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
 _MARKDOWN_JSON_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -166,43 +150,6 @@ def _build_response_from_payload(model_text: str | None, payload: dict) -> Tutor
     )
 
 
-async def generate_tutoring_model_response(
-    request: TutoringChatRequest,
-    retrieval_context: TutoringRetrievalContext,
-    chat_provider: ChatProvider | None,
-    strategy=None,
-) -> TutoringModelResponse | None:
-    """调用 tutoring 模型编排，输入请求和检索上下文，输出可合并进 SSE 的内部模型结果。
-
-    降级链：structured output → text JSON parse → None（上层 fallback 规则版）。
-    """
-    if chat_provider is None:
-        return None
-    messages = build_tutoring_messages(request, retrieval_context, strategy=strategy)
-    try:
-        raw = await _try_structured_output(messages, chat_provider)
-        if raw is not None:
-            return parse_tutoring_model_response(raw)
-        raw = await chat_provider.complete(messages)
-        return parse_tutoring_model_response(raw)
-    except Exception as exc:
-        logger.warning("Tutoring chat generation failed: user_id=%s error=%s", request.user_id, exc)
-        return None
-
-
-async def _try_structured_output(messages, chat_provider) -> str | None:
-    """尝试用 AgentScope structured_model 生成输出，成功返回 JSON 文本，失败返回 None。"""
-    try:
-        raw = await chat_provider.complete(messages, structured_model=_TutoringStructuredOutput)
-        logger.info("Tutoring structured output succeeded")
-        if raw and raw.strip():
-            return raw.strip()
-    except Exception:
-        logger.debug("Tutoring structured output failed", exc_info=True)
-        pass
-    return None
-
-
 def _build_knowledge_points(
     request: TutoringChatRequest,
     context: TutoringRetrievalContext,
@@ -269,14 +216,24 @@ def _build_chunk_content(request: TutoringChatRequest, focus_text: str, context:
     return f"{retrieval_text}{guidance_text}{summary_text}这次重点看{focus_text}。"
 
 
-async def generate_tutoring_sse_events(request, providers=None):
-    """生成 tutoring SSE 事件流，处理 provider 查找和降级链，输入请求和可选 providers，输出 AsyncIterator[str]."""
-    import json
-    from collections.abc import AsyncIterator
+def _build_retry_request(request: TutoringChatRequest, strategy) -> TutoringChatRequest:
+    """构建重试请求：收紧 ReAct 输入，使回答围绕当前 focus_points。"""
+    focus = "、".join(strategy.focus_points) if strategy and strategy.focus_points else "当前问题"
+    tightened = f"{request.message}\n\n[请直接针对「{focus}」给出可用的辅导回答，不要偏题。]"
+    return request.model_copy(update={"message": tightened})
 
-    from agent_service.agents.tutoring_response_critic import evaluate_tutoring_response
+
+def _empty_response() -> TutoringModelResponse:
+    return TutoringModelResponse()
+
+
+async def generate_tutoring_sse_events(request, providers=None):
+    """生成 tutoring SSE 事件流：Retrieval → ReAct → 规则 Guard → 重试一次 → 输出 → 异步审查。"""
+    import json
+
+    from agent_service.agents.tutoring_response_critic import evaluate_tutoring_response_by_rule
     from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
-    from agent_service.agents.tutoring_strategy import select_tutoring_strategy
+    from agent_service.agents.tutoring_strategy import select_tutoring_strategy_by_rule
     from agent_service.core.ai import get_ai_providers
     from agent_service.memory.tutoring_retrieval import (
         build_tutoring_retrieval_context,
@@ -287,6 +244,7 @@ async def generate_tutoring_sse_events(request, providers=None):
         DiagramEvent,
         DoneEvent,
         KnowledgePointsEvent,
+        ReviewEvent,
         SuggestionEvent,
     )
 
@@ -306,23 +264,23 @@ async def generate_tutoring_sse_events(request, providers=None):
     try:
         if reranker is None:
             retrieval_context = await build_tutoring_retrieval_context_with_ai(
-                request, embedding_provider=providers.embedding, vector_store=vector_store
+                request, embedding_provider=embedding, vector_store=vector_store
             )
         else:
             retrieval_context = await build_tutoring_retrieval_context_with_ai(
-                request, embedding_provider=providers.embedding, reranker_provider=reranker, vector_store=vector_store
+                request, embedding_provider=embedding, reranker_provider=reranker, vector_store=vector_store
             )
     except Exception:
         logger.warning("Tutoring retrieval failed, using fallback context", exc_info=True)
         retrieval_context = build_tutoring_retrieval_context(request)
 
     chat = getattr(providers, "chat", None)
-    strategy = await select_tutoring_strategy(request, retrieval_context, chat)
+    strategy = select_tutoring_strategy_by_rule(request, retrieval_context)
     yield f"data: {json.dumps({'type': 'status', 'stage': 'generation', 'message': '正在生成回答...'}, ensure_ascii=False)}\n\n"
     agent_path = "rule"
-    fallback_path = "rule"
     output_source = "rule"
     quality_gate = "not_applicable"
+
     react_response = await generate_tutoring_react_response(
         request, retrieval_context, chat,
         embedding_provider=embedding,
@@ -330,41 +288,45 @@ async def generate_tutoring_sse_events(request, providers=None):
         strategy=strategy,
     )
     if react_response is not None:
-        critic_result = await evaluate_tutoring_response(request, retrieval_context, react_response, strategy, chat)
-        if not critic_result.accepted:
-            quality_gate = "rejected"
-            logger.info("Tutoring ReAct response rejected by critic: reason=%s", critic_result.reason)
-            react_response = None
-        else:
+        guard = evaluate_tutoring_response_by_rule(request, retrieval_context, react_response, strategy)
+        if guard.accepted:
             agent_path = "react"
-            fallback_path = "none"
             output_source = "react"
             quality_gate = "accepted"
-    if react_response is None:
-        react_response = await generate_tutoring_model_response(request, retrieval_context, chat, strategy=strategy)
+        else:
+            quality_gate = "guard_rejected"
+            logger.info("Tutoring ReAct response rejected by guard: reason=%s", guard.reason)
+            react_response = None
+
+    if react_response is None and chat is not None:
+        retry_request = _build_retry_request(request, strategy)
+        react_response = await generate_tutoring_react_response(
+            retry_request, retrieval_context, chat,
+            embedding_provider=embedding,
+            vector_store=vector_store,
+            strategy=strategy,
+        )
         if react_response is not None:
-            critic_result = await evaluate_tutoring_response(request, retrieval_context, react_response, strategy, chat)
-            if not critic_result.accepted:
-                quality_gate = "rejected"
-                logger.info("Tutoring chat response rejected by critic: reason=%s", critic_result.reason)
-                react_response = None
+            guard = evaluate_tutoring_response_by_rule(request, retrieval_context, react_response, strategy)
+            if guard.accepted:
+                agent_path = "react_retry"
+                output_source = "react_retry"
+                quality_gate = "accepted_on_retry"
             else:
-                agent_path = "chat"
-                fallback_path = "none"
-                output_source = "chat"
-                quality_gate = "accepted"
+                quality_gate = "guard_rejected_on_retry"
+                logger.info("Tutoring retry response rejected by guard: reason=%s", guard.reason)
+                react_response = None
 
     runtime_result = build_tutoring_generation_result(
         request, retrieval_context=retrieval_context, model_response=react_response
     )
     logger.info(
-        "agent_trace interface=tutoring/chat user_id=%s course_id=%s retrieval_hit_count=%d agent_path=%s quality_gate=%s fallback_path=%s output_source=%s",
+        "agent_trace interface=tutoring/chat user_id=%s course_id=%s retrieval_hit_count=%d agent_path=%s quality_gate=%s output_source=%s",
         request.user_id,
         request.course_id,
         len(retrieval_context.user_memory_facts) + len(retrieval_context.course_knowledge_chunks),
         agent_path,
         quality_gate,
-        fallback_path,
         output_source,
     )
     if runtime_result.chunk_text:
@@ -384,12 +346,31 @@ async def generate_tutoring_sse_events(request, providers=None):
     ]:
         yield f"data: {json.dumps(event.model_dump(), ensure_ascii=False)}\n\n"
 
+    async_guard = evaluate_tutoring_response_by_rule(
+        request,
+        retrieval_context,
+        react_response or _empty_response(),
+        strategy,
+    )
+    if not async_guard.accepted:
+        logger.info(
+            "agent_trace interface=tutoring/chat user_id=%s async_review=flagged reason=%s",
+            request.user_id,
+            async_guard.reason,
+        )
+        review = ReviewEvent(status="flagged", reason=async_guard.reason)
+        yield f"data: {json.dumps(review.model_dump(), ensure_ascii=False)}\n\n"
+    else:
+        logger.info(
+            "agent_trace interface=tutoring/chat user_id=%s async_review=accepted",
+            request.user_id,
+        )
+
 
 __all__ = [
     "TutoringModelResponse",
     "TutoringGenerationResult",
     "build_tutoring_generation_result",
-    "generate_tutoring_model_response",
     "generate_tutoring_sse_events",
     "parse_tutoring_model_response",
 ]

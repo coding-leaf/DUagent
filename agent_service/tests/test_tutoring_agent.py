@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 from agent_service.agents.tutoring import (
     build_tutoring_generation_result,
-    generate_tutoring_model_response,
     parse_tutoring_model_response,
     TutoringModelResponse,
 )
@@ -164,210 +163,6 @@ def test_build_tutoring_generation_result_collects_single_runtime_object() -> No
     assert result.used_rule_fallback is False
 
 
-def test_generate_tutoring_model_response_uses_chat_provider_and_prompt_messages() -> None:
-    request = TutoringChatRequest(
-        user_id="user-1",
-        course_id="course-1",
-        message="帮我讲一下链式法则",
-        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
-    )
-    context = TutoringRetrievalContext(
-        user_id="user-1",
-        course_id="course-1",
-        query_text="帮我讲一下链式法则",
-        include_course_knowledge=True,
-        knowledge_points=["导数"],
-        user_memory_facts=["用户容易混淆复合函数求导顺序"],
-        course_knowledge_chunks=["链式法则用于复合函数求导"],
-    )
-
-    class FakeChatProvider:
-        def __init__(self) -> None:
-            self.calls = []
-
-        async def complete(self, messages):
-            self.calls.append(messages)
-            return (
-                "链式法则先看外层函数。"
-                "\n<agent_result>{\"knowledge_points\":[\"链式法则\"],"
-                "\"suggestion\":\"先确认外层函数。\"}</agent_result>"
-            )
-
-    provider = FakeChatProvider()
-
-    response = asyncio.run(generate_tutoring_model_response(request, context, provider))
-
-    assert provider.calls
-    assert provider.calls[0][-1].role == "user"
-    assert response.model_text == "链式法则先看外层函数。"
-    assert response.knowledge_point_names == ["链式法则"]
-    assert response.suggestion_text == "先确认外层函数。"
-
-
-def test_generate_tutoring_model_response_includes_strategy_context() -> None:
-    request = TutoringChatRequest(
-        user_id="user-1",
-        course_id="course-1",
-        message="帮我讲一下链式法则",
-        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
-    )
-    context = TutoringRetrievalContext(
-        user_id="user-1",
-        course_id="course-1",
-        query_text="帮我讲一下链式法则",
-        include_course_knowledge=True,
-        knowledge_points=["导数"],
-        user_memory_facts=[],
-        course_knowledge_chunks=[],
-    )
-    strategy = TutoringStrategy(
-        strategy="guided_hint",
-        instruction="分步骤给提示，避免直接给最终答案。",
-        focus_points=["链式法则"],
-        source="rule",
-    )
-
-    class FakeChatProvider:
-        def __init__(self) -> None:
-            self.calls = []
-
-        async def complete(self, messages, structured_model=None):
-            self.calls.append(messages)
-            if structured_model is not None:
-                raise RuntimeError("structured output not supported")
-            return '{"model_text":"先判断外层函数。","knowledge_points":["链式法则"],"suggestion":"自己补内层导数。"}'
-
-    provider = FakeChatProvider()
-
-    response = asyncio.run(generate_tutoring_model_response(request, context, provider, strategy=strategy))
-
-    user_content = provider.calls[-1][-1].content
-    assert response.model_text == "先判断外层函数。"
-    assert "辅导策略：guided_hint" in user_content
-    assert "策略要求：分步骤给提示，避免直接给最终答案。" in user_content
-    assert "策略关注点：链式法则" in user_content
-
-
-def test_generate_tutoring_model_response_uses_structured_output() -> None:
-    request = TutoringChatRequest(
-        user_id="user-1",
-        course_id="course-1",
-        message="帮我讲一下链式法则",
-        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
-    )
-    context = TutoringRetrievalContext(
-        user_id="user-1",
-        course_id="course-1",
-        query_text="帮我讲一下链式法则",
-        include_course_knowledge=True,
-        knowledge_points=["导数"],
-        user_memory_facts=["用户容易混淆复合函数求导顺序"],
-        course_knowledge_chunks=["链式法则用于复合函数求导"],
-    )
-
-    class FakeChatProvider:
-        def __init__(self) -> None:
-            self.complete_calls = []
-
-        async def complete(self, messages, structured_model=None):
-            self.complete_calls.append(structured_model)
-            if structured_model is not None:
-                return (
-                    '{"model_text":"链式法则先看外层求导。",'
-                    '"knowledge_points":["链式法则","复合函数"],'
-                    '"suggestion":"先确认外层函数，再逐层求导。"}'
-                )
-            return "fallback text"
-
-    provider = FakeChatProvider()
-
-    response = asyncio.run(generate_tutoring_model_response(request, context, provider))
-
-    assert len(provider.complete_calls) == 1  # structured success, no fallback needed
-    assert provider.complete_calls[0] is not None
-    assert response.model_text == "链式法则先看外层求导。"
-    assert response.knowledge_point_names == ["链式法则", "复合函数"]
-    assert response.suggestion_text == "先确认外层函数，再逐层求导。"
-
-
-def test_generate_tutoring_model_response_falls_back_on_structured_output_failure() -> None:
-    request = TutoringChatRequest(
-        user_id="user-1",
-        course_id="course-1",
-        message="帮我讲一下链式法则",
-        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
-    )
-    context = TutoringRetrievalContext(
-        user_id="user-1",
-        course_id="course-1",
-        query_text="帮我讲一下链式法则",
-        include_course_knowledge=True,
-        knowledge_points=["导数"],
-        user_memory_facts=[],
-        course_knowledge_chunks=[],
-    )
-
-    class FakeChatProvider:
-        def __init__(self) -> None:
-            self.calls = []
-
-        async def complete(self, messages, structured_model=None):
-            self.calls.append(structured_model)
-            if structured_model is not None:
-                raise RuntimeError("structured output not supported")
-            return (
-                "链式法则先看外层函数。"
-                "\n<agent_result>{\"knowledge_points\":[\"链式法则\"],"
-                "\"suggestion\":\"先确认外层函数。\"}</agent_result>"
-            )
-
-    provider = FakeChatProvider()
-
-    response = asyncio.run(generate_tutoring_model_response(request, context, provider))
-
-    assert len(provider.calls) == 2  # structured failed, then text fallback
-    assert provider.calls[0] is not None
-    assert provider.calls[1] is None
-    assert response.model_text == "链式法则先看外层函数。"
-    assert response.knowledge_point_names == ["链式法则"]
-    assert response.suggestion_text == "先确认外层函数。"
-
-
-def test_generate_tutoring_model_response_ignores_legacy_disabled_structured_output() -> None:
-    request = TutoringChatRequest(
-        user_id="user-1",
-        course_id="course-1",
-        message="帮我讲一下链式法则",
-        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
-    )
-    context = TutoringRetrievalContext(
-        user_id="user-1",
-        course_id="course-1",
-        query_text="帮我讲一下链式法则",
-        include_course_knowledge=True,
-        knowledge_points=["导数"],
-        user_memory_facts=[],
-        course_knowledge_chunks=[],
-    )
-
-    class FakeChatProvider:
-        async def complete_structured(self, messages, structured_model):
-            raise AssertionError("structured output should be skipped")
-
-        async def complete(self, messages):
-            return (
-                "链式法则先看外层函数。"
-                "\n<agent_result>{\"knowledge_points\":[\"链式法则\"],"
-                "\"suggestion\":\"先确认外层函数。\"}</agent_result>"
-            )
-
-    response = asyncio.run(generate_tutoring_model_response(request, context, FakeChatProvider()))
-
-    assert response.model_text == "链式法则先看外层函数。"
-    assert response.knowledge_point_names == ["链式法则"]
-    assert response.suggestion_text == "先确认外层函数。"
-
-
 def test_parse_tutoring_model_response_extracts_diagram_from_json_mode() -> None:
     model_output = (
         '{"model_text": "这是一个树。\\n",'
@@ -413,10 +208,18 @@ def test_generate_tutoring_sse_events_maintains_old_order_without_diagram() -> N
         embedding = None
         reranker = None
 
+    async def _react_success(*args, **kwargs):
+        return TutoringModelResponse(
+            model_text="导数好啊",
+            knowledge_point_names=["导数"],
+            suggestion_text="看看视频",
+        )
+
     async def _collect():
         events = []
-        async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
-            events.append(evt)
+        with patch("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", _react_success):
+            async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+                events.append(evt)
         return events
 
     events = asyncio.run(_collect())
@@ -449,10 +252,18 @@ def test_generate_tutoring_sse_events_logs_agent_trace(caplog) -> None:
         embedding = None
         reranker = None
 
+    async def _react_success(*args, **kwargs):
+        return TutoringModelResponse(
+            model_text="导数表示函数变化率。",
+            knowledge_point_names=["导数"],
+            suggestion_text="先做变化率练习。",
+        )
+
     async def _collect():
         events = []
-        async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
-            events.append(evt)
+        with patch("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", _react_success):
+            async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+                events.append(evt)
         return events
 
     with caplog.at_level("INFO", logger="agent_service.agents.tutoring"):
@@ -460,9 +271,8 @@ def test_generate_tutoring_sse_events_logs_agent_trace(caplog) -> None:
 
     assert events
     assert "agent_trace interface=tutoring/chat" in caplog.text
-    assert "agent_path=chat" in caplog.text
-    assert "fallback_path=none" in caplog.text
-    assert "output_source=chat" in caplog.text
+    assert "agent_path=react" in caplog.text
+    assert "output_source=react" in caplog.text
 
 
 def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
@@ -483,10 +293,19 @@ def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
         embedding = None
         reranker = None
 
+    async def _react_success(*args, **kwargs):
+        return TutoringModelResponse(
+            model_text="这是树",
+            knowledge_point_names=["二叉树"],
+            suggestion_text="看图",
+            diagram="graph TD; A-->B;",
+        )
+
     async def _collect():
         events = []
-        async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
-            events.append(evt)
+        with patch("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", _react_success):
+            async for evt in generate_tutoring_sse_events(request, providers=FakeProviders()):
+                events.append(evt)
         return events
 
     events = asyncio.run(_collect())
@@ -502,7 +321,7 @@ def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
     assert diagram_event["data"] == "graph TD; A-->B;"
 
 
-def test_generate_tutoring_sse_events_rejects_bad_react_response_and_uses_chat_fallback() -> None:
+def test_generate_tutoring_sse_events_rejects_bad_react_response_and_uses_rule_fallback() -> None:
     from agent_service.agents.tutoring import generate_tutoring_sse_events
 
     request = TutoringChatRequest(
@@ -542,4 +361,4 @@ def test_generate_tutoring_sse_events_rejects_bad_react_response_and_uses_chat_f
     ]
 
     assert "今天天气不错" not in "\n".join(chunks)
-    assert chunks[-1] == "导数表示函数变化率。"
+    assert "这次重点看导数" in chunks[-1]

@@ -270,3 +270,54 @@ def test_build_tutoring_retrieval_context_with_ai_degrades_on_retrieval_failure(
     assert context.user_memory_facts == []
     assert context.course_knowledge_chunks == []
     assert "Tutoring retrieval failed" in caplog.text
+
+
+def test_build_tutoring_retrieval_context_with_ai_matches_kg_nodes() -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="什么是二叉树？",
+        user_profile=TutoringUserProfile(guidance_level="L2"),
+        active_kg_nodes=[
+            {"id": "1", "name": "图论"},
+            {"id": "2", "name": "二叉树"},
+            {"id": "3", "name": "平衡树"},
+            {"id": "4", "name": "链表"},
+        ],
+    )
+
+    class FakeEmbeddingProvider:
+        async def embed_texts(self, texts):
+            return [[0.1, 0.2, 0.3]]
+
+    class FakeRerankerProvider:
+        async def score(self, query, documents):
+            scores = []
+            for doc in documents:
+                if doc == "二叉树":
+                    scores.append(0.9)
+                elif doc == "平衡树":
+                    scores.append(0.8)
+                elif doc == "图论":
+                    scores.append(0.2)
+                else:
+                    scores.append(0.1)
+            return scores
+
+    class FakeVectorStore:
+        async def search_user_memory(self, user_id, vector, limit=3):
+            return []
+        async def search_course_knowledge(self, course_id, vector, limit=3):
+            return []
+
+    context = asyncio.run(
+        build_tutoring_retrieval_context_with_ai(
+            request,
+            embedding_provider=FakeEmbeddingProvider(),
+            reranker_provider=FakeRerankerProvider(),
+            vector_store=FakeVectorStore(),
+        )
+    )
+
+    assert [node["name"] for node in context.matched_kg_nodes] == ["二叉树", "平衡树", "图论"]
+    assert len(context.matched_kg_nodes) == 3

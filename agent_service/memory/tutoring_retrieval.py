@@ -18,6 +18,7 @@ class TutoringRetrievalContext(BaseModel):
     knowledge_points: list[KnowledgePoint] = Field(default_factory=list, description="检索或画像命中的知识点")
     user_memory_facts: list[str] = Field(default_factory=list, description="用户长期记忆事实")
     course_knowledge_chunks: list[str] = Field(default_factory=list, description="课程知识库切片")
+    matched_kg_nodes: list[dict] = Field(default_factory=list, description="匹配的 KG 节点列表")
 
     @field_validator("knowledge_points", mode="before")
     @classmethod
@@ -38,6 +39,7 @@ def build_tutoring_retrieval_context(request: TutoringChatRequest) -> TutoringRe
         knowledge_points=_profile_knowledge_points(request),
         user_memory_facts=[],
         course_knowledge_chunks=[],
+        matched_kg_nodes=[],
     )
 
 
@@ -74,6 +76,15 @@ async def build_tutoring_retrieval_context_with_ai(
     user_texts = [result.text for result in user_results if result.text]
     course_texts = [result.text for result in course_results if result.text]
 
+    matched_nodes = []
+    if request.active_kg_nodes:
+        matched_nodes = await _rerank_kg_nodes(
+            request.message,
+            request.active_kg_nodes,
+            reranker_provider,
+            limit=limit,
+        )
+
     try:
         user_texts = await _rerank_texts(request.message, user_texts, reranker_provider)
         course_texts = await _rerank_texts(request.message, course_texts, reranker_provider)
@@ -84,6 +95,7 @@ async def build_tutoring_retrieval_context_with_ai(
         update={
             "user_memory_facts": user_texts,
             "course_knowledge_chunks": course_texts,
+            "matched_kg_nodes": matched_nodes,
         }
     )
 
@@ -114,3 +126,25 @@ async def _rerank_texts(
     scores = await reranker_provider.score(query, documents)
     ranked = sorted(zip(documents, scores, strict=True), key=lambda item: item[1], reverse=True)
     return [document for document, _ in ranked]
+
+
+async def _rerank_kg_nodes(
+    query: str,
+    nodes: list[dict],
+    reranker_provider: RerankerProvider | None,
+    limit: int = 3,
+) -> list[dict]:
+    if not nodes:
+        return []
+    if reranker_provider is None or len(nodes) <= 1:
+        return nodes[:limit]
+    
+    # Extract text representation for reranking
+    documents = [node.get("name", "") for node in nodes]
+    try:
+        scores = await reranker_provider.score(query, documents)
+        ranked = sorted(zip(nodes, scores, strict=True), key=lambda item: item[1], reverse=True)
+        return [node for node, _ in ranked][:limit]
+    except Exception as exc:
+        logger.warning("Tutoring KG nodes rerank failed: error=%s", exc)
+        return nodes[:limit]

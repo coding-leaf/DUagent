@@ -390,3 +390,13 @@
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。
+
+- 2026-06-14：AIChat 假数据清理与课程上下文修正 (A+)：
+  - 问题分析：前一版本 AIChat 引入了写死的资源推荐卡片（如“深入理解指针内存模型”）和写死的 C 语言 ChatEmptyState prompt，且错用了 `course.title` 而不是 `course.name`，这违反了“不允许 mock / 假数据内容”的约束，且可能掩盖 Agent 尚未实现真实检索能力的事实。
+  - 修复：
+    1. 在 `AIChat.jsx` 中将 `activeCourseName` 获取逻辑改为 `course.name || course.title || '未选择课程'`。
+    2. 将动态的 `courseName` 传给 `ChatEmptyState`，并使用泛化提示词替换掉所有硬编码的 C 语言提示词。
+    3. 清除右侧边栏的所有静态资源卡片，替换为真实空态，提示：“完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。”
+  - 契约说明：纯前端 UI 修理，不涉及任何接口调用修改，无 OpenAPI 漂移。
+  - 验证：
+    - Frontend `npm run lint` 通过。

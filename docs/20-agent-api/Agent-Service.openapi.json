@@ -304,6 +304,11 @@
               "knowledge_weak": { "type": "array", "items": { "type": "string" }, "description": "薄弱知识点名称列表" }
             }
           },
+          "active_kg_nodes": {
+            "type": "array",
+            "items": { "type": "object" },
+            "description": "当前课程绑定资源库的 Active KG 节点精简列表"
+          },
           "conversation_summary": { "type": "string", "description": "全局对话摘要（记忆压缩后生成）" },
           "recent_messages": {
             "type": "array",

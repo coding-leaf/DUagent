@@ -21,6 +21,18 @@
 ## 最近验证
 
 ### 2026-06-14
+- Tutoring 快速链路 + 异步 review 事件重构完成。
+  - 已完成：删除同步 LLM critic、chat fallback、策略 LLM 分支；`generate_tutoring_sse_events` 改为 Retrieval -> ReAct -> 规则 Guard -> 最多一次 ReAct 重试 -> 规则兜底；`done` 之后按规则审查结果可选发送 `review` 事件。
+  - 个性化：ReAct prompt 保持长期记忆优先于课程知识；含 `knowledge_weak` 词条的 course chunk 稳定上浮，不丢 chunk。
+  - 前端：`chat.js` 显式透传 `review`；`AIChat.jsx` 在 `done` 后记录最终消息 id，`review` 到达时给对应 AI 消息打 `reviewFlagged`；`ChatMessage.jsx` 将整条 AI 回答标灰并提示“该回答可能不准确”。
+  - 契约：Client API OpenAPI / 接口规范已包含 `review` SSE 事件；Agent Service OpenAPI 补齐既有 `TutoringChatRequest.active_kg_nodes` 字段，修复 schema 对齐测试漂移。
+  - 验证：
+    - `../.venv/bin/python -m pytest tests/ -k "tutoring or retrieval_personalization or review_event" -v -p no:cacheprovider` 通过，77 passed。
+    - `../.venv/bin/python -m pytest tests/test_aichat_hybrid_retrieval.py -v -p no:cacheprovider` 通过，6 passed。
+    - `npm run lint` 通过。
+    - `npm run build` 通过，仍有既有 Vite chunk size warning。
+    - `python3 -c "import json; json.load(open('docs/10-client-api/Client-API.openapi.json')); json.load(open('docs/20-agent-api/Agent-Service.openapi.json')); print('OK')"` 通过。
+
 - 修复 AI Chat Hybrid Retrieval 的过度完成问题。
   - 引入了 `retrieval_debug` 隔离探针调试信息。
   - 实现了 `_match_kg_nodes` 的 Substring -> Reranker -> Embedding 降级打分机制。

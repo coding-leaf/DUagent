@@ -320,7 +320,7 @@ export default function AIChat() {
   };
 
   return (
-    <div className="font-body-md text-slate-800 bg-slate-50 min-h-screen flex flex-col">
+    <div className="font-body-md text-slate-800 bg-slate-50 h-screen flex flex-col overflow-hidden">
       <Navbar />
 
       <div className="flex-1 flex overflow-hidden pt-16">
@@ -329,7 +329,7 @@ export default function AIChat() {
         <aside className={`
           bg-white flex flex-col z-30 transition-all duration-300 ease-in-out relative flex-shrink-0
           /* Mobile Drawer Style */
-          fixed top-0 left-0 h-full w-64 shadow-2xl lg:shadow-none lg:static lg:h-auto
+          fixed top-0 left-0 h-full w-64 shadow-2xl lg:shadow-none lg:static lg:h-full
           ${leftDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           /* Desktop Collapse Style */
           ${leftCollapsed ? 'lg:w-0 lg:opacity-0 lg:overflow-hidden lg:border-transparent' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
@@ -493,7 +493,7 @@ export default function AIChat() {
         <aside className={`
           bg-white flex flex-col z-30 transition-all duration-300 ease-in-out relative flex-shrink-0
           /* Mobile Drawer Style */
-          fixed top-0 right-0 h-full w-72 shadow-2xl xl:shadow-none xl:static xl:h-auto
+          fixed top-0 right-0 h-full w-72 shadow-2xl xl:shadow-none xl:static xl:h-full
           ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full xl:translate-x-0'}
           /* Desktop Collapse Style */
           ${rightCollapsed ? 'xl:w-0 xl:opacity-0 xl:overflow-hidden xl:border-transparent' : 'xl:w-72 xl:opacity-100 xl:border-l xl:border-slate-200'}

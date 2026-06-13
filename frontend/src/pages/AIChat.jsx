@@ -59,7 +59,8 @@ export default function AIChat() {
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
 
-  const activeCourseName = courses?.find(c => c.id === activeCourseId)?.title || '未选择课程';
+  const activeCourse = courses?.find(c => c.id === activeCourseId);
+  const activeCourseName = activeCourse?.name || activeCourse?.title || '未选择课程';
 
   // Sync sessions list when course changes
   useEffect(() => {
@@ -283,7 +284,7 @@ export default function AIChat() {
             <div className="max-w-[760px] mx-auto space-y-8 pb-4">
               
               {messages.length === 0 ? (
-                <ChatEmptyState onCardClick={handleSendMessage} />
+                <ChatEmptyState onCardClick={handleSendMessage} courseName={activeCourseName} />
               ) : (
                 messages.map(msg => (
                   <ChatMessage key={msg.id} message={msg} onSendMessage={handleSendMessage} />
@@ -356,18 +357,15 @@ export default function AIChat() {
               <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
             </div>
             
-            {/* Placeholder Resource Cards */}
-            <div className="border border-slate-200 rounded-xl p-3 bg-white mb-3 hover:shadow-sm transition-shadow cursor-pointer">
-              <div className="w-full h-16 bg-slate-100 rounded-md mb-2 flex items-center justify-center text-slate-300">
-                <span className="material-symbols-outlined text-2xl">smart_display</span>
+            {/* Empty State */}
+            <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
+              <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
+                <span className="material-symbols-outlined text-2xl">inventory_2</span>
               </div>
-              <div className="text-[13px] font-semibold text-slate-700 mb-1 leading-tight">深入理解指针内存模型</div>
-              <div className="text-[11px] text-slate-500">视频课程 · 15分钟</div>
-            </div>
-            
-            <div className="border border-slate-200 rounded-xl p-3 bg-white hover:shadow-sm transition-shadow cursor-pointer">
-              <div className="text-[13px] font-semibold text-slate-700 mb-1 leading-tight">C语言核心代码片段</div>
-              <div className="text-[11px] text-slate-500">图文资料 · 必读</div>
+              <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
+              <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
+                完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+              </div>
             </div>
             
           </div>

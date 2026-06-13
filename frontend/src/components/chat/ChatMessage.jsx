@@ -16,13 +16,14 @@ const getDisplayText = (value) => {
 
 export default function ChatMessage({ message, onSendMessage }) {
   const isUser = message.role === 'user';
+  const isReviewFlagged = !isUser && message.reviewFlagged;
   
   const handleCopy = (text) => {
     navigator.clipboard?.writeText(text).catch(console.error);
   };
 
   return (
-    <div className={`flex gap-4 max-w-[100%] group ${isUser ? 'ml-auto flex-row-reverse' : ''}`}>
+    <div className={`flex gap-4 max-w-[100%] group ${isUser ? 'ml-auto flex-row-reverse' : ''} ${isReviewFlagged ? 'opacity-60' : ''}`}>
       <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${isUser ? 'bg-cyan-600 text-white shadow-sm' : 'bg-sky-100 text-cyan-600'}`}>
         {isUser ? (
           <span className="material-symbols-outlined text-[18px]">person</span>
@@ -37,6 +38,13 @@ export default function ChatMessage({ message, onSendMessage }) {
         {!isUser && message.toolCalls && message.toolCalls.map((tc, idx) => (
           <ToolCallCard key={idx} name={tc.name} status={tc.status} />
         ))}
+
+        {isReviewFlagged && (
+          <div className="mb-2 flex w-fit items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+            <span className="material-symbols-outlined text-[15px]">warning</span>
+            该回答可能不准确
+          </div>
+        )}
 
         {/* Markdown Content */}
         <div className={`markdown-body break-words leading-[1.7] ${isUser ? 'text-white' : 'text-slate-700 text-[15px]'}`}>

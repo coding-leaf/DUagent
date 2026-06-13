@@ -121,6 +121,8 @@ export const chatService = {
               onMessage(parsed);
             } else if (parsed.type === 'done') {
               onDone(parsed);
+            } else if (parsed.type === 'review') {
+              onMessage(parsed);
             } else {
               // Generic fallback
               onMessage(parsed);
@@ -142,4 +144,3 @@ export const chatService = {
     return () => controller.abort();
   }
 };
-

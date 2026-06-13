@@ -58,6 +58,7 @@ export default function AIChat() {
   
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const lastMessageIdRef = useRef(null);
 
   const activeCourse = courses?.find(c => c.id === activeCourseId);
   const activeCourseName = activeCourse?.name || activeCourse?.title || '未选择课程';
@@ -109,6 +110,7 @@ export default function AIChat() {
       abortControllerRef.current = null;
     }
     setActiveSession(null);
+    lastMessageIdRef.current = null;
     setMessages([]);
     setIsSending(false);
   };
@@ -124,6 +126,7 @@ export default function AIChat() {
     if (abortControllerRef.current) {
       abortControllerRef.current();
     }
+    lastMessageIdRef.current = null;
 
     // Optimistic UI updates
     setMessages(prev => {
@@ -189,14 +192,28 @@ export default function AIChat() {
             }
             return m;
           }));
+        } else if (msg.type === 'review') {
+          const targetId = lastMessageIdRef.current;
+          setMessages(prev => {
+            const fallbackId = [...prev].reverse().find(m => m.role === 'assistant')?.id;
+            const idToFlag = targetId || fallbackId;
+            if (!idToFlag) return prev;
+            return prev.map(m => (
+              m.id === idToFlag
+                ? { ...m, reviewFlagged: true, reviewReason: msg.reason || 'off_topic' }
+                : m
+            ));
+          });
         }
       },
       (doneData) => {
+        const finalMessageId = doneData.message_id || `ai-${Date.now()}`;
+        lastMessageIdRef.current = finalMessageId;
         setMessages(prev => prev.map(m => {
           if (m.id === 'ai-placeholder') {
             return {
               ...m,
-              id: doneData.message_id || `ai-${prev.length}`,
+              id: finalMessageId,
               loading: false
             };
           }

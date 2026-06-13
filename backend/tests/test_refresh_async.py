@@ -193,8 +193,13 @@ async def test():
             body = r.json().get("data", {})
             chk("dialogue-update → profile source",
                 body.get("sources", {}).get("learning_goal") == "profile_dialogue")
+            agent_path = mock_agent.await_args.args[0] if mock_agent.await_args else ""
             payload = mock_agent.await_args.args[1] if mock_agent.await_args else {}
+            chk("dialogue-update → agent path",
+                agent_path == "/agent/v1/profile/dialogue-update")
             chk("dialogue-update → agent course_id", payload.get("course_id") == course_id)
+            chk("dialogue-update → agent message passthrough",
+                "动态内存分配" in payload.get("message", ""))
 
             async with async_session_factory() as db:
                 pf_r = await db.execute(

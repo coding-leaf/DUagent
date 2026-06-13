@@ -1,31 +1,31 @@
-export default function ChatEmptyState({ onSendMessage }) {
-  const suggestions = [
-    {
-      icon: 'school',
-      title: '解释知识点',
-      description: '例如：帮我解释 C 语言指针和数组的关系',
-      prompt: '帮我解释 C 语言指针和数组的关系，请给出简单易懂的示例。'
-    },
-    {
-      icon: 'code',
-      title: '分析代码',
-      description: '例如：帮我分析这段代码为什么会段错误',
-      prompt: '我有一段代码运行时出现了段错误（Segmentation Fault），你能帮我分析一下可能的原因并教我如何调试吗？'
-    },
-    {
-      icon: 'library_books',
-      title: '推荐资源',
-      description: '例如：给我推荐适合复习指针的学习资料',
-      prompt: '我想重点复习 C 语言的指针部分，请给我推荐一些高质量的学习资料、视频课程或练习题。'
-    },
-    {
-      icon: 'route',
-      title: '规划复习',
-      description: '例如：我想一周内补齐动态内存分配',
-      prompt: '我的动态内存分配学得不太好，如果我想在一周内补齐这部分的知识，你能帮我制定一个详细的复习规划吗？'
-    }
-  ];
+const suggestions = [
+  {
+    icon: 'school',
+    title: '解释知识点',
+    description: '例如：帮我解释 C 语言指针和数组的关系',
+    prompt: '帮我解释 C 语言指针和数组的关系，请给出简单易懂的示例。'
+  },
+  {
+    icon: 'code',
+    title: '分析代码',
+    description: '例如：帮我分析这段代码为什么会段错误',
+    prompt: '我有一段代码运行时出现了段错误（Segmentation Fault），你能帮我分析一下可能的原因并教我如何调试吗？'
+  },
+  {
+    icon: 'library_books',
+    title: '推荐资源',
+    description: '例如：给我推荐适合复习指针的学习资料',
+    prompt: '我想重点复习 C 语言的指针部分，请给我推荐一些高质量的学习资料、视频课程或练习题。'
+  },
+  {
+    icon: 'route',
+    title: '规划复习',
+    description: '例如：我想一周内补齐动态内存分配',
+    prompt: '我的动态内存分配学得不太好，如果我想在一周内补齐这部分的知识，你能帮我制定一个详细的复习规划吗？'
+  }
+];
 
+export default function ChatEmptyState({ onCardClick }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in max-w-3xl mx-auto w-full">
       <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-sky-400 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20 mb-6 relative overflow-hidden">
@@ -42,7 +42,7 @@ export default function ChatEmptyState({ onSendMessage }) {
         {suggestions.map((item, idx) => (
           <button
             key={idx}
-            onClick={() => onSendMessage(item.prompt)}
+            onClick={() => onCardClick?.(item.prompt)}
             className="flex items-start gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-cyan-200 hover:-translate-y-0.5 transition-all duration-300 text-left group"
           >
             <div className="w-10 h-10 rounded-xl bg-slate-50 group-hover:bg-cyan-50 flex items-center justify-center flex-shrink-0 transition-colors">

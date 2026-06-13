@@ -518,3 +518,11 @@
   - 新增 `sanitizeMermaidSource` 自动容错逻辑，使用正则检测并为大模型输出中括号内包含 `<br>`/`:`/空格等保留字符但未包裹双引号的节点标签（如 `A[变量a<br>值: 10]`）自动加盖双引号（如 `A["变量a<br>值: 10"]`），从前端层面彻底规避由于未转义特殊字符引起的 Mermaid 语法解析白屏（`Parse Error`）。
 - **文件**: `src/components/chat/ChatMessage.jsx`
 - **测试**: 运行 `npm run lint` 通过。
+
+### 2026-06-14 锁定 AI 问答页面与侧边栏高度
+- **状态**: 已完成
+- **内容**: 
+  - 锁定外层容器高度为视口高度（`h-screen`），并隐藏外层溢出滚动（`overflow-hidden`）。
+  - 将左侧历史侧边栏和右侧资源侧边栏在桌面端的高度设置为占满容器（`lg:h-full` / `xl:h-full`），确保中间对话区域可以进行独立滚动。
+- **文件**: `src/pages/AIChat.jsx`
+- **测试**: 运行 `npm run lint` 成功。

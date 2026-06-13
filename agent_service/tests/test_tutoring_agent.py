@@ -57,6 +57,24 @@ def test_parse_tutoring_model_response_handles_json_mode_output() -> None:
     assert parsed.diagram is None
 
 
+def test_parse_tutoring_model_response_handles_markdown_fenced_json() -> None:
+    model_output = (
+        "```json\n"
+        '{"model_text": "指针保存的是地址，不是变量本身。", '
+        '"knowledge_points": ["指针", "地址"], '
+        '"suggestion": "先区分 & 取地址和 * 解引用。", '
+        '"diagram": null}'
+        "\n```"
+    )
+
+    parsed = parse_tutoring_model_response(model_output)
+
+    assert parsed.model_text == "指针保存的是地址，不是变量本身。"
+    assert parsed.knowledge_point_names == ["指针", "地址"]
+    assert parsed.suggestion_text == "先区分 & 取地址和 * 解引用。"
+    assert parsed.diagram is None
+
+
 def test_parse_tutoring_model_response_json_mode_falls_back_to_xml_regex() -> None:
     """JSON mode 输出为纯文本包裹 + XML 标签时，json.loads 失败后降级为正则提取。"""
     model_output = (
@@ -380,13 +398,14 @@ def test_generate_tutoring_sse_events_maintains_old_order_without_diagram() -> N
         return events
 
     events = asyncio.run(_collect())
-    # fallback chunk, model chunk, knowledge_points, suggestion, done
-    types = []
+    payloads = []
     for evt in events:
         import json
         payload = json.loads(evt.replace("data: ", "").strip())
-        types.append(payload["type"])
-    assert types == ["chunk", "chunk", "knowledge_points", "suggestion", "done"]
+        payloads.append(payload)
+    non_status_types = [payload["type"] for payload in payloads if payload["type"] != "status"]
+    assert non_status_types == ["chunk", "knowledge_points", "suggestion", "done"]
+    assert payloads[0]["type"] == "status"
 
 
 def test_generate_tutoring_sse_events_logs_agent_trace(caplog) -> None:
@@ -449,15 +468,15 @@ def test_generate_tutoring_sse_events_inserts_diagram_when_present() -> None:
         return events
 
     events = asyncio.run(_collect())
-    # fallback chunk, model chunk, diagram, knowledge_points, suggestion, done
-    types = []
+    payloads = []
     for evt in events:
         import json
         payload = json.loads(evt.replace("data: ", "").strip())
-        types.append(payload["type"])
-    assert types == ["chunk", "chunk", "diagram", "knowledge_points", "suggestion", "done"]
-    
-    diagram_event = json.loads(events[2].replace("data: ", "").strip())
+        payloads.append(payload)
+    non_status_payloads = [payload for payload in payloads if payload["type"] != "status"]
+    assert [payload["type"] for payload in non_status_payloads] == ["chunk", "diagram", "knowledge_points", "suggestion", "done"]
+
+    diagram_event = non_status_payloads[1]
     assert diagram_event["data"] == "graph TD; A-->B;"
 
 

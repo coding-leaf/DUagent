@@ -418,6 +418,23 @@
 - **契约**: 不改前端 UI，不改 Client API/OpenAPI；`retrieval_probe` 仍为 Agent 内部诊断端点。
 - **运行态注意**: 8002 Agent 服务需要重启以加载 `/agent/v1/tutoring/retrieval_probe` 新路由；否则 probe 仍可能 404。
 
+## 2026-06-14 AI Chat 输出污染与体感等待修复
+
+- **问题**: Agent SSE 会先把规则 fallback 正文作为 `chunk` 发给前端，模型成功后又发送真实回答，导致同一条 AI 消息混入“兜底模板 + 正常回答”；模型若返回 ```json fenced JSON，parser 会把整段 JSON 代码块当正文，前端 Markdown 渲染后暴露 `model_text/knowledge_points/suggestion`；同时真实链路不是 token streaming，用户在检索/生成期间缺少可信进度反馈。
+- **方案**: 移除“先发 fallback 正文”的假流式，改为先发 `status` 进度事件；只有 ReAct/Chat 都失败时才发送规则 fallback chunk；parser 支持 Markdown fenced JSON 并只提取 `model_text` 作为正文；前端 AIChat 接收 `status` 事件后显示为运行中的工具/检索状态，不写入正文、不入库。
+- **改动**:
+  - `agent_service/agents/tutoring.py`: 新增 fenced JSON 解析；SSE 先发 retrieval/generation 状态事件，模型成功时只发真实模型 chunk，失败时才发 fallback chunk。
+  - `agent_service/tests/test_tutoring_agent.py`: 覆盖 fenced JSON 解析、不再发送双 chunk、diagram 顺序等回归。
+  - `agent_service/tests/test_tutoring_api.py`: 将 API SSE 测试调整为区分 status 事件和正文事件。
+  - `src/pages/AIChat.jsx`: 处理 `status` 事件并显示为运行中的 `ToolCallCard`，首个正文 chunk 到达后清理状态。
+- **验证**:
+  - `./.venv/bin/python -m pytest agent_service/tests/test_tutoring_agent.py -q -p no:cacheprovider` 通过，19 passed。
+  - `./.venv/bin/python -m pytest agent_service/tests/test_tutoring_api.py -q -p no:cacheprovider` 通过，10 passed。
+  - `./.venv/bin/python -m pytest agent_service/tests/test_aichat_hybrid_retrieval.py -q -p no:cacheprovider` 通过，6 passed。
+  - `npm run lint` 通过。
+  - `npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: 不改 Client API/OpenAPI；新增的 `status` 为 Agent SSE 内部事件，Backend 只透传并不入库，正文仍通过 `chunk` 事件传递。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

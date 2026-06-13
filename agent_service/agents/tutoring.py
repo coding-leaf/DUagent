@@ -29,6 +29,7 @@ class _TutoringStructuredOutput(BaseModel):
     diagram: str | None = None
 
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
+_MARKDOWN_JSON_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
 logger = get_logger(__name__)
 
 
@@ -89,6 +90,10 @@ def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
     if json_result is not None:
         return json_result
 
+    fenced_json_result = _try_parse_markdown_json_output(model_output)
+    if fenced_json_result is not None:
+        return fenced_json_result
+
     match = _AGENT_RESULT_PATTERN.search(model_output)
     if match is None:
         return TutoringModelResponse(model_text=model_output.strip() or None)
@@ -100,6 +105,25 @@ def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
         return TutoringModelResponse(model_text=cleaned_text)
 
     return _build_response_from_payload(cleaned_text, payload)
+
+
+def _try_parse_markdown_json_output(model_output: str) -> TutoringModelResponse | None:
+    """尝试解析 Markdown fenced JSON，避免将结构化 JSON 代码块泄露给前端正文。"""
+    stripped = model_output.strip()
+    match = _MARKDOWN_JSON_PATTERN.fullmatch(stripped)
+    if match is None:
+        return None
+    try:
+        payload = json.loads(match.group(1).strip())
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    model_text = payload.get("model_text")
+    return _build_response_from_payload(
+        model_text.strip() if isinstance(model_text, str) and model_text.strip() else None,
+        payload,
+    )
 
 
 def _try_parse_json_mode_output(model_output: str) -> TutoringModelResponse | None:
@@ -275,8 +299,7 @@ async def generate_tutoring_sse_events(request, providers=None):
         except Exception:
             logger.warning("Failed to create QdrantVectorStore", exc_info=True)
 
-    fallback_result = build_tutoring_generation_result(request)
-    yield f"data: {json.dumps({'type': 'chunk', 'content': fallback_result.chunk_text}, ensure_ascii=False)}\n\n"
+    yield f"data: {json.dumps({'type': 'status', 'stage': 'retrieval', 'message': '正在检索课程知识...'}, ensure_ascii=False)}\n\n"
 
     reranker = getattr(providers, "reranker", None)
     try:
@@ -294,6 +317,7 @@ async def generate_tutoring_sse_events(request, providers=None):
 
     chat = getattr(providers, "chat", None)
     strategy = await select_tutoring_strategy(request, retrieval_context, chat)
+    yield f"data: {json.dumps({'type': 'status', 'stage': 'generation', 'message': '正在生成回答...'}, ensure_ascii=False)}\n\n"
     agent_path = "rule"
     fallback_path = "rule"
     output_source = "rule"
@@ -342,7 +366,7 @@ async def generate_tutoring_sse_events(request, providers=None):
         fallback_path,
         output_source,
     )
-    if react_response and react_response.model_text:
+    if runtime_result.chunk_text:
         yield f"data: {json.dumps({'type': 'chunk', 'content': runtime_result.chunk_text}, ensure_ascii=False)}\n\n"
 
     if runtime_result.diagram:

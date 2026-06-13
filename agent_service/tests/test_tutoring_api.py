@@ -11,6 +11,10 @@ def _patch_providers(monkeypatch, providers) -> None:
     monkeypatch.setattr("agent_service.core.ai.get_ai_providers", lambda: providers)
 
 
+def _non_status_events(events: list[dict]) -> list[dict]:
+    return [event for event in events if event.get("type") != "status"]
+
+
 def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
     request = TutoringChatRequest(
         user_id="user-1",
@@ -38,8 +42,10 @@ def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
         for line in body.splitlines()
         if line.startswith("data: ")
     ]
-    assert [event["type"] for event in events] == ["chunk", "knowledge_points", "suggestion", "done"]
-    assert events[-1]["message_id"] == "msg_user-1_new"
+    payload_events = _non_status_events(events)
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
+    assert payload_events[-1]["message_id"] == "msg_user-1_new"
+    assert events[0]["type"] == "status"
 
 
 def test_tutoring_chat_uses_ai_retrieval_context_in_sse_output(monkeypatch) -> None:
@@ -83,8 +89,9 @@ def test_tutoring_chat_uses_ai_retrieval_context_in_sse_output(monkeypatch) -> N
     ]
 
     assert calls["request"] == request
-    assert events[0]["content"].startswith("我会用关键步骤帮你串起来。")
-    assert events[1]["knowledge_points"][0]["name"] == "链式法则"
+    payload_events = _non_status_events(events)
+    assert "我会用关键步骤帮你串起来。" in payload_events[0]["content"]
+    assert payload_events[1]["knowledge_points"][0]["name"] == "链式法则"
 
 
 def test_tutoring_chat_degrades_when_ai_retrieval_fails(monkeypatch) -> None:
@@ -120,9 +127,10 @@ def test_tutoring_chat_degrades_when_ai_retrieval_fails(monkeypatch) -> None:
         if line.startswith("data: ")
     ]
 
-    assert [event["type"] for event in events] == ["chunk", "knowledge_points", "suggestion", "done"]
-    assert events[0]["content"].startswith("我会先拆成更小的步骤来讲。")
-    assert events[1]["knowledge_points"][0]["name"] == "导数"
+    payload_events = _non_status_events(events)
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
+    assert payload_events[0]["content"].startswith("我会先拆成更小的步骤来讲。")
+    assert payload_events[1]["knowledge_points"][0]["name"] == "导数"
 
 
 def test_tutoring_chat_global_scope_does_not_query_course_knowledge(monkeypatch) -> None:
@@ -166,11 +174,12 @@ def test_tutoring_chat_global_scope_does_not_query_course_knowledge(monkeypatch)
 
     assert calls["request"].scope == "global"
     assert calls["request"].course_id is None
-    assert events[0]["content"].startswith("我会直接给出核心思路和检查点。")
-    assert events[1]["knowledge_points"][0]["name"] == "函数"
+    payload_events = _non_status_events(events)
+    assert "我会直接给出核心思路和检查点。" in payload_events[0]["content"]
+    assert payload_events[1]["knowledge_points"][0]["name"] == "函数"
 
 
-def test_tutoring_chat_streams_first_chunk_before_slow_retrieval(monkeypatch) -> None:
+def test_tutoring_chat_streams_status_before_slow_retrieval(monkeypatch) -> None:
     request = TutoringChatRequest(
         user_id="user-1",
         course_id="course-1",
@@ -218,12 +227,12 @@ def test_tutoring_chat_streams_first_chunk_before_slow_retrieval(monkeypatch) ->
     first_chunk, remaining = asyncio.run(consume_first_chunk())
     first_event = json.loads(first_chunk.splitlines()[0].removeprefix("data: "))
 
-    assert first_event["type"] == "chunk"
-    assert first_event["content"].startswith("我会先拆成更小的步骤来讲。")
+    assert first_event["type"] == "status"
+    assert "检索" in first_event["message"]
     assert remaining
 
 
-def test_tutoring_chat_emits_model_chunk_after_first_rule_chunk(monkeypatch) -> None:
+def test_tutoring_chat_emits_only_model_chunk_when_model_succeeds(monkeypatch) -> None:
     request = TutoringChatRequest(
         user_id="user-1",
         course_id="course-1",
@@ -266,9 +275,9 @@ def test_tutoring_chat_emits_model_chunk_after_first_rule_chunk(monkeypatch) -> 
         if line.startswith("data: ")
     ]
 
-    assert [event["type"] for event in events] == ["chunk", "chunk", "knowledge_points", "suggestion", "done"]
-    assert events[0]["content"].startswith("我会用关键步骤帮你串起来。")
-    assert events[1]["content"] == "链式法则用于复合函数求导，要从外层函数开始乘以内层导数。"
+    payload_events = _non_status_events(events)
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
+    assert payload_events[0]["content"] == "链式法则用于复合函数求导，要从外层函数开始乘以内层导数。"
     assert calls["messages"][-1].role == "user"
 
 
@@ -317,9 +326,10 @@ def test_tutoring_chat_uses_model_metadata_from_text_payload(monkeypatch) -> Non
         if line.startswith("data: ")
     ]
 
-    assert events[1]["content"] == "链式法则先看外层函数，再乘以内层导数。"
-    assert [item["name"] for item in events[2]["knowledge_points"]] == ["链式法则", "复合函数"]
-    assert events[3]["suggestion"] == "先确认外层函数，再检查内层导数。"
+    payload_events = _non_status_events(events)
+    assert payload_events[0]["content"] == "链式法则先看外层函数，再乘以内层导数。"
+    assert [item["name"] for item in payload_events[1]["knowledge_points"]] == ["链式法则", "复合函数"]
+    assert payload_events[2]["suggestion"] == "先确认外层函数，再检查内层导数。"
 
 
 def test_tutoring_chat_streams_diagram_event_when_present(monkeypatch) -> None:
@@ -365,8 +375,9 @@ def test_tutoring_chat_streams_diagram_event_when_present(monkeypatch) -> None:
         if line.startswith("data: ")
     ]
 
-    assert [event["type"] for event in events] == ["chunk", "chunk", "diagram", "knowledge_points", "suggestion", "done"]
-    assert events[2]["data"] == "graph TD; A-->B;"
+    payload_events = _non_status_events(events)
+    assert [event["type"] for event in payload_events] == ["chunk", "diagram", "knowledge_points", "suggestion", "done"]
+    assert payload_events[1]["data"] == "graph TD; A-->B;"
 
 
 def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
@@ -410,7 +421,8 @@ def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
         if line.startswith("data: ")
     ]
 
-    assert [event["type"] for event in events] == ["chunk", "knowledge_points", "suggestion", "done"]
+    payload_events = _non_status_events(events)
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
 
 
 def test_build_model_response_uses_chat_provider_without_react_agent(monkeypatch) -> None:

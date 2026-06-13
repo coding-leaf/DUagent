@@ -128,7 +128,7 @@ export default function AIChat() {
     // Optimistic UI updates
     setMessages(prev => {
       const userMsg = { id: `user-${prev.length}`, role: 'user', content: textToSend };
-      const aiPlaceholder = { id: 'ai-placeholder', role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [] };
+      const aiPlaceholder = { id: 'ai-placeholder', role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [], toolCalls: [] };
       return [...prev, userMsg, aiPlaceholder];
     });
     setIsSending(true);
@@ -142,10 +142,21 @@ export default function AIChat() {
         conversation_id: activeSession
       },
       (msg) => {
-        if (msg.type === 'chunk') {
+        if (msg.type === 'status') {
           setMessages(prev => prev.map(m => {
             if (m.id === 'ai-placeholder') {
-              return { ...m, content: m.content + (msg.content || '') };
+              const statusText = msg.message || msg.content || '正在处理...';
+              return {
+                ...m,
+                toolCalls: [{ name: statusText, status: 'running' }]
+              };
+            }
+            return m;
+          }));
+        } else if (msg.type === 'chunk') {
+          setMessages(prev => prev.map(m => {
+            if (m.id === 'ai-placeholder') {
+              return { ...m, content: m.content + (msg.content || ''), toolCalls: [] };
             }
             return m;
           }));

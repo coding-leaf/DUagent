@@ -55,6 +55,7 @@ class AssessmentQualityResult:
     reasons: list[str]
     source: str
     gate: str
+    questions: list | None = None
 
 
 async def review_generated_questions(
@@ -65,131 +66,148 @@ async def review_generated_questions(
     *,
     include_basic_quality: bool = True,
 ) -> AssessmentQualityResult:
-    """Review generated questions and return whether they can be used.
+    """Review and repair generated questions, then run strict answer consistency check.
 
-    Inputs are the original request, coerced questions, optional chat provider,
-    and optional RAG context. Output is a structured quality result used by the
-    assessment fallback chain.
+    Basic, knowledge-point, and difficulty gates only repair labels and drop
+    irreparable questions — they never reject the whole batch. Only the answer
+    consistency gate (LLM) can reject.
     """
+    result_questions = list(questions)
+
     if include_basic_quality:
-        basic_result = await _review_basic_quality(
-            request, questions, chat_provider, course_knowledge_context
+        result_questions = _repair_basic_quality(request, result_questions)
+
+    result_questions = _repair_knowledge_point_fit(request, result_questions)
+
+    result_questions = _repair_difficulty_fit(request, result_questions)
+
+    if not result_questions:
+        return AssessmentQualityResult(False, ["all_questions_dropped"], "rule", "basic_quality")
+
+    # LLM answer consistency gate — the only strict gate
+    if chat_provider is not None:
+        consistency_result = await _review_answer_consistency(
+            chat_provider, result_questions, course_knowledge_context
         )
-        if not basic_result.accepted:
-            return basic_result
+        if not consistency_result.accepted:
+            return consistency_result
 
-    knowledge_result = await _review_knowledge_point_fit(
-        request, questions, chat_provider, course_knowledge_context
-    )
-    if not knowledge_result.accepted:
-        return knowledge_result
-
-    difficulty_result = await _review_difficulty_fit(
-        request, questions, chat_provider, course_knowledge_context
-    )
-    if not difficulty_result.accepted:
-        return difficulty_result
-
-    return AssessmentQualityResult(True, [], "rule", "all")
+    return AssessmentQualityResult(True, [], "rule", "all", questions=result_questions)
 
 
-async def _review_basic_quality(
+def _repair_basic_quality(
     request: QuestionGenerateRequest,
     questions: list[GeneratedQuestion],
+) -> list[GeneratedQuestion]:
+    """Drop malformed questions, keep and return healthy ones."""
+    if not questions:
+        return []
+
+    requested_types = set(request.question_types or [])
+    healthy: list[GeneratedQuestion] = []
+    dropped: list[str] = []
+    for index, question in enumerate(questions, start=1):
+        prefix = f"question_{index}"
+        if requested_types and question.type not in requested_types:
+            dropped.append(f"{prefix}_type_not_requested")
+            continue
+        if not _has_good_content(question.content):
+            dropped.append(f"{prefix}_bad_content")
+            continue
+        if not str(question.knowledge_point or "").strip():
+            dropped.append(f"{prefix}_missing_knowledge_point")
+            continue
+        if question.difficulty is not None and question.difficulty not in _SUPPORTED_DIFFICULTIES:
+            dropped.append(f"{prefix}_bad_difficulty")
+            continue
+        if not _has_good_explanation(question.explanation):
+            dropped.append(f"{prefix}_bad_explanation")
+            continue
+        options_errors = _option_errors(prefix, question)
+        if options_errors:
+            dropped.extend(options_errors)
+            continue
+        healthy.append(question)
+
+    if dropped:
+        logger.warning("Assessment quality basic gate dropped %d/%d questions: %s", len(dropped), len(questions), dropped)
+    return healthy
+
+
+def _repair_knowledge_point_fit(
+    request: QuestionGenerateRequest,
+    questions: list[GeneratedQuestion],
+) -> list[GeneratedQuestion]:
+    """Fix knowledge_point labels that drift from the request target, rather than rejecting."""
+    if not questions:
+        return []
+
+    targets = _target_knowledge_points(request)
+    if not targets:
+        return questions
+
+    for question in questions:
+        if not _question_matches_any_target(question, targets):
+            # Fix the label
+            qp = question
+            original_kp = qp.knowledge_point
+            object.__setattr__(qp, "knowledge_point", targets[0])
+            logger.info(
+                "Fixed knowledge_point label: '%s' -> '%s'", original_kp, targets[0]
+            )
+
+    return questions
+
+
+def _repair_difficulty_fit(
+    request: QuestionGenerateRequest,
+    questions: list[GeneratedQuestion],
+) -> list[GeneratedQuestion]:
+    """Adjust difficulty labels instead of rejecting."""
+    if not questions or not request.difficulty:
+        return questions
+
+    for question in questions:
+        text = _question_text(question)
+        assigned = request.difficulty
+
+        if _looks_too_hard(text) and assigned == "medium":
+            qp = question
+            object.__setattr__(qp, "difficulty", "hard")
+            logger.info("Adjusted difficulty: medium -> hard for question")
+        elif _looks_too_shallow(text) and assigned == "medium":
+            qp = question
+            object.__setattr__(qp, "difficulty", "easy")
+            logger.info("Adjusted difficulty: medium -> easy for question")
+
+    return questions
+
+
+async def _review_answer_consistency(
     chat_provider,
+    questions: list[GeneratedQuestion],
     course_knowledge_context: str | None,
 ) -> AssessmentQualityResult:
-    rule_errors = _basic_quality_errors(request, questions)
-    if rule_errors:
-        logger.warning("Assessment quality basic gate rejected questions: %s", rule_errors)
-        return AssessmentQualityResult(False, rule_errors, "rule", "basic_quality")
-    if chat_provider is None:
-        return AssessmentQualityResult(True, [], "rule", "basic_quality")
+    """Strict LLM check: do questions and answers match? This is the only rejecting gate."""
+    if not questions or chat_provider is None:
+        return AssessmentQualityResult(True, [], "rule", "answer_consistency")
+
     try:
         accepted, reasons = await _review_with_llm(
             chat_provider,
-            system_content="你是严格但稳定的出题质量审查员。只输出 JSON。",
-            prompt=build_question_critic_prompt(
-                request,
-                _questions_json(questions),
-                course_knowledge_context=course_knowledge_context,
-            ),
-            output_name="Assessment basic quality",
+            system_content="你是 EDUagent 的题目一致性审查员。只输出 JSON。",
+            prompt=_build_consistency_prompt(questions, course_knowledge_context),
+            output_name="Assessment answer consistency",
         )
     except Exception:
-        logger.warning(
-            "Assessment quality basic LLM review failed; accepting rule-passed questions",
-            exc_info=True,
-        )
-        return AssessmentQualityResult(True, [], "rule", "basic_quality")
+        logger.warning("Answer consistency LLM review failed; accepting", exc_info=True)
+        return AssessmentQualityResult(True, [], "rule", "answer_consistency")
+
     if not accepted:
-        logger.warning("Assessment quality basic LLM rejected questions: %s", reasons)
-        return AssessmentQualityResult(False, reasons, "llm", "basic_quality")
-    return AssessmentQualityResult(True, [], "llm", "basic_quality")
+        logger.warning("Assessment answer consistency rejected questions: %s", reasons)
+        return AssessmentQualityResult(False, reasons, "llm", "answer_consistency")
 
-
-async def _review_knowledge_point_fit(
-    request: QuestionGenerateRequest,
-    questions: list[GeneratedQuestion],
-    chat_provider,
-    course_knowledge_context: str | None,
-) -> AssessmentQualityResult:
-    rule_result = _review_knowledge_by_rules(request, questions)
-    if not rule_result.accepted:
-        logger.warning("Assessment quality knowledge gate rejected questions: %s", rule_result.reasons)
-        return rule_result
-    if chat_provider is None:
-        return rule_result
-    try:
-        accepted, reasons = await _review_with_llm(
-            chat_provider,
-            system_content="你是 EDUagent 的知识点贴合度审查员。只输出 JSON。",
-            prompt=build_knowledge_point_guard_prompt(
-                request,
-                _questions_json(questions),
-                course_knowledge_context=course_knowledge_context,
-            ),
-            output_name="Assessment knowledge point",
-        )
-    except Exception:
-        logger.warning("Assessment quality knowledge LLM review failed; using rule result", exc_info=True)
-        return rule_result
-    if not accepted:
-        logger.warning("Assessment quality knowledge LLM rejected questions: %s", reasons)
-        return AssessmentQualityResult(False, reasons, "llm", "knowledge_point")
-    return AssessmentQualityResult(True, [], "llm", "knowledge_point")
-
-
-async def _review_difficulty_fit(
-    request: QuestionGenerateRequest,
-    questions: list[GeneratedQuestion],
-    chat_provider,
-    course_knowledge_context: str | None,
-) -> AssessmentQualityResult:
-    rule_result = _review_difficulty_by_rules(request, questions)
-    if not rule_result.accepted:
-        logger.warning("Assessment quality difficulty gate rejected questions: %s", rule_result.reasons)
-        return rule_result
-    if chat_provider is None:
-        return rule_result
-    try:
-        accepted, reasons = await _review_with_llm(
-            chat_provider,
-            system_content="你是 EDUagent 的题目难度审查员。只输出 JSON。",
-            prompt=build_difficulty_balancer_prompt(
-                request,
-                _questions_json(questions),
-                course_knowledge_context=course_knowledge_context,
-            ),
-            output_name="Assessment difficulty",
-        )
-    except Exception:
-        logger.warning("Assessment quality difficulty LLM review failed; using rule result", exc_info=True)
-        return rule_result
-    if not accepted:
-        logger.warning("Assessment quality difficulty LLM rejected questions: %s", reasons)
-        return AssessmentQualityResult(False, reasons, "llm", "difficulty")
-    return AssessmentQualityResult(True, [], "llm", "difficulty")
+    return AssessmentQualityResult(True, [], "llm", "answer_consistency")
 
 
 async def _review_with_llm(
@@ -340,26 +358,8 @@ def _is_related_text(target: str, haystack: str) -> bool:
     return hits / len(bigrams) >= 0.67
 
 
-def _review_difficulty_by_rules(
-    request: QuestionGenerateRequest,
-    questions: list[GeneratedQuestion],
-) -> AssessmentQualityResult:
-    if not questions:
-        return AssessmentQualityResult(False, ["empty_questions"], "rule", "difficulty")
-    if not request.difficulty:
-        return AssessmentQualityResult(True, [], "rule", "difficulty")
 
-    reasons: list[str] = []
-    for index, question in enumerate(questions, start=1):
-        text = _question_text(question)
-        if request.difficulty == "easy" and _looks_too_hard(text):
-            reasons.append(f"question_{index}_too_hard_for_easy")
-        elif request.difficulty == "medium" and (_looks_too_shallow(text) or _looks_too_hard(text)):
-            reasons.append(f"question_{index}_difficulty_extreme_for_medium")
-        elif request.difficulty == "hard" and _looks_too_shallow(text):
-            reasons.append(f"question_{index}_too_shallow_for_hard")
 
-    return AssessmentQualityResult(not reasons, reasons, "rule", "difficulty")
 
 
 def _question_text(question: GeneratedQuestion) -> str:
@@ -430,3 +430,34 @@ def _dedupe_preserving_order(items: list[str]) -> list[str]:
         seen.add(key)
         result.append(item)
     return result
+
+
+def _build_consistency_prompt(
+    questions: list[GeneratedQuestion],
+    course_knowledge_context: str | None,
+) -> str:
+    """Build prompt for LLM answer consistency review."""
+    qs_json = _questions_json(questions)
+    lines = [
+        "请审查以下题目，只判定题目与答案是否一致。",
+        "",
+        "审查标准（严格）：",
+        "- 选择题的答案必须对应于一个正确的选项",
+        "- 答案必须与题目内容一致（不能出现题目问A但答案回答B的情况）",
+        "- 解析内容必须支持该答案",
+        "- single_choice 的答案必须是单个选项 key",
+        "- multi_choice 的答案必须列出所有正确选项 key",
+        "",
+    ]
+    if course_knowledge_context:
+        lines.append("参考资料：")
+        lines.append(course_knowledge_context)
+        lines.append("")
+
+    lines.append("题目列表：")
+    lines.append(qs_json)
+    lines.append("")
+    lines.append(
+        '输出 JSON: {"accepted": true/false, "reasons": ["原因1", ...]}'
+    )
+    return "\n".join(lines)

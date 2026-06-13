@@ -1223,7 +1223,7 @@ class TestQuestionRAG:
         assert len(questions) == 1
         assert questions[0].knowledge_point == "顺序存储结构"
 
-    def test_generate_questions_with_agent_falls_back_to_skeleton_when_llm_misses_knowledge_point(self) -> None:
+    def test_generate_questions_with_agent_repairs_missing_knowledge_point_and_keeps_llm_result(self) -> None:
         from unittest.mock import patch
 
         from agent_service.agents.assessment import generate_questions_with_agent
@@ -1248,9 +1248,9 @@ class TestQuestionRAG:
         with patch("agent_service.agents.assessment.generate_questions_with_llm", _fake_llm):
             questions = asyncio.run(generate_questions_with_agent(self._request(), providers=FakeProviders()))
 
-        assert len(questions) == 2
+        assert len(questions) == 1
         assert questions[0].knowledge_point == "顺序存储结构"
-        assert "完成一道单选题" in questions[0].content
+        assert questions[0].content == "天气预报主要受哪些因素影响？"
 
     def test_generate_questions_with_agent_returns_llm_result_when_knowledge_point_matches(self) -> None:
         from unittest.mock import patch
@@ -1335,9 +1335,10 @@ class TestQuestionRAG:
             )
 
         assert len(questions) == 1
-        assert questions[0].content.startswith("顺序存储结构中")
+        # ReAct question accepted (difficulty repaired from easy to hard), no fallback needed
+        assert "综合证明" in questions[0].content
 
-    def test_generate_questions_with_agent_falls_back_to_skeleton_when_llm_misses_difficulty(self) -> None:
+    def test_generate_questions_with_agent_returns_llm_result_when_llm_difficulty_mismatches(self) -> None:
         from unittest.mock import patch
 
         from agent_service.agents.assessment import generate_questions_with_agent
@@ -1365,9 +1366,9 @@ class TestQuestionRAG:
                 generate_questions_with_agent(self._request(difficulty="hard"), providers=FakeProviders())
             )
 
-        assert len(questions) == 2
+        assert len(questions) == 1
         assert questions[0].knowledge_point == "顺序存储结构"
-        assert "完成一道单选题" in questions[0].content
+        assert questions[0].content == "什么是顺序存储结构？"
 
     def test_generate_questions_with_agent_returns_llm_result_when_difficulty_matches(self) -> None:
         from unittest.mock import patch

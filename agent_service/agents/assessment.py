@@ -595,6 +595,7 @@ async def generate_questions_with_agent(
                     course_knowledge_context=course_knowledge_context,
                 )
                 if quality_result.accepted:
+                    repaired = quality_result.questions if quality_result.questions is not None else questions
                     logger.info("ReActAgent generation succeeded: assessment/generate-questions")
                     logger.info(
                         "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=react quality_gate=accepted fallback_path=none output_source=react",
@@ -602,7 +603,7 @@ async def generate_questions_with_agent(
                         request.course_id,
                         retrieval_hit_count,
                     )
-                    return questions
+                    return repaired
                 else:
                     logger.warning(
                         "Assessment quality gate rejected ReAct questions; falling back to LLM path: gate=%s reasons=%s",
@@ -625,13 +626,14 @@ async def generate_questions_with_agent(
             include_basic_quality=False,
         )
         if quality_result.accepted:
+            repaired = quality_result.questions if quality_result.questions is not None else questions
             logger.info(
                 "agent_trace interface=assessment/generate-questions user_id=%s course_id=%s retrieval_hit_count=%d agent_path=llm quality_gate=accepted fallback_path=llm output_source=llm",
                 request.user_id,
                 request.course_id,
                 retrieval_hit_count,
             )
-            return questions
+            return repaired
         else:
             logger.warning(
                 "Assessment quality gate rejected LLM questions; falling back to skeleton: gate=%s reasons=%s",

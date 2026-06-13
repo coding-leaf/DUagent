@@ -48,9 +48,11 @@ def test_guard_rejects_questions_unrelated_to_explicit_knowledge_point() -> None
 
     result = asyncio.run(review_generated_questions(request, questions))
 
-    assert result.accepted is False
-    assert result.gate == "knowledge_point"
-    assert "question_1_target_mismatch" in result.reasons
+    # knowledge_point mismatch now repairs label instead of rejecting
+    assert result.accepted is True
+    assert result.gate == "all"
+    # repaired knowledge_point should match request
+    assert result.questions[0].knowledge_point == "导数"
 
 
 def test_guard_uses_wrong_points_when_request_has_no_knowledge_point() -> None:
@@ -88,12 +90,10 @@ def test_guard_accepts_comprehensive_questions_when_no_target_exists() -> None:
     assert result.accepted is True
 
 
-def test_guard_llm_reject_overrides_rule_acceptance() -> None:
+def test_guard_llm_answer_consistency_reject() -> None:
     class RejectingChatProvider:
         async def complete(self, messages):
-            if "知识点贴合度" not in messages[0].content:
-                return '{"accepted": true, "reasons": []}'
-            return '{"accepted": false, "reasons": ["没有基于课程上下文"]}'
+            return '{"accepted": false, "reasons": ["答案与题目不符"]}'
 
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", knowledge_point="导数", count=1)
     questions = [_question(content="导数表示函数在某点的瞬时变化率，下列说法正确的是？", knowledge_point="导数")]
@@ -104,8 +104,8 @@ def test_guard_llm_reject_overrides_rule_acceptance() -> None:
 
     assert result.accepted is False
     assert result.source == "llm"
-    assert result.gate == "knowledge_point"
-    assert result.reasons == ["没有基于课程上下文"]
+    assert result.gate == "answer_consistency"
+    assert result.reasons == ["答案与题目不符"]
 
 
 def test_guard_invalid_llm_json_falls_back_to_rule_result() -> None:

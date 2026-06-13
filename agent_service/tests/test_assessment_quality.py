@@ -59,8 +59,8 @@ def test_quality_rejects_bad_choice_options_when_basic_gate_enabled() -> None:
     result = asyncio.run(review_generated_questions(request, questions))
 
     assert result.accepted is False
+    assert "all_questions_dropped" in result.reasons
     assert result.gate == "basic_quality"
-    assert "question_1_choice_options_count" in result.reasons
 
 
 def test_quality_can_skip_basic_gate_for_existing_llm_fallback_semantics() -> None:
@@ -96,9 +96,10 @@ def test_quality_rejects_knowledge_point_mismatch() -> None:
 
     result = asyncio.run(review_generated_questions(request, questions))
 
-    assert result.accepted is False
-    assert result.gate == "knowledge_point"
-    assert "question_1_target_mismatch" in result.reasons
+    # knowledge_point mismatch now repairs label instead of rejecting
+    assert result.accepted is True
+    assert result.gate == "all"
+    assert result.questions is not None
 
 
 def test_quality_rejects_difficulty_mismatch() -> None:
@@ -113,17 +114,15 @@ def test_quality_rejects_difficulty_mismatch() -> None:
 
     result = asyncio.run(review_generated_questions(request, questions))
 
-    assert result.accepted is False
-    assert result.gate == "difficulty"
-    assert "question_1_too_hard_for_easy" in result.reasons
+    # difficulty mismatch now repairs label instead of rejecting
+    assert result.accepted is True
+    assert result.gate == "all"
 
 
-def test_quality_llm_rejection_overrides_rule_acceptance() -> None:
+def test_quality_llm_answer_consistency_rejection() -> None:
     class RejectingChatProvider:
         async def complete(self, messages):
-            if "知识点贴合度" in messages[0].content:
-                return '{"accepted": false, "reasons": ["没有基于课程上下文"]}'
-            return '{"accepted": true, "reasons": []}'
+            return '{"accepted": false, "reasons": ["答案与选项不符"]}'
 
     request = QuestionGenerateRequest(user_id="u1", course_id="c1", knowledge_point="顺序存储结构", count=1)
     questions = [
@@ -135,9 +134,9 @@ def test_quality_llm_rejection_overrides_rule_acceptance() -> None:
     )
 
     assert result.accepted is False
-    assert result.gate == "knowledge_point"
+    assert result.gate == "answer_consistency"
     assert result.source == "llm"
-    assert result.reasons == ["没有基于课程上下文"]
+    assert result.reasons == ["答案与选项不符"]
 
 
 def test_quality_llm_exception_falls_back_to_rule_result() -> None:

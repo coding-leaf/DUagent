@@ -1,8 +1,91 @@
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import mermaid from 'mermaid';
 import ToolCallCard from './ToolCallCard';
+
+mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'strict',
+  theme: 'default',
+});
+
+const normalizeMermaidSource = (content) => {
+  const trimmed = (content || '').trim();
+  const fenced = trimmed.match(/^```(?:mermaid)?\s*([\s\S]*?)```$/i);
+  return fenced ? fenced[1].trim() : trimmed;
+};
+
+const sanitizeMermaidSource = (content) => {
+  let source = normalizeMermaidSource(content);
+  // 1. [label] -> ["label"]
+  source = source.replace(/(\w+)\s*\[([^"\n\]]+)\]/g, '$1["$2"]');
+  // 2. ((label)) -> (("label"))
+  source = source.replace(/(\w+)\s*\(\(([^"\n)]+)\)\)/g, '$1(("$2"))');
+  // 3. (label) -> ("label")
+  source = source.replace(/(\w+)\s*\(([^"\n)]+)\)/g, '$1("$2")');
+  // 4. {label} -> {"label"}
+  source = source.replace(/(\w+)\s*\{([^"\n}]+)\}/g, '$1{"$2"}');
+  // 5. >label] -> >"label"]
+  source = source.replace(/(\w+)\s*>\s*([^"\n\]]+)\]/g, '$1>"$2"]');
+  return source;
+};
+
+function MermaidDiagram({ content }) {
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState('');
+  const source = sanitizeMermaidSource(content);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const renderDiagram = async () => {
+      if (!source) {
+        setSvg('');
+        setError('');
+        return;
+      }
+
+      try {
+        const id = `chat-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const result = await mermaid.render(id, source);
+        if (!cancelled) {
+          setSvg(result.svg);
+          setError('');
+        }
+      } catch (err) {
+        console.error('Mermaid render failed in ChatMessage:', err);
+        if (!cancelled) {
+          setSvg('');
+          setError('图解渲染失败，已显示原始内容。');
+        }
+      }
+    };
+
+    renderDiagram();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+
+  if (error) {
+    return (
+      <div>
+        <div className="text-red-500 text-xs mb-2">{error}</div>
+        <pre className="text-xs p-3 bg-slate-100 rounded-lg overflow-x-auto font-mono text-slate-600 border border-slate-200">{source}</pre>
+      </div>
+    );
+  }
+
+  if (!svg) {
+    return <div className="text-slate-400 text-xs py-4 text-center">正在生成可视化图解...</div>;
+  }
+
+  return <div className="mermaid-svg-wrapper overflow-x-auto p-2 bg-white rounded-lg border border-slate-100 shadow-inner" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
 
 const getDisplayText = (value) => {
   if (value === null || value === undefined) return '';
@@ -124,9 +207,7 @@ export default function ChatMessage({ message, onSendMessage }) {
               <span className="material-symbols-outlined text-[16px] text-cyan-600">schema</span>
               <span>图解模式 (Mermaid)</span>
             </div>
-            <pre className="text-[13px] font-mono bg-[#1E1E1E] text-slate-100 p-4 rounded-lg overflow-x-auto whitespace-pre border border-slate-800 leading-relaxed">
-              {getDisplayText(diag)}
-            </pre>
+            <MermaidDiagram content={getDisplayText(diag)} />
           </div>
         ))}
 

@@ -737,7 +737,7 @@ POST /api/v1/admin/course-catalogs/:catalog_id/resources/generations
 
 **权限：** 仅 admin
 
-**说明：** 基于 CourseCatalog 已入库知识生成标准学习资源。Backend 将生成结果按当前绑定该资源库的教学班 fan-out 写入 `resources`；生成后才绑定的教学班不会自动回补。无绑定教学班时返回 `409`。
+**说明：** 基于 CourseCatalog 已入库知识生成标准学习资源。新生成资源归属当前 `catalog_id` 对应的课程资源库；所有绑定该资源库的教学班都读取这批共享资源。当前仍兼容历史按教学班存储的旧资源，但新链路不再按教学班 fan-out 写多份资源。无绑定教学班时返回 `409`。
 
 **请求体 `application/json`：**
 
@@ -774,7 +774,7 @@ GET /api/v1/admin/course-catalogs/:catalog_id/resources
 
 **权限：** 仅 admin
 
-**说明：** 聚合当前绑定教学班下未软删除的生成资源，供 Admin 在资源库抽屉中管理。该接口不替代学生端 `GET /resources`。
+**说明：** 聚合该课程资源库下未软删除的共享资源，并兼容当前绑定教学班下尚未迁移的历史资源，供 Admin 在资源库抽屉中管理。该接口不替代学生端 `GET /resources`。
 
 **查询参数：**
 
@@ -790,7 +790,7 @@ GET /api/v1/admin/course-catalogs/:catalog_id/resources
 |------|------|------|
 | resources | array | 生成资源列表 |
 | resources[].id | string | 资源 ID |
-| resources[].course_id | string | fan-out 后的教学班 ID |
+| resources[].course_id | string | 兼容字段；新共享资源通常记录首个绑定教学班 ID，历史资源为原教学班 ID |
 | resources[].title | string | 资源标题 |
 | resources[].type | string | 资源类型 |
 | resources[].description | string | 资源描述 |
@@ -1318,7 +1318,7 @@ GET /api/v1/resources?course_id={course_id}&type={type}&page=1&page_size=20
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| course_id | string | 是 | 课程 ID |
+| course_id | string | 是 | 当前教学班 ID；Backend 先校验用户是否可访问该教学班，再解析其绑定的 `catalog_id` 并返回该资源库的共享资源，同时兼容当前教学班下未迁移的历史资源 |
 | type | string | 否 | 资源类型：document / mindmap / reading / code / video；video 为预留类型，v1 默认不生成或返回视频内容 |
 | keyword | string | 否 | 标题关键词搜索 |
 
@@ -1345,7 +1345,7 @@ GET /api/v1/resources?course_id={course_id}&type={type}&page=1&page_size=20
 GET /api/v1/resources/:id
 ```
 
-**说明：** 资源详情页使用该接口读取单条资源内容。`data` 结构为 `ResourceDetailItem`，即资源列表字段加 `content_preview` 和 `content`。
+**说明：** 资源详情页使用该接口读取单条资源内容。若资源归属某个 `catalog_id`，则只有加入了任一绑定该资源库教学班的学生或拥有该教学班的教师可以访问；legacy 按教学班存储的旧资源继续按原教学班权限校验。`data` 结构为 `ResourceDetailItem`，即资源列表字段加 `content_preview` 和 `content`。
 
 **路径参数：**
 

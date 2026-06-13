@@ -1,0 +1,70 @@
+<h2>哪种整体布局更符合“专属学习空间”的感觉？</h2>
+<p class="subtitle">我们希望摆脱“后台管理页面嵌聊天框”的 demo 感，让它更像一个沉浸式学习助手。</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>选项 A：沉浸式工作区 (Discord/Slack 风格)</h3>
+      <p>整体感强。左侧是通栏历史记录。聊天主区域居中且控制最大宽度 (约 800px) 以便阅读，顶部是很轻的“当前课程”上下文栏。输入框贴合在聊天内容柱的底部。</p>
+      <div class="mockup" style="margin-top: 10px; font-size: 10px;">
+        <div style="display: flex; height: 120px; border: 1px solid #ddd; border-radius: 4px;">
+          <div style="width: 25%; border-right: 1px solid #ddd; background: #f9f9f9; padding: 5px;">会话记录</div>
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff;">
+            <div style="height: 20px; border-bottom: 1px solid #eee; padding: 2px 5px; color: #888;">当前课程：C语言程序设计</div>
+            <div style="flex: 1; padding: 10px; display: flex; justify-content: center;">
+              <div style="width: 70%; border-left: 1px dashed #eee; border-right: 1px dashed #eee; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="padding: 5px;">聊天正文区 (最大宽度 800px)</div>
+                <div style="height: 15px; background: #f0f0f0; margin: 5px; border-radius: 4px; text-align: center; color: #666;">吸底输入框</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>选项 B：三栏扩展布局 (为资源推荐预留空间)</h3>
+      <p>为后续的“资源推荐卡片”预留了专门的右侧区域。左侧历史，中间聊天（内容收拢居中），右侧是课程上下文和资源卡片。</p>
+      <div class="mockup" style="margin-top: 10px; font-size: 10px;">
+        <div style="display: flex; height: 120px; border: 1px solid #ddd; border-radius: 4px;">
+          <div style="width: 20%; border-right: 1px solid #ddd; background: #f9f9f9; padding: 5px;">历史记录</div>
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff; padding: 5px;">
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+              <div style="text-align: center; color: #888;">聊天正文区</div>
+              <div style="height: 15px; background: #f0f0f0; border-radius: 4px; text-align: center; color: #666;">悬浮输入框</div>
+            </div>
+          </div>
+          <div style="width: 25%; border-left: 1px solid #ddd; background: #fdfdfd; padding: 5px;">
+            <div style="height: 20px; border-bottom: 1px solid #eee; margin-bottom: 5px; color: #666;">当前课程</div>
+            <div style="color: #999;">资源推荐预留区</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>选项 C：专注文档流 (Notion 风格)</h3>
+      <p>极致干净。左侧边栏默认收起。整个页面是一个大的画布，消息和输入框在中间自然排版。顶部只有极简的面包屑导航。</p>
+      <div class="mockup" style="margin-top: 10px; font-size: 10px;">
+        <div style="display: flex; height: 120px; border: 1px solid #ddd; border-radius: 4px;">
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff; position: relative;">
+            <div style="height: 20px; padding: 2px 10px; color: #888;">☰ 课程 / 会话主题</div>
+            <div style="flex: 1; display: flex; justify-content: center; padding: 10px;">
+              <div style="width: 60%; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="color: #888;">正文式阅读体验</div>
+                <div style="height: 15px; border-top: 1px solid #eee; margin-top: auto; padding-top: 5px; color: #999;">输入框</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

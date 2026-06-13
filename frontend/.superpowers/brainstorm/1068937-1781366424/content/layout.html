@@ -1,0 +1,70 @@
+<h2>Which overall layout feels most like a "Learning Assistant"?</h2>
+<p class="subtitle">We want to move away from the blocky demo feel and design a dedicated space for learning.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Option A: Immersive Workspace</h3>
+      <p>A cohesive design where the chat column is centered (max-width 800px) with a seamless background. The input box is anchored to the chat column, and the top header is a lightweight "Course Context" bar.</p>
+      <div class="mockup" style="margin-top: 10px; font-size: 10px;">
+        <div style="display: flex; height: 120px; border: 1px solid #ddd; border-radius: 4px;">
+          <div style="width: 25%; border-right: 1px solid #ddd; background: #f9f9f9; padding: 5px;">Sidebar (History)</div>
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff;">
+            <div style="height: 20px; border-bottom: 1px solid #eee; padding: 2px 5px; color: #888;">Course: C Language</div>
+            <div style="flex: 1; padding: 10px; display: flex; justify-content: center;">
+              <div style="width: 70%; border-left: 1px dashed #eee; border-right: 1px dashed #eee; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="padding: 5px;">Chat Area (max 800px)</div>
+                <div style="height: 15px; background: #f0f0f0; margin: 5px; border-radius: 4px; text-align: center; color: #666;">Input Box</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Option B: Three-Column Panel (Ready for Resources)</h3>
+      <p>A layout that anticipates the future "Resource Recommendations". Left for history, middle for chat (constrained width), right for context/resources.</p>
+      <div class="mockup" style="margin-top: 10px; font-size: 10px;">
+        <div style="display: flex; height: 120px; border: 1px solid #ddd; border-radius: 4px;">
+          <div style="width: 20%; border-right: 1px solid #ddd; background: #f9f9f9; padding: 5px;">History</div>
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff; padding: 5px;">
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>Chat Area</div>
+              <div style="height: 15px; background: #f0f0f0; border-radius: 4px; text-align: center; color: #666;">Floating Input Pill</div>
+            </div>
+          </div>
+          <div style="width: 25%; border-left: 1px solid #ddd; background: #fdfdfd; padding: 5px;">
+            <div style="height: 20px; border-bottom: 1px solid #eee; margin-bottom: 5px;">Course Context</div>
+            Resources & Tools
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Option C: Focus Mode (Notion style)</h3>
+      <p>Extremely clean. The sidebar is collapsible. The chat and input are centered on a large canvas, with a minimalist top breadcrumb.</p>
+      <div class="mockup" style="margin-top: 10px; font-size: 10px;">
+        <div style="display: flex; height: 120px; border: 1px solid #ddd; border-radius: 4px;">
+          <div style="flex: 1; display: flex; flex-direction: column; background: #fff; position: relative;">
+            <div style="height: 20px; padding: 2px 10px; color: #888;">☰ Course / Topic</div>
+            <div style="flex: 1; display: flex; justify-content: center; padding: 10px;">
+              <div style="width: 60%; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>Chat Area (Natural Text flow)</div>
+                <div style="height: 15px; border-top: 1px solid #eee; margin-top: auto; padding-top: 5px;">Input Line</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

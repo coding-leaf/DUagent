@@ -300,7 +300,7 @@ export default function LearningPath() {
                             {showAllExercises ? '收起' : `展开全部 (${nodeResources.exercises.length} 条)`}
                           </button>
                         )}
-                        <Link to={`/quiz?course_id=${activeCourseId}&amp;node_id=${selectedNodeId}`} className="w-full block text-center py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
+                        <Link to={`/quiz?course_id=${activeCourseId}&node_id=${selectedNodeId}`} className="w-full block text-center py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
                           进入练习
                         </Link>
                       </div>

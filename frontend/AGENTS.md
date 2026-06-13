@@ -76,13 +76,14 @@ If a subdirectory contains another AGENTS.md, the more specific file takes prece
 推荐流程：
 
 1. 阅读相关文档和现有代码，git 查询最近修改。
-2. 写或补测试。
-3. 运行测试，确认当前失败或缺失。
-4. 最小实现。
-5. 运行相关测试。
-6. 更新 `WORKFLOW.md`。
-7. 总结修改内容。
-8. 在用户确认范围内进行 git commit，不进行 git push。
+2. 进行代码修改前审查
+3. 写或补测试。
+4. 运行测试，确认当前失败或缺失。
+5. 最小实现。
+6. 运行相关测试。
+7. 更新 `WORKFLOW.md`。
+8. 总结修改内容。
+9. 在用户确认范围内进行 git commit，不进行 git push。
 
 ---
 
@@ -133,7 +134,8 @@ If a subdirectory contains another AGENTS.md, the more specific file takes prece
 - 不要硬编码密钥、token、数据库密码、私有地址。
 - 如果确需跨边界修改，必须先说明原因、范围和风险。
 - 可申请大范围文件修改权限，但申请时必须说明修改范围、必要性和可能后果。
-
+- 不允许mock等假数据内容
+- 数据库使用限制：只允许用 MySQL。
 ---
 
 ## 契约纪律
@@ -147,8 +149,7 @@ If a subdirectory contains another AGENTS.md, the more specific file takes prece
 - 不要破坏已有前后端联调约定。
 - 当前前端页面目标与现有 Client API 规范存在缺口；缺口未完成契约审查前，不要靠前端硬编码字段、Mock 数据或假接口补齐正式能力。
 
-涉及接口修改时，必须检查：
-
+涉及接口修改时，必须检查：      
 - 请求路径、方法、参数是否与 OpenAPI 一致；
 - 响应字段是否与 OpenAPI 一致；
 - 错误响应格式是否与现有约定一致；
@@ -191,7 +192,7 @@ npm run build
 如果项目提供了更具体的测试命令，优先使用项目已有命令。
 
 如果命令失败，需要在总结中说明：运行的命令、失败位置、关键错误信息、是否已修复；如果未修复，说明原因。
-
+- 数据库使用限制：只允许用 MySQL。
 ---
 
 ## Git
@@ -199,8 +200,7 @@ npm run build
 - 避免在 `master`、`main`、`dev` 等主分支直接开发。
 - 默认在 `feat/功能分区` 或用户当前指定的功能分支开发。
 - 不要自行切换分支，除非用户明确要求。
-- 修改前如工作区已有未提交内容，必须先识别哪些是用户已有改动。
-- 不能回滚、覆盖、删除无关用户改动。
+- 全量git
 - 不要运行 `git reset --hard`。
 - 不要运行 `git clean -fd`。
 - 不要 force push。

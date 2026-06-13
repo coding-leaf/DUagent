@@ -1,0 +1,78 @@
+<h2>AI 消息 & 空态 (Empty State) 视觉方向</h2>
+<p class="subtitle">既然确定了三栏结构（右侧专门展示资源），中间的聊天流应该设计得更适合“学习”场景。</p>
+
+<div class="options">
+  <div class="option" data-choice="1" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>方案一：专注文档式 (Document-style)</h3>
+      <p>完全摒弃气泡感。AI 的回答就像是一篇排版精良的文章。适合大段知识讲解。</p>
+      <div class="mockup" style="margin-top: 10px; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
+        <!-- Tool Call -->
+        <div style="display: flex; align-items: center; gap: 8px; color: #0ea5e9; font-size: 12px; margin-bottom: 12px;">
+          <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #0ea5e9; border-top-color: transparent; animation: spin 1s linear infinite;"></span>
+          正在检索《C语言程序设计》知识库...
+        </div>
+        <!-- Message -->
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 32px; height: 32px; background: #e0f2fe; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #0ea5e9;">AI</div>
+          <div style="flex: 1; font-size: 14px; line-height: 1.6; color: #333;">
+            <p style="margin: 0 0 10px 0;">关于<strong>指针</strong>，我们需要从内存地址的概念讲起。指针本身就是一个变量，其存储的值是另一个变量的地址。</p>
+            <!-- Tags -->
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <span style="padding: 4px 8px; background: #f1f5f9; color: #475569; border-radius: 4px; font-size: 12px;">📌 指针与数组</span>
+              <span style="padding: 4px 8px; background: #f1f5f9; color: #475569; border-radius: 4px; font-size: 12px;">📌 内存管理</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="2" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>方案二：现代智能体感 (Modern Agent) —— 推荐用于比赛演示</h3>
+      <p>增加一些微小的质感和现代科技感（如极淡的背景块、柔和阴影、呼吸灯动画），让它看起来更有“智能感”和“高级感”。</p>
+      <div class="mockup" style="margin-top: 10px; padding: 15px; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 8px;">
+        <!-- Tool Call -->
+        <div style="display: flex; align-items: center; gap: 8px; color: #6366f1; font-size: 12px; margin-bottom: 12px; background: #e0e7ff; padding: 6px 12px; border-radius: 12px; width: fit-content;">
+          ✨ 正在匹配最优学习资源...
+        </div>
+        <!-- Message -->
+        <div style="display: flex; gap: 12px;">
+          <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #0ea5e9, #6366f1); border-radius: 50%; box-shadow: 0 4px 10px rgba(14,165,233,0.3);"></div>
+          <div style="flex: 1; font-size: 14px; line-height: 1.6; color: #1e293b; background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+            <p style="margin: 0 0 10px 0;">关于<strong>指针</strong>，我们需要从内存地址的概念讲起。指针本身就是一个变量...</p>
+            <!-- Tags -->
+            <div style="display: flex; gap: 8px; margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 12px;">
+              <span style="padding: 4px 10px; border: 1px solid #e2e8f0; color: #64748b; border-radius: 20px; font-size: 12px;"># 指针与数组</span>
+              <span style="padding: 4px 10px; border: 1px solid #e2e8f0; color: #64748b; border-radius: 20px; font-size: 12px;"># 内存管理</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 30px;">
+  <h3>关于空态 (Empty State)</h3>
+  <p class="subtitle">对于首次进入没有历史记录的情况，你希望主区域呈现什么样的引导？</p>
+  <div class="options">
+    <div class="option" data-choice="empty_a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>九宫格卡片引导</h3>
+        <p>提供 4-6 个具体的场景卡片，例如“解释概念”、“分析代码”、“推荐章节”。点击直接填入输入框。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="empty_b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>极简对话起点</h3>
+        <p>中间只有一个大号的欢迎语（如“今天你想复习哪一部分？”），下方紧跟着输入框。更强调用户主动输入。</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1486,7 +1486,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "当前教学班 ID；Backend 会先校验用户是否可访问该教学班，再解析其绑定的 catalog_id 并返回该资源库共享资源，同时兼容当前教学班下未迁移的历史资源"
           },
           {
             "name": "chapter",
@@ -1919,6 +1920,7 @@
         ],
         "summary": "获取资源详情",
         "operationId": "getResourceDetail",
+        "description": "读取单条资源详情。若资源归属某个 catalog_id，则只有加入了任一绑定该资源库教学班的学生或拥有该教学班的教师可以访问；legacy 按教学班存储的旧资源继续按原教学班权限校验。",
         "parameters": [
           {
             "name": "id",
@@ -2862,7 +2864,7 @@
           "CourseCatalogs"
         ],
         "summary": "管理员课程资源库生成资源列表",
-        "description": "聚合当前绑定该 CourseCatalog 的教学班下未软删除资源，供 Admin 在资源库抽屉中管理。",
+        "description": "聚合该 CourseCatalog 下未软删除的共享资源，并兼容当前绑定教学班下尚未迁移的历史资源，供 Admin 在资源库抽屉中管理。",
         "parameters": [
           {
             "name": "catalog_id",
@@ -2921,7 +2923,7 @@
           "CourseCatalogs"
         ],
         "summary": "管理员触发课程资源库学习资源生成",
-        "description": "Admin-only。基于 CourseCatalog 已入库知识生成标准学习资源。生成结果按当前绑定该 CourseCatalog 的教学班 fan-out 写入 resources；生成后才绑定的教学班不会自动回补。无绑定教学班时返回 409。",
+        "description": "Admin-only。基于 CourseCatalog 已入库知识生成标准学习资源。新生成资源归属当前 CourseCatalog，对所有绑定该资源库的教学班共享可读；当前仍兼容历史按教学班存储的旧资源，但新链路不再 fan-out 写多份资源。无绑定教学班时返回 409。",
         "parameters": [
           {
             "name": "catalog_id",

@@ -321,6 +321,19 @@
 - **验证**: `python -m json.tool ../docs/10-client-api/Client-API.openapi.json` 通过；`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/student_profile_loop_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_refresh_async.py -q -p no:cacheprovider` 1 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
 - **契约**: OpenAPI 与前端接口规范已同步新增 `/profile/dialogue-update` 和 `profile_dimensions`，无静默字段删除。
 
+## 2026-06-13 画像和练习页闭环修复
+
+- **问题**: Backend 已调用 Agent `/agent/v1/profile/dialogue-update` 但 Agent 缺路由；保底题库 skeleton fallback 字符串选项仍可能落库；Quiz 页面外壳仍写死“数据结构 / 树形结构 / 节点索引关系示意图”。
+- **方案**: Agent Service 补齐画像对话补充路由；Backend 扩展 skeleton 题检测，拒绝字符串选项模板题；`GET /quiz/questions` 返回题目章节、知识点、难度；前端 Quiz 页面改为使用课程名和题目元数据渲染上下文。
+- **改动**:
+  - `agent_service/api/v1/profile.py`、`agent_service/schemas/profile.py`: 新增 `/agent/v1/profile/dialogue-update` 和画像补充响应结构。
+  - `backend/app/api/v1/catalogs.py`: skeleton 题检测兼容字符串 options，避免“正确表述 / 易混淆表述 / 相关补充表述 / 无关表述”落库。
+  - `backend/app/api/v1/quiz.py`: `GET /quiz/questions` 题目项新增 `chapter`、`knowledge_point`、`difficulty`。
+  - `frontend/src/pages/Quiz.jsx`: 用课程、章节、知识点、来源、难度替换静态题目外壳，保留通用 `QuestionRenderer`。
+- **验证**: `../.venv/bin/python -m pytest tests/test_profile_agent.py -q -p no:cacheprovider` 16 passed；`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/student_profile_loop_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_refresh_async.py -q -p no:cacheprovider` 1 passed；`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_quiz_fix_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py -q -p no:cacheprovider` 27 passed；`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/quiz_async_meta_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_quiz_async.py -q -p no:cacheprovider` 1 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: 本批只新增响应字段并补齐 Agent 内部路由，未删除既有字段；正式 OpenAPI 在上一批画像闭环中已同步，本批未继续扩大契约文档修改。
+- **Commits**: `a09ef6b`、`c5ad3fd`、`55d4026`、`d6b2cb6`、`b47bfc1`。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

@@ -20,6 +20,16 @@
 
 ## 最近验证
 
+- 2026-06-13：AIChat 页面 3-Column 布局与 Document-style 重构：
+  - 问题分析：原 AIChat 仅支持纯文本显示及简单的图解代码块，长回答体验沉闷，且无法直观展示复杂任务（如工具调用）的执行过程。页面布局未体现出“课程上下文”与“推荐资源”的作用，只是一个简单的聊天界面。
+  - 修复：
+    1. 新增 `ChatMessage.jsx` 与 `ToolCallCard.jsx`。引入 `react-markdown`、`react-syntax-highlighter` 和 `remark-gfm` 支持完整的 Markdown 渲染与代码高亮（带有一键复制）；并为后续展示多智能体思考/调用留出可折叠的 `ToolCallCard` 组件。
+    2. 新增 `ChatEmptyState.jsx`，提供 4 种初始场景卡片（解释知识点、分析代码、推荐资源、规划复习），支持点击直接发送。
+    3. 重构 `AIChat.jsx` 布局为 3-column 结构：左侧“历史记录”列表，中间为会话区（输入框固定底部且支持自适应高度），右侧展示“相关资源推荐”与当前学习上下文（CourseName）。
+  - 契约说明：纯前端 UI 升级，复用现有 API 字段（`content`, `suggestions`, `knowledge_points`, `diagrams`），不存在后端或契约漂移。
+  - 验证：
+    - Frontend `npm run lint` 通过（清理了所有不再使用的变量，如旧版静态数据）。
+    - 确保 `npm run build` 通过。
 - 2026-06-13：个人资料页接入静默同步画像：
   - 赛题口径确认：个人画像应分为“对话式画像构建”和“随学随新静默更新”；不把 `/profile/refresh` 做成用户输入 prompt。
   - 修复：`StudentProfile.jsx` 在六维画像区新增“同步画像”按钮，调用 `POST /profile/refresh` 创建 `profile_refresh` task，轮询 `GET /tasks/{task_id}`；`completed` 后重新拉取 `GET /profile`，`failed/partial` 显示错误且不覆盖旧画像。

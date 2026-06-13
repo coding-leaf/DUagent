@@ -17,6 +17,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
     "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent?charset=utf8mb4",
@@ -25,7 +27,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.session import async_session_factory
+from app.db.base import Base
+from app.db.session import async_session_factory, engine
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.models.user import RegistrationCode
@@ -79,7 +82,12 @@ async def _poll_diagnosis(db_session, quiz_id, timeout=10, interval=0.3):
     return None
 
 
+@pytest.mark.asyncio
 async def test():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+
     transport = ASGITransport(app=app)
     ok = fail = 0
 
@@ -153,6 +161,14 @@ async def test():
 
         await client.post("/api/v1/courses/join", json={"course_id": course_id},
                           headers=stu_headers)
+
+        r = await client.get(f"/api/v1/quiz/questions?course_id={course_id}&limit=1", headers=stu_headers)
+        chk("questions -> 200", r.status_code == 200)
+        fetched_questions = r.json()["data"]["questions"]
+        assert fetched_questions
+        assert fetched_questions[0]["chapter"] == "ch1"
+        assert fetched_questions[0]["knowledge_point"].startswith("kp")
+        assert "difficulty" in fetched_questions[0]
 
         # Create first QuizSession
         async with async_session_factory() as db:

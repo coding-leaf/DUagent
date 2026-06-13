@@ -114,8 +114,14 @@ async def get_questions(
             "chapter": chapter or "",
             "questions": [
                 {
-                    "id": q.id, "type": q.type, "source": q.source,
-                    "personalized": q.personalized, "content": q.content,
+                    "id": q.id,
+                    "type": q.type,
+                    "source": q.source,
+                    "personalized": q.personalized,
+                    "chapter": q.chapter,
+                    "knowledge_point": q.knowledge_point,
+                    "difficulty": q.difficulty,
+                    "content": q.content,
                     "options": q.options if q.options is not None else [],
                 }
                 for q in questions

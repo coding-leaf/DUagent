@@ -79,10 +79,12 @@ async def build_tutoring_retrieval_context_with_ai(
 
     matched_nodes = []
     if request.active_kg_nodes:
-        matched_nodes = await _rerank_kg_nodes(
-            request.message,
-            request.active_kg_nodes,
-            reranker_provider,
+        matched_nodes = await _match_kg_nodes(
+            query=request.message,
+            nodes=request.active_kg_nodes,
+            reranker_provider=reranker_provider,
+            embedding_provider=embedding_provider,
+            query_vector=query_vector,
             limit=limit,
         )
 
@@ -92,11 +94,25 @@ async def build_tutoring_retrieval_context_with_ai(
     except Exception as exc:
         logger.warning("Tutoring rerank failed: user_id=%s error=%s", request.user_id, exc)
 
+    retrieved_chunk_details = []
+    for r in course_results:
+        safe_meta = {}
+        if hasattr(r, "metadata") and isinstance(r.metadata, dict):
+             for k in ["chapter", "knowledge_point", "source", "material_id", "chunk_index"]:
+                 if k in r.metadata:
+                     safe_meta[k] = r.metadata[k]
+        retrieved_chunk_details.append({
+             "text": r.text,
+             "score": getattr(r, "score", 0.0),
+             "metadata": safe_meta
+        })
+
     return context.model_copy(
         update={
             "user_memory_facts": user_texts,
             "course_knowledge_chunks": course_texts,
             "matched_kg_nodes": matched_nodes,
+            "retrieval_debug": {"retrieved_chunk_details": retrieved_chunk_details}
         }
     )
 
@@ -129,39 +145,77 @@ async def _rerank_texts(
     return [document for document, _ in ranked]
 
 
-async def _rerank_kg_nodes(
+async def _match_kg_nodes(
     query: str,
     nodes: list[dict],
     reranker_provider: RerankerProvider | None,
+    embedding_provider: EmbeddingProvider | None,
+    query_vector: list[float] | None,
     limit: int = 3,
 ) -> list[dict]:
     if not nodes:
         return []
-    
-    if reranker_provider is None or len(nodes) <= 1:
-        # substring exact fallback
-        matched = []
-        lower_query = query.lower()
-        for node in nodes:
-            name = str(node.get("name", ""))
-            if name and name.lower() in lower_query:
-                node_copy = dict(node)
-                node_copy["score"] = 1.0
-                matched.append(node_copy)
-        return matched[:limit]
-    
-    # Extract text representation for reranking
-    documents = [str(node.get("name", "")) for node in nodes]
-    try:
-        scores = await reranker_provider.score(query, documents)
-        ranked = sorted(zip(nodes, scores, strict=True), key=lambda item: item[1], reverse=True)
-        result = []
-        for node, score in ranked[:limit]:
-            if score > 0.05:  # threshold
-                node_copy = dict(node)
-                node_copy["score"] = score
-                result.append(node_copy)
-        return result
-    except Exception as exc:
-        logger.warning("Tutoring KG nodes rerank failed: error=%s", exc)
-        return []
+        
+    matched = []
+    seen_ids = set()
+    query_lower = query.lower()
+
+    # 1. Substring 高精匹配
+    for node in nodes:
+        node_name = node.get("name", "")
+        if node_name and (node_name.lower() in query_lower or query_lower in node_name.lower()):
+            matched_node = dict(node)
+            matched_node["score"] = 1.0
+            matched_node["match_method"] = "substring"
+            matched.append(matched_node)
+            seen_ids.add(node.get("id"))
+            
+    remaining_nodes = [n for n in nodes if n.get("id") not in seen_ids]
+
+    # 2. Reranker 匹配 (若可用)
+    if reranker_provider and remaining_nodes:
+        documents = [n.get("name", "") for n in remaining_nodes]
+        try:
+            scores = await reranker_provider.score(query, documents)
+            for node, score in zip(remaining_nodes, scores, strict=True):
+                if score >= 0.35:
+                    matched_node = dict(node)
+                    matched_node["score"] = score
+                    matched_node["match_method"] = "reranker"
+                    matched.append(matched_node)
+                    seen_ids.add(node.get("id"))
+            remaining_nodes = [n for n in remaining_nodes if n.get("id") not in seen_ids]
+        except Exception as exc:
+            logger.warning("Tutoring KG nodes rerank failed: error=%s", exc)
+            reranker_provider = None # 标记失败，允许进入降级
+
+    # 3. Embedding 降级 (仅当无 Reranker 或 Reranker 失败时)
+    if not reranker_provider and embedding_provider and query_vector and remaining_nodes:
+        # We need an inline cosine similarity if it's not exposed
+        def _cos_sim(v1, v2):
+            import math
+            dot = sum(a * b for a, b in zip(v1, v2))
+            norm_v1 = math.sqrt(sum(a * a for a in v1))
+            norm_v2 = math.sqrt(sum(b * b for b in v2))
+            return dot / (norm_v1 * norm_v2) if norm_v1 and norm_v2 else 0.0
+
+        texts_to_embed = [f"{n.get('name', '')} {n.get('chapter', '')}" for n in remaining_nodes]
+        try:
+            node_vectors = await embedding_provider.embed_texts(texts_to_embed)
+            for node, vector in zip(remaining_nodes, node_vectors, strict=True):
+                score = _cos_sim(query_vector, vector)
+                if score >= 0.55:
+                    matched_node = dict(node)
+                    matched_node["score"] = score
+                    matched_node["match_method"] = "embedding"
+                    matched.append(matched_node)
+        except Exception as exc:
+            logger.warning("Tutoring KG nodes embedding fallback failed: error=%s", exc)
+
+    # 排序分组: 先按 method 优先级，同 method 内按 score
+    def sort_key(n):
+        method_weight = {"substring": 3, "reranker": 2, "embedding": 1}.get(n.get("match_method"), 0)
+        return (method_weight, n.get("score", 0.0))
+        
+    matched.sort(key=sort_key, reverse=True)
+    return matched[:limit]

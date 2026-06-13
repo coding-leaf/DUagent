@@ -10,19 +10,28 @@ import Navbar from '../components/Navbar';
 
 const PROFILE_VALUE_LABELS = {
   exam_sprint: '备考冲刺',
-  daily_homework: '每日作业',
-  casual: '兴趣驱动',
+  daily_homework: '课后巩固',
+  casual: '兴趣拓展',
   video_animation: '视频动画',
   chart_logic: '图表逻辑',
-  text_analysis: '文本分析',
+  text_analysis: '文本解析',
   code_practice: '代码实操',
   formula_derivation: '公式推导',
-  L1: 'L1 · 启发点拨',
-  L2: 'L2 · 伴学拆解',
-  L3: 'L3 · 保姆生成',
+  L1: '启发点拨',
+  L2: '分步伴学',
+  L3: '详细讲解',
   starter: '入门起步',
   active: '稳定学习',
   focused: '高频投入',
+};
+
+const PROFILE_DIMENSION_LABELS = {
+  learning_goal: '当前学习方向',
+  weak_points: '待提升内容',
+  resource_preference: '学习资料偏好',
+  guidance_level: '辅导方式',
+  knowledge_progress: '掌握进度',
+  discipline: '学习习惯',
 };
 
 const PROFILE_EMPTY_TEXT = {
@@ -315,12 +324,12 @@ export default function StudentProfile() {
   };
 
   const sourceLabel = (source) => ({
-    profile_dialogue: '对话补充',
-    system_profile: '系统画像',
-    resource_usage: '资源行为',
-    evaluation: '学习评估',
-    activity: '学习活动',
-    system_pending: '待采集',
+    profile_dialogue: '个人补充',
+    system_profile: '系统分析',
+    resource_usage: '学习行为',
+    evaluation: '评测结果',
+    activity: '学习记录',
+    system_pending: '数据不足',
   }[source] || source || '未知来源');
 
   const handleProfileRefresh = async () => {
@@ -425,9 +434,9 @@ export default function StudentProfile() {
               <div className="flex items-center justify-between gap-4 mb-5">
                 <div>
                   <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface">
-                    <span className="material-symbols-outlined text-cyan-500">badge</span> 六维画像
+                    <span className="material-symbols-outlined text-cyan-500">badge</span> 学习档案
                   </h3>
-                  <p className="text-sm text-secondary mt-1">来自评估、资源行为和对话补充的课程画像摘要。</p>
+                  <p className="text-sm text-secondary mt-1">根据学习行为、评测结果和个人补充生成的课程学习档案。</p>
                 </div>
                 <button
                   onClick={handleProfileRefresh}
@@ -454,7 +463,9 @@ export default function StudentProfile() {
                   {profile_dimensions.map((dimension) => (
                     <div key={dimension.key} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                       <div className="flex items-center justify-between gap-3 mb-2">
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{dimension.label}</p>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          {PROFILE_DIMENSION_LABELS[dimension.key] || dimension.label}
+                        </p>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-cyan-700 border border-cyan-100">
                           {sourceLabel(dimension.source)}
                         </span>
@@ -704,8 +715,8 @@ export default function StudentProfile() {
                 <span className="px-3 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg text-sm font-bold border border-cyan-100">
                   {{
                     exam_sprint: '备考冲刺',
-                    daily_homework: '每日作业',
-                    casual: '兴趣驱动',
+                    daily_homework: '课后巩固',
+                    casual: '兴趣拓展',
                   }[drive_intent.type] || labelValue(drive_intent.type)}
                 </span>
                 <div className="flex-1">

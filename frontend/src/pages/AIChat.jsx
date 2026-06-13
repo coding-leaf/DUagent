@@ -49,7 +49,8 @@ const normalizeMessages = (items) => (
 );
 
 export default function AIChat() {
-  const { activeCourseId } = useCourse();
+  const { activeCourseId, courses } = useCourse();
+  const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -58,12 +59,15 @@ export default function AIChat() {
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
 
+  const activeCourseName = courses?.find(c => c.id === activeCourseId)?.title || '未选择课程';
+
   // Sync sessions list when course changes
   useEffect(() => {
     if (activeCourseId) {
       chatService.getSessions(activeCourseId).then(res => {
         if (res.code === 200 && res.data) {
           const list = res.data.conversations || res.data;
+          setSessions(list);
           if (list.length > 0) {
             setActiveSession(list[0].id);
           } else {
@@ -98,6 +102,16 @@ export default function AIChat() {
     };
   }, []);
 
+  const handleResetConversation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current();
+      abortControllerRef.current = null;
+    }
+    setActiveSession(null);
+    setMessages([]);
+    setIsSending(false);
+  };
+
   const handleSendMessage = (overrideText = '') => {
     const textToSend = (overrideText || inputValue).trim();
     if (!textToSend || isSending || !activeCourseId) return;
@@ -110,7 +124,7 @@ export default function AIChat() {
       abortControllerRef.current();
     }
 
-    // Optimistic UI updates using pure functions
+    // Optimistic UI updates
     setMessages(prev => {
       const userMsg = { id: `user-${prev.length}`, role: 'user', content: textToSend };
       const aiPlaceholder = { id: 'ai-placeholder', role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [] };
@@ -179,9 +193,13 @@ export default function AIChat() {
         setIsSending(false);
         abortControllerRef.current = null;
 
-        // If it was a new conversation, fetch the new ID
         if (!activeSession && doneData.conversation_id) {
           setActiveSession(doneData.conversation_id);
+          chatService.getSessions(activeCourseId).then(res => {
+            if (res.code === 200 && res.data) {
+              setSessions(res.data.conversations || res.data);
+            }
+          }).catch(console.error);
         }
       },
       (err) => {
@@ -203,139 +221,158 @@ export default function AIChat() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans pt-16">
+    <div className="font-body-md text-slate-800 bg-slate-50 min-h-screen flex flex-col">
       <Navbar />
-      
-      {/* Column 1: Left Sidebar (Context) */}
-      <div className="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-10 hidden md:flex">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <span className="font-semibold text-slate-700">当前课程</span>
-          <span className="px-2 py-1 bg-cyan-50 text-cyan-700 text-xs rounded-md font-medium">进行中</span>
-        </div>
-        <div className="p-4">
-          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3">
-            <span className="material-symbols-outlined text-[24px]">terminal</span>
-          </div>
-          <h3 className="font-bold text-slate-800 text-lg mb-1">C 语言程序设计</h3>
-          <p className="text-slate-500 text-sm mb-4">掌握底层逻辑与内存管理的核心基础课程。</p>
-          
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-slate-600 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
-              <span className="material-symbols-outlined text-[18px] text-slate-400">menu_book</span>
-              <span>第 5 章：指针与数组</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-slate-600 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
-              <span className="material-symbols-outlined text-[18px] text-slate-400">assignment</span>
-              <span>实验作业：内存分配</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Column 2: Main Chat Area */}
-      <div className="flex-1 flex flex-col relative h-full max-w-4xl mx-auto w-full shadow-2xl shadow-slate-200/50 bg-white">
+      <div className="flex-1 flex overflow-hidden pt-16">
         
-        {/* Header */}
-        <div className="h-14 border-b border-slate-100 flex items-center px-6 justify-between bg-white/80 backdrop-blur-md sticky top-0 z-20">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-sm font-medium text-slate-600">AI 助教已就绪</span>
-          </div>
-          <button className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
-            <span className="material-symbols-outlined text-[20px]">more_horiz</span>
-          </button>
-        </div>
-
-        {/* Messages / Empty State */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth pb-32 custom-scrollbar">
-          {messages.length === 0 ? (
-            <ChatEmptyState onCardClick={handleSendMessage} />
-          ) : (
-            <div className="space-y-6">
-              {messages.map(msg => (
-                <ChatMessage 
-                  key={msg.id} 
-                  message={msg} 
-                  onSendMessage={handleSendMessage} 
-                />
-              ))}
-              <div ref={messagesEndRef} />
+        {/* Left Sidebar - History */}
+        <aside className="w-64 bg-white border-r border-slate-200 flex flex-col hidden lg:flex">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+              <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
+              智能学习助手
             </div>
-          )}
-        </div>
-
-        {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-10">
-          <div className="max-w-3xl mx-auto">
-            <div className="relative flex items-end gap-2 bg-white border border-slate-200 rounded-2xl shadow-lg shadow-slate-200/50 p-2 focus-within:border-cyan-400 focus-within:ring-4 focus-within:ring-cyan-50 transition-all duration-300">
-              <button className="p-2 text-slate-400 hover:text-cyan-600 transition-colors rounded-xl hover:bg-cyan-50 flex-shrink-0 cursor-pointer">
-                <span className="material-symbols-outlined text-[22px]">attach_file</span>
-              </button>
-              
-              <textarea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
+            <button 
+              onClick={handleResetConversation}
+              className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+              title="新对话"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+            <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
+            {sessions.map(session => (
+              <div 
+                key={session.id} 
+                onClick={() => {
+                  if (abortControllerRef.current) {
+                    abortControllerRef.current();
+                    abortControllerRef.current = null;
                   }
+                  setActiveSession(session.id);
                 }}
-                placeholder="发送消息，或输入 '/' 获取快捷指令..."
-                className="w-full max-h-32 min-h-[44px] bg-transparent border-none focus:ring-0 resize-none py-3 px-2 text-[15px] text-slate-700 placeholder:text-slate-400 leading-relaxed outline-none"
-                rows={1}
-              />
-              
-              <button
-                onClick={() => handleSendMessage()}
-                disabled={isSending || !inputValue.trim() || !activeCourseId}
-                className={`p-3 rounded-xl flex items-center justify-center transition-all duration-300 flex-shrink-0 ${
-                  inputValue.trim() && !isSending && activeCourseId
-                    ? 'bg-cyan-600 text-white shadow-md hover:bg-cyan-700 hover:shadow-lg active:scale-95 cursor-pointer' 
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                className={`px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
+                  activeSession === session.id 
+                    ? 'bg-slate-100 text-slate-800 font-semibold' 
+                    : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                {isSending ? (
-                  <span className="material-symbols-outlined animate-spin text-[20px]">sync</span>
-                ) : (
-                  <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: '"FILL" 1' }}>send</span>
-                )}
-              </button>
-            </div>
-            <div className="text-center mt-3 text-xs text-slate-400">
-              AI 可能会产生误导性信息，请结合课程资料核实。
+                {session.title}
+              </div>
+            ))}
+            {sessions.length === 0 && (
+              <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
+            )}
+          </div>
+        </aside>
+
+        {/* Center Column - Main Chat */}
+        <main className="flex-1 flex flex-col relative bg-slate-50">
+          
+          {/* Top Context Bar */}
+          <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10">
+            <div className="text-sm text-slate-700 font-medium truncate">
+              {activeSession ? sessions.find(s => s.id === activeSession)?.title || '对话中' : '新对话'}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Column 3: Right Sidebar (Recommendations) */}
-      <div className="w-72 bg-slate-50 border-l border-slate-200 flex-col flex-shrink-0 z-10 hidden lg:flex">
-        <div className="p-4 border-b border-slate-200/60 bg-slate-50/80 backdrop-blur-sm sticky top-0">
-          <span className="font-semibold text-slate-700 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-amber-500">auto_awesome</span>
-            智能推荐
-          </span>
-        </div>
-        <div className="p-4 overflow-y-auto custom-scrollbar">
-          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm mb-4 hover:shadow-md transition-shadow cursor-pointer group">
-            <div className="flex items-center gap-2 mb-2 text-xs font-medium text-indigo-600 bg-indigo-50 w-fit px-2 py-1 rounded-md">
-              <span className="material-symbols-outlined text-[14px]">play_circle</span>
-              视频片段
+          {/* Messages Scroll Area */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-4 lg:px-8 py-8">
+            <div className="max-w-[760px] mx-auto space-y-8 pb-4">
+              
+              {messages.length === 0 ? (
+                <ChatEmptyState onCardClick={handleSendMessage} />
+              ) : (
+                messages.map(msg => (
+                  <ChatMessage key={msg.id} message={msg} onSendMessage={handleSendMessage} />
+                ))
+              )}
+              <div ref={messagesEndRef} />
             </div>
-            <h4 className="font-medium text-slate-800 text-sm mb-1 group-hover:text-cyan-600 transition-colors">指针的内存模型详解</h4>
-            <p className="text-xs text-slate-500 line-clamp-2">结合课程第 5 章的内容，这段 5 分钟的视频可以帮你快速回顾...</p>
+          </div>
+
+          {/* Input Composer (Anchored to bottom of middle column) */}
+          <div className="p-4 lg:px-8 pb-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
+            <div className="max-w-[760px] mx-auto">
+              <div className="bg-white border border-slate-300 rounded-2xl shadow-sm p-3 flex flex-col gap-2 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-all">
+                <textarea 
+                  className="w-full border-none focus:ring-0 px-2 py-1 text-[15px] text-slate-800 placeholder-slate-400 resize-none outline-none max-h-32" 
+                  placeholder="在这里输入你的问题..." 
+                  rows={1}
+                  value={inputValue}
+                  onChange={e => {
+                    setInputValue(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                ></textarea>
+                
+                <div className="flex justify-between items-center px-1">
+                  <div className="flex gap-1 text-slate-400">
+                    <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[18px]">attach_file</span>
+                    </button>
+                    <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[18px]">mic</span>
+                    </button>
+                  </div>
+                  
+                  <button 
+                    onClick={() => handleSendMessage()}
+                    disabled={isSending || !inputValue.trim() || !activeCourseId}
+                    className="w-8 h-8 rounded-lg bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
+                  </button>
+                </div>
+              </div>
+              <div className="text-center mt-2 text-[11px] text-slate-400">
+                AI 生成内容仅供学习参考
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* Right Sidebar - Resources (Competition Ready) */}
+        <aside className="w-72 bg-white border-l border-slate-200 hidden xl:flex flex-col">
+          <div className="p-5 border-b border-slate-100">
+            <div className="text-[11px] font-bold text-slate-400 mb-1">当前学习上下文</div>
+            <div className="text-slate-800 font-semibold text-sm truncate" title={activeCourseName}>
+              {activeCourseName}
+            </div>
           </div>
           
-          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer group">
-            <div className="flex items-center gap-2 mb-2 text-xs font-medium text-emerald-600 bg-emerald-50 w-fit px-2 py-1 rounded-md">
-              <span className="material-symbols-outlined text-[14px]">quiz</span>
-              随堂测试
+          <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-[12px] font-bold text-slate-400">相关资源推荐</span>
+              <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
             </div>
-            <h4 className="font-medium text-slate-800 text-sm mb-1 group-hover:text-cyan-600 transition-colors">数组与指针易错题</h4>
-            <p className="text-xs text-slate-500 line-clamp-2">检测你对刚才讨论的知识点的掌握程度，共 3 道选择题。</p>
+            
+            {/* Placeholder Resource Cards */}
+            <div className="border border-slate-200 rounded-xl p-3 bg-white mb-3 hover:shadow-sm transition-shadow cursor-pointer">
+              <div className="w-full h-16 bg-slate-100 rounded-md mb-2 flex items-center justify-center text-slate-300">
+                <span className="material-symbols-outlined text-2xl">smart_display</span>
+              </div>
+              <div className="text-[13px] font-semibold text-slate-700 mb-1 leading-tight">深入理解指针内存模型</div>
+              <div className="text-[11px] text-slate-500">视频课程 · 15分钟</div>
+            </div>
+            
+            <div className="border border-slate-200 rounded-xl p-3 bg-white hover:shadow-sm transition-shadow cursor-pointer">
+              <div className="text-[13px] font-semibold text-slate-700 mb-1 leading-tight">C语言核心代码片段</div>
+              <div className="text-[11px] text-slate-500">图文资料 · 必读</div>
+            </div>
+            
           </div>
-        </div>
+        </aside>
+
       </div>
     </div>
   );

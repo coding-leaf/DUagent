@@ -348,6 +348,66 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_questions():
 
     assert result["status"] == "failed"
     assert result["error"] == "skeleton_rejected"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_string_options():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    child_id = "quiz-child-skeleton-str"
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id=child_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                course_id=class_id,
+                result={
+                    "catalog_id": catalog_id,
+                    "agent_course_id": catalog_id,
+                    "node_name": "输入输出函数",
+                    "chapter": "第7章 输入输出",
+                    "course_ids": [class_id],
+                },
+            )
+        )
+        await db.commit()
+
+    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        mock_agent.return_value = {
+            "questions": [
+                {
+                    "type": "multi_choice",
+                    "content": "第 7 题：请围绕输入输出函数完成一道多选题。",
+                    "options": ["正确表述", "易混淆表述", "相关补充表述", "无关表述"],
+                    "answer": ["A", "C"],
+                    "explanation": "本题用于检查对输入输出函数的基础理解。",
+                }
+            ]
+        }
+        from app.api.v1.catalogs import _generate_quiz_for_child
+
+        async with async_session_factory() as db:
+            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            await db.commit()
+
+            questions = (
+                await db.execute(
+                    select(QuizQuestion).where(
+                        QuizQuestion.course_id == class_id,
+                        QuizQuestion.is_deleted == False,
+                    )
+                )
+            ).scalars().all()
+
+    assert result["status"] == "failed"
+    assert result["error"] == "skeleton_rejected"
+    assert questions == []
     async with async_session_factory() as db:
         child = await db.get(AsyncTask, child_id)
         assert child.status == "failed"

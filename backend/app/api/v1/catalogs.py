@@ -1536,6 +1536,12 @@ async def _generate_quiz_for_child(
         return {"status": "failed", "error": str(e)[:500]}
 
 
+def _quiz_option_text(option) -> str:
+    if isinstance(option, dict):
+        return str(option.get("text") or option.get("label") or option.get("content") or "").strip()
+    return str(option or "").strip()
+
+
 def _is_skeleton_quiz_question(question: dict) -> bool:
     if not isinstance(question, dict):
         return False
@@ -1545,7 +1551,8 @@ def _is_skeleton_quiz_question(question: dict) -> bool:
     options = question.get("options")
     if not isinstance(options, list):
         return False
-    option_texts = [str(option.get("text") or "") for option in options if isinstance(option, dict)]
+    option_texts = [_quiz_option_text(option) for option in options]
+    option_texts = [text for text in option_texts if text]
     return option_texts == ["正确表述", "易混淆表述", "相关补充表述", "无关表述"]
 
 

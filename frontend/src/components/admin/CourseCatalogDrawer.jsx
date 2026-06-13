@@ -75,6 +75,7 @@ const formatUploadQueueStatus = createStatusLabelFormatter({
 const formatTaskStatus = createStatusLabelFormatter({
   processing: '处理中',
   completed: '已完成',
+  partial: '部分失败',
   failed: '失败'
 }, '—');
 
@@ -498,7 +499,12 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
   }, [knowledgeGraphTask?.status, knowledgeGraphTask?.task_id, onChanged, open, refreshDetails]);
 
   useEffect(() => {
-    if (!quizGenTask?.task_id || quizGenTask.status === 'completed' || quizGenTask.status === 'failed') return;
+    if (
+      !quizGenTask?.task_id
+      || quizGenTask.status === 'completed'
+      || quizGenTask.status === 'partial'
+      || quizGenTask.status === 'failed'
+    ) return;
     let active = true;
     const poll = async () => {
       try {
@@ -506,7 +512,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
         const task = normalizeTask(res.data, quizGenTask.task_id, 'quiz_generation');
         if (!active) return;
         setQuizGenTask(task);
-        if (task.status === 'completed' || task.status === 'failed') {
+        if (task.status === 'completed' || task.status === 'partial' || task.status === 'failed') {
           setQuizGenerating(false);
           if (onChanged) onChanged();
         }
@@ -1187,21 +1193,31 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
               </button>
             </div>
 
-            {(quizGenTask?.status === 'processing' || quizGenTask?.status === 'completed' || quizGenTask?.status === 'failed') && (
+            {(quizGenTask?.status === 'processing'
+              || quizGenTask?.status === 'completed'
+              || quizGenTask?.status === 'partial'
+              || quizGenTask?.status === 'failed') && (
               <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex h-2 w-2 rounded-full ${
                     quizGenTask.status === 'completed' ? 'bg-emerald-500' :
+                    quizGenTask.status === 'partial' ? 'bg-amber-500' :
                     quizGenTask.status === 'failed' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'
                   }`}></span>
                   <span className="text-xs text-slate-700 font-medium">
-                    题库生成 {quizGenTask.status === 'completed' ? '完成' : quizGenTask.status === 'failed' ? '失败' : '进行中'}
-                    {quizGenTask.status === 'completed' && quizGenTask.result?.total_question_count
+                    题库生成 {quizGenTask.status === 'completed'
+                      ? '完成'
+                      : quizGenTask.status === 'partial'
+                        ? '部分失败'
+                        : quizGenTask.status === 'failed'
+                          ? '失败'
+                          : '进行中'}
+                    {(quizGenTask.status === 'completed' || quizGenTask.status === 'partial') && quizGenTask.result?.total_question_count
                       ? `（${quizGenTask.result.completed_node_count}/${quizGenTask.result.total_node_count} 节点，共 ${quizGenTask.result.total_question_count} 题）`
                       : ''}
                   </span>
                 </div>
-                {quizGenTask.status === 'failed' && quizGenTask.error_message && (
+                {(quizGenTask.status === 'failed' || quizGenTask.status === 'partial') && quizGenTask.error_message && (
                   <div className="mt-2 text-xs text-red-600">{quizGenTask.error_message}</div>
                 )}
               </div>

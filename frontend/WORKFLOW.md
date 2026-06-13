@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+- 2026-06-13：Admin 保底题库 `partial` 终态前端修复：
+  - 根因确认：真实开发库 C 语言资源库父 `quiz_generation` 任务 `8adbdc49dd2f400a` 已在 `2026-06-13 03:11:55` 完成，状态为 `partial`，汇总 `20` 个节点中 `8` 成功、`12` 失败、共生成 `56` 题；前端 `CourseCatalogDrawer.jsx` 轮询只把 `completed/failed` 当终态，导致按钮一直显示“生成中”。
+  - 修复：题库生成状态文案补齐 `partial -> 部分失败`；题库轮询把 `partial` 视为终态，停止轮询并恢复“生成题库”按钮可点击；状态卡片显示部分失败时的节点/题目汇总。
+  - 契约说明：本轮按工作区约束未修改 `../docs/10-client-api/*`，因此 `/tasks/{task_id}` 对 `partial` 的文档漂移仍存在，后续如要收口需单独走契约更新。
+  - 验证：
+    - Frontend `npm run build` 通过，仍有既有 Vite chunk size warning。
+    - Frontend `npm run lint` 退出码为 0；存在既有 warning：`src/pages/Quiz.jsx` `react-hooks/exhaustive-deps` 缺少 `nodeId` 依赖，非本轮引入。
+    - 尝试新增 Playwright 回归 `npm run test:e2e -- e2e/specs.spec.js -g "Admin baseline quiz generation stops polling on partial task status"`，当前环境下卡在 `page.goto('/admin')` 导航超时，已撤回该不稳定测试，避免把失败用例留在工作区。
 - 2026-06-12：资源库 KG 宿主课兼容层落地：
   - Backend `CourseCatalog` 新增 `kg_host_course_id`，通过 `backend/migrations/2026-06-12-add-catalog-kg-host-course-id.sql` 持久化资源库对应的隐藏宿主课。
   - Admin `POST /admin/course-catalogs/{catalog_id}/knowledge-graphs/generations` 不再要求资源库先绑定真实教学班；当资源库尚无宿主课时，Backend 会创建或复用隐藏宿主课，并基于该宿主课生成 active KG。

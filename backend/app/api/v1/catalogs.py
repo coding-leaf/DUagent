@@ -38,6 +38,7 @@ SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
 KG_RESOURCE_TARGET_LIMIT = 10
+QUIZ_GENERATION_CONCURRENCY = 2
 HOST_COURSE_NAME_PREFIX = "[KG HOST] "
 COURSE_NAME_MAX_LENGTH = 100
 
@@ -1371,14 +1372,21 @@ async def _run_quiz_generation_background(
     fanout_course_ids: list[str],
 ) -> None:
     """后台异步：遍历子任务调 Agent 出题落库，完成后汇总父任务。"""
+    semaphore = asyncio.Semaphore(QUIZ_GENERATION_CONCURRENCY)
+
+    async def _run_child(child_id: str) -> dict:
+        async with semaphore:
+            async with async_session_factory() as child_db:
+                result = await _generate_quiz_for_child(child_db, child_id, fanout_course_ids)
+                await child_db.commit()
+                return result
+
+    results = await asyncio.gather(
+        *[_run_child(child_id) for child_id in child_task_ids],
+        return_exceptions=True,
+    )
+
     async with async_session_factory() as db:
-        child_futures = []
-        for child_id in child_task_ids:
-            child_futures.append(_generate_quiz_for_child(db, child_id, fanout_course_ids))
-
-        # 并发执行所有子任务
-        results = await asyncio.gather(*child_futures, return_exceptions=True)
-
         # 汇总父任务
         parent_result = await db.execute(
             select(AsyncTask).where(AsyncTask.id == parent_id, AsyncTask.is_deleted == False)
@@ -1394,6 +1402,23 @@ async def _run_quiz_generation_background(
             (r.get("question_count") or 0)
             for r in results if isinstance(r, dict) and r.get("status") == "completed"
         )
+        inserted_question_ids = [
+            question_id
+            for r in results if isinstance(r, dict)
+            for question_id in (r.get("inserted_question_ids") or [])
+        ]
+        if inserted_question_ids:
+            for cid in fanout_course_ids:
+                await db.execute(
+                    update(QuizQuestion)
+                    .where(
+                        QuizQuestion.course_id == cid,
+                        QuizQuestion.source == "baseline",
+                        QuizQuestion.is_deleted == False,
+                        ~QuizQuestion.id.in_(inserted_question_ids),
+                    )
+                    .values(is_deleted=True)
+                )
         parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
         parent.progress = 100
         parent.completed_at = _now_utc()
@@ -1402,6 +1427,7 @@ async def _run_quiz_generation_background(
             "completed_node_count": completed,
             "failed_node_count": failed,
             "total_question_count": total_qs,
+            "inserted_question_count": len(inserted_question_ids),
         }
         await db.commit()
 
@@ -1423,11 +1449,13 @@ async def _generate_quiz_for_child(
     node_name = child_data.get("node_name", "")
     chapter = child_data.get("chapter") or ""
     course_ids = child_data.get("course_ids") or fanout_course_ids
+    agent_course_id = child_data.get("agent_course_id") or child_data.get("catalog_id") or child.course_id or ""
 
     payload = {
         "task_id": child.id,
         "user_id": child.user_id or "",
-        "course_id": child.course_id or "",
+        "course_id": agent_course_id,
+        "class_course_ids": course_ids,
         "chapter": chapter,
         "knowledge_point": node_name,
         "question_types": [
@@ -1446,9 +1474,15 @@ async def _generate_quiz_for_child(
         )
         questions = data.get("questions") if isinstance(data, dict) else []
         new_questions: list[QuizQuestion] = []
+        inserted_question_ids: list[str] = []
         for cid in course_ids:
             for q in (questions if isinstance(questions, list) else []):
+                if _is_skeleton_quiz_question(q):
+                    continue
+                question_id = uuid4().hex[:16]
+                inserted_question_ids.append(question_id)
                 new_questions.append(QuizQuestion(
+                    id=question_id,
                     course_id=cid,
                     chapter=chapter,
                     knowledge_point=node_name,
@@ -1461,14 +1495,31 @@ async def _generate_quiz_for_child(
                     correct_answer=str(q.get("answer", "")),
                     explanation=q.get("explanation", ""),
                 ))
+        if not new_questions:
+            child.status = "failed"
+            child.progress = 100
+            child.error_code = "skeleton_rejected"
+            child.error_message = "Agent returned only skeleton fallback questions"
+            child.completed_at = _now_utc()
+            child.result = {**child_data, "question_count": 0, "rejected_reason": "skeleton"}
+            return {"status": "failed", "error": "skeleton_rejected"}
         for q in new_questions:
             db.add(q)
 
         child.status = "completed"
         child.progress = 100
         child.completed_at = _now_utc()
-        child.result = {**child_data, "question_count": len(questions) if isinstance(questions, list) else 0}
-        return {"status": "completed", "question_count": len(questions) if isinstance(questions, list) else 0}
+        child.result = {
+            **child_data,
+            "agent_course_id": agent_course_id,
+            "question_count": len(new_questions),
+            "inserted_question_ids": inserted_question_ids,
+        }
+        return {
+            "status": "completed",
+            "question_count": len(new_questions),
+            "inserted_question_ids": inserted_question_ids,
+        }
     except AgentServiceError as e:
         child.status = "failed"
         child.progress = 100
@@ -1483,6 +1534,19 @@ async def _generate_quiz_for_child(
         child.error_message = str(e)[:500]
         child.completed_at = _now_utc()
         return {"status": "failed", "error": str(e)[:500]}
+
+
+def _is_skeleton_quiz_question(question: dict) -> bool:
+    if not isinstance(question, dict):
+        return False
+    content = str(question.get("content") or "")
+    if "请围绕" not in content or "完成一道" not in content:
+        return False
+    options = question.get("options")
+    if not isinstance(options, list):
+        return False
+    option_texts = [str(option.get("text") or "") for option in options if isinstance(option, dict)]
+    return option_texts == ["正确表述", "易混淆表述", "相关补充表述", "无关表述"]
 
 
 @router.post("/admin/course-catalogs/{catalog_id}/quiz/generations", status_code=202)
@@ -1537,18 +1601,6 @@ async def admin_generate_catalog_quiz(
             },
         )
 
-    # 重复生成前软删除旧保底题
-    for cid in fanout_course_ids:
-        await db.execute(
-            update(QuizQuestion)
-            .where(
-                QuizQuestion.course_id == cid,
-                QuizQuestion.source == "baseline",
-                QuizQuestion.is_deleted == False,
-            )
-            .values(is_deleted=True)
-        )
-
     parent = AsyncTask(
         task_type="quiz_generation",
         status="processing",
@@ -1558,6 +1610,7 @@ async def admin_generate_catalog_quiz(
         result={
             "catalog_id": catalog.id,
             "catalog_title": catalog.title,
+            "agent_course_id": catalog.id,
             "fanout_course_ids": fanout_course_ids,
             "total_node_count": len(kg_nodes),
             "completed_node_count": 0,
@@ -1582,6 +1635,7 @@ async def admin_generate_catalog_quiz(
             result={
                 "catalog_id": catalog.id,
                 "parent_task_id": parent.id,
+                "agent_course_id": catalog.id,
                 "node_name": node_name,
                 "chapter": chapter,
                 "course_ids": fanout_course_ids,

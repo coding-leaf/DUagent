@@ -298,6 +298,16 @@
 - **验证**: `pytest tests/test_learning_path_fallback.py -v` 9 passed
 - **Commit**: `f426ff6` `66fca5d` `6e30ab6` `04f282d` `3a54ec8` `15c2b12` `16525b9` `3f35a34`
 
+## 2026-06-13 Admin 保底题库生成稳定性修复
+
+- **问题**: Admin 题库生成先软删除旧 baseline 题，Agent 60 秒超时或 skeleton fallback 后会导致 LearningPath 无题；Agent payload 使用教学班 id，无法命中按 catalog id 入库的 Qdrant 切片。
+- **方案**: Agent 检索使用 `catalog.id`，落库仍 fanout 到绑定教学班；后台子任务并发限制为 2；至少有新题成功落库后再替换旧 baseline；识别 skeleton 兜底题并拒绝落库。
+- **改动**:
+  - `backend/app/api/v1/catalogs.py`: quiz generation 子任务记录 `agent_course_id`，payload `course_id` 改为 catalog id；`class_course_ids` 保留教学班 fanout；旧题替换延后到父任务汇总阶段；每个子任务独立 DB session；新增 skeleton 题检测。
+  - `backend/tests/test_admin_catalog_resource_generation.py`: 新增旧题保留、Agent RAG scope、skeleton 拒绝 3 个回归测试；修正资源生成 KG host fixture。
+- **验证**: `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_quiz_fix_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py -q -p no:cacheprovider` 26 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: 无 OpenAPI 变更；Admin 外部接口路径和响应不变。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

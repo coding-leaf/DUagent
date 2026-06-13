@@ -20,6 +20,7 @@ from app.main import app
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
 from app.models.course import Course
 from app.models.others import AsyncTask, CourseKnowledgeGraph, Resource
+from app.models.quiz import QuizQuestion
 from app.models.user import User
 
 
@@ -146,6 +147,39 @@ async def _seed_active_kg(
         return graph.id
 
 
+async def _seed_catalog_host_with_active_kg(
+    *,
+    catalog_id: str,
+    host_course_id: str,
+    nodes: list[dict] | None = None,
+) -> str:
+    async with async_session_factory() as db:
+        db.add(
+            Course(
+                id=host_course_id,
+                name=f"Host {host_course_id}",
+                course_code=f"H{host_course_id[-6:]}",
+                teacher_id="teacher-admin-gen",
+            )
+        )
+        catalog = await db.get(CourseCatalog, catalog_id)
+        catalog.kg_host_course_id = host_course_id
+        await db.commit()
+    return await _seed_active_kg(
+        host_course_id,
+        nodes
+        or [
+            {
+                "id": "node-quiz-1",
+                "name": "输入输出函数",
+                "chapter": "第7章 输入输出",
+                "support_band": "strong",
+                "body_top1_score": 0.88,
+            }
+        ],
+    )
+
+
 async def _count_tasks(catalog_id: str) -> int:
     async with async_session_factory() as db:
         result = await db.execute(
@@ -157,6 +191,169 @@ async def _count_tasks(catalog_id: str) -> int:
             for task in tasks
             if isinstance(task.result, dict) and task.result.get("catalog_id") == catalog_id
         )
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_quiz_generation_does_not_delete_existing_baseline_before_background_success():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    await _seed_catalog_host_with_active_kg(
+        catalog_id=catalog_id,
+        host_course_id="host-admin-gen-a",
+    )
+    async with async_session_factory() as db:
+        db.add(
+            QuizQuestion(
+                id="old-baseline-question",
+                course_id=class_id,
+                chapter="第7章 输入输出",
+                knowledge_point="输入输出函数",
+                type="single_choice",
+                source="baseline",
+                personalized=False,
+                difficulty="medium",
+                content="printf 的格式字符串用于控制输出格式。",
+                options=[{"key": "A", "text": "正确"}],
+                correct_answer="A",
+                explanation="旧题应在新题成功前保持可见。",
+                is_deleted=False,
+            )
+        )
+        await db.commit()
+
+    with patch("app.api.v1.catalogs._run_quiz_generation_background", new_callable=AsyncMock):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/quiz/generations",
+                headers=_auth_headers("admin-admin-gen", "admin"),
+            )
+
+    assert response.status_code == 202, response.text
+    async with async_session_factory() as db:
+        question = await db.get(QuizQuestion, "old-baseline-question")
+        assert question is not None
+        assert question.is_deleted is False
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_id_for_persistence():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    child_id = "quiz-child-agent-scope"
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id=child_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                course_id=class_id,
+                result={
+                    "catalog_id": catalog_id,
+                    "agent_course_id": catalog_id,
+                    "node_name": "输入输出函数",
+                    "chapter": "第7章 输入输出",
+                    "course_ids": [class_id],
+                },
+            )
+        )
+        await db.commit()
+
+    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        mock_agent.return_value = {
+            "questions": [
+                {
+                    "type": "single_choice",
+                    "content": "关于 printf 的格式控制字符串，下列说法哪项正确？",
+                    "options": [{"key": "A", "text": "%d 用于十进制整数输出"}],
+                    "answer": "A",
+                    "explanation": "printf 按格式控制字符串解释后续参数。",
+                }
+            ]
+        }
+        from app.api.v1.catalogs import _generate_quiz_for_child
+
+        async with async_session_factory() as db:
+            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            await db.commit()
+
+    assert result["status"] == "completed"
+    payload = mock_agent.await_args.args[1]
+    assert payload["course_id"] == catalog_id
+    async with async_session_factory() as db:
+        questions = (
+            await db.execute(select(QuizQuestion).where(QuizQuestion.course_id == class_id))
+        ).scalars().all()
+        assert len(questions) == 1
+        assert questions[0].content == "关于 printf 的格式控制字符串，下列说法哪项正确？"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_questions():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    child_id = "quiz-child-skeleton"
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id=child_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                course_id=class_id,
+                result={
+                    "catalog_id": catalog_id,
+                    "agent_course_id": catalog_id,
+                    "node_name": "输入输出函数",
+                    "chapter": "第7章 输入输出",
+                    "course_ids": [class_id],
+                },
+            )
+        )
+        await db.commit()
+
+    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        mock_agent.return_value = {
+            "questions": [
+                {
+                    "type": "multi_choice",
+                    "content": "第 7 题：请围绕输入输出函数完成一道多选题。",
+                    "options": [
+                        {"key": "A", "text": "正确表述"},
+                        {"key": "B", "text": "易混淆表述"},
+                        {"key": "C", "text": "相关补充表述"},
+                        {"key": "D", "text": "无关表述"},
+                    ],
+                    "answer": ["A", "C"],
+                    "explanation": "本题用于检查对输入输出函数的基础理解。",
+                }
+            ]
+        }
+        from app.api.v1.catalogs import _generate_quiz_for_child
+
+        async with async_session_factory() as db:
+            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            await db.commit()
+
+    assert result["status"] == "failed"
+    assert result["error"] == "skeleton_rejected"
+    async with async_session_factory() as db:
+        child = await db.get(AsyncTask, child_id)
+        assert child.status == "failed"
+        assert child.error_code == "skeleton_rejected"
+        count = len((await db.execute(select(QuizQuestion))).scalars().all())
+        assert count == 0
 
 
 @pytest.mark.asyncio
@@ -212,9 +409,10 @@ async def test_admin_catalog_generation_without_metadata_creates_parent_and_chil
     await _seed_user("teacher-admin-gen", "teacher")
     catalog_id = await _seed_ready_catalog()
     class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
-    await _seed_active_kg(
-        class_a,
-        [
+    await _seed_catalog_host_with_active_kg(
+        catalog_id=catalog_id,
+        host_course_id="host-admin-gen-a",
+        nodes=[
             {
                 "id": "node-1",
                 "name": "变量",
@@ -312,10 +510,11 @@ async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_us
     await _seed_user("admin-admin-gen", "admin")
     await _seed_user("teacher-admin-gen", "teacher")
     catalog_id = await _seed_ready_catalog()
-    class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
-    await _seed_active_kg(
-        class_a,
-        [
+    await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    await _seed_catalog_host_with_active_kg(
+        catalog_id=catalog_id,
+        host_course_id="host-admin-gen-a",
+        nodes=[
             {
                 "id": "bad",
                 "name": "目录",

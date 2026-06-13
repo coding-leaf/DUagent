@@ -3,6 +3,7 @@ import { chatService } from '../api/services/chat';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 import ChatMessage from '../components/chat/ChatMessage';
+import ChatEmptyState from '../components/chat/ChatEmptyState';
 
 const getDisplayText = (value) => {
   if (value === null || value === undefined) return '';
@@ -49,7 +50,6 @@ const normalizeMessages = (items) => (
 
 export default function AIChat() {
   const { activeCourseId } = useCourse();
-  const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -64,7 +64,6 @@ export default function AIChat() {
       chatService.getSessions(activeCourseId).then(res => {
         if (res.code === 200 && res.data) {
           const list = res.data.conversations || res.data;
-          setSessions(list);
           if (list.length > 0) {
             setActiveSession(list[0].id);
           } else {
@@ -98,16 +97,6 @@ export default function AIChat() {
       }
     };
   }, []);
-
-  const handleResetConversation = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current();
-      abortControllerRef.current = null;
-    }
-    setActiveSession(null);
-    setMessages([]);
-    setIsSending(false);
-  };
 
   const handleSendMessage = (overrideText = '') => {
     const textToSend = (overrideText || inputValue).trim();
@@ -190,14 +179,9 @@ export default function AIChat() {
         setIsSending(false);
         abortControllerRef.current = null;
 
-        // If it was a new conversation, fetch the new ID and refresh sessions
+        // If it was a new conversation, fetch the new ID
         if (!activeSession && doneData.conversation_id) {
           setActiveSession(doneData.conversation_id);
-          chatService.getSessions(activeCourseId).then(res => {
-            if (res.code === 200 && res.data) {
-              setSessions(res.data.conversations || res.data);
-            }
-          }).catch(console.error);
         }
       },
       (err) => {
@@ -219,136 +203,140 @@ export default function AIChat() {
   };
 
   return (
-    <div className="font-body-md text-on-background bg-background min-h-screen">
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans pt-16">
       <Navbar />
-
-      {/* Sidebar specific for Chat */}
-      <aside className="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden lg:flex z-40">
-        <div className="px-6 mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center text-cyan-600">
-              <span className="material-symbols-outlined">smart_toy</span>
+      
+      {/* Column 1: Left Sidebar (Context) */}
+      <div className="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-10 hidden md:flex">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <span className="font-semibold text-slate-700">当前课程</span>
+          <span className="px-2 py-1 bg-cyan-50 text-cyan-700 text-xs rounded-md font-medium">进行中</span>
+        </div>
+        <div className="p-4">
+          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3">
+            <span className="material-symbols-outlined text-[24px]">terminal</span>
+          </div>
+          <h3 className="font-bold text-slate-800 text-lg mb-1">C 语言程序设计</h3>
+          <p className="text-slate-500 text-sm mb-4">掌握底层逻辑与内存管理的核心基础课程。</p>
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-slate-600 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+              <span className="material-symbols-outlined text-[18px] text-slate-400">menu_book</span>
+              <span>第 5 章：指针与数组</span>
             </div>
-            <div>
-              <h3 className="font-bold text-on-surface">数据结构掌控者</h3>
-              <p className="text-xs text-gray-500">多智能体学习系统</p>
+            <div className="flex items-center gap-2 text-sm text-slate-600 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+              <span className="material-symbols-outlined text-[18px] text-slate-400">assignment</span>
+              <span>实验作业：内存分配</span>
             </div>
           </div>
-          <button 
-            onClick={handleResetConversation} 
-            className="w-full mt-4 bg-primary-container text-on-primary-container py-2 rounded-lg font-semibold active:scale-95 transition-all cursor-pointer hover:opacity-90"
-          >
-            启动新对话
+        </div>
+      </div>
+
+      {/* Column 2: Main Chat Area */}
+      <div className="flex-1 flex flex-col relative h-full max-w-4xl mx-auto w-full shadow-2xl shadow-slate-200/50 bg-white">
+        
+        {/* Header */}
+        <div className="h-14 border-b border-slate-100 flex items-center px-6 justify-between bg-white/80 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-sm font-medium text-slate-600">AI 助教已就绪</span>
+          </div>
+          <button className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
+            <span className="material-symbols-outlined text-[20px]">more_horiz</span>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 space-y-1">
-          <div className="px-2 py-1 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">历史记录</div>
-          {sessions.map(session => (
-            <div 
-              key={session.id} 
-              onClick={() => {
-                if (abortControllerRef.current) {
-                  abortControllerRef.current();
-                  abortControllerRef.current = null;
-                }
-                setActiveSession(session.id);
-              }}
-              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:pl-4 transition-all duration-200 ${activeSession === session.id ? 'bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
-            >
-              <span className="material-symbols-outlined">chat</span>
-              <span className="truncate">{session.title}</span>
+
+        {/* Messages / Empty State */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth pb-32 custom-scrollbar">
+          {messages.length === 0 ? (
+            <ChatEmptyState onCardClick={handleSendMessage} />
+          ) : (
+            <div className="space-y-6">
+              {messages.map(msg => (
+                <ChatMessage 
+                  key={msg.id} 
+                  message={msg} 
+                  onSendMessage={handleSendMessage} 
+                />
+              ))}
+              <div ref={messagesEndRef} />
             </div>
-          ))}
-          {sessions.length === 0 && (
-            <p className="text-xs text-gray-400 px-2 py-4">无历史对话</p>
           )}
         </div>
-      </aside>
 
-      {/* Main Content Stage */}
-      <main className="flex-1 ml-0 lg:ml-64 relative pt-16">
-        <div className="max-w-[1280px] mx-auto p-6 md:p-8 h-[calc(100vh-64px)] flex flex-col">
-          
-          {/* Chat Header */}
-          <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex-shrink-0 mt-4">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <img 
-                  alt="DS智能体" 
-                  className="w-12 h-12 rounded-full object-cover" 
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDTph4R2THjMqqQ8MYqgdOtqxa_oTri5CZ4iJbFSWdAtv48LpkFLOYc8xXPnYnHwNOFDZ_vkxfyQPWbffAqdpt6eqSVz1_ygfVV_65KDuJaeSfeZV6QjTw8ixTuU7jV5iOpqGHUUT0MmW-Lnd3SV78coSR4hC-RXUedoJ6yz5DuzRycn9WZHzGXsO4FML2jIwNVguUis_bKXa6hIs9A53YZ5vjZvMl5Utsm9Y3sMvpBO1gyZRyQKW8hOX97tXNqahu4iUD5K0CjvZCG" 
-                />
-                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full"></span>
-              </div>
-              <div>
-                <h2 className="font-h3 text-on-surface">DS 智能答疑专家</h2>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 bg-cyan-50 text-cyan-600 text-[10px] rounded-full font-bold">运行中</span>
-                  <span className="text-xs text-gray-400">已就绪，随时为您解析复杂结构</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={handleResetConversation}
-                className="flex items-center gap-1 px-4 py-2 text-cyan-600 border border-cyan-200 rounded-lg hover:bg-cyan-50 transition-all text-[13px] font-medium cursor-pointer"
+        {/* Input Area */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent pt-10">
+          <div className="max-w-3xl mx-auto">
+            <div className="relative flex items-end gap-2 bg-white border border-slate-200 rounded-2xl shadow-lg shadow-slate-200/50 p-2 focus-within:border-cyan-400 focus-within:ring-4 focus-within:ring-cyan-50 transition-all duration-300">
+              <button className="p-2 text-slate-400 hover:text-cyan-600 transition-colors rounded-xl hover:bg-cyan-50 flex-shrink-0 cursor-pointer">
+                <span className="material-symbols-outlined text-[22px]">attach_file</span>
+              </button>
+              
+              <textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="发送消息，或输入 '/' 获取快捷指令..."
+                className="w-full max-h-32 min-h-[44px] bg-transparent border-none focus:ring-0 resize-none py-3 px-2 text-[15px] text-slate-700 placeholder:text-slate-400 leading-relaxed outline-none"
+                rows={1}
+              />
+              
+              <button
+                onClick={() => handleSendMessage()}
+                disabled={isSending || !inputValue.trim() || !activeCourseId}
+                className={`p-3 rounded-xl flex items-center justify-center transition-all duration-300 flex-shrink-0 ${
+                  inputValue.trim() && !isSending && activeCourseId
+                    ? 'bg-cyan-600 text-white shadow-md hover:bg-cyan-700 hover:shadow-lg active:scale-95 cursor-pointer' 
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
               >
-                <span className="material-symbols-outlined text-sm">refresh</span>
-                重置对话
+                {isSending ? (
+                  <span className="material-symbols-outlined animate-spin text-[20px]">sync</span>
+                ) : (
+                  <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: '"FILL" 1' }}>send</span>
+                )}
               </button>
             </div>
-          </div>
-
-          {/* Chat Scroll Area */}
-          <div className="flex-1 overflow-y-auto space-y-6 pb-32 px-2 custom-scrollbar">
-            
-            {messages.map(msg => (
-              <ChatMessage key={msg.id} message={msg} onSendMessage={handleSendMessage} />
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Anchor */}
-          <div className="fixed bottom-4 left-4 lg:left-[280px] right-4 max-w-[1280px] xl:mx-auto bg-background pb-2 pt-2 px-4">
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-2 flex items-end gap-2">
-              <button className="p-3 text-gray-400 hover:text-cyan-500 transition-all cursor-pointer">
-                <span className="material-symbols-outlined">attach_file</span>
-              </button>
-              <div className="flex-1 min-h-[48px] max-h-32 overflow-y-auto px-2 py-3">
-                <textarea 
-                  className="w-full border-none focus:ring-0 p-0 text-body-md placeholder-gray-400 resize-none outline-none" 
-                  placeholder="在这里输入你的问题，或者输入 / 呼唤特定智能体..." 
-                  rows={1}
-                  value={inputValue}
-                  onChange={e => setInputValue(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                ></textarea>
-              </div>
-              <div className="flex items-center gap-2 pr-2 pb-1">
-                <button className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg cursor-pointer">
-                  <span className="material-symbols-outlined">mic</span>
-                </button>
-                <button 
-                  onClick={() => handleSendMessage()}
-                  disabled={isSending || !inputValue.trim() || !activeCourseId}
-                  className="bg-cyan-600 text-white disabled:opacity-50 w-10 h-10 rounded-xl flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer hover:bg-cyan-700"
-                >
-                  <span className="material-symbols-outlined">send</span>
-                </button>
-              </div>
-            </div>
-            <div className="text-center mt-3">
-              <p className="text-[10px] text-gray-400 tracking-wide uppercase">AI 生成内容仅供学习参考，请核对关键代码逻辑</p>
+            <div className="text-center mt-3 text-xs text-slate-400">
+              AI 可能会产生误导性信息，请结合课程资料核实。
             </div>
           </div>
-
         </div>
-      </main>
+      </div>
+
+      {/* Column 3: Right Sidebar (Recommendations) */}
+      <div className="w-72 bg-slate-50 border-l border-slate-200 flex-col flex-shrink-0 z-10 hidden lg:flex">
+        <div className="p-4 border-b border-slate-200/60 bg-slate-50/80 backdrop-blur-sm sticky top-0">
+          <span className="font-semibold text-slate-700 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-amber-500">auto_awesome</span>
+            智能推荐
+          </span>
+        </div>
+        <div className="p-4 overflow-y-auto custom-scrollbar">
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm mb-4 hover:shadow-md transition-shadow cursor-pointer group">
+            <div className="flex items-center gap-2 mb-2 text-xs font-medium text-indigo-600 bg-indigo-50 w-fit px-2 py-1 rounded-md">
+              <span className="material-symbols-outlined text-[14px]">play_circle</span>
+              视频片段
+            </div>
+            <h4 className="font-medium text-slate-800 text-sm mb-1 group-hover:text-cyan-600 transition-colors">指针的内存模型详解</h4>
+            <p className="text-xs text-slate-500 line-clamp-2">结合课程第 5 章的内容，这段 5 分钟的视频可以帮你快速回顾...</p>
+          </div>
+          
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer group">
+            <div className="flex items-center gap-2 mb-2 text-xs font-medium text-emerald-600 bg-emerald-50 w-fit px-2 py-1 rounded-md">
+              <span className="material-symbols-outlined text-[14px]">quiz</span>
+              随堂测试
+            </div>
+            <h4 className="font-medium text-slate-800 text-sm mb-1 group-hover:text-cyan-600 transition-colors">数组与指针易错题</h4>
+            <p className="text-xs text-slate-500 line-clamp-2">检测你对刚才讨论的知识点的掌握程度，共 3 道选择题。</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

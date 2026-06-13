@@ -7,7 +7,7 @@ import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
 
 export default function Quiz() {
   const navigate = useNavigate();
-  const { activeCourseId } = useCourse();
+  const { activeCourseId, courses } = useCourse();
   const [searchParams] = useSearchParams();
   const nodeId = searchParams.get('node_id');
   const [quizData, setQuizData] = useState(null);
@@ -120,7 +120,26 @@ export default function Quiz() {
   const currentQuestion = quizData.questions[currentQuestionIndex];
   const totalQuestions = quizData.questions.length;
   const progressPercent = Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
-
+  const activeCourse = courses.find((course) => course.id === activeCourseId);
+  const courseName = activeCourse?.name || '课程练习';
+  const currentChapter = currentQuestion.chapter || quizData.chapter || '当前章节';
+  const currentKnowledgePoint = currentQuestion.knowledge_point || currentQuestion.knowledgePoint || '综合练习';
+  const sourceLabel = {
+    baseline: '保底题库',
+    common: '公共题库',
+    personalized: '个性化题'
+  }[currentQuestion.source] || '题库';
+  const difficultyLabel = {
+    easy: '简单',
+    medium: '中等',
+    hard: '困难'
+  }[currentQuestion.difficulty] || currentQuestion.difficulty || '未标注';
+  const metadataItems = [
+    { icon: 'topic', label: '知识点', value: currentKnowledgePoint },
+    { icon: 'inventory_2', label: '题目来源', value: sourceLabel },
+    { icon: 'speed', label: '难度', value: difficultyLabel },
+    { icon: 'format_list_numbered', label: '题量', value: `${totalQuestions} 题` }
+  ];
 
   return (
     <div className="bg-surface text-on-surface font-body-md min-h-screen">
@@ -135,11 +154,11 @@ export default function Quiz() {
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <span className="text-xl font-bold tracking-tighter text-slate-900">数据结构智慧训练</span>
+            <span className="text-xl font-bold tracking-tighter text-slate-900">{courseName}</span>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">timer</span>
-            <span className="font-body-md text-primary font-bold tracking-tight">18:45</span>
+            <span className="material-symbols-outlined text-primary">topic</span>
+            <span className="font-body-md text-primary font-bold tracking-tight max-w-[240px] truncate">{currentKnowledgePoint}</span>
           </div>
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-slate-50 rounded-full transition-colors active:scale-95 duration-200 cursor-pointer">
@@ -163,31 +182,28 @@ export default function Quiz() {
               <span className="material-symbols-outlined">smart_toy</span>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">第4章：树形结构</h3>
+              <h3 className="text-sm font-bold text-slate-900">{currentChapter}</h3>
+              <p className="text-xs text-slate-500 mt-1">{sourceLabel}</p>
             </div>
           </div>
         </div>
         <nav className="flex-1 space-y-1">
-          <div className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:pl-6 transition-all duration-300 cursor-pointer rounded-lg">
-            <span className="material-symbols-outlined text-sm">dashboard</span>
-            <span className="font-label-sm text-xs font-medium">练习概览</span>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:pl-6 transition-all duration-300 cursor-pointer rounded-lg">
-            <span className="material-symbols-outlined text-sm">account_tree</span>
-            <span className="font-label-sm text-xs font-medium">数据结构基础</span>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3 bg-white text-primary shadow-sm rounded-lg border-l-4 border-primary font-bold">
-            <span className="material-symbols-outlined text-sm">lan</span>
-            <span className="font-label-sm text-xs font-medium">树与二叉树</span>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:pl-6 transition-all duration-300 cursor-pointer rounded-lg">
-            <span className="material-symbols-outlined text-sm">hub</span>
-            <span className="font-label-sm text-xs font-medium">图论算法</span>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:pl-6 transition-all duration-300 cursor-pointer rounded-lg">
-            <span className="material-symbols-outlined text-sm">smart_toy</span>
-            <span className="font-label-sm text-xs font-medium">智能体助手</span>
-          </div>
+          {metadataItems.map((item, index) => (
+            <div
+              key={item.label}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg ${
+                index === 0
+                  ? 'bg-white text-primary shadow-sm border-l-4 border-primary font-bold'
+                  : 'text-slate-500 bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">{item.icon}</span>
+              <div className="min-w-0">
+                <span className="font-label-sm text-[11px] text-slate-400 block">{item.label}</span>
+                <span className="font-label-sm text-xs font-medium truncate block max-w-[150px]">{item.value}</span>
+              </div>
+            </div>
+          ))}
         </nav>
         <div className="mt-auto px-4">
           <button 
@@ -230,14 +246,27 @@ export default function Quiz() {
               </h2>
             </div>
 
-            {/* Technical Visualization Placeholder (Static mockup for now) */}
-            <div className="w-full h-48 bg-slate-50 rounded-xl mb-8 flex items-center justify-center border border-dashed border-slate-200 relative overflow-hidden group">
+            <div className="w-full bg-slate-50 rounded-xl mb-8 border border-slate-200 relative overflow-hidden">
               <div className="absolute inset-0 opacity-20 pointer-events-none">
                 <div className="w-full h-full" style={{ backgroundImage: 'radial-gradient(#00d1ff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
               </div>
-              <div className="flex flex-col items-center gap-3 relative z-10">
-                <span className="material-symbols-outlined text-primary/40 text-4xl">account_tree</span>
-                <p className="text-slate-400 font-label-sm">节点索引关系示意图区域</p>
+              <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 p-5">
+                <div className="sm:col-span-3 flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wide">
+                  <span className="material-symbols-outlined text-primary text-base">info</span>
+                  当前题目上下文
+                </div>
+                <div className="rounded-lg bg-white/80 border border-white px-4 py-3">
+                  <span className="block text-[11px] text-slate-400 mb-1">章节</span>
+                  <span className="block text-sm font-bold text-slate-800 truncate">{currentChapter}</span>
+                </div>
+                <div className="rounded-lg bg-white/80 border border-white px-4 py-3">
+                  <span className="block text-[11px] text-slate-400 mb-1">知识点</span>
+                  <span className="block text-sm font-bold text-slate-800 truncate">{currentKnowledgePoint}</span>
+                </div>
+                <div className="rounded-lg bg-white/80 border border-white px-4 py-3">
+                  <span className="block text-[11px] text-slate-400 mb-1">来源 / 难度</span>
+                  <span className="block text-sm font-bold text-slate-800 truncate">{sourceLabel} · {difficultyLabel}</span>
+                </div>
               </div>
             </div>
 

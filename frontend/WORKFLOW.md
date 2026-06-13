@@ -435,6 +435,21 @@
   - `npm run build` 通过，仍有既有 Vite chunk size warning。
 - **契约**: 不改 Client API/OpenAPI；新增的 `status` 为 Agent SSE 内部事件，Backend 只透传并不入库，正文仍通过 `chunk` 事件传递。
 
+## 2026-06-14 AI Chat trailing JSON 代码块清理
+
+- **问题**: 部分模型输出是“自然语言正文 + 末尾 ```json 结构化结果代码块”，上一轮 parser 只处理“整段都是 fenced JSON”的情况，导致末尾 `model_text/knowledge_points/suggestion/diagram` JSON 仍被前端 Markdown 渲染出来。
+- **方案**: `parse_tutoring_model_response()` 在任意位置搜索 fenced JSON；只有 JSON object 含 `model_text`、`knowledge_points`、`suggestion` 或 `diagram` 等结构化字段时才接管解析；优先使用 payload 内的 `model_text` 作为正文，否则使用剥离 JSON 代码块后的自然语言正文。
+- **改动**:
+  - `agent_service/agents/tutoring.py`: fenced JSON parser 从整段 `fullmatch` 改为安全 `finditer`，避免 trailing JSON 泄露。
+  - `agent_service/tests/test_tutoring_agent.py`: 增加“正文 + trailing fenced JSON”回归测试，断言正文不含 ```json 和 `"model_text"`。
+- **验证**:
+  - `./.venv/bin/python -m pytest agent_service/tests/test_tutoring_agent.py -q -p no:cacheprovider` 通过，20 passed。
+  - `./.venv/bin/python -m pytest agent_service/tests/test_tutoring_api.py -q -p no:cacheprovider` 通过，10 passed。
+  - `./.venv/bin/python -m pytest agent_service/tests/test_aichat_hybrid_retrieval.py -q -p no:cacheprovider` 通过，6 passed。
+  - `npm run lint` 通过。
+  - `npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: 无 OpenAPI/Client API 变更；仅修正 Agent 内部模型输出解析。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

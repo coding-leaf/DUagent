@@ -75,6 +75,28 @@ def test_parse_tutoring_model_response_handles_markdown_fenced_json() -> None:
     assert parsed.diagram is None
 
 
+def test_parse_tutoring_model_response_strips_trailing_markdown_fenced_json() -> None:
+    model_output = (
+        "📌 一句话总结\n"
+        "指针变量 p 存的是地址，*p 是去那个地址取值或赋值，&a 是取 a 的地址。\n\n"
+        "```json\n"
+        '{"model_text": "指针变量 p 存的是地址，*p 是去那个地址取值或赋值，&a 是取 a 的地址。", '
+        '"knowledge_points": ["指针声明与定义", "取地址运算符 &", "解引用运算符 *"], '
+        '"suggestion": "请告诉我哪个部分还模糊。", '
+        '"diagram": "graph TD\\nA-->B"}'
+        "\n```"
+    )
+
+    parsed = parse_tutoring_model_response(model_output)
+
+    assert parsed.model_text == "指针变量 p 存的是地址，*p 是去那个地址取值或赋值，&a 是取 a 的地址。"
+    assert "```json" not in parsed.model_text
+    assert '"model_text"' not in parsed.model_text
+    assert parsed.knowledge_point_names == ["指针声明与定义", "取地址运算符 &", "解引用运算符 *"]
+    assert parsed.suggestion_text == "请告诉我哪个部分还模糊。"
+    assert parsed.diagram == "graph TD\nA-->B"
+
+
 def test_parse_tutoring_model_response_json_mode_falls_back_to_xml_regex() -> None:
     """JSON mode 输出为纯文本包裹 + XML 标签时，json.loads 失败后降级为正则提取。"""
     model_output = (

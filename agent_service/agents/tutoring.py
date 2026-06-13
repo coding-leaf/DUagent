@@ -110,20 +110,22 @@ def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
 def _try_parse_markdown_json_output(model_output: str) -> TutoringModelResponse | None:
     """尝试解析 Markdown fenced JSON，避免将结构化 JSON 代码块泄露给前端正文。"""
     stripped = model_output.strip()
-    match = _MARKDOWN_JSON_PATTERN.fullmatch(stripped)
-    if match is None:
-        return None
-    try:
-        payload = json.loads(match.group(1).strip())
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    model_text = payload.get("model_text")
-    return _build_response_from_payload(
-        model_text.strip() if isinstance(model_text, str) and model_text.strip() else None,
-        payload,
-    )
+    for match in _MARKDOWN_JSON_PATTERN.finditer(stripped):
+        try:
+            payload = json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if not any(key in payload for key in ("model_text", "knowledge_points", "suggestion", "diagram")):
+            continue
+        model_text = payload.get("model_text")
+        if isinstance(model_text, str) and model_text.strip():
+            clean_text = model_text.strip()
+        else:
+            clean_text = _MARKDOWN_JSON_PATTERN.sub("", stripped).strip() or None
+        return _build_response_from_payload(clean_text, payload)
+    return None
 
 
 def _try_parse_json_mode_output(model_output: str) -> TutoringModelResponse | None:

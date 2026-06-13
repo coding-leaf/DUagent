@@ -3,6 +3,8 @@ CLI Probe Tool for AI Chat Hybrid Retrieval
 """
 import argparse
 import asyncio
+import json
+import sys
 import uuid
 import httpx
 
@@ -18,15 +20,21 @@ async def main() -> None:
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
+    def log(message: str) -> None:
+        if args.json:
+            print(message, file=sys.stderr)
+        else:
+            print(message)
+
     if args.course_id and args.catalog_id:
-        print("Note: Both --course-id and --catalog-id provided. course_id will be used for Backend context, and catalog_id will override KG search.")
+        log("Note: Both --course-id and --catalog-id provided. course_id will be used for Backend context, and catalog_id will override KG search.")
 
     user_id = "probe_user"
     conversation_id = str(uuid.uuid4())
 
-    print("[*] Initializing async db session...")
+    log("[*] Initializing async db session...")
     async with async_session_factory() as db:
-        print(f"[*] Assembling tutoring payload for course={args.course_id}, catalog={args.catalog_id}, question='{args.question}'...")
+        log(f"[*] Assembling tutoring payload for course={args.course_id}, catalog={args.catalog_id}, question='{args.question}'...")
         try:
             payload = await _assemble_tutoring_payload(
                 user_id=user_id,
@@ -38,11 +46,11 @@ async def main() -> None:
                 catalog_id=args.catalog_id,
             )
         except Exception as e:
-            print(f"[!] Failed to assemble payload: {e}")
+            log(f"[!] Failed to assemble payload: {e}")
             return
 
     agent_url = f"{settings.AGENT_SERVICE_URL.rstrip('/')}/agent/v1/tutoring/retrieval_probe"
-    print(f"[*] Hitting agent service at {agent_url}...")
+    log(f"[*] Hitting agent service at {agent_url}...")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -50,9 +58,9 @@ async def main() -> None:
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
-            print(f"[!] Request failed: {e}")
+            log(f"[!] Request failed: {e}")
             if isinstance(e, httpx.HTTPStatusError):
-                print(e.response.text)
+                log(e.response.text)
             return
 
     # Check if agent service wrapped it
@@ -64,13 +72,14 @@ async def main() -> None:
     knowledge_points = data.get("knowledge_points", [])
 
     retrieval_debug = data.get("retrieval_debug", {})
+    retrieved_chunk_details = retrieval_debug.get("retrieved_chunk_details", []) if isinstance(retrieval_debug, dict) else []
     summary = {
         "kg_match_count": len(matched_kg_nodes),
-        "chunk_count": len(course_knowledge_chunks)
+        "chunk_count": len(course_knowledge_chunks),
+        "chunk_detail_count": len(retrieved_chunk_details),
     }
-    
+
     if args.json:
-        import json
         output = {
             "course_id": args.course_id,
             "catalog_id": args.catalog_id,
@@ -92,7 +101,10 @@ async def main() -> None:
     print(f"[Qdrant Chunks] (Count: {len(course_knowledge_chunks)})")
     for i, chunk in enumerate(course_knowledge_chunks):
         preview = chunk.replace('\\n', ' ')[:100] + ("..." if len(chunk) > 100 else "")
-        print(f"  {i+1}. {preview}")
+        detail = retrieved_chunk_details[i] if i < len(retrieved_chunk_details) and isinstance(retrieved_chunk_details[i], dict) else {}
+        score = detail.get("score", "N/A")
+        metadata = detail.get("metadata", {})
+        print(f"  {i+1}. {preview} [Score: {score} | Metadata: {metadata}]")
 
     print("\n" + "="*50)
     print(f"[Knowledge Points] (Count: {len(knowledge_points)})")

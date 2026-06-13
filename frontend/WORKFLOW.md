@@ -401,6 +401,23 @@
 - **验证**: `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
 - **契约**: 无 OpenAPI 变更；只修改前端渲染文案。
 
+## 2026-06-14 AI Chat Hybrid Retrieval 代码热修
+
+- **问题**: 最近的 Hybrid Retrieval 接入在 Backend `_assemble_tutoring_payload()` 中误读 `CourseKnowledgeGraph.graph_data`，但真实模型字段是 `nodes` / `edges`，导致课程对话 `POST /api/v1/tutoring/chat` 在存在 active KG 时直接 500；同时 probe CLI 的 `--json` 会混入人工日志，控制台输出也缺少 Qdrant chunk 的 score / metadata。
+- **方案**: 仅修代码错误，不处理数据库脏数据；Backend 从 `CourseKnowledgeGraph.nodes` 安全提取 `active_kg_nodes`，继续只透传 `id/name/chapter`；probe CLI 在 JSON 模式下只向 stdout 输出 JSON，日志走 stderr，并在控制台模式展示 chunk score 与白名单 metadata；同步修正 Agent 旧测试中低分 KG 节点仍被保留的过期断言。
+- **改动**:
+  - `backend/app/api/v1/tutoring.py`: 修复 active KG 节点字段读取，移除不存在的 `graph_data` 访问。
+  - `backend/tools/probe_aichat_hybrid_retrieval.py`: 修复 `--json` 输出污染，并补充 Qdrant chunk score / metadata 输出。
+  - `backend/tests/test_tutoring_privacy.py`: 新增 MySQL 回归测试，覆盖 CourseOffering -> CourseCatalog -> active KG -> `active_kg_nodes` payload 组装链路。
+  - `agent_service/tests/test_tutoring_retrieval.py`: 将 KG reranker 低分节点断言对齐当前 `score >= 0.35` 策略。
+- **验证**:
+  - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/tutoring_payload_kg_fix?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_tutoring_privacy.py::test_tutoring_payload_uses_active_kg_nodes_field -q -p no:cacheprovider` 通过，1 passed。
+  - `./.venv/bin/python -m pytest agent_service/tests/test_aichat_hybrid_retrieval.py -q -p no:cacheprovider` 通过，6 passed。
+  - `./.venv/bin/python -m pytest agent_service/tests/test_tutoring_retrieval.py -q -p no:cacheprovider` 通过，9 passed。
+  - `PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -B -c "... ast.parse ..."` 通过，相关 Python 文件语法正常。
+- **契约**: 不改前端 UI，不改 Client API/OpenAPI；`retrieval_probe` 仍为 Agent 内部诊断端点。
+- **运行态注意**: 8002 Agent 服务需要重启以加载 `/agent/v1/tutoring/retrieval_probe` 新路由；否则 probe 仍可能 404。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

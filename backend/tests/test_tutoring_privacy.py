@@ -13,8 +13,10 @@ os.environ["DATABASE_URL"] = os.environ.get(
 
 from app.api.v1.tutoring import _assemble_tutoring_payload, _build_learner_context
 from app.db.session import async_session_factory, init_db
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.conversation import Conversation
-from app.models.others import UserProfile
+from app.models.course import Course
+from app.models.others import CourseKnowledgeGraph, UserProfile
 from app.models.user import User
 
 
@@ -81,3 +83,87 @@ async def test_tutoring_payload_excludes_personal_identifiers():
         "grade": "大一 (Freshman)",
         "guidance_level": "L3",
     }
+
+
+@pytest.mark.asyncio
+async def test_tutoring_payload_uses_active_kg_nodes_field():
+    await init_db()
+
+    async with async_session_factory() as db:
+        suffix = uuid.uuid4().hex[:8]
+        user = User(
+            username=f"kg_payload_{suffix}",
+            email=f"kg_payload_{suffix}@example.com",
+            password_hash="hash",
+            role="teacher",
+        )
+        db.add(user)
+        await db.flush()
+
+        catalog_id = f"catalog_{suffix}"
+        host_course_id = f"host_{suffix}"
+        course_id = f"course_{suffix}"
+        db.add_all([
+            Course(
+                id=host_course_id,
+                name="C 语言资源库宿主课程",
+                course_code=f"HKG{suffix[:6].upper()}",
+                teacher_id=user.id,
+            ),
+            Course(
+                id=course_id,
+                name="C 语言程序设计",
+                course_code=f"CKG{suffix[:6].upper()}",
+                teacher_id=user.id,
+            ),
+        ])
+        await db.flush()
+
+        conversation = Conversation(
+            user_id=user.id,
+            scope="course",
+            course_id=course_id,
+            title="kg payload",
+        )
+        db.add_all([
+            CourseCatalog(
+                id=catalog_id,
+                title="C 语言资源库",
+                kg_host_course_id=host_course_id,
+            ),
+            CourseOffering(
+                id=course_id,
+                name="C 语言程序设计",
+                catalog_id=catalog_id,
+                teacher_id=user.id,
+                class_code=f"KG{suffix[:6].upper()}",
+            ),
+            CourseKnowledgeGraph(
+                course_id=host_course_id,
+                version=1,
+                is_active=True,
+                source_type="catalog_chunks",
+                generation_strategy="catalog_chunks_llm",
+                nodes=[
+                    {"id": "n1", "name": "指针", "chapter": "第 6 章"},
+                    {"id": "n2", "name": "malloc/free", "chapter": "第 7 章", "extra": "hidden"},
+                ],
+                edges=[{"from": "n1", "to": "n2"}],
+            ),
+            conversation,
+        ])
+        await db.commit()
+
+        payload = await _assemble_tutoring_payload(
+            user.id,
+            "course",
+            course_id,
+            conversation.id,
+            "讲一下 malloc",
+            db,
+        )
+
+    assert payload["active_kg_nodes"] == [
+        {"id": "n1", "name": "指针", "chapter": "第 6 章"},
+        {"id": "n2", "name": "malloc/free", "chapter": "第 7 章"},
+    ]

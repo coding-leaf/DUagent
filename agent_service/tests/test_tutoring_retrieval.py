@@ -319,5 +319,5 @@ def test_build_tutoring_retrieval_context_with_ai_matches_kg_nodes() -> None:
         )
     )
 
-    assert [node["name"] for node in context.matched_kg_nodes] == ["二叉树", "平衡树", "图论"]
-    assert len(context.matched_kg_nodes) == 3
+    assert [node["name"] for node in context.matched_kg_nodes] == ["二叉树", "平衡树"]
+    assert len(context.matched_kg_nodes) == 2

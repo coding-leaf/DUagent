@@ -66,9 +66,10 @@ async def _assemble_tutoring_payload(
             catalog = catalog_r.scalar_one_or_none()
             if catalog and catalog.kg_host_course_id:
                 active_kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
-                if active_kg and active_kg.graph_data:
+                kg_nodes = active_kg.nodes if active_kg and isinstance(active_kg.nodes, list) else []
+                if kg_nodes:
                     nodes = []
-                    for node in active_kg.graph_data.get("nodes", []):
+                    for node in kg_nodes:
                         nodes.append({
                             "id": node.get("id"),
                             "name": node.get("name"),

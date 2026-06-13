@@ -19,6 +19,7 @@ class TutoringRetrievalContext(BaseModel):
     user_memory_facts: list[str] = Field(default_factory=list, description="用户长期记忆事实")
     course_knowledge_chunks: list[str] = Field(default_factory=list, description="课程知识库切片")
     matched_kg_nodes: list[dict] = Field(default_factory=list, description="匹配的 KG 节点列表")
+    retrieval_debug: dict | None = Field(None, description="仅供 probe/debug 使用，不保证前端展示，绝不暴露至 Client API/SSE 响应流中")
 
     @field_validator("knowledge_points", mode="before")
     @classmethod
@@ -136,31 +137,15 @@ async def _rerank_kg_nodes(
 ) -> list[dict]:
     if not nodes:
         return []
-    
     if reranker_provider is None or len(nodes) <= 1:
-        # substring exact fallback
-        matched = []
-        lower_query = query.lower()
-        for node in nodes:
-            name = str(node.get("name", ""))
-            if name and name.lower() in lower_query:
-                node_copy = dict(node)
-                node_copy["score"] = 1.0
-                matched.append(node_copy)
-        return matched[:limit]
+        return nodes[:limit]
     
     # Extract text representation for reranking
-    documents = [str(node.get("name", "")) for node in nodes]
+    documents = [node.get("name", "") for node in nodes]
     try:
         scores = await reranker_provider.score(query, documents)
         ranked = sorted(zip(nodes, scores, strict=True), key=lambda item: item[1], reverse=True)
-        result = []
-        for node, score in ranked[:limit]:
-            if score > 0.05:  # threshold
-                node_copy = dict(node)
-                node_copy["score"] = score
-                result.append(node_copy)
-        return result
+        return [node for node, _ in ranked][:limit]
     except Exception as exc:
         logger.warning("Tutoring KG nodes rerank failed: error=%s", exc)
-        return []
+        return nodes[:limit]

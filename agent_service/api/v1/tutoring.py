@@ -45,6 +45,10 @@ async def tutoring_chat(request: TutoringChatRequest) -> StreamingResponse:
     response_model=TutoringRetrievalContext,
 )
 async def retrieval_probe(request: TutoringChatRequest) -> TutoringRetrievalContext:
+    """
+    内部探针端点。仅供 CLI 或 Debug 工具测试 Agent Hybrid Retrieval 质量使用。
+    不进 Client API 契约。
+    """
     providers = get_ai_providers()
     vector_store = None
     if getattr(providers, "embedding", None):

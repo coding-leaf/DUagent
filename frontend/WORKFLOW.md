@@ -20,6 +20,13 @@
 
 ## 最近验证
 
+- 2026-06-13：Quiz 前端题型渲染收口（单选/多选）：
+  - 根因确认：`Quiz.jsx` 原先把所有题都按单选处理，题型标签只识别 `single_choice`，答案状态固定为单值，选项控件固定为 `radio`；因此保底题库里的 `multi_choice` 题虽然能被后端返回，但前端不能正确作答。
+  - 修复：新增 `src/components/quiz/` 下的题型分发层，`QuestionRenderer` 按 `question.type` 分发到 `SingleChoiceQuestionCard`、`MultiChoiceQuestionCard` 或 `UnsupportedQuestionCard`；`Quiz.jsx` 的答案状态改为按题型保存 `string | string[]`，提交时原样透传；取题 `useEffect` 补入 `node_id` 依赖，并在切题时重置题目索引和答案状态。
+  - 扩展口径：当前仅正式支持 `single_choice` 与 `multi_choice`；未来 `code` 等题型已有明确前端扩展点，但本轮不接入 UI 主流程。
+  - 验证：
+    - Frontend `npm run lint` 通过。
+    - Frontend `npm run build` 通过，仍有既有 Vite chunk size warning。
 - 2026-06-13：Admin 保底题库 `partial` 终态前端修复：
   - 根因确认：真实开发库 C 语言资源库父 `quiz_generation` 任务 `8adbdc49dd2f400a` 已在 `2026-06-13 03:11:55` 完成，状态为 `partial`，汇总 `20` 个节点中 `8` 成功、`12` 失败、共生成 `56` 题；前端 `CourseCatalogDrawer.jsx` 轮询只把 `completed/failed` 当终态，导致按钮一直显示“生成中”。
   - 修复：题库生成状态文案补齐 `partial -> 部分失败`；题库轮询把 `partial` 视为终态，停止轮询并恢复“生成题库”按钮可点击；状态卡片显示部分失败时的节点/题目汇总。

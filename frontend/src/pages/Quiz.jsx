@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
 import { useCourse } from '../context/CourseContext';
+import QuestionRenderer from '../components/quiz/QuestionRenderer';
+import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
 
 export default function Quiz() {
   const navigate = useNavigate();
@@ -19,6 +21,8 @@ export default function Quiz() {
       if (!activeCourseId) return;
       try {
         setLoading(true);
+        setCurrentQuestionIndex(0);
+        setAnswers({});
         const res = await quizService.getQuestions(activeCourseId, nodeId || undefined);
         if (res.code === 200) {
           setQuizData(res.data);
@@ -30,15 +34,31 @@ export default function Quiz() {
       }
     };
     fetchQuestions();
-  }, [activeCourseId]);
+  }, [activeCourseId, nodeId]);
 
-  const handleOptionSelect = (optionKey) => {
+  const handleAnswerChange = (nextAnswer) => {
     if (!quizData) return;
     const currentQ = quizData.questions[currentQuestionIndex];
-    setAnswers(prev => ({
-      ...prev,
-      [currentQ.id]: optionKey
-    }));
+    const normalizedType = String(currentQ?.type || '').toLowerCase();
+
+    setAnswers((prev) => {
+      if (normalizedType === 'multi_choice' || normalizedType === 'multiple_choice') {
+        const existing = Array.isArray(prev[currentQ.id]) ? prev[currentQ.id] : [];
+        const updated = existing.includes(nextAnswer)
+          ? existing.filter((item) => item !== nextAnswer)
+          : [...existing, nextAnswer];
+
+        return {
+          ...prev,
+          [currentQ.id]: updated
+        };
+      }
+
+      return {
+        ...prev,
+        [currentQ.id]: nextAnswer
+      };
+    });
   };
 
   const handleNextOrSubmit = async () => {
@@ -203,7 +223,7 @@ export default function Quiz() {
           <section data-testid="quiz-question" className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
             <div className="flex items-start gap-4 mb-6">
               <span className="bg-primary-container text-on-primary-container px-3 py-1 rounded-lg font-bold text-sm shrink-0">
-                {currentQuestion.type === 'single_choice' ? '单选题' : '未知题型'}
+                {getQuestionTypeLabel(currentQuestion.type)}
               </span>
               <h2 className="font-h3 text-h3 text-on-surface flex-1">
                 {currentQuestion.content}
@@ -221,33 +241,11 @@ export default function Quiz() {
               </div>
             </div>
 
-            {/* Options List */}
-            <div className="space-y-4">
-              {currentQuestion.options && currentQuestion.options.map(option => {
-                const isSelected = answers[currentQuestion.id] === option.key;
-                return (
-                  <label 
-                    key={option.key} 
-                    className={`group flex items-center p-5 rounded-xl border-2 transition-all cursor-pointer ${
-                      isSelected ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary hover:bg-primary/5'
-                    }`}
-                  >
-                    <input 
-                      className="w-5 h-5 text-primary border-slate-300 focus:ring-primary" 
-                      name={`question-${currentQuestion.id}`} 
-                      type="radio" 
-                      checked={isSelected}
-                      onChange={() => handleOptionSelect(option.key)}
-                    />
-                    <span className={`ml-4 font-body-md transition-colors ${
-                      isSelected ? 'text-primary font-bold' : 'text-on-surface group-hover:text-primary'
-                    }`}>
-                      {option.key}. {option.text}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
+            <QuestionRenderer
+              question={currentQuestion}
+              value={answers[currentQuestion.id]}
+              onChange={handleAnswerChange}
+            />
           </section>
 
           {/* Bottom Action Controls */}

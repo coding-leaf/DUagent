@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+### 2026-06-14
+- 修复 AI Chat Hybrid Retrieval 的过度完成问题。
+  - 引入了 `retrieval_debug` 隔离探针调试信息。
+  - 实现了 `_match_kg_nodes` 的 Substring -> Reranker -> Embedding 降级打分机制。
+  - 确保提示词不再机械复读所有 KG 节点。
+  - 更新探针命令行支持 `--catalog-id`。
+  - 测试全部通过。当前状态回调至“真实 Hybrid 闭环待验证”。
+
 - 2026-06-14：Task 4 - AI Chat Hybrid Retrieval Regression Suite:
   - 任务：为 AI Chat 混合检索建立集成回归测试。
   - 修复：在 `agent_service/tests/test_aichat_hybrid_retrieval.py` 新增回归测试集，模拟 CLI 探针逻辑，使用 C 语言样本（指针、数组、malloc）结合 mock 的 KG 节点、embedding 和 vector store 来测试 `build_tutoring_retrieval_context_with_ai` 函数。

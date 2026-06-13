@@ -2,9 +2,10 @@ import asyncio
 
 import pytest
 
-from agent_service.memory.tutoring_retrieval import build_tutoring_retrieval_context_with_ai
+from agent_service.memory.tutoring_retrieval import build_tutoring_retrieval_context_with_ai, _match_kg_nodes
 from agent_service.memory.vector_store import VectorSearchResult
 from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
+from agent_service.core.ai import RerankerProvider, EmbeddingProvider
 
 
 class FakeEmbeddingProvider:
@@ -198,3 +199,39 @@ async def test_hybrid_retrieval_malloc_sample() -> None:
     # Assert chunks
     assert len(context.course_knowledge_chunks) == 2
     assert any("malloc函数" in chunk for chunk in context.course_knowledge_chunks)
+
+
+@pytest.mark.asyncio
+async def test_kg_nodes_no_match_returns_empty():
+    # 有 Reranker 但是打分低 (例如 < 0.35)
+    class MockReranker(RerankerProvider):
+        async def score(self, query: str, documents: list[str]) -> list[float]:
+            return [0.1, 0.2]
+            
+    nodes = [{"id": "1", "name": "A"}, {"id": "2", "name": "B"}]
+    matched = await _match_kg_nodes("query", nodes, MockReranker(), None, None)
+    assert matched == []
+
+@pytest.mark.asyncio
+async def test_kg_nodes_substring_match_high_confidence():
+    # 没有 Reranker 时，Substring 匹配 (Query: "解释 malloc/free", Node: "malloc/free")
+    nodes = [{"id": "1", "name": "malloc/free"}, {"id": "2", "name": "指针"}]
+    matched = await _match_kg_nodes("解释 malloc/free", nodes, None, None, None)
+    assert len(matched) == 1
+    assert matched[0]["match_method"] == "substring"
+    assert matched[0]["score"] == 1.0
+    
+@pytest.mark.asyncio
+async def test_kg_nodes_embedding_fallback():
+    # 没有 Reranker，且 substring 不中时，mock embedding 算相似度 > 0.55
+    class MockEmbedding(EmbeddingProvider):
+        async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            # 两个向量，第一个相似，第二个不相似
+            return [[1.0, 0.0], [0.0, 1.0]]
+            
+    nodes = [{"id": "1", "name": "NodeA"}, {"id": "2", "name": "NodeB"}]
+    query_vector = [0.9, 0.1]
+    matched = await _match_kg_nodes("test", nodes, None, MockEmbedding(), query_vector)
+    assert len(matched) == 1
+    assert matched[0]["match_method"] == "embedding"
+    assert matched[0]["score"] >= 0.55

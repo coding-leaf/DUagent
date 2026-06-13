@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { chatService } from '../api/services/chat';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
+import ChatMessage from '../components/chat/ChatMessage';
 
 const getDisplayText = (value) => {
   if (value === null || value === undefined) return '';
@@ -302,71 +303,8 @@ export default function AIChat() {
           <div className="flex-1 overflow-y-auto space-y-6 pb-32 px-2 custom-scrollbar">
             
             {messages.map(msg => (
-              <div key={msg.id} className={`flex gap-4 max-w-[85%] ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${msg.role === 'user' ? 'bg-cyan-600 text-white' : 'bg-cyan-100 text-cyan-600'}`}>
-                  <span className="material-symbols-outlined text-sm" style={msg.role !== 'user' ? { fontVariationSettings: '"FILL" 1' } : {}}>
-                    {msg.role === 'user' ? 'person' : 'smart_toy'}
-                  </span>
-                </div>
-                <div className={`p-4 rounded-2xl w-full ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none shadow-sm' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none shadow-sm'}`}>
-                  <p className="text-body-md whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                  
-                  {/* Suggestions rendering */}
-                  {msg.suggestions && msg.suggestions.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
-                      {msg.suggestions.map((sug, i) => (
-                        <span
-                          key={`${msg.id}-suggestion-${i}-${sug}`}
-                          onClick={() => handleSendMessage(sug)} 
-                          className="px-3 py-1 bg-gray-50 text-cyan-600 text-xs rounded-full cursor-pointer hover:bg-cyan-50 transition-colors border border-gray-100"
-                        >
-                          {sug}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Knowledge Points Badges */}
-                  {msg.knowledge_points && msg.knowledge_points.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
-                      <span className="text-xs text-gray-400 flex items-center gap-1 mr-1">
-                        <span className="material-symbols-outlined text-[14px]">school</span>
-                        关联知识点:
-                      </span>
-                      {msg.knowledge_points.map((kp, i) => (
-                        <span key={`${msg.id}-knowledge-${i}-${kp}`} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] rounded-full font-medium">
-                          {kp}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Diagrams rendering */}
-                  {msg.diagrams && msg.diagrams.map((diag, index) => (
-                    <div key={`${msg.id}-diagram-${index}-${getDisplayText(diag).slice(0, 32)}`} className="bg-gray-50 rounded-xl p-4 border border-gray-200 mt-4 mb-4">
-                      <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
-                        <span className="material-symbols-outlined text-sm">schema</span>
-                        <span>图解模式 (Mermaid)</span>
-                      </div>
-                      <pre className="text-xs font-mono bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto whitespace-pre">
-                        {typeof diag === 'object' ? diag.code || JSON.stringify(diag) : diag}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ChatMessage key={msg.id} message={msg} onSendMessage={handleSendMessage} />
             ))}
-            
-            {isSending && messages.length > 0 && messages[messages.length - 1].loading && messages[messages.length - 1].content === '' && (
-               <div className="flex gap-4 max-w-[85%]">
-                 <div className="w-8 h-8 rounded-full bg-cyan-100 flex-shrink-0 flex items-center justify-center">
-                   <span className="material-symbols-outlined text-cyan-600 text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
-                 </div>
-                 <div className="bg-white p-4 border border-gray-100 rounded-2xl rounded-tl-none w-16 flex justify-center items-center shadow-sm">
-                   <span className="material-symbols-outlined animate-spin text-cyan-600">progress_activity</span>
-                 </div>
-               </div>
-            )}
             <div ref={messagesEndRef} />
           </div>
 

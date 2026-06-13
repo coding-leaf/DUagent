@@ -6,10 +6,22 @@ import ToolCallCard from './ToolCallCard';
 
 const getDisplayText = (value) => {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    if (value.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed.model_text || parsed.content) {
+          return parsed.model_text || parsed.content;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return value;
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (typeof value === 'object') {
-    return value.code || value.name || value.title || value.content || JSON.stringify(value);
+    return value.model_text || value.code || value.name || value.title || value.content || JSON.stringify(value);
   }
   return String(value);
 };

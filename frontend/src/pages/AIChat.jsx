@@ -7,10 +7,23 @@ import ChatEmptyState from '../components/chat/ChatEmptyState';
 
 const getDisplayText = (value) => {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    if (value.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed.model_text || parsed.content) {
+          return parsed.model_text || parsed.content;
+        }
+      } catch {
+        // Ignored
+      }
+    }
+    return value;
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (typeof value === 'object') {
-    return value.name
+    return value.model_text
+      || value.name
       || value.title
       || value.knowledge_point
       || value.label
@@ -34,13 +47,38 @@ const normalizeMessage = (message, index = 0) => {
     || message?.message_id
     || `${message?.role || 'message'}-${message?.timestamp || index}`;
 
+  let contentObj = message?.content;
+  if (typeof contentObj === 'string' && contentObj.trim().startsWith('{')) {
+    try {
+      contentObj = JSON.parse(contentObj);
+    } catch {
+      // Ignored
+    }
+  }
+
+  let displayContent;
+  let diagrams = message?.diagrams || [];
+  let knowledge_points = message?.knowledge_points || [];
+  let suggestions = message?.suggestions || [];
+
+  if (typeof contentObj === 'object' && contentObj !== null) {
+    displayContent = contentObj.model_text || contentObj.content || JSON.stringify(contentObj);
+    if (contentObj.diagram && !diagrams.length) diagrams = [contentObj.diagram];
+    if (contentObj.diagrams && !diagrams.length) diagrams = contentObj.diagrams;
+    if (contentObj.knowledge_points && !knowledge_points.length) knowledge_points = contentObj.knowledge_points;
+    if (contentObj.suggestion && !suggestions.length) suggestions = [contentObj.suggestion];
+    if (contentObj.suggestions && !suggestions.length) suggestions = contentObj.suggestions;
+  } else {
+    displayContent = getDisplayText(message?.content);
+  }
+
   return {
     ...message,
     id: normalizedId,
-    content: getDisplayText(message?.content),
-    diagrams: Array.isArray(message?.diagrams) ? message.diagrams : [],
-    knowledge_points: normalizeTextList(message?.knowledge_points),
-    suggestions: normalizeTextList(message?.suggestions),
+    content: displayContent,
+    diagrams: Array.isArray(diagrams) ? diagrams : (diagrams ? [diagrams] : []),
+    knowledge_points: normalizeTextList(knowledge_points),
+    suggestions: normalizeTextList(suggestions),
   };
 };
 

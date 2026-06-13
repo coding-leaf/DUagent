@@ -20,6 +20,12 @@
 
 ## 最近验证
 
+- 2026-06-14：Task 4 - AI Chat Hybrid Retrieval Regression Suite:
+  - 任务：为 AI Chat 混合检索建立集成回归测试。
+  - 修复：在 `agent_service/tests/test_aichat_hybrid_retrieval.py` 新增回归测试集，模拟 CLI 探针逻辑，使用 C 语言样本（指针、数组、malloc）结合 mock 的 KG 节点、embedding 和 vector store 来测试 `build_tutoring_retrieval_context_with_ai` 函数。
+  - 契约说明：仅新增测试用例，不涉及 API 契约或实现的修改。
+  - 验证：
+    - 运行 `uv run pytest agent_service/tests/test_aichat_hybrid_retrieval.py -q`，3/3 passed。
 - 2026-06-13：AIChat 页面 3-Column 布局与 Document-style 重构：
   - 问题分析：原 AIChat 仅支持纯文本显示及简单的图解代码块，长回答体验沉闷，且无法直观展示复杂任务（如工具调用）的执行过程。页面布局未体现出“课程上下文”与“推荐资源”的作用，只是一个简单的聊天界面。
   - 修复：
@@ -400,3 +406,14 @@
   - 契约说明：纯前端 UI 修理，不涉及任何接口调用修改，无 OpenAPI 漂移。
   - 验证：
     - Frontend `npm run lint` 通过。
+
+### 2026-06-14 Task 3 完成记录
+1. **当前完成 / 实现状态**：完成 AI Chat Hybrid Retrieval 的 Task 3，实现了 `agent_service/api/v1/tutoring.py` 的 `/retrieval_probe` 探针接口，并新增了 `backend/tools/probe_aichat_hybrid_retrieval.py` 命令行工具。
+2. **修改文件**：
+   - `agent_service/api/v1/tutoring.py`
+   - `backend/tools/probe_aichat_hybrid_retrieval.py`
+3. **测试结果**：在 backend 目录下成功运行了 `uv run ruff check tools/probe_aichat_hybrid_retrieval.py` 并修复了 f-string 问题。运行 `uv run python -m tools.probe_aichat_hybrid_retrieval --help` 成功输出帮助信息。
+4. **OpenAPI/契约是否漂移**：否。
+5. **git commit 信息**：已提交。commit hash `9f00ab3`。
+6. **剩余风险**：需要在有数据的环境下实际运行探针工具来验证 Qdrant 和 Agent 组合的行为，目前仅测试了工具能成功加载及请求装配。
+7. **下一步建议**：根据计划进入实际检索效果的联调或执行下一个任务。

@@ -6,7 +6,7 @@ from agent_service.agents.tutoring_tools import build_tutoring_toolkit
 from agent_service.core.ai import ChatProvider, EmbeddingProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
-from agent_service.prompts.tutoring import build_strategy_context_text
+from agent_service.prompts.tutoring import build_strategy_context_text, _join_kg_nodes
 from agent_service.schemas.tutoring import TutoringChatRequest
 
 logger = get_logger(__name__)
@@ -65,6 +65,7 @@ def _build_react_user_message(
         f"薄弱点：{', '.join(profile.knowledge_weak) or '无'}",
         f"已掌握：{', '.join(profile.knowledge_mastered) or '无'}",
         f"会话摘要：{request.conversation_summary or '无'}",
+        f"命中知识点：{_join_kg_nodes(retrieval_context.matched_kg_nodes)}",
         f"长期记忆：{_join_items(retrieval_context.user_memory_facts)}",
         f"课程知识：{_join_items(retrieval_context.course_knowledge_chunks)}",
     ]

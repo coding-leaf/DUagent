@@ -139,14 +139,11 @@
 
 ## 当前下一步队列
 
-1. **#29 AI Chat 检索能力独立 spec**
-   按已定口径，后续 Chat spec 必须从”先验证 Agent 检索能力”开始，不先加 UI。
+1. **C 样本 catalog 数据一致性恢复**
+   删除资料后 chunk 重算逻辑已修复，但真实 C catalog 已处于历史不一致状态。下一步先修正这条开发库数据或重新上传有效资料并入库。
 
 2. **#28 Admin 用户停用状态契约**
    如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
-
-3. **C 样本 catalog 数据一致性恢复**
-   删除资料后 chunk 重算逻辑已修复，但真实 C catalog 已处于历史不一致状态。下一步先修正这条开发库数据或重新上传有效资料并入库。
 
 4. **LearningPath 节点资源挂载验证**
    KG fallback 已让学习路径页面可显示骨架，下一步验证真实 C 样本的节点资源（weak_point_tutorials/exercises/chapter_materials）是否能在页面上正确展示。当前 resources 表挂载到 KG 节点的数据可能仍缺。
@@ -173,6 +170,7 @@
 - 2026-06-11 LearningPath-KG 资源命中评估基线：新增只读 probe 后跑真实 C 样本，报告 `/tmp/learning-path-resource-probe-c-language.json` 显示 `active_kg_node_count=108`、`resource_count=84`、`kg_tagged_resource_count=80`，但 `learning_path_id=null`、`learning_path_node_count=0`；只读 MySQL 复核该 course 当前无非删除 LearningPath，因此不能直接评估 ready gate，下一步必须先生成 / 刷新 LearningPath。
 - 2026-06-13 Admin 批量生成保底题库：CourseCatalogDrawer 新增"生成题库"按钮，一键为全部 KG 节点生成保底题库（source=baseline, 3 单选+4 多选/节点）。`GET /quiz/questions` 加 `node_id` 支持节点模式答题，source 过滤加 `baseline`。LearningPath "进入练习"带 node_id，Quiz 页面支持从 URL 读取节点参数。
 - 2026-06-12 LearningPath KG Fallback：`GET /learning-path` 无 LP 记录时不再返回空，而是从 active KG 拓扑排序合成路径骨架（全 recommended）。KG fallback 已闭环，不再阻塞学习路径页面展示；Agent 个性化生成后置，不删除历史 refresh 端点但当前不需要接 UI。
+- 2026-06-13 AI Chat Hybrid Retrieval 探针雏形：后端已将 `active_kg_nodes` 透传给 Agent Service 的 `TutoringChatRequest`，Agent 内实现了 KG 节点与 User Message 语义匹配打分，并将其作为兜底 Knowledge Points 注入 prompt。新增了探针端点 `/retrieval_probe` 和 CLI 工具（支持分数与 `--json` 输出）。当前为「探针与 mock 回归已完成，真实闭环待验证」状态，下一步需进行真实集成测试。
 - 2026-06-11 Admin 删除资料一致性修复：删除 CourseCatalog material 后现在会按剩余未删除 material 重算 `catalog.chunk_count`，避免删除最后一个有效资料后 catalog 仍保留历史 chunk 并误判 ready。真实 C catalog 已存在的历史不一致数据不会被代码自动回填，需单独修正或重新入库。
 
 ## 更新规则

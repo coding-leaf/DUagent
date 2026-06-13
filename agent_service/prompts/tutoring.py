@@ -38,6 +38,7 @@ def build_tutoring_messages(
             f"薄弱点：{', '.join(request.user_profile.knowledge_weak) or '无'}",
             f"已掌握：{', '.join(request.user_profile.knowledge_mastered) or '无'}",
             f"会话摘要：{request.conversation_summary or '无'}",
+            f"命中知识点：{_join_kg_nodes(retrieval_context.matched_kg_nodes)}",
             f"长期记忆：{_join_or_none(retrieval_context.user_memory_facts)}",
             f"课程知识：{_join_or_none(retrieval_context.course_knowledge_chunks)}",
             build_strategy_context_text(strategy) if strategy is not None else "",
@@ -69,6 +70,7 @@ def build_strategy_selection_messages(
             f"薄弱点：{', '.join(request.user_profile.knowledge_weak) or '无'}",
             f"已掌握：{', '.join(request.user_profile.knowledge_mastered) or '无'}",
             f"会话摘要：{request.conversation_summary or '无'}",
+            f"命中知识点：{_join_kg_nodes(retrieval_context.matched_kg_nodes)}",
             f"长期记忆：{_join_or_none(retrieval_context.user_memory_facts)}",
             f"课程知识：{_join_or_none(retrieval_context.course_knowledge_chunks)}",
             "策略含义：guided_hint=分步骤提示；direct_explanation=直接解释概念；"
@@ -99,6 +101,7 @@ def build_response_critic_messages(
             f"当前问题：{request.message}",
             f"引导粒度：{request.user_profile.guidance_level}",
             build_strategy_context_text(strategy),
+            f"命中知识点：{_join_kg_nodes(retrieval_context.matched_kg_nodes)}",
             f"长期记忆：{_join_or_none(retrieval_context.user_memory_facts)}",
             f"课程知识：{_join_or_none(retrieval_context.course_knowledge_chunks)}",
             f"候选回答：{getattr(model_response, 'model_text', None) or '无'}",
@@ -127,3 +130,6 @@ def build_strategy_context_text(strategy) -> str:
 
 def _join_or_none(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items) if items else "无"
+
+def _join_kg_nodes(nodes: list[dict]) -> str:
+    return "、".join(str(n.get("name", "")) for n in nodes) if nodes else "无"

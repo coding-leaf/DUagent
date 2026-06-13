@@ -192,6 +192,15 @@ def _build_knowledge_points(
             for name in knowledge_point_names[:3]
             if name
         ]
+    if context.matched_kg_nodes:
+        return [
+            KnowledgePoint(
+                name=str(node.get("name", "")),
+                chapter=str(node.get("chapter", "")),
+            )
+            for node in context.matched_kg_nodes[:3]
+            if node.get("name")
+        ]
     if context.knowledge_points:
         return context.knowledge_points
     weak_points = request.user_profile.knowledge_weak

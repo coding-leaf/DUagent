@@ -33,6 +33,7 @@ from app.services.resource_scope import resource_scope_clause
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 logger = logging.getLogger(__name__)
 ingestion_agent_client = AgentClient(timeout=300.0)
+quiz_agent_client = AgentClient(timeout=300.0)
 
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
@@ -1468,7 +1469,7 @@ async def _generate_quiz_for_child(
     }
 
     try:
-        data = await agent_client.post_json(
+        data = await quiz_agent_client.post_json(
             "/agent/v1/assessment/generate-questions",
             payload,
         )

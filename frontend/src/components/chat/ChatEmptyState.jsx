@@ -1,60 +1,68 @@
-const suggestions = [
-  {
-    icon: 'school',
-    title: '解释知识点',
-    description: '例如：帮我解释 C 语言指针和数组的关系',
-    prompt: '帮我解释 C 语言指针和数组的关系，请给出简单易懂的示例。'
-  },
-  {
-    icon: 'code',
-    title: '分析代码',
-    description: '例如：帮我分析这段代码为什么会段错误',
-    prompt: '我有一段代码运行时出现了段错误（Segmentation Fault），你能帮我分析一下可能的原因并教我如何调试吗？'
-  },
-  {
-    icon: 'library_books',
-    title: '推荐资源',
-    description: '例如：给我推荐适合复习指针的学习资料',
-    prompt: '我想重点复习 C 语言的指针部分，请给我推荐一些高质量的学习资料、视频课程或练习题。'
-  },
-  {
-    icon: 'route',
-    title: '规划复习',
-    description: '例如：我想一周内补齐动态内存分配',
-    prompt: '我的动态内存分配学得不太好，如果我想在一周内补齐这部分的知识，你能帮我制定一个详细的复习规划吗？'
-  }
-];
+export default function ChatEmptyState({ onCardClick, courseName = '当前课程' }) {
+  const suggestCards = [
+    {
+      icon: 'lightbulb',
+      title: '解释关键概念',
+      prompt: `帮我解释${courseName}里的一个核心概念，并给出例子。`,
+      color: 'amber'
+    },
+    {
+      icon: 'code_blocks',
+      title: '分析代码或思路',
+      prompt: `帮我分析一段和${courseName}相关的代码或解题思路。`,
+      color: 'emerald'
+    },
+    {
+      icon: 'menu_book',
+      title: '推荐学习方向',
+      prompt: `请根据${courseName}推荐我接下来应该学习的方向。`,
+      color: 'indigo'
+    },
+    {
+      icon: 'calendar_month',
+      title: '规划复习安排',
+      prompt: `我想复习${courseName}的薄弱点，请帮我规划一周学习安排。`,
+      color: 'rose'
+    }
+  ];
 
-export default function ChatEmptyState({ onCardClick }) {
+  const getColorClasses = (color) => {
+    const classes = {
+      amber: 'bg-amber-50 text-amber-600 group-hover:bg-amber-100',
+      emerald: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100',
+      indigo: 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100',
+      rose: 'bg-rose-50 text-rose-600 group-hover:bg-rose-100'
+    };
+    return classes[color];
+  };
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in max-w-3xl mx-auto w-full">
-      <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-sky-400 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20 mb-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-white/20 backdrop-blur-sm"></div>
-        <span className="material-symbols-outlined text-[32px] text-white relative z-10" style={{ fontVariationSettings: '"FILL" 1' }}>
-          robot_2
-        </span>
+    <div className="h-full flex flex-col items-center justify-center py-10 px-4">
+      <div className="w-16 h-16 bg-gradient-to-tr from-cyan-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-200/50 mb-6 relative">
+        <span className="material-symbols-outlined text-[32px] text-white">smart_toy</span>
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full border-2 border-white"></div>
       </div>
       
-      <h2 className="text-2xl font-bold text-slate-800 mb-2">有什么我可以帮您的？</h2>
-      <p className="text-slate-500 mb-10 max-w-md">您可以直接在下方输入问题，或者从以下常见场景中选择一个开始。</p>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-        {suggestions.map((item, idx) => (
-          <button
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">你好，我是你的智能助教</h2>
+      <p className="text-slate-500 mb-10 text-center max-w-md leading-relaxed">
+        我可以帮你解答疑惑、分析代码、规划学习路线，或者基于课程资料进行知识拓展。
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
+        {suggestCards.map((card, idx) => (
+          <div 
             key={idx}
-            onClick={() => onCardClick?.(item.prompt)}
-            className="flex items-start gap-4 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-cyan-200 hover:-translate-y-0.5 transition-all duration-300 text-left group"
+            onClick={() => onCardClick(card.prompt)}
+            className="group bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:border-cyan-300 hover:shadow-md transition-all duration-300 flex items-start gap-4"
           >
-            <div className="w-10 h-10 rounded-xl bg-slate-50 group-hover:bg-cyan-50 flex items-center justify-center flex-shrink-0 transition-colors">
-              <span className="material-symbols-outlined text-slate-400 group-hover:text-cyan-500 transition-colors">
-                {item.icon}
-              </span>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${getColorClasses(card.color)}`}>
+              <span className="material-symbols-outlined text-[20px]">{card.icon}</span>
             </div>
             <div>
-              <h3 className="font-semibold text-slate-700 group-hover:text-cyan-700 mb-1 transition-colors">{item.title}</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">{item.description}</p>
+              <h3 className="font-semibold text-slate-700 text-[15px] mb-1 group-hover:text-cyan-700 transition-colors">{card.title}</h3>
+              <p className="text-slate-500 text-[13px] leading-relaxed line-clamp-2">{card.prompt}</p>
             </div>
-          </button>
+          </div>
         ))}
       </div>
     </div>

@@ -9,11 +9,13 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.api.deps import get_current_user, get_db
 from app.models.conversation import Conversation, Message
+from app.models.catalog import CourseOffering, CourseCatalog
 from app.models.others import UserProfile
 from app.models.user import User
 from app.schemas.operations import TutoringChatRequest
 from app.db.session import async_session_factory
 from app.services.agent_client import AgentServiceError, agent_client
+from app.services.course_knowledge_graphs import get_active_knowledge_graph
 
 router = APIRouter(prefix="/api/v1/tutoring", tags=["tutoring"])
 
@@ -40,6 +42,26 @@ async def _assemble_tutoring_payload(
     }
     if course_id:
         payload["course_id"] = course_id
+
+    # active_kg_nodes: 从关联的 Active KG 中提取精简节点
+    payload["active_kg_nodes"] = []
+    if scope == "course" and course_id:
+        offering_r = await db.execute(select(CourseOffering).where(CourseOffering.id == course_id))
+        offering = offering_r.scalar_one_or_none()
+        if offering and offering.catalog_id:
+            catalog_r = await db.execute(select(CourseCatalog).where(CourseCatalog.id == offering.catalog_id))
+            catalog = catalog_r.scalar_one_or_none()
+            if catalog and catalog.kg_host_course_id:
+                active_kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
+                if active_kg and active_kg.graph_data:
+                    nodes = []
+                    for node in active_kg.graph_data.get("nodes", []):
+                        nodes.append({
+                            "id": node.get("id"),
+                            "name": node.get("name"),
+                            "chapter": node.get("chapter"),
+                        })
+                    payload["active_kg_nodes"] = nodes
 
     # user_profile: 从 SQL 读取最近画像
     if scope == "course" and course_id:

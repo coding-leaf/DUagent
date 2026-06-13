@@ -28,6 +28,7 @@ class TutoringChatRequest(BaseModel):
         ...,
         description="用户画像（由 Backend 从 SQL 组装）。注意：Qdrant 检索由 Agent Service 自行完成",
     )
+    active_kg_nodes: list[dict] = Field(default_factory=list, description="当前课程绑定资源库的 Active KG 节点精简列表")
     conversation_summary: str | None = Field(None, description="全局对话摘要（记忆压缩后生成）")
     recent_messages: list[RecentMessage] = Field(default_factory=list, description="最近 N 轮缓冲消息")
 

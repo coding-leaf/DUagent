@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class QuizSubmitRequest(BaseModel):
@@ -24,6 +24,7 @@ class TutoringChatRequest(BaseModel):
     scope: str = "course"
     course_id: Optional[str] = None
     conversation_id: Optional[str] = None
+    active_kg_nodes: list[dict] = Field(default_factory=list, description="当前课程绑定资源库的 Active KG 节点精简列表")
 
 
 class ResourceGenerateRequest(BaseModel):

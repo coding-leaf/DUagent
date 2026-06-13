@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from agent_service.core.ai import ChatProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext, build_tutoring_retrieval_context
-from agent_service.prompts.tutoring import build_tutoring_messages
 from agent_service.schemas.tutoring import (
     KnowledgePoint,
     SuggestedExercise,

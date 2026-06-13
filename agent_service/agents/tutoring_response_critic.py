@@ -1,14 +1,11 @@
-"""Tutoring ResponseCriticAgent：内部判断候选回答是否可采纳，不改变 API 契约。"""
+"""Tutoring 规则 Guard：判断候选回答是否可采纳，纯规则、无 LLM 调用、无网络。"""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
-from agent_service.core.ai import ChatProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
-from agent_service.prompts.tutoring import build_response_critic_messages
 from agent_service.schemas.tutoring import TutoringChatRequest
 
 logger = get_logger(__name__)
@@ -21,35 +18,13 @@ class TutoringCriticResult:
     source: str
 
 
-async def evaluate_tutoring_response(
-    request: TutoringChatRequest,
-    retrieval_context: TutoringRetrievalContext,
-    model_response,
-    strategy,
-    chat_provider: ChatProvider | None,
-) -> TutoringCriticResult:
-    """评估候选 tutoring 回复，输入请求/上下文/候选回复/策略/模型，输出是否采纳。"""
-    fallback = _evaluate_by_rule(request, retrieval_context, model_response, strategy)
-    if chat_provider is None:
-        return fallback
-    try:
-        raw = await chat_provider.complete(
-            build_response_critic_messages(request, retrieval_context, model_response, strategy)
-        )
-        parsed = _parse_llm_critic_result(raw)
-        if parsed is not None:
-            return parsed
-    except Exception as exc:
-        logger.warning("Tutoring response critic failed: user_id=%s error=%s", request.user_id, exc)
-    return fallback
-
-
-def _evaluate_by_rule(
+def evaluate_tutoring_response_by_rule(
     request: TutoringChatRequest,
     retrieval_context: TutoringRetrievalContext,
     model_response,
     strategy,
 ) -> TutoringCriticResult:
+    """规则审查候选 tutoring 回复，输入请求/上下文/候选回复/策略，输出是否采纳（纯规则）。"""
     text = (getattr(model_response, "model_text", None) or "").strip()
     if not text:
         return TutoringCriticResult(accepted=False, reason="empty_response", source="rule")
@@ -86,7 +61,7 @@ def _is_relevant(
         for item in (getattr(model_response, "knowledge_point_names", []) or [])
         if isinstance(item, str) and item.strip()
     }
-    if response_terms.intersection(cleaned_terms):
+    if response_terms.intersection(set(cleaned_terms)):
         return True
     compact_message = request.message.strip()
     return len(compact_message) >= 2 and compact_message in text
@@ -99,19 +74,4 @@ def _term_text(item) -> str:
     return name.strip() if isinstance(name, str) else ""
 
 
-def _parse_llm_critic_result(raw: str) -> TutoringCriticResult | None:
-    try:
-        payload = json.loads(raw.strip())
-    except (json.JSONDecodeError, AttributeError):
-        return None
-    if not isinstance(payload, dict) or not isinstance(payload.get("accepted"), bool):
-        return None
-    reason = payload.get("reason")
-    return TutoringCriticResult(
-        accepted=payload["accepted"],
-        reason=reason.strip() if isinstance(reason, str) and reason.strip() else "llm_judgement",
-        source="llm",
-    )
-
-
-__all__ = ["TutoringCriticResult", "evaluate_tutoring_response"]
+__all__ = ["TutoringCriticResult", "evaluate_tutoring_response_by_rule"]

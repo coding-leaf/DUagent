@@ -1,14 +1,11 @@
-"""Tutoring StrategyAgent：根据请求和检索上下文选择内部辅导策略，不改变 API 契约。"""
+"""Tutoring StrategyAgent：纯规则选择内部辅导策略，不改变 API 契约，无 LLM 调用。"""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
-from agent_service.core.ai import ChatProvider
 from agent_service.core.logging import get_logger
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
-from agent_service.prompts.tutoring import build_strategy_selection_messages
 from agent_service.schemas.tutoring import TutoringChatRequest
 
 logger = get_logger(__name__)
@@ -29,29 +26,11 @@ class TutoringStrategy:
     source: str
 
 
-async def select_tutoring_strategy(
-    request: TutoringChatRequest,
-    retrieval_context: TutoringRetrievalContext,
-    chat_provider: ChatProvider | None,
-) -> TutoringStrategy:
-    """选择 tutoring 内部策略，输入请求/检索上下文/可选模型，输出下游 prompt 使用的策略对象。"""
-    fallback = _select_rule_strategy(request, retrieval_context)
-    if chat_provider is None:
-        return fallback
-    try:
-        raw = await chat_provider.complete(build_strategy_selection_messages(request, retrieval_context))
-        parsed = _parse_llm_strategy(raw, fallback)
-        if parsed is not None:
-            return parsed
-    except Exception as exc:
-        logger.warning("Tutoring strategy selection failed: user_id=%s error=%s", request.user_id, exc)
-    return fallback
-
-
-def _select_rule_strategy(
+def select_tutoring_strategy_by_rule(
     request: TutoringChatRequest,
     retrieval_context: TutoringRetrievalContext,
 ) -> TutoringStrategy:
+    """纯规则选择 tutoring 内部策略，输入请求/检索上下文，输出下游 prompt 使用的策略对象。"""
     strategy = _rule_strategy_name(request)
     return TutoringStrategy(
         strategy=strategy,
@@ -90,28 +69,4 @@ def _build_focus_points(
     return [item.strip() for item in candidates if isinstance(item, str) and item.strip()][:3]
 
 
-def _parse_llm_strategy(raw: str, fallback: TutoringStrategy) -> TutoringStrategy | None:
-    try:
-        payload = json.loads(raw.strip())
-    except (json.JSONDecodeError, AttributeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    strategy = payload.get("strategy")
-    if strategy not in SUPPORTED_STRATEGIES:
-        return None
-    focus_points = payload.get("focus_points")
-    parsed_focus_points = (
-        [item.strip() for item in focus_points if isinstance(item, str) and item.strip()][:3]
-        if isinstance(focus_points, list)
-        else []
-    )
-    return TutoringStrategy(
-        strategy=strategy,
-        instruction=SUPPORTED_STRATEGIES[strategy],
-        focus_points=parsed_focus_points or fallback.focus_points,
-        source="llm",
-    )
-
-
-__all__ = ["TutoringStrategy", "select_tutoring_strategy"]
+__all__ = ["TutoringStrategy", "select_tutoring_strategy_by_rule"]

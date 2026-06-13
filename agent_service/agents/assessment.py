@@ -351,7 +351,8 @@ async def build_question_generation_knowledge_context(
     request: QuestionGenerateRequest,
     embedding_provider,
     vector_store=None,
-    limit: int = 5,
+    limit: int = 10,
+    score_threshold: float = 0.5,
 ) -> str:
     """检索课程知识库中与出题请求相关的内容，输入请求和 embedding provider，输出拼接后的上下文字符串。
 
@@ -367,7 +368,7 @@ async def build_question_generation_knowledge_context(
             vector_store = QdrantVectorStore()
 
         query_text = " ".join(
-            part for part in [request.knowledge_point, request.chapter, request.course_id]
+            part for part in [request.knowledge_point, request.chapter]
             if part
         )
         vectors = await embedding_provider.embed_texts([query_text])
@@ -376,8 +377,12 @@ async def build_question_generation_knowledge_context(
         )
         if not results:
             return ""
-        chunks = [_truncate_chunk(r.text, 1000) for r in results if r.text]
-        logger.info("RAG retrieved %d chunks for course_id=%s", len(chunks), request.course_id)
+        chunks = [
+            _truncate_chunk(r.text, 1000)
+            for r in results
+            if r.text and (r.score is None or r.score >= score_threshold)
+        ]
+        logger.info("RAG retrieved %d chunks (score>=%s) for course_id=%s", len(chunks), score_threshold, request.course_id)
         if not chunks:
             return ""
         return "\n---\n".join(chunks)

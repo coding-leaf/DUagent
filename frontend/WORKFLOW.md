@@ -492,3 +492,9 @@
 - **内容**: 修复 AI 响应返回 JSON 时，`getDisplayText` 无法正确提取 `model_text` 导致直接渲染 JSON 字符串（进而使得 markdown 代码块换行失效和语法高亮失效）的问题。
 - **文件**: `src/pages/AIChat.jsx`, `src/components/chat/ChatMessage.jsx`
 - **测试**: 运行 `npm run lint` 通过，已确认语法正常。
+
+### 2026-06-14 优化智能问答 Tool Call 进度展示逻辑
+- **状态**: 已完成
+- **内容**: 剔除了非工具调用的“正在生成回答...”的 ToolCall 渲染（该进度已由默认打字机和泡泡内的 loading dot 展现），并修复了 RAG 检索状态（“检索课程知识库”）在生成首个 chunk 后闪烁消失的问题，使其保留为已完成（`check_circle`）状态。
+- **文件**: `src/pages/AIChat.jsx`
+- **测试**: 运行 `npm run lint` 通过。

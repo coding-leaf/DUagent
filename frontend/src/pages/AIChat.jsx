@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { chatService } from '../api/services/chat';
+import { learningService } from '../api/services/learning';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 import ChatMessage from '../components/chat/ChatMessage';
@@ -93,6 +95,7 @@ export default function AIChat() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [resources, setResources] = useState([]);
   
   // Collapse & Drawer States
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -147,6 +150,22 @@ export default function AIChat() {
       }
     };
   }, []);
+
+  // Fetch course resources when activeCourseId changes
+  useEffect(() => {
+    if (activeCourseId) {
+      learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 100 })
+        .then(res => {
+          if (res.code === 200 && res.data) {
+            const list = res.data.resources || res.data;
+            setResources(Array.isArray(list) ? list : []);
+          }
+        })
+        .catch(console.error);
+    } else {
+      setTimeout(() => setResources([]), 0);
+    }
+  }, [activeCourseId]);
 
   const handleResetConversation = () => {
     if (abortControllerRef.current) {
@@ -318,6 +337,25 @@ export default function AIChat() {
       }
     );
   };
+
+  const getActiveKnowledgePoints = () => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant' && msg.knowledge_points && msg.knowledge_points.length > 0) {
+        return msg.knowledge_points;
+      }
+    }
+    return [];
+  };
+
+  const activeKPs = getActiveKnowledgePoints();
+  const recommendedResources = resources.filter(res => {
+    if (activeKPs.length === 0) return true; // Show all if no knowledge points mentioned yet
+    return activeKPs.some(kp => 
+      res.knowledge_point?.toLowerCase().includes(kp.toLowerCase()) ||
+      res.title?.toLowerCase().includes(kp.toLowerCase())
+    );
+  });
 
   return (
     <div className="font-body-md text-slate-800 bg-slate-50 h-screen flex flex-col overflow-hidden">
@@ -512,16 +550,66 @@ export default function AIChat() {
                 <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
               </div>
               
-              {/* Empty State */}
-              <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
-                <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
-                  <span className="material-symbols-outlined text-2xl">inventory_2</span>
+              {recommendedResources.length > 0 ? (
+                <div className="space-y-3">
+                  {recommendedResources.map(res => {
+                    let icon = 'description';
+                    let iconBg = 'bg-blue-50 text-blue-600';
+                    if (res.type === 'mindmap') {
+                      icon = 'hub';
+                      iconBg = 'bg-purple-50 text-purple-600';
+                    } else if (res.type === 'reading') {
+                      icon = 'menu_book';
+                      iconBg = 'bg-amber-50 text-amber-600';
+                    } else if (res.type === 'code') {
+                      icon = 'code';
+                      iconBg = 'bg-emerald-50 text-emerald-600';
+                    } else if (res.type === 'video') {
+                      icon = 'video_library';
+                      iconBg = 'bg-rose-50 text-rose-600';
+                    }
+                    return (
+                      <Link 
+                        key={res.id} 
+                        to={"/resource/" + res.id} 
+                        className="flex gap-3 p-3 rounded-xl border border-slate-100 hover:border-cyan-200 hover:bg-cyan-50/30 transition-all duration-200 group cursor-pointer block"
+                      >
+                        <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 font-medium`}>
+                          <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-[13px] font-semibold text-slate-800 group-hover:text-cyan-700 transition-colors line-clamp-1 mb-0.5">
+                            {res.title}
+                          </h4>
+                          {res.description && (
+                            <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                              {res.description}
+                            </p>
+                          )}
+                          {res.knowledge_point && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-medium bg-slate-100 text-slate-600 rounded">
+                                {res.knowledge_point}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
-                <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
-                <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
-                  完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+              ) : (
+                /* Empty State */
+                <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
+                  <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
+                    <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                  </div>
+                  <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
+                  <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
+                    完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 

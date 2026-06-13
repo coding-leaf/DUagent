@@ -21,6 +21,19 @@
 ## 最近验证
 
 ### 2026-06-14
+- AIChat 聊天回答内嵌 Markdown Mermaid 代码块可视化渲染及 React 19 属性警告修复：
+  - 问题分析：
+    1. 大模型在回答正文中直接输出的 ````mermaid` 代码块，以往被作为常规的高亮文本代码块渲染，未将其转化为 SVG 关系图，导致页面上直接展示 Mermaid 源码。
+    2. React 19 开发环境下，`ReactMarkdown` 在自定义 `code` 渲染组件中带入的 AST 节点 `node` 属性在未剥离的情况下直接传给 DOM 元素，导致 `node="[object Object]"` 属性污染 DOM 并触发控制台警告。
+  - 修复：
+    1. 在 `ChatMessage.jsx` 的自定义 `code` 组件中，对非 inline 且语言为 `mermaid` 的代码块进行拦截，自动转换为 `MermaidDiagram` 可视化组件进行图形渲染。
+    2. 采用结构化参数提取：`code(codeProps)`，显式解构取出 `node`，并将剩余的 `rest` 属性传递给 `<SyntaxHighlighter>` 与 fallback `<code>`，完全消除了属性污染与警告。
+  - 契约说明：纯前端 Markdown 图解与渲染属性过滤，不涉及 API 契约机制变更，无契约漂移。
+  - 验证：
+    - `npm run lint` 通过。
+    - `npm run build` 成功。
+    - `npx playwright test e2e/specs.spec.js -g "AI Chat renders historical messages"` 通过。
+
 - AIChat 桌面端侧边栏收起后控制按钮丢失问题修复：
   - 问题分析：原 `<aside>` 侧边栏容器在折叠时被赋予了 `lg:overflow-hidden` / `xl:overflow-hidden`，由于绝对定位的折叠控制按钮悬浮在侧边栏容器边缘之外（具有负偏置 `right-[-12px]` / `left-[-12px]`），容器的 `overflow-hidden` 会直接把控制按钮裁剪隐藏，导致折叠后按钮消失，用户无法再次展开。
   - 修复：移除 `<aside>` 侧边栏本身在折叠时的 `overflow-hidden` 样式，使其保持溢出可见。同时在侧边栏内部引入一层自适应的 `<div className="w-full h-full overflow-hidden flex flex-col">` 包装容器，这样在宽度为 0 时能依然利用这层包装裁切隐藏侧边栏的正文，而绝对定位的按钮则因为外层可见而能正常悬浮显示并响应点击。

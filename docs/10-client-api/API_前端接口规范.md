@@ -1460,6 +1460,7 @@ POST /api/v1/tutoring/chat
 | knowledge_points | 引用的知识点列表 |
 | suggestion | 补充学习建议 + 相似例题推送 |
 | done | 本轮回答完成，携带 conversation_id |
+| review | （可选）在 done 之后异步发出；`{"type":"review","status":"flagged","reason":"<规则原因>"}` — status=flagged 表示该回答可能不准确，前端应标灰整条消息，原文保留。旧前端收到此事件可安全忽略。 |
 
 **`done` 事件 `data`：**
 

@@ -2120,7 +2120,7 @@
               "text/event-stream": {
                 "schema": {
                   "type": "string",
-                  "description": "事件类型: chunk / diagram / knowledge_points / suggestion / done"
+                  "description": "事件类型: chunk / diagram / knowledge_points / suggestion / done / review。review 事件在 done 之后异步发出，结构: {\"type\":\"review\",\"status\":\"flagged\",\"reason\":\"<规则原因>\"}，status=flagged 表示该回答可能不准确，前端应标灰提示，原文保留。"
                 }
               }
             }

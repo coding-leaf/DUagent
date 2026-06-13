@@ -183,6 +183,7 @@ def _build_knowledge_points(
     context: TutoringRetrievalContext,
     knowledge_point_names: list[str] | None = None,
 ) -> list[KnowledgePoint]:
+    # 1. 优先使用模型生成的 names
     if knowledge_point_names:
         return [
             KnowledgePoint(
@@ -192,17 +193,22 @@ def _build_knowledge_points(
             for name in knowledge_point_names[:3]
             if name
         ]
+        
+    # 2. 兜底 1: 真实图谱命中节点
     if context.matched_kg_nodes:
         return [
             KnowledgePoint(
-                name=str(node.get("name", "")),
-                chapter=str(node.get("chapter", "")),
+                name=node.get("name", "未知节点"),
+                chapter=node.get("chapter") or request.course_id if request.scope == "course" else None,
             )
             for node in context.matched_kg_nodes[:3]
-            if node.get("name")
         ]
+        
+    # 3. 兜底 2: Context 里自带的 Knowledge Points (旧逻辑兼容)
     if context.knowledge_points:
         return context.knowledge_points
+        
+    # 4. 兜底 3: Profile 薄弱/掌握项，或字面截断
     weak_points = request.user_profile.knowledge_weak
     mastered_points = request.user_profile.knowledge_mastered
     names = weak_points or mastered_points or [request.message[:20] or "当前问题"]

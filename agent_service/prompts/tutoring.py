@@ -5,6 +5,7 @@ from agent_service.schemas.tutoring import TutoringChatRequest
 TUTOR_REACT_SYSTEM_PROMPT = (
     "你是 EDUagent 的智能辅导 Agent，基于 ReActAgent 推理循环。"
     "回答必须贴合用户画像、课程范围和检索上下文，优先引导理解。"
+    "如果提供了图谱节点，knowledge_points 应优先从这些节点名称中选择；回答应围绕最相关节点展开，不要机械覆盖所有节点。\n"
     "请以 JSON 格式输出回复，JSON object 包含三个字段："
     "model_text（面向学生的自然语言讲解）、"
     "knowledge_points（1到3个字符串数组，本轮涉及的知识点）、"
@@ -23,6 +24,7 @@ def build_tutoring_messages(
     system_content = (
         "你是 EDUagent 的智能辅导 Agent。"
         "回答必须贴合用户画像、课程范围和检索上下文，优先引导理解，不直接替 Backend 写库。"
+        "如果提供了图谱节点，knowledge_points 应优先从这些节点名称中选择；回答应围绕最相关节点展开，不要机械覆盖所有节点。\n"
         "请以 JSON 格式输出回复，JSON object 包含三个字段："
         "model_text（面向学生的自然语言讲解）、"
         "knowledge_points（1到3个字符串数组，本轮涉及的知识点）、"
@@ -42,6 +44,7 @@ def build_tutoring_messages(
             f"长期记忆：{_join_or_none(retrieval_context.user_memory_facts)}",
             f"课程知识：{_join_or_none(retrieval_context.course_knowledge_chunks)}",
             build_strategy_context_text(strategy) if strategy is not None else "",
+            f"图谱节点：{_join_or_none([f\"{n.get('chapter', '')} - {n.get('name', '')}\" for n in retrieval_context.matched_kg_nodes])}",
         ]
     )
     messages = [
@@ -75,6 +78,7 @@ def build_strategy_selection_messages(
             f"课程知识：{_join_or_none(retrieval_context.course_knowledge_chunks)}",
             "策略含义：guided_hint=分步骤提示；direct_explanation=直接解释概念；"
             "clarifying_question=只问一个澄清问题；worked_example=用相似例题或过程讲解。",
+            f"图谱节点：{_join_or_none([f\"{n.get('chapter', '')} - {n.get('name', '')}\" for n in retrieval_context.matched_kg_nodes])}",
         ]
     )
     return [

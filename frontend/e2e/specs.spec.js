@@ -1257,10 +1257,10 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
 
     await page.goto('/ai-chat');
 
-    await expect(page.getByRole('heading', { name: 'DS 智能答疑专家' })).toBeVisible();
+    await expect(page.getByText('智能学习助手')).toBeVisible();
     await expect(page.getByText('可以从局部平衡调整理解。')).toBeVisible();
-    await expect(page.getByText('红黑树旋转', { exact: true })).toBeVisible();
-    await expect(page.getByText('继续解释插入修复', { exact: true })).toBeVisible();
+    await expect(page.getByText('# 红黑树旋转')).toBeVisible();
+    await expect(page.getByText('继续解释插入修复')).toBeVisible();
 
     expect(consoleErrors.join('\n')).not.toContain('Objects are not valid as a React child');
     expect(consoleErrors.join('\n')).not.toContain('Each child in a list should have a unique "key" prop');

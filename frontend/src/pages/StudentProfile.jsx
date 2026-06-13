@@ -8,6 +8,29 @@ import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 
+const PROFILE_VALUE_LABELS = {
+  exam_sprint: '备考冲刺',
+  daily_homework: '每日作业',
+  casual: '兴趣驱动',
+  video_animation: '视频动画',
+  chart_logic: '图表逻辑',
+  text_analysis: '文本分析',
+  code_practice: '代码实操',
+  formula_derivation: '公式推导',
+  L1: 'L1 · 启发点拨',
+  L2: 'L2 · 伴学拆解',
+  L3: 'L3 · 保姆生成',
+  starter: '入门起步',
+  active: '稳定学习',
+  focused: '高频投入',
+};
+
+const PROFILE_EMPTY_TEXT = {
+  weak_points: '暂无错题或评测记录',
+  knowledge_progress: '暂无评测记录',
+  discipline: '暂无连续学习记录',
+};
+
 export default function StudentProfile() {
   const navigate = useNavigate();
   const { activeCourseId, courses } = useCourse();
@@ -197,6 +220,7 @@ export default function StudentProfile() {
 
   // 当前课程名：从 CourseContext 按 activeCourseId 查找
   const currentCourseName = courses.find(c => c.id === activeCourseId)?.name || '未选择';
+  const courseNameById = (courseId) => courses.find(c => c.id === courseId)?.name || '';
   const profileFields = [
     { label: '学号 / 工号', value: user?.student_id || '未填写' },
     { label: '专业', value: user?.major || '未填写' },
@@ -215,6 +239,26 @@ export default function StudentProfile() {
   const guidanceUpdatedText = guidance_level.updated_at
     ? daysAgoText(guidance_level.updated_at, '')
     : null;
+
+  const isOpaqueId = (value) => (
+    typeof value === 'string' && /^[a-f0-9]{16,32}$/i.test(value)
+  );
+
+  const labelValue = (value) => PROFILE_VALUE_LABELS[value] || value;
+
+  const displayCourseSubject = (subject) => {
+    if (!subject) return '';
+    if (subject === activeCourseId) return currentCourseName;
+    const matchedCourseName = courseNameById(subject);
+    if (matchedCourseName) return matchedCourseName;
+    return isOpaqueId(subject) ? '' : subject;
+  };
+
+  const disciplineBadgeView = {
+    subject: displayCourseSubject(discipline_badge.subject),
+    level: labelValue(discipline_badge.level),
+    streakDays: Number(discipline_badge.streak_days || 0),
+  };
 
   const handleGuidanceChange = async (level) => {
     if (guidanceSubmitting || localGuidanceLevel === level) return;
@@ -238,17 +282,36 @@ export default function StudentProfile() {
     }
   };
 
-  const formatDimensionValue = (value) => {
+  const formatDisciplineDimension = (value) => {
+    if (!value || typeof value !== 'object') return PROFILE_EMPTY_TEXT.discipline;
+
+    const parts = [];
+    const subject = displayCourseSubject(value.subject);
+    const level = labelValue(value.level);
+    const streakDays = Number(value.streak_days || 0);
+
+    if (level) parts.push(`状态：${level}`);
+    if (subject) parts.push(`课程：${subject}`);
+    if (streakDays > 0) parts.push(`连续学习 ${streakDays} 天`);
+
+    return parts.join(' · ') || PROFILE_EMPTY_TEXT.discipline;
+  };
+
+  const formatDimensionValue = (value, key) => {
+    if (key === 'discipline') return formatDisciplineDimension(value);
+    if (key === 'knowledge_progress' && !value) return PROFILE_EMPTY_TEXT.knowledge_progress;
+
     if (Array.isArray(value)) {
-      return value.filter(Boolean).join('、') || '待补充';
+      return value.filter(Boolean).map(labelValue).join('、') || PROFILE_EMPTY_TEXT[key] || '待补充';
     }
     if (value && typeof value === 'object') {
       const meaningful = Object.entries(value)
         .filter(([, itemValue]) => itemValue !== '' && itemValue !== null && itemValue !== undefined)
-        .map(([key, itemValue]) => `${key}: ${itemValue}`);
-      return meaningful.join(' / ') || '待补充';
+        .map(([itemKey, itemValue]) => `${itemKey}: ${labelValue(itemValue)}`);
+      return meaningful.join(' / ') || PROFILE_EMPTY_TEXT[key] || '待补充';
     }
-    return value || '待补充';
+    if (value === 0) return '0';
+    return labelValue(value) || PROFILE_EMPTY_TEXT[key] || '待补充';
   };
 
   const sourceLabel = (source) => ({
@@ -337,9 +400,9 @@ export default function StudentProfile() {
             <div className="flex-1">
               <div className="flex items-center gap-4 mb-2">
                 <h1 className="font-h1 text-3xl text-on-surface">{displayName}</h1>
-                {discipline_badge.level && discipline_badge.subject ? (
+                {discipline_badge.level ? (
                   <span className="bg-amber-50 text-amber-700 text-xs px-4 py-1 rounded-full font-bold uppercase tracking-wider border border-amber-200">
-                    学科勋章：{discipline_badge.subject} · {discipline_badge.level}
+                    学科勋章：{disciplineBadgeView.subject ? `${disciplineBadgeView.subject} · ` : ''}{disciplineBadgeView.level}
                   </span>
                 ) : (
                   <span className="bg-slate-100 text-slate-400 text-xs px-4 py-1 rounded-full">学科勋章：—</span>
@@ -397,7 +460,7 @@ export default function StudentProfile() {
                         </span>
                       </div>
                       <p className="text-sm text-on-surface font-semibold leading-6">
-                        {formatDimensionValue(dimension.value)}
+                        {formatDimensionValue(dimension.value, dimension.key)}
                       </p>
                     </div>
                   ))}
@@ -641,9 +704,9 @@ export default function StudentProfile() {
                 <span className="px-3 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg text-sm font-bold border border-cyan-100">
                   {{
                     exam_sprint: '备考冲刺',
-                    daily_homework: '日常作业',
+                    daily_homework: '每日作业',
                     casual: '兴趣驱动',
-                  }[drive_intent.type] || drive_intent.type}
+                  }[drive_intent.type] || labelValue(drive_intent.type)}
                 </span>
                 <div className="flex-1">
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -657,7 +720,7 @@ export default function StudentProfile() {
             {/* 学科勋章 */}
             <div className="border-t border-slate-100 pt-6">
               <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-3">学科勋章</p>
-              {discipline_badge.subject && discipline_badge.level ? (
+              {discipline_badge.level ? (
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center border-4 border-amber-200">
                     <span className="material-symbols-outlined text-2xl text-amber-600" style={{ fontVariationSettings: '"FILL" 1' }}>
@@ -666,10 +729,10 @@ export default function StudentProfile() {
                   </div>
                   <div>
                     <p className="font-bold text-on-surface">
-                      学科勋章：{discipline_badge.subject} · {discipline_badge.level}
+                      学科勋章：{disciplineBadgeView.subject ? `${disciplineBadgeView.subject} · ` : ''}{disciplineBadgeView.level}
                     </p>
                     <p className="text-sm text-slate-500 mt-1">
-                      连续打卡 <span className="text-amber-600 font-bold">{discipline_badge.streak_days}</span> 天
+                      连续学习 <span className="text-amber-600 font-bold">{disciplineBadgeView.streakDays}</span> 天
                     </p>
                   </div>
                 </div>

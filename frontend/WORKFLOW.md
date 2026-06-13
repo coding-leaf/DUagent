@@ -350,6 +350,15 @@
 - **契约**: 本批只新增响应字段并补齐 Agent 内部路由，未删除既有字段；正式 OpenAPI 在上一批画像闭环中已同步，本批未继续扩大契约文档修改。
 - **Commits**: `a09ef6b`、`c5ad3fd`、`55d4026`、`d6b2cb6`、`b47bfc1`。
 
+## 2026-06-13 学生画像展示降噪
+
+- **问题**: `GET /profile` 已能返回课程画像，但个人资料页会直接展示内部枚举和结构字段，例如 `daily_homework`、`code_practice`、`L1`、`starter` 以及 `subject: 课程ID`。
+- **方案**: 仅在前端渲染层做字段翻译和降噪，不改接口、不改后端数据；画像刷新仍走静默 `POST /profile/refresh` + `GET /tasks/{task_id}`。
+- **改动**:
+  - `src/pages/StudentProfile.jsx`: 新增画像枚举中文映射；六维画像按维度 key 友好渲染；学习纪律对象显示为“状态 / 课程 / 连续学习天数”；课程 ID 优先映射为当前课程名，无法识别的裸 ID 不展示。
+- **验证**: `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: 无 OpenAPI 变更；无新增字段、无删除字段。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

@@ -486,3 +486,9 @@
 5. **git commit 信息**：已提交。commit hash `9f00ab3`。
 6. **剩余风险**：需要在有数据的环境下实际运行探针工具来验证 Qdrant 和 Agent 组合的行为，目前仅测试了工具能成功加载及请求装配。
 7. **下一步建议**：根据计划进入实际检索效果的联调或执行下一个任务。
+
+### 2026-06-14 修复 AI 对话框代码渲染问题
+- **状态**: 已完成
+- **内容**: 修复 AI 响应返回 JSON 时，`getDisplayText` 无法正确提取 `model_text` 导致直接渲染 JSON 字符串（进而使得 markdown 代码块换行失效和语法高亮失效）的问题。
+- **文件**: `src/pages/AIChat.jsx`, `src/components/chat/ChatMessage.jsx`
+- **测试**: 运行 `npm run lint` 通过，已确认语法正常。

@@ -137,6 +137,18 @@ _（当前无占位接口）_
 
 ## 最近状态变更
 
+- `2026-06-13` `Admin 保底题库生题拆分兜底`
+  - **根因**：真实父 `quiz_generation` 任务 `852bd3532a9d448a` 显示 `20` 个节点中 `4` 成功、`16` 失败，失败子任务均为 `skeleton_rejected`；这说明修正 quality gate 后，主要瓶颈已前移到 Agent 单次混合生成 `7` 题时未产出有效题。
+  - **完成**：`_generate_quiz_for_child()` 保留原始 `7` 题批量请求；当批量返回全骨架 / 无有效题时，改为拆成 `single_choice count=3` 与 `multi_choice count=4` 两次请求，分别过滤骨架后落库。只要拆分后有有效题，该 KG 节点不再被整节点判失败。
+  - **完成**：多选标准答案落库改为逗号分隔格式（如 `A,C`），避免 Python list 字符串进入后续判分链路；现有 `quiz_service` 判分已兼容逗号分隔。
+  - **测试维护**：题库生成子任务测试改为 patch `quiz_agent_client.post_json`，避免误调用真实 Agent Service。
+  - **验证**：
+    - RED：`test_admin_catalog_quiz_child_splits_large_mixed_request_when_batch_returns_skeleton` 修复前失败为 `failed != completed`。
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_quiz_generation_split_red?charset=utf8mb4 PYTHONDONTWRITEBYTECODE=1 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py -q -p no:cacheprovider`：28 passed。
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/quiz_answer_format_regression?charset=utf8mb4 PYTHONDONTWRITEBYTECODE=1 ../.venv/bin/python -m pytest tests/test_quiz_async.py -q -p no:cacheprovider`：1 passed。
+  - **契约**：Client API 契约改变：`否` / Agent API 契约改变：`否`。仅改变 Backend 对既有 Agent 端点的调用粒度。
+  - **剩余风险**：拆分请求会增加 Agent 调用次数；如果单题型小批次仍返回骨架，该节点仍会失败。后续若真实成功率仍不足，再评估 Agent 侧单题重试或提示词/结构化输出调整。
+
 - `2026-06-11` `KG 资源 metadata 对齐真实探针阻塞记录`
   - **尝试**：检查真实 C 语言 catalog `b2444963f0e54587` 与绑定课程 `6c698badb60a4809`，Agent Service `8002` 健康，active KG 为 `27c3acb1e98a49d1`、`version=3`、`route_a_prune_usable_060`、`108` nodes / `100` edges。
   - **阻塞**：catalog 当前 `status=ready`、`knowledge_status=dirty`、`chunk_count=665`；Admin 资源生成接口要求 `knowledge_status in {"ready","partial"}`，因此不会进入 KG-node 默认资源生成分支。

@@ -266,7 +266,7 @@ async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {
             "questions": [
                 {
@@ -293,6 +293,119 @@ async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_
         ).scalars().all()
         assert len(questions) == 1
         assert questions[0].content == "关于 printf 的格式控制字符串，下列说法哪项正确？"
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_quiz_child_splits_large_mixed_request_when_batch_returns_skeleton():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+    child_id = "quiz-child-split-fallback"
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id=child_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                course_id=class_id,
+                result={
+                    "catalog_id": catalog_id,
+                    "agent_course_id": catalog_id,
+                    "node_name": "输入输出函数",
+                    "chapter": "第7章 输入输出",
+                    "course_ids": [class_id],
+                },
+            )
+        )
+        await db.commit()
+
+    skeleton_batch = {
+        "questions": [
+            {
+                "type": "single_choice",
+                "content": "第 1 题：请围绕输入输出函数完成一道单选题。",
+                "options": [
+                    {"key": "A", "text": "正确表述"},
+                    {"key": "B", "text": "易混淆表述"},
+                    {"key": "C", "text": "相关补充表述"},
+                    {"key": "D", "text": "无关表述"},
+                ],
+                "answer": "A",
+                "explanation": "本题用于检查对输入输出函数的基础理解。",
+            }
+        ]
+    }
+    single_batch = {
+        "questions": [
+            {
+                "type": "single_choice",
+                "content": f"关于 printf 格式控制的单选题 {index}，下列说法哪项正确？",
+                "options": [
+                    {"key": "A", "text": "%d 可用于输出十进制整数"},
+                    {"key": "B", "text": "%d 用于输出字符串"},
+                    {"key": "C", "text": "printf 不需要格式控制"},
+                    {"key": "D", "text": "格式控制符只能写在参数末尾"},
+                ],
+                "answer": "A",
+                "explanation": "printf 会按照格式控制字符串解释后续参数。",
+            }
+            for index in range(1, 4)
+        ]
+    }
+    multi_batch = {
+        "questions": [
+            {
+                "type": "multi_choice",
+                "content": f"关于 scanf 与 printf 的多选题 {index}，哪些说法正确？",
+                "options": [
+                    {"key": "A", "text": "scanf 读取输入时需要匹配格式控制符"},
+                    {"key": "B", "text": "printf 输出时完全不使用格式控制符"},
+                    {"key": "C", "text": "printf 的格式控制字符串会影响输出形式"},
+                    {"key": "D", "text": "scanf 的地址参数总是可以省略"},
+                ],
+                "answer": ["A", "C"],
+                "explanation": "scanf 和 printf 都依赖格式控制字符串处理输入输出。",
+            }
+            for index in range(1, 5)
+        ]
+    }
+
+    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        mock_agent.side_effect = [skeleton_batch, single_batch, multi_batch]
+        from app.api.v1.catalogs import _generate_quiz_for_child
+
+        async with async_session_factory() as db:
+            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            await db.commit()
+
+    assert result["status"] == "completed"
+    assert result["question_count"] == 7
+    assert mock_agent.await_count == 3
+    first_payload = mock_agent.await_args_list[0].args[1]
+    second_payload = mock_agent.await_args_list[1].args[1]
+    third_payload = mock_agent.await_args_list[2].args[1]
+    assert first_payload["count"] == 7
+    assert second_payload["question_types"] == ["single_choice"]
+    assert second_payload["count"] == 3
+    assert third_payload["question_types"] == ["multi_choice"]
+    assert third_payload["count"] == 4
+    async with async_session_factory() as db:
+        questions = (
+            await db.execute(
+                select(QuizQuestion)
+                .where(QuizQuestion.course_id == class_id, QuizQuestion.is_deleted == False)
+                .order_by(QuizQuestion.type.asc(), QuizQuestion.content.asc())
+            )
+        ).scalars().all()
+    assert len(questions) == 7
+    assert [q.type for q in questions].count("single_choice") == 3
+    assert [q.type for q in questions].count("multi_choice") == 4
+    multi_question = next(q for q in questions if q.type == "multi_choice")
+    assert multi_question.correct_answer == "A,C"
 
 
 @pytest.mark.asyncio
@@ -323,7 +436,7 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_questions():
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {
             "questions": [
                 {
@@ -378,7 +491,7 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_string_options
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {
             "questions": [
                 {

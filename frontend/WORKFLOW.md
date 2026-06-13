@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+- 2026-06-13：Admin 保底题库拆分请求兜底：
+  - 根因确认：最新真实父任务 `852bd3532a9d448a` 为 `partial`，`20` 个节点中 `4` 成功、`16` 个子任务因 `skeleton_rejected` 失败；失败点已不在前端数量或 quality gate，而是 Agent 单节点一次生成 `7` 题时未产出有效题，降级骨架后被 Backend 过滤。
+  - 修复：Backend 保留原单节点 `7` 题批量请求；当批量结果全为骨架 / 无有效题时，自动拆成 `single_choice count=3` 与 `multi_choice count=4` 两次小请求，分别过滤骨架后落库；多选答案落库改为稳定逗号格式（如 `A,C`），避免 Python list 字符串进入判分链路。
+  - 契约说明：未改变 Client API 路径、请求体、响应字段、任务类型或状态枚举；未改变 Agent API 路径或字段，仅调整 Backend 调用粒度。
+  - 验证：
+    - Backend RED：新增 `test_admin_catalog_quiz_child_splits_large_mixed_request_when_batch_returns_skeleton`，修复前按预期失败（当前实现直接 `skeleton_rejected`）。
+    - Backend MySQL `tests/test_admin_catalog_resource_generation.py` 28/28 passed。
+    - Backend MySQL `tests/test_quiz_async.py` 1/1 passed。
 - 2026-06-13：Quiz 前端题型渲染收口（单选/多选）：
   - 根因确认：`Quiz.jsx` 原先把所有题都按单选处理，题型标签只识别 `single_choice`，答案状态固定为单值，选项控件固定为 `radio`；因此保底题库里的 `multi_choice` 题虽然能被后端返回，但前端不能正确作答。
   - 修复：新增 `src/components/quiz/` 下的题型分发层，`QuestionRenderer` 按 `question.type` 分发到 `SingleChoiceQuestionCard`、`MultiChoiceQuestionCard` 或 `UnsupportedQuestionCard`；`Quiz.jsx` 的答案状态改为按题型保存 `string | string[]`，提交时原样透传；取题 `useEffect` 补入 `node_id` 依赖，并在切题时重置题目索引和答案状态。

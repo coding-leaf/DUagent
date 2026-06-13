@@ -40,6 +40,8 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024
 RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
 KG_RESOURCE_TARGET_LIMIT = 10
 QUIZ_GENERATION_CONCURRENCY = 2
+QUIZ_BASELINE_SINGLE_COUNT = 3
+QUIZ_BASELINE_MULTI_COUNT = 4
 HOST_COURSE_NAME_PREFIX = "[KG HOST] "
 COURSE_NAME_MAX_LENGTH = 100
 
@@ -1452,28 +1454,14 @@ async def _generate_quiz_for_child(
     course_ids = child_data.get("course_ids") or fanout_course_ids
     agent_course_id = child_data.get("agent_course_id") or child_data.get("catalog_id") or child.course_id or ""
 
-    payload = {
-        "task_id": child.id,
-        "user_id": child.user_id or "",
-        "course_id": agent_course_id,
-        "class_course_ids": course_ids,
-        "chapter": chapter,
-        "knowledge_point": node_name,
-        "question_types": [
-            "single_choice", "single_choice", "single_choice",
-            "multi_choice", "multi_choice", "multi_choice", "multi_choice",
-        ],
-        "count": 7,
-        "difficulty": "medium",
-        "source": "baseline",
-    }
-
     try:
-        data = await quiz_agent_client.post_json(
-            "/agent/v1/assessment/generate-questions",
-            payload,
+        questions = await _generate_baseline_quiz_questions(
+            child=child,
+            agent_course_id=agent_course_id,
+            course_ids=course_ids,
+            chapter=chapter,
+            node_name=node_name,
         )
-        questions = data.get("questions") if isinstance(data, dict) else []
         new_questions: list[QuizQuestion] = []
         inserted_question_ids: list[str] = []
         for cid in course_ids:
@@ -1493,7 +1481,7 @@ async def _generate_quiz_for_child(
                     difficulty="medium",
                     content=q.get("content", ""),
                     options=q.get("options", []),
-                    correct_answer=str(q.get("answer", "")),
+                    correct_answer=_format_quiz_answer(q.get("answer", "")),
                     explanation=q.get("explanation", ""),
                 ))
         if not new_questions:
@@ -1535,6 +1523,96 @@ async def _generate_quiz_for_child(
         child.error_message = str(e)[:500]
         child.completed_at = _now_utc()
         return {"status": "failed", "error": str(e)[:500]}
+
+
+def _build_baseline_quiz_payload(
+    *,
+    child: AsyncTask,
+    agent_course_id: str,
+    course_ids: list[str],
+    chapter: str,
+    node_name: str,
+    question_types: list[str],
+    count: int,
+) -> dict:
+    return {
+        "task_id": child.id,
+        "user_id": child.user_id or "",
+        "course_id": agent_course_id,
+        "class_course_ids": course_ids,
+        "chapter": chapter,
+        "knowledge_point": node_name,
+        "question_types": question_types,
+        "count": count,
+        "difficulty": "medium",
+        "source": "baseline",
+    }
+
+
+async def _request_baseline_quiz_questions(payload: dict) -> list[dict]:
+    data = await quiz_agent_client.post_json(
+        "/agent/v1/assessment/generate-questions",
+        payload,
+    )
+    questions = data.get("questions") if isinstance(data, dict) else []
+    if not isinstance(questions, list):
+        return []
+    return [question for question in questions if isinstance(question, dict)]
+
+
+async def _generate_baseline_quiz_questions(
+    *,
+    child: AsyncTask,
+    agent_course_id: str,
+    course_ids: list[str],
+    chapter: str,
+    node_name: str,
+) -> list[dict]:
+    bulk_payload = _build_baseline_quiz_payload(
+        child=child,
+        agent_course_id=agent_course_id,
+        course_ids=course_ids,
+        chapter=chapter,
+        node_name=node_name,
+        question_types=(["single_choice"] * QUIZ_BASELINE_SINGLE_COUNT)
+        + (["multi_choice"] * QUIZ_BASELINE_MULTI_COUNT),
+        count=QUIZ_BASELINE_SINGLE_COUNT + QUIZ_BASELINE_MULTI_COUNT,
+    )
+    questions = await _request_baseline_quiz_questions(bulk_payload)
+    if _non_skeleton_quiz_questions(questions):
+        return questions
+
+    split_questions: list[dict] = []
+    for question_type, count in (
+        ("single_choice", QUIZ_BASELINE_SINGLE_COUNT),
+        ("multi_choice", QUIZ_BASELINE_MULTI_COUNT),
+    ):
+        payload = _build_baseline_quiz_payload(
+            child=child,
+            agent_course_id=agent_course_id,
+            course_ids=course_ids,
+            chapter=chapter,
+            node_name=node_name,
+            question_types=[question_type],
+            count=count,
+        )
+        batch_questions = await _request_baseline_quiz_questions(payload)
+        split_questions.extend(_non_skeleton_quiz_questions(batch_questions))
+    return split_questions
+
+
+def _non_skeleton_quiz_questions(questions: list[dict]) -> list[dict]:
+    return [
+        question
+        for question in questions
+        if isinstance(question, dict) and not _is_skeleton_quiz_question(question)
+    ]
+
+
+def _format_quiz_answer(answer) -> str:
+    if isinstance(answer, list):
+        return ",".join(str(item).strip() for item in answer if str(item).strip())
+    return str(answer or "").strip()
 
 
 def _quiz_option_text(option) -> str:

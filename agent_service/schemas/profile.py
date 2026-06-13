@@ -90,3 +90,20 @@ class ProfileData(BaseModel):
 
 class ProfileGenerateResponse(ApiResponse[ProfileData]):
     pass
+
+
+class ProfileDialogueUpdateRequest(BaseModel):
+    user_id: str = Field(..., description="用户 ID")
+    course_id: str = Field(..., description="课程 ID")
+    message: str = Field(..., min_length=1, max_length=1000, description="学生补充文本")
+
+
+class ProfileDialogueUpdateData(BaseModel):
+    learning_goal: str | None = Field(None, description="自然语言学习目标")
+    weak_points: list[str] = Field(default_factory=list, description="学生自述薄弱点")
+    preferred_resources: list[str] = Field(default_factory=list, description="资源偏好键")
+    guidance_level: GuidanceLevel | None = Field(None, description="可选引导粒度")
+
+
+class ProfileDialogueUpdateResponse(ApiResponse[ProfileDialogueUpdateData]):
+    pass

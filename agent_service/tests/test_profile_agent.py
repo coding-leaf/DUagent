@@ -309,6 +309,35 @@ def test_profile_api_endpoint_falls_back_to_rule_on_llm_none() -> None:
     assert response.data.modal_preference == rule_result.modal_preference
 
 
+def test_profile_dialogue_update_extracts_goal_weak_points_and_preferences() -> None:
+    from agent_service.api.v1.profile import update_profile_by_dialogue
+    from agent_service.schemas.profile import ProfileDialogueUpdateRequest
+
+    response = asyncio.run(
+        update_profile_by_dialogue(
+            ProfileDialogueUpdateRequest(
+                user_id="student-1",
+                course_id="course-c",
+                message="我想两周内补齐 C 语言指针和动态内存分配，最好多给代码练习和图解。",
+            )
+        )
+    )
+
+    assert response.code == 200
+    assert response.data.learning_goal == "我想两周内补齐 C 语言指针和动态内存分配，最好多给代码练习和图解。"
+    assert "动态内存分配" in response.data.weak_points
+    assert "code_practice" in response.data.preferred_resources
+    assert "chart_logic" in response.data.preferred_resources
+
+
+def test_profile_dialogue_update_route_is_in_openapi() -> None:
+    from agent_service.main import app
+
+    schema = app.openapi()
+
+    assert "/agent/v1/profile/dialogue-update" in schema["paths"]
+
+
 def _build_request() -> ProfileGenerateRequest:
     return ProfileGenerateRequest(
         user_id="user-1",

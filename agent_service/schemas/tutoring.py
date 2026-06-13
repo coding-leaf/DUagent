@@ -80,7 +80,13 @@ class DoneEvent(BaseModel):
     suggested_exercises: list[SuggestedExercise] = Field(default_factory=list, description="推送的相似例题")
 
 
-TutoringSSEEvent = ChunkEvent | DiagramEvent | KnowledgePointsEvent | SuggestionEvent | DoneEvent
+class ReviewEvent(BaseModel):
+    type: Literal["review"] = "review"
+    status: Literal["flagged"] = Field(..., description="审查结论；flagged 表示该回答可能不准确")
+    reason: str = Field(..., description="审查判定原因，如 off_topic / empty_response / missing_clarifying_question")
+
+
+TutoringSSEEvent = ChunkEvent | DiagramEvent | KnowledgePointsEvent | SuggestionEvent | DoneEvent | ReviewEvent
 
 
 class SSEEventMessage(BaseModel):

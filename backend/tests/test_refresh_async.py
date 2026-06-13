@@ -15,6 +15,7 @@ import os
 import time
 import uuid
 from unittest.mock import AsyncMock, patch
+import pytest
 
 # Override to match local MySQL port (Docker default 3306, .env may differ)
 os.environ["DATABASE_URL"] = os.environ.get(
@@ -25,7 +26,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.session import async_session_factory
+from app.db.base import Base
+from app.db.session import async_session_factory, engine
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.models.user import RegistrationCode
@@ -74,7 +76,12 @@ async def _poll_task(client, task_id, headers, timeout=15):
     return None
 
 
+@pytest.mark.asyncio
 async def test():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+
     transport = ASGITransport(app=app)
     ok = fail = 0
 
@@ -86,6 +93,7 @@ async def test():
             ok += 1
         else:
             fail += 1
+            assert cond, name
         return cond
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -163,9 +171,83 @@ async def test():
                 result and "50301" in str(result.get("error_code", "")))
 
         # =============================================
-        # 3. evaluation/refresh success
+        # 3. profile/dialogue-update success
         # =============================================
-        print("\n-- 3. evaluation/refresh success --")
+        print("\n-- 3. profile/dialogue-update success --")
+        with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+            mock_agent.return_value = {
+                "learning_goal": "准备期末考试，重点学习 C 语言指针",
+                "learning_preferences": ["代码例子", "图解"],
+                "weak_points": ["动态内存分配"],
+                "drive_intent": "exam_cram",
+            }
+            r = await client.post(
+                "/api/v1/profile/dialogue-update",
+                headers=headers,
+                json={
+                    "course_id": course_id,
+                    "message": "我正在学 C 语言指针，准备期末考试，喜欢代码例子和图解，不太理解动态内存分配。",
+                },
+            )
+            chk("dialogue-update → 200", r.status_code == 200)
+            body = r.json().get("data", {})
+            chk("dialogue-update → profile source",
+                body.get("sources", {}).get("learning_goal") == "profile_dialogue")
+            payload = mock_agent.await_args.args[1] if mock_agent.await_args else {}
+            chk("dialogue-update → agent course_id", payload.get("course_id") == course_id)
+
+            async with async_session_factory() as db:
+                pf_r = await db.execute(
+                    select(UserProfile).where(
+                        UserProfile.course_id == course_id,
+                        UserProfile.is_deleted == False,
+                    )
+                )
+                pf = pf_r.scalars().first()
+                chk("dialogue-update → persisted goal",
+                    pf and pf.drive_intent.get("learning_goal") == "准备期末考试，重点学习 C 语言指针")
+                chk("dialogue-update → persisted weak point",
+                    pf and any(item.get("name") == "动态内存分配" for item in pf.cognitive_blindspots))
+
+        # =============================================
+        # 4. profile/dialogue-update Agent failure
+        # =============================================
+        print("\n-- 4. profile/dialogue-update Agent failure --")
+        async with async_session_factory() as db:
+            before_r = await db.execute(
+                select(UserProfile).where(
+                    UserProfile.course_id == course_id,
+                    UserProfile.is_deleted == False,
+                )
+            )
+            before_profile = before_r.scalars().first()
+            before_goal = (before_profile.drive_intent or {}).get("learning_goal") if before_profile else None
+
+        with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+            mock_agent.side_effect = AgentServiceError(
+                message="dialogue parse failed", status_code=502, agent_code=50210)
+            r = await client.post(
+                "/api/v1/profile/dialogue-update",
+                headers=headers,
+                json={"course_id": course_id, "message": "解析失败案例"},
+            )
+            chk("dialogue-update Agent error → 502", r.status_code == 502)
+
+        async with async_session_factory() as db:
+            after_r = await db.execute(
+                select(UserProfile).where(
+                    UserProfile.course_id == course_id,
+                    UserProfile.is_deleted == False,
+                )
+            )
+            after_profile = after_r.scalars().first()
+            after_goal = (after_profile.drive_intent or {}).get("learning_goal") if after_profile else None
+            chk("dialogue-update Agent error → no overwrite", after_goal == before_goal)
+
+        # =============================================
+        # 5. evaluation/refresh success
+        # =============================================
+        print("\n-- 5. evaluation/refresh success --")
         with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {
                 "progress_table": {"columns": [], "rows": []},
@@ -196,9 +278,9 @@ async def test():
                 chk("eval/refresh → DB record written", ev_r.scalars().first() is not None)
 
         # =============================================
-        # 4. evaluation/refresh Agent failure
+        # 6. evaluation/refresh Agent failure
         # =============================================
-        print("\n-- 4. evaluation/refresh Agent failure --")
+        print("\n-- 6. evaluation/refresh Agent failure --")
         with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="eval failed", status_code=500, agent_code=50001)
@@ -211,9 +293,9 @@ async def test():
                 result and "50001" in str(result.get("error_code", "")))
 
         # =============================================
-        # 5. learning-path/refresh success
+        # 7. learning-path/refresh success
         # =============================================
-        print("\n-- 5. learning-path/refresh success --")
+        print("\n-- 7. learning-path/refresh success --")
         with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {
                 "nodes": [{"id": "n1", "name": "Intro", "status": "pending", "mastery": 0, "order": 0}],
@@ -243,9 +325,9 @@ async def test():
                 chk("lp/refresh → DB record written", lp_r.scalars().first() is not None)
 
         # =============================================
-        # 6. learning-path/refresh Agent failure
+        # 8. learning-path/refresh Agent failure
         # =============================================
-        print("\n-- 6. learning-path/refresh Agent failure --")
+        print("\n-- 8. learning-path/refresh Agent failure --")
         with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="lp failed", status_code=500, agent_code=50002)

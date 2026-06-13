@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +35,11 @@ _default_profile = {
 }
 
 
+class ProfileDialogueUpdateRequest(BaseModel):
+    course_id: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=1000)
+
+
 async def _acquire_profile_lock(db: AsyncSession, user_id: str, course_id: str) -> str:
     """Acquire a MySQL named lock for serializing profile writes."""
     lock_name = f"profile_{user_id}_{course_id}"
@@ -55,12 +61,144 @@ async def _release_profile_lock(db: AsyncSession, lock_name: str) -> None:
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
+def _as_list(value) -> list:
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def _dedupe_limit(items: list, limit: int = 10) -> list:
+    seen: set[str] = set()
+    result = []
+    for item in items:
+        if isinstance(item, dict):
+            key = str(item.get("name") or item.get("point") or item)
+        else:
+            key = str(item)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _merge_dialogue_profile(pf: UserProfile, extracted: dict) -> dict:
+    now = datetime.now(timezone.utc)
+    learning_goal = extracted.get("learning_goal")
+    weak_points = _as_list(extracted.get("weak_points") or extracted.get("cognitive_blindspots"))
+    preferred_resources = _as_list(extracted.get("preferred_resources"))
+    guidance_level = extracted.get("guidance_level")
+
+    drive_intent = dict(pf.drive_intent or _default_profile["drive_intent"])
+    if learning_goal:
+        drive_intent["learning_goal"] = str(learning_goal)
+        drive_intent["source"] = "profile_dialogue"
+
+    blindspots = list(pf.cognitive_blindspots or [])
+    blindspots.extend(
+        {
+            "name": str(point),
+            "source": "profile_dialogue",
+            "updated_at": now.isoformat(),
+        }
+        for point in weak_points
+        if point
+    )
+
+    modal_preference = dict(pf.modal_preference or _default_profile["modal_preference"])
+    for resource in preferred_resources:
+        key = str(resource)
+        if key:
+            modal_preference[key] = max(int(modal_preference.get(key, 50)), 70)
+
+    if guidance_level:
+        pf.guidance_level_current = str(guidance_level)
+        pf.guidance_level_updated_at = now
+
+    pf.drive_intent = drive_intent
+    pf.cognitive_blindspots = _dedupe_limit(blindspots)
+    pf.modal_preference = modal_preference
+    pf.generated_at = now
+
+    return {
+        "learning_goal": learning_goal,
+        "weak_points": weak_points,
+        "preferred_resources": preferred_resources,
+        "guidance_level": guidance_level,
+    }
+
+
+def _resource_preference_summary(modal_preference: dict) -> str:
+    if not modal_preference:
+        return "暂无明显资源偏好"
+    ordered = sorted(modal_preference.items(), key=lambda item: item[1] if isinstance(item[1], (int, float)) else 0, reverse=True)
+    return "、".join(str(name) for name, score in ordered[:3] if isinstance(score, (int, float)))
+
+
+def _profile_dimensions(profile: dict) -> list[dict]:
+    drive_intent = profile.get("drive_intent") or {}
+    blindspots = profile.get("cognitive_blindspots") or []
+    modal_preference = profile.get("modal_preference") or {}
+    knowledge_coordinates = profile.get("knowledge_coordinates") or []
+    discipline_badge = profile.get("discipline_badge") or {}
+    guidance_level = profile.get("guidance_level") or {}
+
+    weak_source = "profile_dialogue" if any(
+        isinstance(item, dict) and item.get("source") == "profile_dialogue"
+        for item in blindspots
+    ) else ("evaluation" if blindspots else "system_pending")
+
+    return [
+        {
+            "key": "learning_goal",
+            "label": "学习目标",
+            "value": drive_intent.get("learning_goal") or drive_intent.get("type") or "待补充",
+            "source": drive_intent.get("source") or "system_profile",
+        },
+        {
+            "key": "weak_points",
+            "label": "薄弱点",
+            "value": [item.get("name") if isinstance(item, dict) else item for item in blindspots],
+            "source": weak_source,
+        },
+        {
+            "key": "resource_preference",
+            "label": "资源偏好",
+            "value": _resource_preference_summary(modal_preference),
+            "source": "profile_dialogue" if any(
+                key not in _default_profile["modal_preference"] for key in modal_preference
+            ) else "resource_usage",
+        },
+        {
+            "key": "guidance_level",
+            "label": "引导强度",
+            "value": guidance_level.get("current") or "L2",
+            "source": "system_profile",
+        },
+        {
+            "key": "knowledge_progress",
+            "label": "知识进展",
+            "value": len(knowledge_coordinates),
+            "source": "evaluation",
+        },
+        {
+            "key": "discipline",
+            "label": "学习纪律",
+            "value": discipline_badge or {},
+            "source": "activity",
+        },
+    ]
+
+
 def _profile_data(pf: UserProfile | None, course_id: str) -> dict:
     if pf is None:
         data = dict(_default_profile)
         data["course_id"] = course_id
+        data["profile_dimensions"] = _profile_dimensions(data)
         return data
-    return {
+    data = {
         "course_id": pf.course_id,
         "modal_preference": pf.modal_preference or _default_profile["modal_preference"],
         "guidance_level": {
@@ -73,6 +211,8 @@ def _profile_data(pf: UserProfile | None, course_id: str) -> dict:
         "discipline_badge": pf.discipline_badge or _default_profile["discipline_badge"],
         "generated_at": pf.generated_at.isoformat() if pf.generated_at else None,
     }
+    data["profile_dimensions"] = _profile_dimensions(data)
+    return data
 
 
 @router.post("/initialize")
@@ -146,6 +286,98 @@ async def get_profile(
     )
     pf = result.scalars().first()
     return {"code": 200, "message": "success", "data": _profile_data(pf, course_id)}
+
+
+@router.post("/dialogue-update")
+async def dialogue_update_profile(
+    req: ProfileDialogueUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.role == "student":
+        check = await db.execute(
+            select(CourseEnrollment).where(
+                CourseEnrollment.student_id == current_user.id,
+                CourseEnrollment.course_id == req.course_id,
+                CourseEnrollment.is_deleted == False,
+            )
+        )
+        if not check.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 40300, "message": "未加入该课程", "data": None},
+            )
+
+    payload = {
+        "user_id": current_user.id,
+        "course_id": req.course_id,
+        "message": req.message,
+    }
+    try:
+        data = await agent_client.post_json("/agent/v1/profile/dialogue-update", payload)
+    except AgentServiceError as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"code": e.agent_code or e.status_code, "message": e.message, "data": None},
+        ) from e
+
+    extracted = data.get("profile") if isinstance(data, dict) and isinstance(data.get("profile"), dict) else data
+    if not isinstance(extracted, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": 50200, "message": "画像解析结果格式错误", "data": None},
+        )
+
+    lock_name = await _acquire_profile_lock(db, current_user.id, req.course_id)
+    try:
+        result = await db.execute(
+            select(UserProfile)
+            .where(
+                UserProfile.user_id == current_user.id,
+                UserProfile.course_id == req.course_id,
+                UserProfile.is_deleted == False,
+            )
+            .order_by(UserProfile.generated_at.desc())
+        )
+        pf = result.scalars().first()
+        if pf is None:
+            pf = UserProfile(
+                user_id=current_user.id,
+                course_id=req.course_id,
+                generated_at=datetime.now(timezone.utc),
+            )
+            db.add(pf)
+            await db.flush()
+
+        merged = _merge_dialogue_profile(pf, extracted)
+        response_data = _profile_data(pf, req.course_id)
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(
+            "Profile dialogue update: error user_id=%s course_id=%s type=%s message=%s",
+            current_user.id, req.course_id, type(e).__name__, str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": 50000, "message": "画像补充失败", "data": None},
+        ) from e
+    finally:
+        await _release_profile_lock(db, lock_name)
+
+    sources = {key: "profile_dialogue" for key, value in merged.items() if value}
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "profile": merged,
+            "sources": sources,
+            "profile_data": response_data,
+        },
+    }
 
 
 async def _assemble_profile_payload(user_id: str, course_id: str, db: AsyncSession) -> dict:

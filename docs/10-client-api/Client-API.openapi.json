@@ -1197,6 +1197,73 @@
         }
       }
     },
+    "/profile/dialogue-update": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "对话补充用户画像",
+        "description": "将学生自然语言补充的学习目标、薄弱点、资源偏好等信息提交给 Agent 解析，并合并到当前课程画像。Agent 解析失败时不覆盖已有画像。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileDialogueUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "补充成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "profile": {
+                          "type": "object",
+                          "description": "本次从文本中解析出的画像增量"
+                        },
+                        "sources": {
+                          "type": "object",
+                          "description": "本次增量字段来源，值为 profile_dialogue"
+                        },
+                        "profile_data": {
+                          "$ref": "#/components/schemas/ProfileData"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Agent 解析失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessHTTPErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/profile/refresh": {
       "post": {
         "tags": [
@@ -3866,6 +3933,14 @@
               "intensity": {
                 "type": "number",
                 "description": "近期学习强度 0-100"
+              },
+              "learning_goal": {
+                "type": "string",
+                "description": "学习目标，自然语言补充后可返回"
+              },
+              "source": {
+                "type": "string",
+                "description": "来源标记，如 profile_dialogue"
               }
             }
           },
@@ -3891,6 +3966,52 @@
             "format": "date-time",
             "nullable": true,
             "description": "生成时间；未初始化时可为 null"
+          },
+          "profile_dimensions": {
+            "type": "array",
+            "description": "六维画像摘要，供前端直接渲染",
+            "items": {
+              "$ref": "#/components/schemas/ProfileDimension"
+            }
+          }
+        }
+      },
+      "ProfileDimension": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "维度键：learning_goal / weak_points / resource_preference / guidance_level / knowledge_progress / discipline"
+          },
+          "label": {
+            "type": "string",
+            "description": "维度展示名"
+          },
+          "value": {
+            "description": "维度值，可能是字符串、数组、数字或对象"
+          },
+          "source": {
+            "type": "string",
+            "description": "维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending"
+          }
+        }
+      },
+      "ProfileDialogueUpdateRequest": {
+        "type": "object",
+        "required": [
+          "course_id",
+          "message"
+        ],
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "description": "课程 ID"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "学生补充文本"
           }
         }
       },

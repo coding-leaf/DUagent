@@ -10,6 +10,10 @@ export const profileService = {
     return apiClient.post('/profile/refresh', { course_id: courseId });
   },
 
+  updateProfileByDialogue: async (courseId, message) => {
+    return apiClient.post('/profile/dialogue-update', { course_id: courseId, message });
+  },
+
   getLearningEffects(courseId) {
     return apiClient.get('/evaluation', { params: { course_id: courseId } });
   }

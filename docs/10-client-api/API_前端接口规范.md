@@ -959,13 +959,43 @@ GET /api/v1/profile?course_id={course_id}
 | drive_intent | object | 驱动意图（状态光环） |
 | drive_intent.type | string | 类型：exam_sprint / daily_homework / casual |
 | drive_intent.intensity | number | 近期学习强度 0-100 |
+| drive_intent.learning_goal | string | 学习目标，自然语言补充后可返回 |
+| drive_intent.source | string | 来源标记，如 profile_dialogue |
 | discipline_badge | object | 学科底座徽章 |
 | discipline_badge.subject | string | 学科名称 |
 | discipline_badge.level | string | 徽章等级 |
 | discipline_badge.streak_days | integer | 连续学习天数 |
+| profile_dimensions | array | 六维画像摘要，供前端直接渲染 |
+| profile_dimensions[].key | string | 维度键：learning_goal / weak_points / resource_preference / guidance_level / knowledge_progress / discipline |
+| profile_dimensions[].label | string | 维度展示名 |
+| profile_dimensions[].value | any | 维度值，可能是字符串、数组、数字或对象 |
+| profile_dimensions[].source | string | 维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending |
 | generated_at | string | 画像生成时间 |
 
-### 7.3 刷新用户画像
+### 7.3 对话补充用户画像
+
+```
+POST /api/v1/profile/dialogue-update
+```
+
+**说明：** 将学生自然语言补充的学习目标、薄弱点、资源偏好等信息提交给 Agent 解析，并合并到当前课程画像。Agent 解析失败时不覆盖已有画像。
+
+**请求体 `application/json`：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| course_id | string | 是 | 课程 ID |
+| message | string | 是 | 学生补充文本，1-1000 字符 |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| profile | object | 本次从文本中解析出的画像增量 |
+| sources | object | 本次增量字段来源，值为 profile_dialogue |
+| profile_data | object | 合并后的完整画像，结构同 `GET /profile` |
+
+### 7.4 刷新用户画像
 
 ```
 POST /api/v1/profile/refresh

@@ -308,6 +308,19 @@
 - **验证**: `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/admin_catalog_quiz_fix_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_admin_catalog_resource_generation.py -q -p no:cacheprovider` 26 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
 - **契约**: 无 OpenAPI 变更；Admin 外部接口路径和响应不变。
 
+## 2026-06-13 学生画像基础闭环
+
+- **问题**: 学生画像页只能读取刷新后的结构化画像，缺少自然语言补充入口；前端也无法直接展示稳定的六维画像摘要。
+- **方案**: 新增 `/profile/dialogue-update`，由 Agent 解析学生补充文本并合并到当前课程画像；`GET /profile` 返回 `profile_dimensions`，前端按来源展示六维摘要。
+- **改动**:
+  - `backend/app/api/v1/profile.py`: 新增对话补充请求模型、画像合并逻辑、六维摘要生成和 `POST /profile/dialogue-update`；Agent 失败不覆盖旧画像。
+  - `backend/tests/test_refresh_async.py`: 增加对话补充成功、Agent 失败不污染旧画像的回归测试，并补齐测试断言。
+  - `frontend/src/api/services/profile.js`: 新增 `updateProfileByDialogue()`。
+  - `frontend/src/pages/StudentProfile.jsx`: 新增六维画像卡片、自然语言补充输入区，并兼容对话补充产生的薄弱点结构。
+  - `docs/10-client-api/API_前端接口规范.md`、`docs/10-client-api/Client-API.openapi.json`: 同步新增接口和 `profile_dimensions` 契约。
+- **验证**: `python -m json.tool ../docs/10-client-api/Client-API.openapi.json` 通过；`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/student_profile_loop_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_refresh_async.py -q -p no:cacheprovider` 1 passed；`npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: OpenAPI 与前端接口规范已同步新增 `/profile/dialogue-update` 和 `profile_dimensions`，无静默字段删除。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

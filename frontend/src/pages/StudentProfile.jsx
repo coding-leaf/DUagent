@@ -13,6 +13,9 @@ export default function StudentProfile() {
   const { user, refreshUser } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [guidanceSubmitting, setGuidanceSubmitting] = useState(false);
+  const [dialogueMessage, setDialogueMessage] = useState('');
+  const [dialogueSubmitting, setDialogueSubmitting] = useState(false);
+  const [dialogueError, setDialogueError] = useState('');
   const [profileError, setProfileError] = useState(null);
   const [localGuidanceLevel, setLocalGuidanceLevel] = useState(
     user?.guidance_level || 'L2'
@@ -134,6 +137,7 @@ export default function StudentProfile() {
     cognitive_blindspots = [],
     drive_intent = { type: 'casual', intensity: 30 },
     discipline_badge = { subject: '', level: '', streak_days: 0 },
+    profile_dimensions = [],
   } = profile;
 
   // 姓名优先级：real_name → username → 兜底
@@ -183,6 +187,55 @@ export default function StudentProfile() {
     }
   };
 
+  const formatDimensionValue = (value) => {
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join('、') || '待补充';
+    }
+    if (value && typeof value === 'object') {
+      const meaningful = Object.entries(value)
+        .filter(([, itemValue]) => itemValue !== '' && itemValue !== null && itemValue !== undefined)
+        .map(([key, itemValue]) => `${key}: ${itemValue}`);
+      return meaningful.join(' / ') || '待补充';
+    }
+    return value || '待补充';
+  };
+
+  const sourceLabel = (source) => ({
+    profile_dialogue: '对话补充',
+    system_profile: '系统画像',
+    resource_usage: '资源行为',
+    evaluation: '学习评估',
+    activity: '学习活动',
+    system_pending: '待采集',
+  }[source] || source || '未知来源');
+
+  const handleDialogueSubmit = async () => {
+    const message = dialogueMessage.trim();
+    if (!message || dialogueSubmitting) return;
+
+    setDialogueSubmitting(true);
+    setDialogueError('');
+    try {
+      const res = await profileService.updateProfileByDialogue(activeCourseId, message);
+      if (res.code === 200) {
+        const nextProfile = res.data?.profile_data;
+        if (nextProfile) {
+          setProfileData(nextProfile);
+        } else {
+          await fetchProfile();
+        }
+        setDialogueMessage('');
+      } else {
+        setDialogueError(res.message || '画像补充失败，请稍后重试');
+      }
+    } catch (err) {
+      console.error('画像补充失败:', err);
+      setDialogueError(err.response?.data?.detail?.message || '画像补充失败，请稍后重试');
+    } finally {
+      setDialogueSubmitting(false);
+    }
+  };
+
   return (
     <div className="bg-background text-on-background font-body-md antialiased min-h-screen">
       {/* TopNavBar */}
@@ -227,6 +280,70 @@ export default function StudentProfile() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            <section className="lg:col-span-7 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface">
+                    <span className="material-symbols-outlined text-cyan-500">badge</span> 六维画像
+                  </h3>
+                  <p className="text-sm text-secondary mt-1">来自评估、资源行为和对话补充的课程画像摘要。</p>
+                </div>
+              </div>
+              {profile_dimensions.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {profile_dimensions.map((dimension) => (
+                    <div key={dimension.key} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{dimension.label}</p>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-cyan-700 border border-cyan-100">
+                          {sourceLabel(dimension.source)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-on-surface font-semibold leading-6">
+                        {formatDimensionValue(dimension.value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 py-6 text-center">暂无画像维度数据</p>
+              )}
+            </section>
+
+            <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
+                <span className="material-symbols-outlined text-cyan-500">edit_note</span> 补充学习画像
+              </h3>
+              <p className="text-sm text-secondary mb-4">
+                用一句话说明目标、薄弱点或资源偏好，系统会补充到当前课程画像。
+              </p>
+              <textarea
+                value={dialogueMessage}
+                onChange={(event) => {
+                  setDialogueMessage(event.target.value);
+                  if (dialogueError) setDialogueError('');
+                }}
+                maxLength={1000}
+                rows={5}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-on-surface outline-none focus:border-cyan-400 focus:bg-white transition-colors resize-none"
+                placeholder="例如：我想两周内补齐 C 语言指针和动态内存分配，最好多给代码练习。"
+              />
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${dialogueError ? 'text-red-500' : 'text-slate-400'}`}>
+                  {dialogueError || `${dialogueMessage.length}/1000`}
+                </span>
+                <button
+                  onClick={handleDialogueSubmit}
+                  disabled={!dialogueMessage.trim() || dialogueSubmitting}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
+                >
+                  {dialogueSubmitting ? '补充中...' : '补充画像'}
+                </button>
+              </div>
+            </section>
           </div>
 
         {/* Bento Grid Main Content */}
@@ -386,21 +503,27 @@ export default function StudentProfile() {
               {cognitive_blindspots.length > 0 ? (
                 <div className="space-y-2">
                   {cognitive_blindspots.map((item, i) => {
+                    const blindspot = typeof item === 'string' ? { name: item } : item;
                     const severityColors = {
                       high: 'bg-red-50 text-red-700 border-red-100',
                       medium: 'bg-amber-50 text-amber-700 border-amber-100',
                       low: 'bg-slate-100 text-slate-500 border-slate-200',
                     };
                     const severityLabels = { high: '高', medium: '中', low: '低' };
-                    const colorClass = severityColors[item.severity] || 'bg-slate-100 text-slate-500 border-slate-200';
-                    const label = severityLabels[item.severity] || item.severity;
+                    const colorClass = severityColors[blindspot.severity] || 'bg-slate-100 text-slate-500 border-slate-200';
+                    const label = severityLabels[blindspot.severity] || blindspot.severity || '待关注';
                     return (
                       <div key={i} className="flex items-center gap-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${colorClass} border`}>
                           {label}
                         </span>
-                        <span className="text-sm text-on-surface">{item.name}</span>
-                        <span className="text-xs text-slate-400">· 错误 {item.error_count} 次</span>
+                        <span className="text-sm text-on-surface">{blindspot.name || blindspot.point || '未命名薄弱点'}</span>
+                        {blindspot.error_count !== undefined && (
+                          <span className="text-xs text-slate-400">· 错误 {blindspot.error_count} 次</span>
+                        )}
+                        {blindspot.source === 'profile_dialogue' && (
+                          <span className="text-xs text-cyan-600">· 对话补充</span>
+                        )}
                       </div>
                     );
                   })}

@@ -61,7 +61,7 @@
 | `Login.jsx` | 登录 | `GET /auth/captcha`、`POST /auth/login` | ✅ 已可操作 | 管理员/教师/学生登录分流已修正。 |
 | `Register.jsx` | 注册 | `GET /auth/captcha`、`POST /auth/register` | ✅ 已可操作 | 注册提交基础资料和 `guidance_level`。 |
 | `AuthContext.jsx` | 鉴权恢复 | `GET /users/me` | ✅ 已可操作 | 页面刷新后恢复登录态。 |
-| `StudentProfile.jsx` | 查看学生画像、修改指导级别 | `GET /profile`、`PUT /users/me` | ✅ 已可操作 | 没有调用 `profileService.refreshProfile()`。 |
+| `StudentProfile.jsx` | 查看学生画像、对话补充画像、修改指导级别 | `GET /profile`、`POST /profile/dialogue-update`、`PUT /users/me` | ✅ 已可操作 | 六维画像走 `profile_dimensions`；仍没有调用 `profileService.refreshProfile()`。 |
 | `Dashboard.jsx` | 查看课程资源列表；有课程但无资源时显示准备中空态 | `GET /resources` | ✅ 已可操作 | 按当前教学班 `course_id` 读取资源；不展示 Admin 原始资料。 |
 | `ResourceDetail.jsx` | 查看资源详情、正文、代码、Mermaid mindmap | `GET /resources/{id}` | ✅ 已可操作 | Mermaid 渲染是前端展示能力。 |
 | `Quiz.jsx` | 按节点/自由模式获取题目并提交答案 | `GET /quiz/questions?node_id=xxx`、`POST /quiz/submit` | ✅ 已可操作 | 支持节点模式（LearningPath 带 node_id 进入）和自由模式；后台诊断失败不阻塞结果。 |
@@ -121,7 +121,7 @@
 | 20 | LearningPath 展示 / 节点资源 | ✅ 已可操作 | 页面可展示学习路径并查看节点资源；无 LP 记录时从 active KG 拓扑排序合成路径骨架（source="kg_fallback"），全节点 recommended | KG fallback 已闭环，不再依赖 Agent 个性化生成来显示基础路径。 |
 | 21 | LearningPath 刷新 | ⚠️ 前端无入口 + ⏸️ 暂缓 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；KG fallback 已覆盖基础展示 | 当前阶段不需要接刷新 UI；如未来需要 Agent 个性化路径，再评估。 |
 | 22 | KG ready gate | ⏸️ 暂缓 | KG fallback 已让 LearningPath 可用，不再阻塞主流程 | 待 Agent 个性化路径设计后再定。 |
-| 23 | 学生画像展示 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile`，并展示 `/users/me` 基础资料 | 字段扩展必须走契约。 |
+| 23 | 学生画像展示 / 对话补充 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile` 展示六维画像，调用 `POST /profile/dialogue-update` 用自然语言补充学习目标、薄弱点和资源偏好，并展示 `/users/me` 基础资料 | 后续新增画像维度仍必须走契约。 |
 | 24 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
 | 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
 | 26 | Evaluation refresh | ⚠️ 前端无入口 | `learningService.refreshEvaluation()` 存在，对应 `/evaluation/refresh`，但页面无调用 | 决定是否接刷新入口或删除误导性 service。 |
@@ -152,7 +152,7 @@
    KG fallback 已让学习路径页面可显示骨架，下一步验证真实 C 样本的节点资源（weak_point_tutorials/exercises/chapter_materials）是否能在页面上正确展示。当前 resources 表挂载到 KG 节点的数据可能仍缺。
 
 5. **Profile / Evaluation refresh 入口决策**
-   决定 `profileService.refreshProfile()` 和 `learningService.refreshEvaluation()` 是否接前端刷新按钮，或删除误导性 service。
+   Profile 已具备对话补充入口；仍需决定 `profileService.refreshProfile()` 的异步重算按钮是否必要，以及 `learningService.refreshEvaluation()` 是否接前端刷新按钮或删除误导性 service。
 
 ## 纠偏记录
 

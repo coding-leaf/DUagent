@@ -18,7 +18,7 @@ export default function ChatMessage({ message, onSendMessage }) {
   const isUser = message.role === 'user';
   
   const handleCopy = (text) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard?.writeText(text).catch(console.error);
   };
 
   return (
@@ -52,7 +52,7 @@ export default function ChatMessage({ message, onSendMessage }) {
                       <span>{match[1]}</span>
                       <button 
                         onClick={() => handleCopy(codeStr)}
-                        className="opacity-0 group-hover/code:opacity-100 transition-opacity hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+                        className="opacity-0 group-hover/code:opacity-100 focus:opacity-100 transition-opacity hover:text-slate-700 flex items-center gap-1 cursor-pointer"
                         title="Copy code"
                       >
                         <span className="material-symbols-outlined text-[14px]">content_copy</span>
@@ -69,7 +69,7 @@ export default function ChatMessage({ message, onSendMessage }) {
                     />
                   </div>
                 ) : (
-                  <code {...props} className={`${className} bg-slate-100 text-cyan-700 px-1.5 py-0.5 rounded text-[13px] font-mono border border-slate-200`}>
+                  <code {...props} className={`${className || ''} bg-slate-100 text-cyan-700 px-1.5 py-0.5 rounded text-[13px] font-mono border border-slate-200`.trim()}>
                     {children}
                   </code>
                 );
@@ -93,7 +93,7 @@ export default function ChatMessage({ message, onSendMessage }) {
         {message.isError && (
           <div className="mt-2 text-red-500 text-[13px] flex items-center gap-1 font-medium bg-red-50 p-2 rounded-lg w-fit">
             <span className="material-symbols-outlined text-[16px]">error</span>
-            {message.content.includes('发送失败') ? '' : '生成失败，请重试'}
+            {message.content?.includes('发送失败') ? '' : '生成失败，请重试'}
           </div>
         )}
 

@@ -67,6 +67,15 @@ AIChat / tutoring 链路当前在输出第一个 chunk 之前会**串行**发起
 
 `_evaluate_by_rule`（`tutoring_response_critic.py:47-60`）已有规则：非空、`clarifying_question` 策略须含问句、与知识点/消息相关。Guard 与异步审查复用同一套规则函数，避免两套口径。
 
+### 4.1b 检索个性化加权（可测口径）
+
+现状（`memory/tutoring_retrieval.py:47-117`）：`user_memory_facts` 与 `course_knowledge_chunks` 各自独立检索、各自 rerank，再原样放进 context；ReAct prompt（`tutoring_react_flow.py:68-69`）把两者作为两段平级列出。个性化"更偏个人薄弱点/记忆"落成两条**可断言**的规则：
+
+1. **个人记忆优先于课程知识**：在 `_build_react_user_message` 拼装时，`user_memory_facts` 段排在 `course_knowledge_chunks` 段之前（当前顺序已是长期记忆在前、课程知识在后，需保持并在测试中固化该顺序断言）。
+2. **薄弱点相关 chunk 上浮**：在检索结果进入 prompt 之前，对 `course_knowledge_chunks` 做一次稳定重排——文本包含该学生 `user_profile.knowledge_weak` 任一词条的 chunk 排到前面（稳定排序，不丢弃任何 chunk，不改变 limit）。该重排是纯 Python、无网络、不增加 LLM 往返。
+
+> 验收：给定一个 weak=["指针"] 的请求与两条 course chunk（一条含"指针"、一条不含），断言含"指针"的 chunk 在 prompt 中位置靠前；断言 user_memory 段整体在 course_knowledge 段之前。不调权重浮点分，仅做确定性重排，避免影响 grounding 探针口径。
+
 ### 4.2 重试一次 ReAct
 
 Guard 拒绝时，再调用一次 `generate_tutoring_react_response`，在 user_message 末尾追加一条收紧指令（例如"上一轮回答未围绕该学生的薄弱点/当前问题，请直接针对 {focus_points} 给出可用回答"）。仍失败则走规则兜底，不再额外打任何 LLM chat。
@@ -130,14 +139,35 @@ class ReviewEvent(BaseModel):
 
 ## 7. 删除清单（移出阻塞链路并删除死代码）
 
-确认无其它调用方后删除：
+下表已用全仓 grep 核实引用面，删除时必须**同步处理对应测试**（删 LLM 能力 = 删/改写测它的用例，不能让套件红着）。
 
-- `agent_service/agents/tutoring.py`：`generate_tutoring_model_response`、`_try_structured_output`、`_TutoringStructuredOutput`、`build_tutoring_model_response`（chat fallback 相关），以及编排里第 5/6 步调用。
-- `agent_service/agents/tutoring_response_critic.py`：删除 `evaluate_tutoring_response` 的 LLM 分支（critic LLM）与 `_parse_llm_critic_result`、`build_response_critic_messages` 调用；**保留** `_evaluate_by_rule` 及相关 helper，重命名导出为规则 Guard 用途（如 `evaluate_tutoring_response_by_rule`）。
-- `agent_service/agents/tutoring_strategy.py`：删除 `select_tutoring_strategy` 的 LLM 分支与 `_parse_llm_strategy`、`build_strategy_selection_messages` 调用；**保留** `_select_rule_strategy`，对外暴露为快速链路策略入口。
-- `agent_service/prompts/tutoring.py`：删除仅被上述 LLM 分支使用的 `build_response_critic_messages`、`build_strategy_selection_messages`（需先 grep 确认无其它引用）。
+### 7.1 生产代码改动
 
-> 删除前对每个符号做全仓 grep，确认无测试/工具/其它模块引用；有引用的同步处理。
+| 符号 / 位置 | 动作 | 连带处理 |
+| --- | --- | --- |
+| `agents/tutoring.py:170` `generate_tutoring_model_response` | 删除（chat fallback） | 同步删 `__all__`（tutoring.py:393）里的 `"generate_tutoring_model_response"` 导出 |
+| `agents/tutoring.py:194` `_try_structured_output`、`:20` `_TutoringStructuredOutput` | 删除（仅 fallback 用） | — |
+| `agents/tutoring.py:11` `from ... import build_tutoring_messages` + `:182` 调用 | 删除 | `build_tutoring_messages` 变孤儿，见下行 |
+| `prompts/tutoring.py:18` `build_tutoring_messages` | 删除（仅 fallback 用） | **注意：不要删 `TUTOR_REACT_SYSTEM_PROMPT`(prompts/tutoring.py:5)——它是 ReAct 主路径在用的 system prompt。`build_tutoring_messages` 内部虽复用它，但删函数时该 prompt 必须保留。** |
+| `agents/tutoring.py:334,347` 同步 `evaluate_tutoring_response` 调用 + `:345` fallback 调用 | 删除，替换为：Guard（规则）→ 重试一次 ReAct → 规则兜底 | 编排函数主体重写 |
+| `agents/tutoring_response_critic.py:24` `evaluate_tutoring_response` 的 LLM 分支(:33-44) + `:102` `_parse_llm_critic_result` | 删除 LLM 分支；**保留** `_evaluate_by_rule` 及 helper，对外暴露规则 Guard（如 `evaluate_tutoring_response_by_rule`） | 删 `:11` `build_response_critic_messages` import |
+| `agents/tutoring_strategy.py:32` `select_tutoring_strategy` 的 LLM 分支(:41-48) + `:93` `_parse_llm_strategy` | 删除 LLM 分支；**保留** `_select_rule_strategy`，对外暴露为快速链路策略入口 | 删 `:11` `build_strategy_selection_messages` import |
+| `prompts/tutoring.py:57` `build_strategy_selection_messages`、`:88` `build_response_critic_messages` | 删除（grep 确认仅被上述 LLM 分支 + 其专用测试引用） | 见 7.2 |
+| `agents/tutoring_react.py:3` 文档字符串"降级到 generate_tutoring_model_response()" | 改写为"降级到规则兜底" | 仅注释 |
+
+### 7.2 测试代码连带改动（grep 已确认）
+
+| 测试文件 | 现状 | 动作 |
+| --- | --- | --- |
+| `tests/test_tutoring_agent.py`（6 处用 `generate_tutoring_model_response`，含 structured output 用例 :167-364） | 测 chat fallback 能力 | 删除这些用例；保留 `parse_tutoring_model_response`/`build_tutoring_generation_result` 相关用例 |
+| `tests/test_tutoring_api.py:461` 调 `generate_tutoring_model_response` | 测 fallback | 删除/改写该断言 |
+| `tests/test_tutoring_response_critic.py`（7 处，含 FakeChatProvider LLM 分支 :102-141） | 测 critic 规则 + LLM | 保留规则用例并改调新规则入口名；删除 LLM 分支用例 |
+| `tests/test_tutoring_strategy.py`（含 LLM 分支 :62-85） | 测规则 + LLM 策略 | 保留规则用例并改调新入口名；删除 LLM 分支用例 |
+| `tests/test_tutoring_prompts.py`（:5-7 import 三个 builder，:43/70 测 selection/critic messages，:12 测 build_tutoring_messages） | 测被删的 prompt builder | 删除测 `build_strategy_selection_messages`/`build_response_critic_messages`/`build_tutoring_messages` 的用例；保留 ReAct prompt 相关用例 |
+
+> 原则：删能力同步删测，不靠保留死测试维持绿；保留的规则用例改调新入口名后必须仍绿。
+>
+> **不受影响（保留，无需改）**：`tests/test_tutoring_react.py:74-77` 断言 `TUTOR_REACT_SYSTEM_PROMPT` 内容——ReAct prompt 不删，该测试继续绿。
 
 ## 8. 测试计划
 
@@ -165,13 +195,13 @@ class ReviewEvent(BaseModel):
 ## 9. 风险
 
 - **时序竞态**：review 必须在 done 之后定位到已 finalize 的消息；用 `lastMessageIdRef` 兜底，避免落到 placeholder。
-- **删除连带**：critic/strategy/fallback 的 prompt builder 可能被工具或测试引用；删除前必须 grep。
-- **个性化增强的检索加权**：调权重可能影响命中分布；以现有 C 语言样本探针回归，避免回归 grounding。
+- **删除连带**：critic/strategy/fallback 的 prompt builder 与 chat fallback 被多个**现有测试**引用（见 7.2）；删生产代码必须同步删/改测试，否则套件红。
+- **个性化重排**：4.1b 用确定性稳定重排而非浮点加权，避免影响 grounding 探针口径；以现有 C 语言样本探针回归确认无回归。
 - **沉默通过的可观测性**：异步审查通过不发事件，需保留 `agent_trace` 日志记录审查结论，便于排查。
 
 ## 10. 验收口径
 
 - 正常一轮对话：出字前只有"检索 + ReAct（+ 最多一次重试）"，无策略/critic/fallback 的 LLM 往返。
-- 个性化：ReAct prompt 中按引导级别/薄弱点明确调讲法；检索更偏个人记忆/薄弱点。
+- 个性化：ReAct prompt 中按引导级别/薄弱点明确调讲法；检索按 4.1b 口径——user_memory 段在 course_knowledge 段之前，且含 weak 词条的 course chunk 上浮（确定性可断言）。
 - 撤回：审查 flagged 时前端整条标灰 + "该回答可能不准确"，原文保留。
 - 契约：OpenAPI / 接口规范已含 review 事件；旧前端忽略 review 仍可用。

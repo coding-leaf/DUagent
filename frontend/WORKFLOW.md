@@ -20,6 +20,14 @@
 
 ## 最近验证
 
+- 2026-06-13：个人资料页接入静默同步画像：
+  - 赛题口径确认：个人画像应分为“对话式画像构建”和“随学随新静默更新”；不把 `/profile/refresh` 做成用户输入 prompt。
+  - 修复：`StudentProfile.jsx` 在六维画像区新增“同步画像”按钮，调用 `POST /profile/refresh` 创建 `profile_refresh` task，轮询 `GET /tasks/{task_id}`；`completed` 后重新拉取 `GET /profile`，`failed/partial` 显示错误且不覆盖旧画像。
+  - 保留：原“补充学习画像”输入框继续走 `POST /profile/dialogue-update`，用于学生主动补充学习目标、薄弱点和资源偏好。
+  - 契约说明：未修改 OpenAPI / Client API；复用已有 `/profile/refresh`、`/tasks/{task_id}` 和 `profile_dimensions`。
+  - 验证：
+    - Frontend `npm run lint` 通过。
+    - Frontend `npm run build` 通过，仍有既有 Vite chunk size warning。
 - 2026-06-13：Admin 保底题库拆分请求兜底：
   - 根因确认：最新真实父任务 `852bd3532a9d448a` 为 `partial`，`20` 个节点中 `4` 成功、`16` 个子任务因 `skeleton_rejected` 失败；失败点已不在前端数量或 quality gate，而是 Agent 单节点一次生成 `7` 题时未产出有效题，降级骨架后被 Backend 过滤。
   - 修复：Backend 保留原单节点 `7` 题批量请求；当批量结果全为骨架 / 无有效题时，自动拆成 `single_choice count=3` 与 `multi_choice count=4` 两次小请求，分别过滤骨架后落库；多选答案落库改为稳定逗号格式（如 `A,C`），避免 Python list 字符串进入判分链路。

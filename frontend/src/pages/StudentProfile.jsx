@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { profileService } from '../api/services/profile';
 import { authService } from '../api/services/auth';
+import { taskService } from '../api/services/task';
 import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
@@ -17,6 +18,10 @@ export default function StudentProfile() {
   const [dialogueSubmitting, setDialogueSubmitting] = useState(false);
   const [dialogueError, setDialogueError] = useState('');
   const [profileError, setProfileError] = useState(null);
+  const [refreshTask, setRefreshTask] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [localGuidanceLevel, setLocalGuidanceLevel] = useState(
     user?.guidance_level || 'L2'
   );
@@ -75,6 +80,52 @@ export default function StudentProfile() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: fetch on mount / course change
     fetchProfile();
   }, [fetchProfile]);
+
+  useEffect(() => {
+    if (!refreshTask?.task_id || refreshTask.status !== 'processing') return;
+
+    let cancelled = false;
+    let timeoutId;
+
+    const pollTask = async () => {
+      try {
+        const res = await taskService.getTaskStatus(refreshTask.task_id);
+        if (cancelled) return;
+
+        const task = res.data || {};
+        const status = task.status || 'processing';
+        setRefreshTask({
+          ...task,
+          task_id: task.task_id || refreshTask.task_id,
+          status,
+        });
+
+        if (status === 'completed') {
+          setRefreshing(false);
+          setRefreshError('');
+          setRefreshMessage('画像已同步');
+          await fetchProfile();
+        } else if (status === 'failed' || status === 'partial') {
+          setRefreshing(false);
+          setRefreshMessage('');
+          setRefreshError(task.error_message || '画像同步失败，请稍后重试');
+        } else if (!cancelled) {
+          timeoutId = setTimeout(pollTask, 2000);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('画像同步任务查询失败:', err);
+        setRefreshError('画像同步状态查询失败，正在重试');
+        timeoutId = setTimeout(pollTask, 2000);
+      }
+    };
+
+    timeoutId = setTimeout(pollTask, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [fetchProfile, refreshTask?.status, refreshTask?.task_id]);
 
   if (!activeCourseId) {
     return (
@@ -209,6 +260,30 @@ export default function StudentProfile() {
     system_pending: '待采集',
   }[source] || source || '未知来源');
 
+  const handleProfileRefresh = async () => {
+    if (!activeCourseId || refreshing) return;
+
+    setRefreshing(true);
+    setRefreshError('');
+    setRefreshMessage('正在同步画像...');
+    try {
+      const res = await profileService.refreshProfile(activeCourseId);
+      const taskId = res.data?.task_id;
+      if (res.code === 202 && taskId) {
+        setRefreshTask({ task_id: taskId, status: 'processing', progress: 10 });
+      } else {
+        setRefreshing(false);
+        setRefreshMessage('');
+        setRefreshError(res.message || '画像同步启动失败，请稍后重试');
+      }
+    } catch (err) {
+      console.error('画像同步启动失败:', err);
+      setRefreshing(false);
+      setRefreshMessage('');
+      setRefreshError(err.response?.data?.detail?.message || '画像同步启动失败，请稍后重试');
+    }
+  };
+
   const handleDialogueSubmit = async () => {
     const message = dialogueMessage.trim();
     if (!message || dialogueSubmitting) return;
@@ -291,7 +366,26 @@ export default function StudentProfile() {
                   </h3>
                   <p className="text-sm text-secondary mt-1">来自评估、资源行为和对话补充的课程画像摘要。</p>
                 </div>
+                <button
+                  onClick={handleProfileRefresh}
+                  disabled={refreshing}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
+                >
+                  <span className={`material-symbols-outlined text-base ${refreshing ? 'animate-spin' : ''}`}>
+                    {refreshing ? 'progress_activity' : 'sync'}
+                  </span>
+                  {refreshing ? '同步中...' : '同步画像'}
+                </button>
               </div>
+              {(refreshMessage || refreshError) && (
+                <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
+                  refreshError
+                    ? 'border-red-100 bg-red-50 text-red-600'
+                    : 'border-cyan-100 bg-cyan-50 text-cyan-700'
+                }`}>
+                  {refreshError || refreshMessage}
+                </div>
+              )}
               {profile_dimensions.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {profile_dimensions.map((dimension) => (

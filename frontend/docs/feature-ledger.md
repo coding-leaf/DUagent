@@ -61,7 +61,7 @@
 | `Login.jsx` | 登录 | `GET /auth/captcha`、`POST /auth/login` | ✅ 已可操作 | 管理员/教师/学生登录分流已修正。 |
 | `Register.jsx` | 注册 | `GET /auth/captcha`、`POST /auth/register` | ✅ 已可操作 | 注册提交基础资料和 `guidance_level`。 |
 | `AuthContext.jsx` | 鉴权恢复 | `GET /users/me` | ✅ 已可操作 | 页面刷新后恢复登录态。 |
-| `StudentProfile.jsx` | 查看学生画像、对话补充画像、修改指导级别 | `GET /profile`、`POST /profile/dialogue-update`、`PUT /users/me` | ✅ 已可操作 | 六维画像走 `profile_dimensions`；仍没有调用 `profileService.refreshProfile()`。 |
+| `StudentProfile.jsx` | 查看学生画像、对话补充画像、静默同步画像、修改指导级别 | `GET /profile`、`POST /profile/dialogue-update`、`POST /profile/refresh`、`GET /tasks/{task_id}`、`PUT /users/me` | ✅ 已可操作 | 六维画像走 `profile_dimensions`；同步画像不暴露 prompt，完成后刷新画像。 |
 | `Dashboard.jsx` | 查看课程资源列表；有课程但无资源时显示准备中空态 | `GET /resources` | ✅ 已可操作 | 按当前教学班 `course_id` 读取资源；不展示 Admin 原始资料。 |
 | `ResourceDetail.jsx` | 查看资源详情、正文、代码、Mermaid mindmap | `GET /resources/{id}` | ✅ 已可操作 | Mermaid 渲染是前端展示能力。 |
 | `Quiz.jsx` | 按节点/自由模式获取题目并提交答案 | `GET /quiz/questions?node_id=xxx`、`POST /quiz/submit` | ✅ 已可操作 | 支持节点模式（LearningPath 带 node_id 进入）和自由模式；后台诊断失败不阻塞结果。 |
@@ -122,7 +122,7 @@
 | 21 | LearningPath 刷新 | ⚠️ 前端无入口 + ⏸️ 暂缓 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；KG fallback 已覆盖基础展示 | 当前阶段不需要接刷新 UI；如未来需要 Agent 个性化路径，再评估。 |
 | 22 | KG ready gate | ⏸️ 暂缓 | KG fallback 已让 LearningPath 可用，不再阻塞主流程 | 待 Agent 个性化路径设计后再定。 |
 | 23 | 学生画像展示 / 对话补充 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile` 展示六维画像，调用 `POST /profile/dialogue-update` 用自然语言补充学习目标、薄弱点和资源偏好，并展示 `/users/me` 基础资料 | 后续新增画像维度仍必须走契约。 |
-| 24 | Profile refresh | ⚠️ 前端无入口 | `profileService.refreshProfile()` 存在，对应 `/profile/refresh`，但页面无调用 | 决定是否接刷新按钮；不接则登记为后端能力。 |
+| 24 | Profile refresh | ✅ 已可操作 | `StudentProfile.jsx` 提供“同步画像”按钮，调用 `POST /profile/refresh` 创建 `profile_refresh` task，轮询 `GET /tasks/{task_id}`，完成后重新拉取 `GET /profile` | 该入口为静默随学更新，不暴露 prompt 输入。 |
 | 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation` | 累计时长/趋势等仍是阶段二缺口。 |
 | 26 | Evaluation refresh | ⚠️ 前端无入口 | `learningService.refreshEvaluation()` 存在，对应 `/evaluation/refresh`，但页面无调用 | 决定是否接刷新入口或删除误导性 service。 |
 | 27 | 教师学生深度报告 | ✅ 已可操作 + 📋 待设计局部口径 | 学生报告页面接 `GET /teaching/classes/{class_id}/students/{student_id}/learning` | `overall_score` 真实计算口径待设计。 |
@@ -151,8 +151,8 @@
 4. **LearningPath 节点资源挂载验证**
    KG fallback 已让学习路径页面可显示骨架，下一步验证真实 C 样本的节点资源（weak_point_tutorials/exercises/chapter_materials）是否能在页面上正确展示。当前 resources 表挂载到 KG 节点的数据可能仍缺。
 
-5. **Profile / Evaluation refresh 入口决策**
-   Profile 已具备对话补充入口；仍需决定 `profileService.refreshProfile()` 的异步重算按钮是否必要，以及 `learningService.refreshEvaluation()` 是否接前端刷新按钮或删除误导性 service。
+5. **Evaluation refresh 入口决策**
+   Profile 已具备对话补充和静默同步画像入口；仍需决定 `learningService.refreshEvaluation()` 是否接前端刷新按钮或删除误导性 service。
 
 ## 纠偏记录
 
@@ -160,7 +160,7 @@
 - 2026-06-09 契约纠偏：`/resources/generate`、`/quiz/generate` 在当前前端契约中标记为作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
 - `learningService.triggerResourceGeneration()` 和旧 `learningService.getTaskStatus()` 已删除；任务查询由 `taskService.getTaskStatus()` 承担。
 - Admin 课程资源库导入和向量化已经实现，不应再误判为“只做了后端”或“没接 UI”。
-- `refreshLearningPath()`、`refreshEvaluation()`、`refreshProfile()`、`quizService.getHistory()` 这类方法存在不等于用户功能可操作；必须看页面是否调用。
+- `refreshLearningPath()`、`refreshEvaluation()`、`quizService.getHistory()` 这类方法存在不等于用户功能可操作；必须看页面是否调用。`refreshProfile()` 已由个人资料页接入为静默同步画像入口。
 - 后续更新本账本时，必须优先写用户入口和真实调用，再写文件证据。
 - 2026-06-09 资源消费闭环归档：最初版本采用按班存 / 按班读；该口径已在 2026-06-12 切换为“教学班绑定资源库、资源按资源库共享读取”，legacy 按班资源仅保留兼容读取。
 - 2026-06-10 KG 方向纠偏：现有 CLI 目录版 KG 已在真实 catalog `b2444963f0e54587` / course `6c698badb60a4809` 生成 `116` 节点，但排除目录型 chunk 后仅 `25/116=21.6%` 节点达到正文支撑阈值；同时正文资料密度足够（知识型正文 `465/613=75.9%`）。因此下一步不是审核 / 签字或 KG ready gate，而是先做 KG 版本 / 回滚，再按“目录骨架 + 正文 chunk 验证 / 补充”的路线 A 返工 KG 生成。

@@ -498,3 +498,11 @@
 - **内容**: 剔除了非工具调用的“正在生成回答...”的 ToolCall 渲染（该进度已由默认打字机和泡泡内的 loading dot 展现），并修复了 RAG 检索状态（“检索课程知识库”）在生成首个 chunk 后闪烁消失的问题，使其保留为已完成（`check_circle`）状态。
 - **文件**: `src/pages/AIChat.jsx`
 - **测试**: 运行 `npm run lint` 通过。
+
+### 2026-06-14 集成 AI 对话 Mermaid 可视化渲染与语法容错
+- **状态**: 已完成
+- **内容**: 
+  - 在 `ChatMessage.jsx` 中新增 `MermaidDiagram` 渲染组件，替代原先简单的 `<pre>` 文本标签，使图解模式能够直接显示可视化关系图。
+  - 新增 `sanitizeMermaidSource` 自动容错逻辑，使用正则检测并为大模型输出中括号内包含 `<br>`/`:`/空格等保留字符但未包裹双引号的节点标签（如 `A[变量a<br>值: 10]`）自动加盖双引号（如 `A["变量a<br>值: 10"]`），从前端层面彻底规避由于未转义特殊字符引起的 Mermaid 语法解析白屏（`Parse Error`）。
+- **文件**: `src/components/chat/ChatMessage.jsx`
+- **测试**: 运行 `npm run lint` 通过。

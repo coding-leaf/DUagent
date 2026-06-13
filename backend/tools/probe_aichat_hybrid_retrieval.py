@@ -19,14 +19,14 @@ async def main() -> None:
     args = parser.parse_args()
 
     if args.course_id and args.catalog_id:
-        print("Warning: Both --course-id and --catalog-id provided. course_id will be used for Backend context, and catalog_id logic should ideally override KG (but note backend might not support catalog_id yet).")
+        print("Note: Both --course-id and --catalog-id provided. course_id will be used for Backend context, and catalog_id will override KG search.")
 
     user_id = "probe_user"
     conversation_id = str(uuid.uuid4())
 
     print("[*] Initializing async db session...")
     async with async_session_factory() as db:
-        print(f"[*] Assembling tutoring payload for course={args.course_id}, question='{args.question}'...")
+        print(f"[*] Assembling tutoring payload for course={args.course_id}, catalog={args.catalog_id}, question='{args.question}'...")
         try:
             payload = await _assemble_tutoring_payload(
                 user_id=user_id,
@@ -35,6 +35,7 @@ async def main() -> None:
                 conversation_id=conversation_id,
                 message=args.question,
                 db=db,
+                catalog_id=args.catalog_id,
             )
         except Exception as e:
             print(f"[!] Failed to assemble payload: {e}")

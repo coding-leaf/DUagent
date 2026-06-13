@@ -32,6 +32,7 @@ def _build_learner_context(user: User) -> dict:
 async def _assemble_tutoring_payload(
     user_id: str, scope: str, course_id: str | None,
     conversation_id: str, message: str, db: AsyncSession,
+    catalog_id: str | None = None,
 ) -> dict:
     """组装调用 Agent /tutoring/chat 所需的 payload。"""
     payload: dict = {
@@ -48,8 +49,20 @@ async def _assemble_tutoring_payload(
     if scope == "course" and course_id:
         offering_r = await db.execute(select(CourseOffering).where(CourseOffering.id == course_id))
         offering = offering_r.scalar_one_or_none()
-        if offering and offering.catalog_id:
-            catalog_r = await db.execute(select(CourseCatalog).where(CourseCatalog.id == offering.catalog_id))
+        
+        target_catalog_id = None
+        if catalog_id:
+            target_catalog_id = catalog_id
+            if offering and offering.catalog_id and offering.catalog_id != catalog_id:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Course_id({course_id}) maps to catalog_id({offering.catalog_id}) but catalog_id({catalog_id}) was provided. Using provided catalog_id for KG."
+                )
+        elif offering:
+            target_catalog_id = offering.catalog_id
+
+        if target_catalog_id:
+            catalog_r = await db.execute(select(CourseCatalog).where(CourseCatalog.id == target_catalog_id))
             catalog = catalog_r.scalar_one_or_none()
             if catalog and catalog.kg_host_course_id:
                 active_kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)

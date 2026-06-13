@@ -186,10 +186,24 @@ export default function AIChat() {
         if (msg.type === 'status') {
           setMessages(prev => prev.map(m => {
             if (m.id === 'ai-placeholder') {
+              if (msg.stage === 'generation') {
+                const updatedToolCalls = (m.toolCalls || []).map(tc =>
+                  tc.id === 'retrieval' ? { ...tc, status: 'completed' } : tc
+                );
+                return {
+                  ...m,
+                  toolCalls: updatedToolCalls
+                };
+              } else if (msg.stage === 'retrieval') {
+                return {
+                  ...m,
+                  toolCalls: [{ id: 'retrieval', name: '检索课程知识库', status: 'running' }]
+                };
+              }
               const statusText = msg.message || msg.content || '正在处理...';
               return {
                 ...m,
-                toolCalls: [{ name: statusText, status: 'running' }]
+                toolCalls: [{ id: 'generic', name: statusText, status: 'running' }]
               };
             }
             return m;
@@ -197,7 +211,10 @@ export default function AIChat() {
         } else if (msg.type === 'chunk') {
           setMessages(prev => prev.map(m => {
             if (m.id === 'ai-placeholder') {
-              return { ...m, content: m.content + (msg.content || ''), toolCalls: [] };
+              const updatedToolCalls = (m.toolCalls || []).map(tc =>
+                tc.status === 'running' ? { ...tc, status: 'completed' } : tc
+              );
+              return { ...m, content: m.content + (msg.content || ''), toolCalls: updatedToolCalls };
             }
             return m;
           }));
@@ -249,17 +266,21 @@ export default function AIChat() {
         lastMessageIdRef.current = finalMessageId;
         setMessages(prev => prev.map(m => {
           if (m.id === 'ai-placeholder') {
+            const updatedToolCalls = (m.toolCalls || []).map(tc =>
+              tc.status === 'running' ? { ...tc, status: 'completed' } : tc
+            );
             return {
               ...m,
               id: finalMessageId,
-              loading: false
+              loading: false,
+              toolCalls: updatedToolCalls
             };
           }
           return m;
         }));
         setIsSending(false);
         abortControllerRef.current = null;
-
+ 
         if (!activeSession && doneData.conversation_id) {
           setActiveSession(doneData.conversation_id);
           chatService.getSessions(activeCourseId).then(res => {
@@ -272,11 +293,15 @@ export default function AIChat() {
       (err) => {
         setMessages(prev => prev.map(m => {
           if (m.id === 'ai-placeholder') {
+            const updatedToolCalls = (m.toolCalls || []).map(tc =>
+              tc.status === 'running' ? { ...tc, status: 'completed' } : tc
+            );
             return {
               ...m,
               content: m.content + '\n\n[发送失败: ' + (err.message || '网络连接故障') + ']',
               loading: false,
-              isError: true
+              isError: true,
+              toolCalls: updatedToolCalls
             };
           }
           return m;

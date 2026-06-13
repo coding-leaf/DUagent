@@ -255,6 +255,16 @@ export default function StudentProfile() {
 
   const labelValue = (value) => PROFILE_VALUE_LABELS[value] || value;
 
+  const formatProfileTextValue = (value) => {
+    if (typeof value !== 'string') return labelValue(value);
+    const parts = value
+      .split(/[、,/]/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length <= 1) return labelValue(value);
+    return parts.map(labelValue).join('、');
+  };
+
   const displayCourseSubject = (subject) => {
     if (!subject) return '';
     if (subject === activeCourseId) return currentCourseName;
@@ -320,7 +330,7 @@ export default function StudentProfile() {
       return meaningful.join(' / ') || PROFILE_EMPTY_TEXT[key] || '待补充';
     }
     if (value === 0) return '0';
-    return labelValue(value) || PROFILE_EMPTY_TEXT[key] || '待补充';
+    return formatProfileTextValue(value) || PROFILE_EMPTY_TEXT[key] || '待补充';
   };
 
   const sourceLabel = (source) => ({

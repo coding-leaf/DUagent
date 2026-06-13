@@ -368,6 +368,15 @@
 - **验证**: `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
 - **契约**: 无 OpenAPI 变更；只修改前端渲染文案。
 
+## 2026-06-13 学习资料偏好字符串枚举展示修复
+
+- **问题**: 后端 `profile_dimensions.resource_preference.value` 返回 `code_practice、text_analysis、chart_logic` 这类已拼接字符串，前端只映射数组项和单个枚举值，导致学习资料偏好仍显示内部枚举。
+- **方案**: 前端格式化字符串值时识别 `、`、`,`、`/` 分隔的枚举列表，逐项映射后再拼回中文展示。
+- **改动**:
+  - `src/pages/StudentProfile.jsx`: 新增 `formatProfileTextValue()`，兼容拼接字符串枚举。
+- **验证**: `npm run lint` 通过；`npm run build` 通过，仍有既有 Vite chunk size warning。
+- **契约**: 无 OpenAPI 变更；只修改前端渲染文案。
+
 ## 下一步指针
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。

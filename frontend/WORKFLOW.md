@@ -21,6 +21,24 @@
 ## 最近验证
 
 ### 2026-06-14
+- AIChat 桌面端侧边栏收起后控制按钮丢失问题修复：
+  - 问题分析：原 `<aside>` 侧边栏容器在折叠时被赋予了 `lg:overflow-hidden` / `xl:overflow-hidden`，由于绝对定位的折叠控制按钮悬浮在侧边栏容器边缘之外（具有负偏置 `right-[-12px]` / `left-[-12px]`），容器的 `overflow-hidden` 会直接把控制按钮裁剪隐藏，导致折叠后按钮消失，用户无法再次展开。
+  - 修复：移除 `<aside>` 侧边栏本身在折叠时的 `overflow-hidden` 样式，使其保持溢出可见。同时在侧边栏内部引入一层自适应的 `<div className="w-full h-full overflow-hidden flex flex-col">` 包装容器，这样在宽度为 0 时能依然利用这层包装裁切隐藏侧边栏的正文，而绝对定位的按钮则因为外层可见而能正常悬浮显示并响应点击。
+  - 契约说明：纯前端 UI 布局结构调整，无契约漂移。
+  - 验证：
+    - `npm run lint` 通过。
+    - `npm run build` 成功。
+    - `npx playwright test e2e/specs.spec.js -g "AI Chat renders historical messages"` 通过。
+
+- AIChat 聊天对话中 Mermaid 嵌套括号节点渲染报错修复：
+  - 问题分析：原 `sanitizeMermaidSource` 采用简单正则进行替换，当节点标签包含嵌套括号时（如 `B[arr[0]=10]`），正则会提前匹配到第一个右中括号 `]`，从而将 `B[arr[0]` 错误替换为 `B["arr[0"]`，其后残留的 `=10]` 导致最终生成非法语法并触发 Mermaid 解析报错（Lexical error）。
+  - 修复：重写 `sanitizeMermaidSource`，使用支持嵌套括号/花括号/中括号层级扫描（Nesting-Aware Scanning）算法。通过跟踪 `[` / `]`、`(` / `)` 等括号对的嵌套计数，精确确定节点的最外层闭合位置，完美解决包含嵌套表达式（如数组下标）的标签在自动加引号时被截断的问题。
+  - 契约说明：纯前端 Mermaid 语法容错处理，不涉及 API 契约机制变更，不涉及后端与契约漂移。
+  - 验证：
+    - `npm run lint` 通过。
+    - `npm run build` 成功。
+    - `npx playwright test e2e/specs.spec.js -g "AI Chat renders historical messages"` 通过。
+
 - AIChat 页面动态推荐资源侧边栏接入完成：
   - 问题分析：原推荐资源侧边栏是静态 Mock，无法根据当前对话上下文推荐相关课程学习资源。
   - 修复：

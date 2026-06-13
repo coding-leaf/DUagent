@@ -370,47 +370,50 @@ export default function AIChat() {
           fixed top-0 left-0 h-full w-64 shadow-2xl lg:shadow-none lg:static lg:h-full
           ${leftDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           /* Desktop Collapse Style */
-          ${leftCollapsed ? 'lg:w-0 lg:opacity-0 lg:overflow-hidden lg:border-transparent' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
+          ${leftCollapsed ? 'lg:w-0 lg:opacity-0 lg:border-transparent' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
         `}>
-          <div className="flex-1 flex flex-col min-w-[256px] h-full">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
-                智能学习助手
-              </div>
-              <button 
-                onClick={handleResetConversation}
-                className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
-                title="新对话"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-              <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
-              {sessions.map(session => (
-                <div 
-                  key={session.id} 
-                  onClick={() => {
-                    if (abortControllerRef.current) {
-                      abortControllerRef.current();
-                      abortControllerRef.current = null;
-                    }
-                    setActiveSession(session.id);
-                    setLeftDrawerOpen(false); // Close mobile history drawer
-                  }}
-                  className={`px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
-                    activeSession === session.id 
-                      ? 'bg-slate-100 text-slate-800 font-semibold' 
-                      : 'text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  {session.title}
+          {/* Wrapper to handle overflow clipping during width transitions without hiding absolute handle */}
+          <div className="w-full h-full overflow-hidden flex flex-col">
+            <div className="flex-1 flex flex-col min-w-[256px] h-full">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold text-slate-800">
+                  <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
+                  智能学习助手
                 </div>
-              ))}
-              {sessions.length === 0 && (
-                <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
-              )}
+                <button 
+                  onClick={handleResetConversation}
+                  className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                  title="新对话"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+                <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
+                {sessions.map(session => (
+                  <div 
+                    key={session.id} 
+                    onClick={() => {
+                      if (abortControllerRef.current) {
+                        abortControllerRef.current();
+                        abortControllerRef.current = null;
+                      }
+                      setActiveSession(session.id);
+                      setLeftDrawerOpen(false); // Close mobile history drawer
+                    }}
+                    className={`px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
+                      activeSession === session.id 
+                        ? 'bg-slate-100 text-slate-800 font-semibold' 
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {session.title}
+                  </div>
+                ))}
+                {sessions.length === 0 && (
+                  <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -534,82 +537,85 @@ export default function AIChat() {
           fixed top-0 right-0 h-full w-72 shadow-2xl xl:shadow-none xl:static xl:h-full
           ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full xl:translate-x-0'}
           /* Desktop Collapse Style */
-          ${rightCollapsed ? 'xl:w-0 xl:opacity-0 xl:overflow-hidden xl:border-transparent' : 'xl:w-72 xl:opacity-100 xl:border-l xl:border-slate-200'}
+          ${rightCollapsed ? 'xl:w-0 xl:opacity-0 xl:border-transparent' : 'xl:w-72 xl:opacity-100 xl:border-l xl:border-slate-200'}
         `}>
-          <div className="flex-1 flex flex-col min-w-[288px] h-full">
-            <div className="p-5 border-b border-slate-100">
-              <div className="text-[11px] font-bold text-slate-400 mb-1">当前学习上下文</div>
-              <div className="text-slate-800 font-semibold text-sm truncate" title={activeCourseName}>
-                {activeCourseName}
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-[12px] font-bold text-slate-400">相关资源推荐</span>
-                <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
+          {/* Wrapper to handle overflow clipping during width transitions without hiding absolute handle */}
+          <div className="w-full h-full overflow-hidden flex flex-col">
+            <div className="flex-1 flex flex-col min-w-[288px] h-full">
+              <div className="p-5 border-b border-slate-100">
+                <div className="text-[11px] font-bold text-slate-400 mb-1">当前学习上下文</div>
+                <div className="text-slate-800 font-semibold text-sm truncate" title={activeCourseName}>
+                  {activeCourseName}
+                </div>
               </div>
               
-              {recommendedResources.length > 0 ? (
-                <div className="space-y-3">
-                  {recommendedResources.map(res => {
-                    let icon = 'description';
-                    let iconBg = 'bg-blue-50 text-blue-600';
-                    if (res.type === 'mindmap') {
-                      icon = 'hub';
-                      iconBg = 'bg-purple-50 text-purple-600';
-                    } else if (res.type === 'reading') {
-                      icon = 'menu_book';
-                      iconBg = 'bg-amber-50 text-amber-600';
-                    } else if (res.type === 'code') {
-                      icon = 'code';
-                      iconBg = 'bg-emerald-50 text-emerald-600';
-                    } else if (res.type === 'video') {
-                      icon = 'video_library';
-                      iconBg = 'bg-rose-50 text-rose-600';
-                    }
-                    return (
-                      <Link 
-                        key={res.id} 
-                        to={"/resource/" + res.id} 
-                        className="flex gap-3 p-3 rounded-xl border border-slate-100 hover:border-cyan-200 hover:bg-cyan-50/30 transition-all duration-200 group cursor-pointer block"
-                      >
-                        <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 font-medium`}>
-                          <span className="material-symbols-outlined text-[20px]">{icon}</span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="text-[13px] font-semibold text-slate-800 group-hover:text-cyan-700 transition-colors line-clamp-1 mb-0.5">
-                            {res.title}
-                          </h4>
-                          {res.description && (
-                            <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-                              {res.description}
-                            </p>
-                          )}
-                          {res.knowledge_point && (
-                            <div className="mt-1.5 flex flex-wrap gap-1">
-                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-medium bg-slate-100 text-slate-600 rounded">
-                                {res.knowledge_point}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
+              <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-[12px] font-bold text-slate-400">相关资源推荐</span>
+                  <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
                 </div>
-              ) : (
-                /* Empty State */
-                <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
-                  <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
-                    <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                
+                {recommendedResources.length > 0 ? (
+                  <div className="space-y-3">
+                    {recommendedResources.map(res => {
+                      let icon = 'description';
+                      let iconBg = 'bg-blue-50 text-blue-600';
+                      if (res.type === 'mindmap') {
+                        icon = 'hub';
+                        iconBg = 'bg-purple-50 text-purple-600';
+                      } else if (res.type === 'reading') {
+                        icon = 'menu_book';
+                        iconBg = 'bg-amber-50 text-amber-600';
+                      } else if (res.type === 'code') {
+                        icon = 'code';
+                        iconBg = 'bg-emerald-50 text-emerald-600';
+                      } else if (res.type === 'video') {
+                        icon = 'video_library';
+                        iconBg = 'bg-rose-50 text-rose-600';
+                      }
+                      return (
+                        <Link 
+                          key={res.id} 
+                          to={"/resource/" + res.id} 
+                          className="flex gap-3 p-3 rounded-xl border border-slate-100 hover:border-cyan-200 hover:bg-cyan-50/30 transition-all duration-200 group cursor-pointer block"
+                        >
+                          <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 font-medium`}>
+                            <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-[13px] font-semibold text-slate-800 group-hover:text-cyan-700 transition-colors line-clamp-1 mb-0.5">
+                              {res.title}
+                            </h4>
+                            {res.description && (
+                              <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                                {res.description}
+                              </p>
+                            )}
+                            {res.knowledge_point && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                <span className="inline-block px-1.5 py-0.5 text-[9px] font-medium bg-slate-100 text-slate-600 rounded">
+                                  {res.knowledge_point}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
                   </div>
-                  <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
-                  <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
-                    完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+                ) : (
+                  /* Empty State */
+                  <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
+                    <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
+                      <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                    </div>
+                    <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
+                    <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
+                      完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 

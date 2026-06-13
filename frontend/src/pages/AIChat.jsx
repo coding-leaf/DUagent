@@ -94,6 +94,12 @@ export default function AIChat() {
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   
+  // Collapse & Drawer States
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
@@ -151,6 +157,7 @@ export default function AIChat() {
     lastMessageIdRef.current = null;
     setMessages([]);
     setIsSending(false);
+    setLeftDrawerOpen(false); // Close mobile drawer
   };
 
   const handleSendMessage = (overrideText = '') => {
@@ -319,55 +326,104 @@ export default function AIChat() {
       <div className="flex-1 flex overflow-hidden pt-16">
         
         {/* Left Sidebar - History */}
-        <aside className="w-64 bg-white border-r border-slate-200 flex flex-col hidden lg:flex">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2 font-bold text-slate-800">
-              <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
-              智能学习助手
-            </div>
-            <button 
-              onClick={handleResetConversation}
-              className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
-              title="新对话"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-            <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
-            {sessions.map(session => (
-              <div 
-                key={session.id} 
-                onClick={() => {
-                  if (abortControllerRef.current) {
-                    abortControllerRef.current();
-                    abortControllerRef.current = null;
-                  }
-                  setActiveSession(session.id);
-                }}
-                className={`px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
-                  activeSession === session.id 
-                    ? 'bg-slate-100 text-slate-800 font-semibold' 
-                    : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                {session.title}
+        <aside className={`
+          bg-white flex flex-col z-30 transition-all duration-300 ease-in-out relative flex-shrink-0
+          /* Mobile Drawer Style */
+          fixed top-0 left-0 h-full w-64 shadow-2xl lg:shadow-none lg:static lg:h-auto
+          ${leftDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          /* Desktop Collapse Style */
+          ${leftCollapsed ? 'lg:w-0 lg:opacity-0 lg:overflow-hidden lg:border-transparent' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
+        `}>
+          <div className="flex-1 flex flex-col min-w-[256px] h-full">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-slate-800">
+                <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
+                智能学习助手
               </div>
-            ))}
-            {sessions.length === 0 && (
-              <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
-            )}
+              <button 
+                onClick={handleResetConversation}
+                className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                title="新对话"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+              <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
+              {sessions.map(session => (
+                <div 
+                  key={session.id} 
+                  onClick={() => {
+                    if (abortControllerRef.current) {
+                      abortControllerRef.current();
+                      abortControllerRef.current = null;
+                    }
+                    setActiveSession(session.id);
+                    setLeftDrawerOpen(false); // Close mobile history drawer
+                  }}
+                  className={`px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
+                    activeSession === session.id 
+                      ? 'bg-slate-100 text-slate-800 font-semibold' 
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {session.title}
+                </div>
+              ))}
+              {sessions.length === 0 && (
+                <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
+              )}
+            </div>
           </div>
+
+          {/* Desktop Collapse Handle */}
+          <button 
+            onClick={() => setLeftCollapsed(!leftCollapsed)}
+            className="hidden lg:flex absolute right-[-12px] top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border border-slate-200 bg-white items-center justify-center shadow-md cursor-pointer hover:bg-slate-50 hover:text-cyan-600 transition-all z-40 active:scale-90"
+            title={leftCollapsed ? "展开侧边栏" : "收起侧边栏"}
+          >
+            <span className="material-symbols-outlined text-[16px] select-none">
+              {leftCollapsed ? 'chevron_right' : 'chevron_left'}
+            </span>
+          </button>
         </aside>
+
+        {/* Backdrop Overlay for mobile drawers */}
+        {(leftDrawerOpen || rightDrawerOpen) && (
+          <div 
+            onClick={() => { setLeftDrawerOpen(false); setRightDrawerOpen(false); }}
+            className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
+          />
+        )}
 
         {/* Center Column - Main Chat */}
         <main className="flex-1 flex flex-col relative bg-slate-50">
           
           {/* Top Context Bar */}
           <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10">
-            <div className="text-sm text-slate-700 font-medium truncate">
-              {activeSession ? sessions.find(s => s.id === activeSession)?.title || '对话中' : '新对话'}
+            <div className="flex items-center gap-1.5 min-w-0">
+              {/* Mobile Left Drawer Trigger */}
+              <button 
+                onClick={() => setLeftDrawerOpen(true)}
+                className="lg:hidden text-slate-500 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer mr-1 flex items-center justify-center"
+                title="打开历史记录"
+              >
+                <span className="material-symbols-outlined text-[20px]">menu</span>
+              </button>
+              
+              <div className="text-sm text-slate-700 font-medium truncate">
+                {activeSession ? sessions.find(s => s.id === activeSession)?.title || '对话中' : '新对话'}
+              </div>
             </div>
+
+            {/* Mobile Right Drawer Trigger */}
+            <button 
+              onClick={() => setRightDrawerOpen(true)}
+              className="xl:hidden text-slate-500 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+              title="查看推荐资源"
+            >
+              <span className="material-symbols-outlined text-[20px]">menu_book</span>
+            </button>
           </div>
 
           {/* Messages Scroll Area */}
@@ -434,32 +490,51 @@ export default function AIChat() {
         </main>
 
         {/* Right Sidebar - Resources (Competition Ready) */}
-        <aside className="w-72 bg-white border-l border-slate-200 hidden xl:flex flex-col">
-          <div className="p-5 border-b border-slate-100">
-            <div className="text-[11px] font-bold text-slate-400 mb-1">当前学习上下文</div>
-            <div className="text-slate-800 font-semibold text-sm truncate" title={activeCourseName}>
-              {activeCourseName}
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[12px] font-bold text-slate-400">相关资源推荐</span>
-              <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
-            </div>
-            
-            {/* Empty State */}
-            <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
-              <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
-                <span className="material-symbols-outlined text-2xl">inventory_2</span>
-              </div>
-              <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
-              <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
-                完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+        <aside className={`
+          bg-white flex flex-col z-30 transition-all duration-300 ease-in-out relative flex-shrink-0
+          /* Mobile Drawer Style */
+          fixed top-0 right-0 h-full w-72 shadow-2xl xl:shadow-none xl:static xl:h-auto
+          ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full xl:translate-x-0'}
+          /* Desktop Collapse Style */
+          ${rightCollapsed ? 'xl:w-0 xl:opacity-0 xl:overflow-hidden xl:border-transparent' : 'xl:w-72 xl:opacity-100 xl:border-l xl:border-slate-200'}
+        `}>
+          <div className="flex-1 flex flex-col min-w-[288px] h-full">
+            <div className="p-5 border-b border-slate-100">
+              <div className="text-[11px] font-bold text-slate-400 mb-1">当前学习上下文</div>
+              <div className="text-slate-800 font-semibold text-sm truncate" title={activeCourseName}>
+                {activeCourseName}
               </div>
             </div>
             
+            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-[12px] font-bold text-slate-400">相关资源推荐</span>
+                <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
+              </div>
+              
+              {/* Empty State */}
+              <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
+                <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
+                  <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                </div>
+                <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
+                <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
+                  完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Desktop Collapse Handle */}
+          <button 
+            onClick={() => setRightCollapsed(!rightCollapsed)}
+            className="hidden xl:flex absolute left-[-12px] top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border border-slate-200 bg-white items-center justify-center shadow-md cursor-pointer hover:bg-slate-50 hover:text-cyan-600 transition-all z-40 active:scale-90"
+            title={rightCollapsed ? "展开侧边栏" : "收起侧边栏"}
+          >
+            <span className="material-symbols-outlined text-[16px] select-none">
+              {rightCollapsed ? 'chevron_left' : 'chevron_right'}
+            </span>
+          </button>
         </aside>
 
       </div>

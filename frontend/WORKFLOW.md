@@ -21,6 +21,20 @@
 ## 最近验证
 
 ### 2026-06-14
+- AIChat 页面动态推荐资源侧边栏接入完成：
+  - 问题分析：原推荐资源侧边栏是静态 Mock，无法根据当前对话上下文推荐相关课程学习资源。
+  - 修复：
+    1. 引入 `Link` 及 `learningService`。
+    2. 新增 `resources` 状态并在 `activeCourseId` 变化时，调用 `learningService.getResources` 拉取当前课程的全部资源（使用 `setTimeout` 规避 `useEffect` 同步设置 state 的 lint 警告）。
+    3. 新增 `getActiveKnowledgePoints` 辅助方法过滤出消息历史中最新的 AI 知识点。
+    4. 根据活跃知识点 `activeKPs` 过滤 `resources` 得到推荐列表（若无活跃知识点则默认推荐全部，否则按知识点名或标题匹配）。
+    5. 右侧 aside 渲染根据推荐资源列表动态生成卡片链接，针对不同资源类型（document, mindmap, reading, code, video）展示对应图标与配色，并在为空时渲染美观的空状态。
+  - 契约说明：复用已有的 `GET /resources` 及资源详情跳转，符合契约约定。
+  - 验证：
+    - `npm run lint` 通过。
+    - `npm run build` 成功。
+    - `npx playwright test e2e/specs.spec.js -g "AI Chat renders historical messages"` 通过。
+
 - AIChat 页面侧边栏响应式折叠与滑出抽屉重构完成：
   - 问题分析：原侧边栏采用固定隐藏/显示样式，导致移动端完全无法访问历史记录与学习资源，且在桌面端无法由用户收拢以获得更宽的聊天窗口。
   - 修复：

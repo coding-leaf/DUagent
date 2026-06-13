@@ -67,7 +67,7 @@
 | `Quiz.jsx` | 按节点/自由模式获取题目并提交答案 | `GET /quiz/questions?node_id=xxx`、`POST /quiz/submit` | ✅ 已可操作 | 支持节点模式（LearningPath 带 node_id 进入）和自由模式；后台诊断失败不阻塞结果。 |
 | `PracticeResult.jsx` | 查看练习结果 | `GET /quiz/result` | ✅ 已可操作 | 做完留在结果页，手动返回。 |
 | `LearningPath.jsx` | "进入练习"带节点上下文 | `/quiz?course_id=xxx&node_id=yyy` | ✅ 已可操作 | 从节点面板点"进入练习"跳转 Quiz。 |
-| `AIChat.jsx` | 查看会话、历史消息、SSE 对话；左右侧边栏支持桌面折叠及移动端抽屉收缩，支持遮罩交互与会话联动 | `GET /tutoring/conversations`、`GET /tutoring/conversations/{id}`、`POST /tutoring/chat` | ✅ 已可操作 | 已兼容对象型 `knowledge_points`；已完成侧边栏响应式与桌面折叠功能升级；已锁定桌面端页面及侧边栏高度。 |
+| `AIChat.jsx` | 查看会话、历史消息、SSE 对话；左右侧边栏支持桌面折叠及移动端抽屉收缩，支持遮罩交互与会话联动；根据对话知识点推荐资源 | `GET /tutoring/conversations`、`GET /tutoring/conversations/{id}`、`POST /tutoring/chat`、`GET /resources` | ✅ 已可操作 | 已兼容对象型 `knowledge_points`；已完成侧边栏响应式与桌面折叠功能升级；已锁定桌面端页面及侧边栏高度；已实现基于对话当前活跃知识点的动态相关资源推荐。 |
 | `LearningPath.jsx` | 查看学习路径、查看节点资源 | `GET /learning-path`、`GET /learning-path/nodes/{node_id}/resources` | ✅ 已可操作 | 没有调用 `refreshLearningPath()`。 |
 | `LearningEffects.jsx` | 查看学习效果 | `GET /evaluation` | ✅ 已可操作 | 没有调用 `refreshEvaluation()`。 |
 | `TeacherConsole.jsx` | 查看班级、绑定资源库状态、当前教学班上下文下的共享资源、课程码、学生列表、班级洞察 | `GET /courses`、`GET /resources`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 教师端只读确认绑定资源库资源，可跳转资源详情并复制课程码；不提供生成/上传/删除资源入口。 |

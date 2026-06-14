@@ -919,6 +919,41 @@ POST /api/v1/evaluation/refresh
 
 **说明：** Backend 聚合练习记录、资源使用、学习路径进度、辅导对话摘要等 SQL 数据后异步调用 Agent 生成评估；完成后保存为该用户在该课程下的最近评估。
 
+### 6.3 记录学习行为事件
+
+```
+POST /api/v1/learning-activities
+```
+
+**说明：** 前端在资源浏览、节点选择、节点练习开始和提交时上报单条学习行为。该接口要求认证；上报失败不得阻塞正常学习流程。`/evaluation` 的 `node_progress.study_duration_seconds` 优先使用学习行为表中该 KG 节点的累计时长；没有学习行为记录时兼容使用已提交练习的 `time_spent`。
+
+**请求体 `application/json`：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| course_id | string | 是 | 课程 ID |
+| activity_type | string | 是 | resource_view / resource_study / node_view / node_practice_start / node_practice_submit |
+| node_id | string | 条件必填 | node_view、node_practice_start、node_practice_submit 必填；资源事件已知节点时建议传 |
+| node_name | string | 否 | KG 节点名称，缺省时后端尽量按节点 ID 解析 |
+| resource_id | string | 条件必填 | resource_view、resource_study 必填 |
+| quiz_id | string | 条件必填 | node_practice_submit 必填；node_practice_start 建议传 |
+| duration_seconds | integer | 条件必填 | resource_study、node_practice_submit 必填；取值 0-14400 秒 |
+| occurred_at | string | 否 | ISO 8601 事件时间；缺省或不可解析时以后端接收时间为准 |
+| metadata | object | 否 | 小型结构化上下文，如 `{ "source": "resource_detail" }` |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | 学习行为记录 ID |
+
+**校验规则：**
+
+- 当前用户必须有权访问 `course_id`。
+- `resource_id` 必须属于该课程可读资源范围。
+- `duration_seconds` 不允许为负数，不允许超过 14400 秒。
+- 未知 `activity_type` 或缺少条件必填字段返回 422。
+
 ---
 
 ## 七、用户画像 `/api/v1/profile`

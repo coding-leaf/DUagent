@@ -3037,6 +3037,77 @@
           }
         }
       }
+    },
+    "/learning-activities": {
+      "post": {
+        "tags": [
+          "LearningActivity"
+        ],
+        "summary": "记录学习行为事件",
+        "description": "前端在资源浏览、节点选择、节点练习开始/提交时上报单条学习行为。该接口要求认证；上报失败不应阻塞学习流程。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearningActivityCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "记录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningActivityCreateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权访问课程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于该课程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5739,6 +5810,87 @@
                 "example": null
               }
             }
+          }
+        }
+      },
+      "LearningActivityCreate": {
+        "type": "object",
+        "required": [
+          "course_id",
+          "activity_type"
+        ],
+        "properties": {
+          "course_id": {
+            "type": "string"
+          },
+          "activity_type": {
+            "type": "string",
+            "enum": [
+              "resource_view",
+              "resource_study",
+              "node_view",
+              "node_practice_start",
+              "node_practice_submit"
+            ]
+          },
+          "node_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "node_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "resource_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "quiz_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 14400,
+            "nullable": true
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        }
+      },
+      "LearningActivityCreated": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "LearningActivityCreateResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LearningActivityCreated"
           }
         }
       }

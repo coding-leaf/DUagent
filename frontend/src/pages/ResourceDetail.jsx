@@ -1,8 +1,9 @@
 
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { learningService } from '../api/services/learning';
+import { learningActivityService } from '../api/services/learningActivity';
 
 const TYPE_LABELS = {
   document: '文档',
@@ -92,9 +93,13 @@ function MermaidDiagram({ content }) {
 
 export default function ResourceDetail() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const [resource, setResource] = useState(null);
   const [loading, setLoading] = useState(true);
+  const studyStartRef = useRef(null);
+  const trackingResourceRef = useRef(null);
+  const nodeContext = location.state?.node || {};
 
   useEffect(() => {
     if (id) {
@@ -104,6 +109,39 @@ export default function ResourceDetail() {
       .finally(() => setLoading(false));
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!resource?.id || !resource?.course_id) return undefined;
+
+    const activityContext = {
+      course_id: resource.course_id,
+      resource_id: resource.id,
+      node_id: nodeContext.id || nodeContext.node_id || null,
+      node_name: nodeContext.name || nodeContext.node_name || resource.knowledge_point || null
+    };
+
+    studyStartRef.current = Date.now();
+    trackingResourceRef.current = activityContext;
+    learningActivityService.trackActivity({
+      ...activityContext,
+      activity_type: 'resource_view',
+      metadata: { source: 'resource_detail' }
+    });
+
+    return () => {
+      const startedAt = studyStartRef.current;
+      const trackedResource = trackingResourceRef.current;
+      if (!startedAt || !trackedResource) return;
+      const duration = Math.floor((Date.now() - startedAt) / 1000);
+      if (duration < learningActivityService.minStudySeconds) return;
+      learningActivityService.trackActivity({
+        ...trackedResource,
+        activity_type: 'resource_study',
+        duration_seconds: duration,
+        metadata: { source: 'resource_detail' }
+      });
+    };
+  }, [resource, nodeContext.id, nodeContext.name, nodeContext.node_id, nodeContext.node_name]);
 
   if (loading) {
     return (

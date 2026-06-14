@@ -33,6 +33,43 @@ class Resource(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class LearningActivity(Base):
+    __tablename__ = "learning_activities"
+    __table_args__ = (
+        Index(
+            "idx_learning_activities_user_course_node",
+            "user_id",
+            "course_id",
+            "node_id",
+            "is_deleted",
+        ),
+        Index(
+            "idx_learning_activities_type_time",
+            "user_id",
+            "course_id",
+            "activity_type",
+            "occurred_at",
+        ),
+        Index("idx_learning_activities_resource", "resource_id", "is_deleted"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
+    user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
+    node_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    node_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("resources.id"), nullable=True)
+    activity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
+    create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class AsyncTask(Base):
     __tablename__ = "async_tasks"
 

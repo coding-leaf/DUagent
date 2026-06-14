@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { learningService } from '../api/services/learning';
+import { learningActivityService } from '../api/services/learningActivity';
 import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
@@ -16,6 +17,7 @@ export default function LearningPath() {
   const [showAllTutorials, setShowAllTutorials] = useState(false);
   const [showAllExercises, setShowAllExercises] = useState(false);
   const [showAllMaterials, setShowAllMaterials] = useState(false);
+  const initialSelectionSkippedRef = useRef(false);
 
   useEffect(() => {
     const fetchPath = async () => {
@@ -78,6 +80,23 @@ export default function LearningPath() {
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNodeId, fetchNodeResources]);
+
+  useEffect(() => {
+    if (!activeCourseId || !selectedNodeId || !learningPath?.nodes?.length) return;
+    const selectedNode = learningPath.nodes.find((node) => node.id === selectedNodeId);
+    if (!selectedNode) return;
+    if (!initialSelectionSkippedRef.current) {
+      initialSelectionSkippedRef.current = true;
+      return;
+    }
+    learningActivityService.trackActivity({
+      course_id: activeCourseId,
+      activity_type: 'node_view',
+      node_id: selectedNode.id,
+      node_name: selectedNode.name,
+      metadata: { source: 'learning_path' }
+    });
+  }, [activeCourseId, learningPath, selectedNodeId]);
 
   return (
     <div className="font-body-md bg-background min-h-screen text-on-background">
@@ -254,7 +273,7 @@ export default function LearningPath() {
                             <p className="text-sm font-bold text-on-surface mb-1">{item.title}</p>
                             <p className="text-xs text-secondary line-clamp-2 mb-2">{item.content || ''}</p>
                             {item.id ? (
-                              <Link to={`/resource/${item.id}`} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1">
+                              <Link to={`/resource/${item.id}`} state={{ node: { id: selectedNodeId, name: nodeResources.node_name } }} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1">
                                 查看资源 <span className="material-symbols-outlined text-xs">arrow_forward</span>
                               </Link>
                             ) : (
@@ -328,7 +347,7 @@ export default function LearningPath() {
                               <p className="text-sm font-bold text-on-surface">{item.title}</p>
                             </div>
                             {item.id ? (
-                              <Link to={`/resource/${item.id}`} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1 mt-1">
+                              <Link to={`/resource/${item.id}`} state={{ node: { id: selectedNodeId, name: nodeResources.node_name } }} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1 mt-1">
                                 查看资源 <span className="material-symbols-outlined text-xs">arrow_forward</span>
                               </Link>
                             ) : (

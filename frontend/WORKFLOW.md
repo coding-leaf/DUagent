@@ -560,6 +560,23 @@
 
 下一步队列不在本文件维护，统一查看 `docs/feature-ledger.md` 的“当前下一步队列”。
 
+## 2026-06-14 学习行为采集与学习效果耗时闭环
+
+- **问题**: `/learning-effects` 节点学习耗时此前只能从 `QuizSession.time_spent` 兜底，资源阅读和节点浏览没有真实行为来源。
+- **改动**:
+  - Backend 新增 `LearningActivity` 模型、迁移和 `POST /api/v1/learning-activities`。
+  - `/evaluation` 节点进度聚合优先读取学习行为表累计时长、资源访问次数和最近活动时间；没有学习行为时兼容旧练习耗时。
+  - `GET /resources/{id}` 返回 `course_id`，支持资源详情页上报课程上下文。
+  - Frontend 新增 `learningActivityService`，在资源详情、LearningPath 节点选择、Quiz 节点练习开始/提交处做非阻塞上报。
+  - Quiz 提交从硬编码 `time_spent: 120` 改为页面真实 elapsed seconds。
+  - Client API Markdown 和 OpenAPI 同步新增 `/learning-activities` 契约。
+- **验证**:
+  - `../.venv/bin/python -m pytest tests/test_learning_activities.py tests/test_resource_detail.py -q -p no:cacheprovider` 通过，4 passed。
+  - `npm run lint -- --max-warnings=0` 通过。
+  - `python3 -m json.tool docs/10-client-api/Client-API.openapi.json` 通过。
+  - `git diff --check` 通过。
+- **契约**: 新增 `POST /learning-activities`；资源详情响应新增兼容字段 `course_id`。
+
 - 2026-06-14：AIChat 假数据清理与课程上下文修正 (A+)：
   - 问题分析：前一版本 AIChat 引入了写死的资源推荐卡片（如“深入理解指针内存模型”）和写死的 C 语言 ChatEmptyState prompt，且错用了 `course.title` 而不是 `course.name`，这违反了“不允许 mock / 假数据内容”的约束，且可能掩盖 Agent 尚未实现真实检索能力的事实。
   - 修复：

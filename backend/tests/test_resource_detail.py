@@ -121,10 +121,11 @@ async def test():
         join2_r = await client.post("/api/v1/courses/join", json={"course_code": course2_code}, headers=stu2_headers)
         assert join2_r.status_code == 200, f"Join course2 failed: {join2_r.status_code} {join2_r.json()}"
 
+        catalog_id = f"catalog_shared_{uuid.uuid4().hex[:8]}"
         async with async_session_factory() as db:
             db.add(
                 CourseCatalog(
-                    id="catalog_shared_test",
+                    id=catalog_id,
                     title="Shared Catalog",
                     status="ready",
                     knowledge_status="ready",
@@ -133,19 +134,19 @@ async def test():
                 )
             )
             db.add_all([
-                CourseOffering(
-                    id=course_id,
-                    name="Resource Test Course",
-                    catalog_id="catalog_shared_test",
-                    teacher_id=tea_id,
-                    class_code=course_code,
-                ),
-                CourseOffering(
-                    id=course2_id,
-                    name="Student2 Course",
-                    catalog_id="catalog_shared_test",
-                    teacher_id=tea_id,
-                    class_code=course2_code,
+                    CourseOffering(
+                        id=course_id,
+                        name="Resource Test Course",
+                        catalog_id=catalog_id,
+                        teacher_id=tea_id,
+                        class_code=course_code,
+                    ),
+                    CourseOffering(
+                        id=course2_id,
+                        name="Student2 Course",
+                        catalog_id=catalog_id,
+                        teacher_id=tea_id,
+                        class_code=course2_code,
                 ),
             ])
             await db.commit()
@@ -172,7 +173,7 @@ async def test():
                          type="mindmap", content=None, chapter="ch4"),
                 Resource(id=video_id, course_id=course_id, title="Video Resource",
                          type="video", content=None, chapter="ch5"),
-                Resource(id=shared_id, course_id=course_id, catalog_id="catalog_shared_test",
+                Resource(id=shared_id, course_id=course_id, catalog_id=catalog_id,
                          title="Shared Catalog Resource", type="document", content="shared doc content",
                          chapter="共享章节", knowledge_point="共享知识点"),
             ]
@@ -286,7 +287,7 @@ async def test():
         print("\n-- 9. response shape --")
         r = await client.get(f"/api/v1/resources/{doc_id}", headers=stu_headers)
         data = r.json()["data"]
-        expected_fields = {"id", "title", "type", "description", "tags", "chapter",
+        expected_fields = {"id", "course_id", "title", "type", "description", "tags", "chapter",
                            "knowledge_point", "view_count", "created_at", "content_preview",
                            "content"}
         actual_fields = set(data.keys())

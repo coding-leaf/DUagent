@@ -12,7 +12,7 @@ from app.api.deps import get_current_user, get_db
 from app.db.session import async_session_factory
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import CourseEnrollment
-from app.models.others import AsyncTask, CourseKnowledgeGraph, Evaluation, Resource
+from app.models.others import AsyncTask, CourseKnowledgeGraph, Evaluation, LearningActivity, Resource
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
@@ -136,6 +136,50 @@ async def _build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessi
         for stats in attempts.values():
             stats["duration"] = sum(session_by_id[sid].time_spent or 0 for sid in stats["sessions"])
 
+    node_ids = [
+        str(node.get("id") or node.get("node_id") or f"node_{index}")
+        for index, node in enumerate(nodes)
+        if isinstance(node, dict)
+    ]
+    activity_by_node: dict[str, dict] = {}
+    if node_ids:
+        activity_result = await db.execute(
+            select(
+                LearningActivity.node_id,
+                func.coalesce(func.sum(LearningActivity.duration_seconds), 0),
+                func.count(LearningActivity.id),
+                func.max(LearningActivity.occurred_at),
+            ).where(
+                LearningActivity.user_id == user_id,
+                LearningActivity.course_id == course_id,
+                LearningActivity.node_id.in_(node_ids),
+                LearningActivity.is_deleted == False,
+            ).group_by(LearningActivity.node_id)
+        )
+        for node_id, duration, activity_count, last_activity_at in activity_result.all():
+            if node_id:
+                activity_by_node[str(node_id)] = {
+                    "duration": int(duration or 0),
+                    "activity_count": int(activity_count or 0),
+                    "last_activity_at": last_activity_at,
+                }
+
+        resource_visit_result = await db.execute(
+            select(
+                LearningActivity.node_id,
+                func.count(LearningActivity.id),
+            ).where(
+                LearningActivity.user_id == user_id,
+                LearningActivity.course_id == course_id,
+                LearningActivity.node_id.in_(node_ids),
+                LearningActivity.activity_type == "resource_view",
+                LearningActivity.is_deleted == False,
+            ).group_by(LearningActivity.node_id)
+        )
+        for node_id, visit_count in resource_visit_result.all():
+            if node_id:
+                activity_by_node.setdefault(str(node_id), {})["resource_visit_count"] = int(visit_count or 0)
+
     rows: list[dict] = []
     for index, node in enumerate(nodes):
         if not isinstance(node, dict):
@@ -164,7 +208,11 @@ async def _build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessi
             status_text = "未测评/默认通过"
             mastery_label = "未测评/默认通过"
 
-        duration = int(attempt_stats["duration"]) if attempt_stats and attempt_stats["duration"] else None
+        activity_stats = activity_by_node.get(node_id, {})
+        activity_duration = int(activity_stats.get("duration") or 0)
+        quiz_duration = int(attempt_stats["duration"]) if attempt_stats and attempt_stats["duration"] else 0
+        duration = activity_duration or quiz_duration or None
+        last_activity_at = activity_stats.get("last_activity_at")
         rows.append(
             {
                 "node_id": node_id,
@@ -176,8 +224,8 @@ async def _build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessi
                 "assessment_state": assessment_state,
                 "question_count": question_count,
                 "attempt_count": attempt_count,
-                "resource_visit_count": None,
-                "last_activity_at": None,
+                "resource_visit_count": activity_stats.get("resource_visit_count"),
+                "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
             }
         )
     return rows

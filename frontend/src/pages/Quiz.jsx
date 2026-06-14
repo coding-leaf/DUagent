@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
+import { learningActivityService } from '../api/services/learningActivity';
 import { useCourse } from '../context/CourseContext';
 import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
@@ -15,6 +16,8 @@ export default function Quiz() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const quizStartRef = useRef(null);
+  const practiceStartTrackedRef = useRef(null);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -26,6 +29,7 @@ export default function Quiz() {
         const res = await quizService.getQuestions(activeCourseId, nodeId || undefined);
         if (res.code === 200) {
           setQuizData(res.data);
+          quizStartRef.current = Date.now();
         }
       } catch (error) {
         console.error("Failed to load questions", error);
@@ -35,6 +39,21 @@ export default function Quiz() {
     };
     fetchQuestions();
   }, [activeCourseId, nodeId]);
+
+  useEffect(() => {
+    if (!activeCourseId || !nodeId || !quizData?.quiz_id) return;
+    if (practiceStartTrackedRef.current === quizData.quiz_id) return;
+    practiceStartTrackedRef.current = quizData.quiz_id;
+    const firstQuestion = quizData.questions?.[0];
+    learningActivityService.trackActivity({
+      course_id: activeCourseId,
+      activity_type: 'node_practice_start',
+      node_id: nodeId,
+      node_name: firstQuestion?.knowledge_point || null,
+      quiz_id: quizData.quiz_id,
+      metadata: { source: 'quiz' }
+    });
+  }, [activeCourseId, nodeId, quizData]);
 
   const handleAnswerChange = (nextAnswer) => {
     if (!quizData) return;
@@ -71,11 +90,15 @@ export default function Quiz() {
     }
 
     // 最后一题，提交答案
+    const elapsedSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - (quizStartRef.current || Date.now())) / 1000)
+    );
     try {
       setSubmitting(true);
       const submitData = {
         quiz_id: quizData.quiz_id,
-        time_spent: 120, // dummy time
+        time_spent: elapsedSeconds,
         answers: Object.entries(answers).map(([qId, ans]) => ({
           question_id: qId,
           answer: ans
@@ -88,6 +111,17 @@ export default function Quiz() {
     } catch (error) {
       console.error("Failed to submit quiz", error);
     } finally {
+      if (nodeId && activeCourseId) {
+        learningActivityService.trackActivity({
+          course_id: activeCourseId,
+          activity_type: 'node_practice_submit',
+          node_id: nodeId,
+          node_name: quizData.questions?.[0]?.knowledge_point || null,
+          quiz_id: quizData.quiz_id,
+          duration_seconds: elapsedSeconds,
+          metadata: { source: 'quiz' }
+        });
+      }
       setSubmitting(false);
     }
   };

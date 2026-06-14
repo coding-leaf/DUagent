@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS learning_activities (
+  id VARCHAR(32) NOT NULL PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  course_id VARCHAR(32) NOT NULL,
+  node_id VARCHAR(64) NULL,
+  node_name VARCHAR(100) NULL,
+  resource_id VARCHAR(32) NULL,
+  activity_type VARCHAR(40) NOT NULL,
+  duration_seconds INT NULL,
+  occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  metadata JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  create_by VARCHAR(32) NULL,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  update_by VARCHAR(32) NULL,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  CONSTRAINT fk_learning_activities_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_learning_activities_course FOREIGN KEY (course_id) REFERENCES courses(id),
+  CONSTRAINT fk_learning_activities_resource FOREIGN KEY (resource_id) REFERENCES resources(id),
+  INDEX idx_learning_activities_user_course_node (user_id, course_id, node_id, is_deleted),
+  INDEX idx_learning_activities_type_time (user_id, course_id, activity_type, occurred_at),
+  INDEX idx_learning_activities_resource (resource_id, is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

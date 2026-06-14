@@ -63,13 +63,13 @@
 | `AuthContext.jsx` | 鉴权恢复 | `GET /users/me` | ✅ 已可操作 | 页面刷新后恢复登录态。 |
 | `StudentProfile.jsx` | 查看学生画像、对话补充画像、静默同步画像、修改指导级别 | `GET /profile`、`POST /profile/dialogue-update`、`POST /profile/refresh`、`GET /tasks/{task_id}`、`PUT /users/me` | ✅ 已可操作 | 六维画像走 `profile_dimensions`；同步画像不暴露 prompt，完成后刷新画像。 |
 | `Dashboard.jsx` | 查看课程资源列表；有课程但无资源时显示准备中空态 | `GET /resources` | ✅ 已可操作 | 按当前教学班 `course_id` 读取资源；不展示 Admin 原始资料。 |
-| `ResourceDetail.jsx` | 查看资源详情、正文、代码、Mermaid mindmap | `GET /resources/{id}` | ✅ 已可操作 | Mermaid 渲染是前端展示能力。 |
-| `Quiz.jsx` | 按节点/自由模式获取题目并提交答案 | `GET /quiz/questions?node_id=xxx`、`POST /quiz/submit` | ✅ 已可操作 | 支持节点模式（LearningPath 带 node_id 进入）和自由模式；后台诊断失败不阻塞结果。 |
+| `ResourceDetail.jsx` | 查看资源详情、正文、代码、Mermaid mindmap，并上报资源浏览/学习行为 | `GET /resources/{id}`、`POST /learning-activities` | ✅ 已可操作 | Mermaid 渲染是前端展示能力；学习行为上报失败不阻塞阅读。 |
+| `Quiz.jsx` | 按节点/自由模式获取题目并提交答案，上报节点练习行为 | `GET /quiz/questions?node_id=xxx`、`POST /quiz/submit`、`POST /learning-activities` | ✅ 已可操作 | 支持节点模式（LearningPath 带 node_id 进入）和自由模式；提交真实 elapsed seconds；后台诊断/行为上报失败不阻塞结果。 |
 | `PracticeResult.jsx` | 查看练习结果 | `GET /quiz/result` | ✅ 已可操作 | 做完留在结果页，手动返回。 |
 | `LearningPath.jsx` | "进入练习"带节点上下文 | `/quiz?course_id=xxx&node_id=yyy` | ✅ 已可操作 | 从节点面板点"进入练习"跳转 Quiz。 |
 | `AIChat.jsx` | 查看会话、历史消息、SSE 对话；左右侧边栏支持桌面折叠及移动端抽屉收缩，支持遮罩交互与会话联动；根据对话知识点推荐资源 | `GET /tutoring/conversations`、`GET /tutoring/conversations/{id}`、`POST /tutoring/chat`、`GET /resources` | ✅ 已可操作 | 已兼容对象型 `knowledge_points`；已完成侧边栏响应式与桌面折叠功能升级；已锁定桌面端页面及侧边栏高度；已实现基于对话当前活跃知识点的动态相关资源推荐。 |
-| `LearningPath.jsx` | 查看学习路径、查看节点资源 | `GET /learning-path`、`GET /learning-path/nodes/{node_id}/resources` | ✅ 已可操作 | 没有调用 `refreshLearningPath()`。 |
-| `LearningEffects.jsx` | 查看 KG 节点学习效果、刷新评估任务 | `GET /evaluation`、`POST /evaluation/refresh`、`GET /tasks/{task_id}` | ✅ 已可操作 | 展示真实 `node_progress`；无题节点显示“未测评/默认通过”；学习耗时无真实采集时显示“暂无记录”。 |
+| `LearningPath.jsx` | 查看学习路径、查看节点资源，上报节点选择行为 | `GET /learning-path`、`GET /learning-path/nodes/{node_id}/resources`、`POST /learning-activities` | ✅ 已可操作 | 没有调用 `refreshLearningPath()`；初始默认节点不重复上报。 |
+| `LearningEffects.jsx` | 查看 KG 节点学习效果、刷新评估任务 | `GET /evaluation`、`POST /evaluation/refresh`、`GET /tasks/{task_id}` | ✅ 已可操作 | 展示真实 `node_progress`；无题节点显示“未测评/默认通过”；学习耗时优先来自学习行为表，无活动采集时才显示“暂无记录”。 |
 | `TeacherConsole.jsx` | 查看班级、绑定资源库状态、当前教学班上下文下的共享资源、课程码、学生列表、班级洞察 | `GET /courses`、`GET /resources`、`GET /teaching/classes/{class_id}/students`、`GET /teaching/classes/{class_id}/insights` | ✅ 已可操作 | 教师端只读确认绑定资源库资源，可跳转资源详情并复制课程码；不提供生成/上传/删除资源入口。 |
 | `TeacherStudentReport.jsx` | 查看单个学生学习报告 | `GET /teaching/classes/{class_id}/students/{student_id}/learning` | ✅ 已可操作 | `overall_score` 真实口径仍待设计，前端不展示硬编码分。 |
 | `AdminConsole.jsx` | 管理用户、查看日志、创建/查看课程资源库 | `GET /admin/users`、`DELETE /admin/users/{user_id}`、`GET /admin/logs/agent`、`GET /admin/logs/operations`、`GET/POST /admin/course-catalogs` | ✅ 已可操作 | 用户停用状态持久展示仍缺契约字段。 |
@@ -123,7 +123,7 @@
 | 22 | KG ready gate | ⏸️ 暂缓 | KG fallback 已让 LearningPath 可用，不再阻塞主流程 | 待 Agent 个性化路径设计后再定。 |
 | 23 | 学生画像展示 / 对话补充 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile` 展示六维画像，调用 `POST /profile/dialogue-update` 用自然语言补充学习目标、薄弱点和资源偏好，并展示 `/users/me` 基础资料 | 后续新增画像维度仍必须走契约。 |
 | 24 | Profile refresh | ✅ 已可操作 | `StudentProfile.jsx` 提供“同步画像”按钮，调用 `POST /profile/refresh` 创建 `profile_refresh` task，轮询 `GET /tasks/{task_id}`，完成后重新拉取 `GET /profile` | 该入口为静默随学更新，不暴露 prompt 输入。 |
-| 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation`，展示 KG 节点级 `node_progress`、掌握度分布和学习效果总结 | 学习耗时当前仅在有真实来源时展示；无活动采集时显示“暂无记录”。 |
+| 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation`，展示 KG 节点级 `node_progress`、掌握度分布和学习效果总结；节点学习耗时优先聚合 `LearningActivity.duration_seconds` | 无活动采集时兼容练习 `time_spent` 或显示“暂无记录”。 |
 | 26 | Evaluation refresh | ✅ 已可操作 | `LearningEffects.jsx` 的“重新评估”调用 `POST /evaluation/refresh` 并轮询 `GET /tasks/{task_id}`，完成后重新拉取 `GET /evaluation` | Agent 生成总结质量仍取决于后端/Agent；失败或 partial 时保留最近一次评估。 |
 | 27 | 教师学生深度报告 | ✅ 已可操作 + 📋 待设计局部口径 | 学生报告页面接 `GET /teaching/classes/{class_id}/students/{student_id}/learning` | `overall_score` 真实计算口径待设计。 |
 
@@ -134,7 +134,7 @@
 | 28 | Admin 用户停用状态持久展示 | ✅ 已可操作 | 2026-06-14：Backend `list_users` 已返回 `is_active`，前端改为从 API 读取停用状态，刷新页面后持久展示。 | 后续可补重新激活端点。 |
 | 29 | AI Chat `knowledge_points[]` 元素类型 | 📋 待设计 | 真实历史响应出现对象元素，OpenAPI 仍声明 string；前端已兼容防白屏 | 做契约审查，决定 string 还是 object union。 |
 | 30 | 复杂教师/Admin 指标 | 📋 待设计 | 排名、覆盖率、动力指数等不能前端补造 | 先设计 SQL/Agent/Client API 来源。 |
-| 31 | 累计学习时长 / 阅读进度 / AIChat 活动摘要 / 资源偏好分布 | ⏸️ 暂缓 | 缺行为采集口径和 activity 表设计 | 单独数据采集专项。 |
+| 31 | 累计学习时长 / 阅读进度 / AIChat 活动摘要 / 资源偏好分布 | ✅ 部分闭环 + 📋 后续扩展 | 已完成学习行为采集表、资源阅读/节点选择/节点练习事件、学习效果节点耗时聚合；暂不做 heartbeat、AIChat 摘要和资源偏好百分比 | 后续如需阅读进度百分比或 AIChat 活动摘要，另做事件口径设计。 |
 | 32 | Memory 压缩 | ⏸️ 暂缓 | Agent 内部能力，不进当前前端主线 | 不作为 Client API 功能推进。 |
 
 ## 当前下一步队列
@@ -145,8 +145,8 @@
 2. **AI Chat `knowledge_points[]` 元素类型契约审查（#29）**
    真实历史响应出现对象元素，OpenAPI 仍声明 string；前端已兼容防白屏，做契约审查决定最终类型。
 
-3. **学习行为采集专项（#31）**
-   若要把学习效果页的“学习耗时”从 `暂无记录` 升级为真实累计时长，需要单独设计 activity 采集表与事件口径。
+3. **真实环境学习行为联调（#31）**
+   跑一轮资源详情停留、LearningPath 节点切换、节点练习提交，确认 `/learning-activities` 写库后 `/evaluation` 的 `node_progress.study_duration_seconds/resource_visit_count/last_activity_at` 符合预期。
 
 ## 纠偏记录
 

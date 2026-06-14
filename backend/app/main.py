@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
     admin, auth, catalogs, courses, evaluation, learning_path,
-    profile, quiz, resources, tasks, teaching, tutoring,
+    learning_activities, profile, quiz, resources, tasks, teaching, tutoring,
     users, webhooks,
 )
 from app.core.config import settings
@@ -104,6 +104,7 @@ app.include_router(courses.router)
 app.include_router(teaching.router)
 app.include_router(admin.router)
 app.include_router(evaluation.router)
+app.include_router(learning_activities.router)
 app.include_router(profile.router)
 app.include_router(learning_path.router)
 app.include_router(quiz.router)

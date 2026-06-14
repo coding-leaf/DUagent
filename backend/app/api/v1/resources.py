@@ -102,6 +102,7 @@ async def get_resource_detail(
         "message": "success",
         "data": {
             "id": resource.id,
+            "course_id": resource.course_id,
             "title": resource.title,
             "type": resource.type,
             "description": resource.description or "",

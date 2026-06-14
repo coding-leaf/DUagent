@@ -215,7 +215,7 @@ async def compute_profile_fields(
         select(
             func.max(LearningActivity.occurred_at),
             func.sum(case((LearningActivity.occurred_at >= seven_days_ago, LearningActivity.duration_seconds), else_=0)),
-            func.sum(LearningActivity.duration_seconds),
+            func.sum(case((LearningActivity.occurred_at >= thirty_days_ago, LearningActivity.duration_seconds), else_=0)),
         ).where(
             LearningActivity.user_id == user_id,
             LearningActivity.course_id == course_id,

@@ -25,6 +25,14 @@
 
 ### 2026-06-14
 
+- 修复学习效果看板 `study_duration_seconds` 不更新问题：
+  - 根因：`GET /evaluation` 在存在 Evaluation 快照时，用 `stored_node_progress` 覆盖了实时聚合的 `node_progress`
+  - 修复：`evaluation.py:298` 改为始终返回实时 `node_progress`，不再依赖旧快照
+  - 测试：`test_learning_activities.py` 3 passed, `test_refresh_async.py` 1 passed
+  - 影响：用户答完题后回到学习效果页，学习时长即时可见，无需手动"重新评估"
+
+### 2026-06-14
+
 - `/learning-effects` KG 节点学习效果看板接入完成：
   - 问题分析：
     1. 原页面只有局部掌握度来自 `GET /evaluation`，AI 分析报告、学习路径进度表、资源反馈分布、总交互数等仍是硬编码展示。

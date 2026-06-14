@@ -295,11 +295,7 @@ async def get_evaluation(
             "progress_table": progress_table,
             "mastery_table": ev.mastery_table or _empty_table,
             "resource_usage_table": ev.resource_usage_table or _empty_table,
-            "node_progress": (
-                stored_node_progress
-                if _looks_like_node_progress(stored_node_progress)
-                else node_progress
-            ),
+            "node_progress": node_progress,
             "summary_text": ev.summary_text or "",
             "generated_at": ev.generated_at.isoformat() if ev.generated_at else None,
         },

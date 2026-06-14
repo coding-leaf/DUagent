@@ -25,6 +25,20 @@
 
 ### 2026-06-14
 
+- 修复 AIChat 新建会话后只能单轮回答、无法延续上下文的问题：
+  - 根因：Backend `POST /tutoring/chat` 正常代理 Agent SSE 时原样透传 Agent `done` 事件；Agent Service 的 `DoneEvent` 不包含 Client API 契约要求的 `conversation_id`，前端因此无法在新建对话首轮结束后设置 `activeSession`，第二轮继续以空 `conversation_id` 发起，表现为每次都是新会话。
+  - 修复：`backend/app/api/v1/tutoring.py` 在 Backend Client API 边界解析到 `type=done` 后，强制补齐真实 `conversation_id` 和 Backend assistant `message_id`，并保留 Agent 返回的知识点 / 练习建议字段；非 done 事件继续透传。
+  - 回归测试：`backend/tests/test_agent_integration.py` 新增 `test_tutoring_chat_done_event_includes_backend_conversation_id`，mock Agent 返回不带 `conversation_id` 的 done，先 RED 失败于 `KeyError: 'conversation_id'`，修复后通过。
+  - 契约说明：未修改 OpenAPI / Client API 文档；本轮是实现对齐既有 `done.conversation_id` 契约，无契约漂移。Agent Service 内部 schema 不变。
+  - 验证：
+    - `cd backend && ../.venv/bin/python -m pytest tests/test_agent_integration.py::TestTutoringChatIntegration::test_tutoring_chat_done_event_includes_backend_conversation_id -q -p no:cacheprovider` → `1 passed`。
+    - `cd backend && ../.venv/bin/python -m pytest tests/test_agent_integration.py::TestTutoringChatIntegration -q -p no:cacheprovider` → `4 passed`。
+    - `npm run lint` → 通过。
+    - `npm run build` → 通过，仍有既有 Vite chunk size warning。
+  - 剩余风险：本轮恢复的是当前会话短期上下文续接；长期 memory 压缩仍按当前主线暂缓，不在本次范围。
+
+### 2026-06-14
+
 - 移除 ai-chat（tutoring）链路的规则 Guard，修复 LLM 有效回答被误杀后前端只显示一句摘要的问题：
   - 根因：`generate_tutoring_sse_events` 在 ReAct 产出后调用 `evaluate_tutoring_response_by_rule` 做相关性（off_topic）校验，要求检索可信术语字面出现在回答里；当前素材 OCR 差、资源与 KG 节点对不齐，术语对不上 → 有效回答被判 off_topic 清零 → 落到 `_build_chunk_content` 兜底句（内含 `conversation_summary`），前端因此只显示“结合已有摘要：…”那段摘要，而 LLM 实际已洋洋洒洒输出完整回答。
   - 修复（范围：流程移除、保留文件）：

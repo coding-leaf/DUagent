@@ -7,6 +7,7 @@
 - Profile refresh payload 组装正确
 """
 import asyncio
+import json
 import os
 import sys
 from unittest.mock import AsyncMock, patch
@@ -260,6 +261,42 @@ class TestTutoringChatIntegration:
             # Agent might be unreachable, but SSE should still stream to done
             assert r.status_code == 200
             assert "text/event-stream" in r.headers.get("content-type", "")
+
+    @pytest.mark.asyncio
+    async def test_tutoring_chat_done_event_includes_backend_conversation_id(self):
+        """Backend 对外 done 事件必须携带真实 conversation_id，保证前端后续继续同一会话。"""
+        captured_payload = {}
+
+        async def fake_stream_sse(path, payload):
+            captured_payload.update(payload)
+            yield 'data: {"type":"chunk","content":"第一轮回答"}\n\n'.encode("utf-8")
+            yield b'data: {"type":"done","message_id":"agent-msg-new"}\n\n'
+
+        from sse_starlette.sse import AppStatus
+        AppStatus.should_exit = False
+        AppStatus.should_exit_event = None
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            s_h, course_id = await self._setup_tutoring(client)
+            with patch("app.api.v1.tutoring.agent_client.stream_sse", fake_stream_sse):
+                r = await client.post("/api/v1/tutoring/chat", headers=s_h, json={
+                    "message": "先讲一下数组",
+                    "scope": "course",
+                    "course_id": course_id,
+                })
+
+            assert r.status_code == 200
+            events = [
+                json.loads(line.removeprefix("data: "))
+                for line in r.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            done = next(event for event in events if event["type"] == "done")
+
+        assert captured_payload["conversation_id"]
+        assert done["conversation_id"] == captured_payload["conversation_id"]
+        assert done["message_id"] != "agent-msg-new"
 
     @pytest.mark.asyncio
     async def test_tutoring_conversations_list(self):

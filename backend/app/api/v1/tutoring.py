@@ -229,10 +229,7 @@ async def tutoring_chat(
                     if not data_str:
                         continue
 
-                    # Forward to frontend
-                    yield {"event": "message", "data": data_str}
-
-                    # Parse for accumulation
+                    # Parse for accumulation and adapt Backend Client API boundary fields.
                     try:
                         parsed = json.loads(data_str)
                         t = parsed.get("type", "")
@@ -256,8 +253,14 @@ async def tutoring_chat(
                             kp_used = parsed.get("knowledge_points_used")
                             if not knowledge_points and isinstance(kp_used, list):
                                 knowledge_points = kp_used
+                            parsed["conversation_id"] = conversation_id
+                            parsed["message_id"] = a_msg_id
+                            data_str = json.dumps(parsed, ensure_ascii=False)
                     except json.JSONDecodeError:
                         pass
+
+                    # Forward to frontend
+                    yield {"event": "message", "data": data_str}
 
         except AgentServiceError:
             if not done_sent:

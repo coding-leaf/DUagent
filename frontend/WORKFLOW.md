@@ -23,6 +23,13 @@
 
 ## 最近验证
 
+### 2026-06-15
+
+- Fix Profile Persistence and Extract Shared KG Aggregation:
+  - 提取 `_build_node_progress_rows` 和 `_resolve_evaluation_kg` 从 `backend/app/api/v1/evaluation.py` 到新的共享服务 `backend/app/services/knowledge_progress.py`。
+  - 更新 `evaluation.py` 的相关调用和导入。
+  - 修复 `backend/app/api/v1/profile.py` 里的画像持久化逻辑，由原来的软删除后插入新行改为直接就地更新，解决了使用软删而唯一索引未过滤导致的 unique key 冲突问题。
+
 ### 2026-06-14
 
 - 二次修复 AIChat 短期记忆失效与刷新后 user/assistant 顺序反转：

@@ -231,21 +231,31 @@ async def initialize_profile(
                 UserProfile.is_deleted == False,
             )
         )
-        for old in old_result.scalars().all():
-            old.is_deleted = True
-
+        pf = old_result.scalars().first()
         answers = req.answers or {}
-        profile = UserProfile(
-            user_id=current_user.id,
-            course_id=req.course_id,
-            guidance_level_current=answers.get("guidance_level", "L2"),
-            guidance_level_updated_at=datetime.now(timezone.utc),
-            modal_preference={k: 60 for k in (answers.get("modal_preference") or ["text"])},
-            drive_intent={"type": answers.get("learning_goal", "casual"), "intensity": 50},
-            knowledge_coordinates=[{"name": "入门", "status": "learning", "mastered_at": None}],
-            generated_at=datetime.now(timezone.utc),
-        )
-        db.add(profile)
+        now = datetime.now(timezone.utc)
+        
+        if pf:
+            pf.guidance_level_current = answers.get("guidance_level", "L2")
+            pf.guidance_level_updated_at = now
+            pf.modal_preference = {k: 60 for k in (answers.get("modal_preference") or ["text"])}
+            pf.drive_intent = {"type": answers.get("learning_goal", "casual"), "intensity": 50}
+            pf.knowledge_coordinates = [{"name": "入门", "status": "learning", "mastered_at": None}]
+            pf.generated_at = now
+            profile = pf
+        else:
+            profile = UserProfile(
+                user_id=current_user.id,
+                course_id=req.course_id,
+                guidance_level_current=answers.get("guidance_level", "L2"),
+                guidance_level_updated_at=now,
+                modal_preference={k: 60 for k in (answers.get("modal_preference") or ["text"])},
+                drive_intent={"type": answers.get("learning_goal", "casual"), "intensity": 50},
+                knowledge_coordinates=[{"name": "入门", "status": "learning", "mastered_at": None}],
+                generated_at=now,
+            )
+            db.add(profile)
+            
         await db.flush()
         await db.refresh(profile)
         await db.commit()
@@ -486,16 +496,15 @@ async def _run_profile_refresh_background(
                         UserProfile.is_deleted == False,
                     )
                 )
-                for old in old_result.scalars().all():
-                    old.is_deleted = True
-
-                pf = UserProfile(
-                    user_id=user_id,
-                    course_id=course_id,
-                    generated_at=now,
-                )
-                db.add(pf)
-                await db.flush()
+                pf = old_result.scalars().first()
+                if not pf:
+                    pf = UserProfile(
+                        user_id=user_id,
+                        course_id=course_id,
+                    )
+                    db.add(pf)
+                    await db.flush()
+                pf.generated_at = now
 
                 pf.modal_preference = data.get("modal_preference", {})
                 gs = data.get("guidance_level_suggestion") or {}

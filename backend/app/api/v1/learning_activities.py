@@ -13,6 +13,7 @@ from app.services.resource_scope import (
     ensure_course_resource_access,
     resolve_course_resource_scope,
     resource_scope_clause,
+    user_can_access_catalog_resources,
 )
 
 router = APIRouter(prefix="/api/v1/learning-activities", tags=["learning-activities"])
@@ -28,6 +29,22 @@ def _validation_error(message: str) -> HTTPException:
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={"code": 42200, "message": message, "data": None},
     )
+
+
+async def _resolve_resource_catalog_id(
+    db: AsyncSession,
+    resource_id: str | None,
+) -> str | None:
+    if not resource_id:
+        return None
+    result = await db.execute(
+        select(Resource.catalog_id).where(
+            Resource.id == resource_id,
+            Resource.is_deleted == False,
+        )
+    )
+    row = result.first()
+    return row[0] if row and row[0] else None
 
 
 async def _resolve_node_name(
@@ -76,7 +93,25 @@ async def create_learning_activity(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await ensure_course_resource_access(db, current_user, req.course_id)
+    scope = await resolve_course_resource_scope(db, req.course_id)
+    if scope.catalog_id:
+        if not await user_can_access_catalog_resources(db, current_user, scope.catalog_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 40300, "message": "无权访问该课程", "data": None},
+            )
+    elif req.resource_id:
+        catalog_id = await _resolve_resource_catalog_id(db, req.resource_id)
+        if catalog_id:
+            if not await user_can_access_catalog_resources(db, current_user, catalog_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": 40300, "message": "无权访问该课程", "data": None},
+                )
+        else:
+            await ensure_course_resource_access(db, current_user, req.course_id)
+    else:
+        await ensure_course_resource_access(db, current_user, req.course_id)
 
     if req.activity_type in _DURATION_REQUIRED and req.duration_seconds is None:
         raise _validation_error("该学习行为需要 duration_seconds")

@@ -50,7 +50,7 @@
 5. 当前实现口径：新生成资源归属 `CourseCatalog`，同一资源库绑定多个教学班后可共享读取；legacy 按班级存储的旧资源继续兼容当前教学班读取，但不自动跨班共享。
 6. 资源库 KG 宿主课是当前接受的长期兼容层：它只承载资源库知识图谱，不出现在教师/学生课程列表，也不能通过课程码加入。
 7. `/resources/generate`、`/quiz/generate` 在当前前端契约中作废 / 不接入；教师端不提供生成资源入口，练习页不提供触发生题入口。
-8. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 资源评估 probe 已接入，但管理员删除/重入库后真实 C catalog 出现历史不一致状态：当前未删除 material `chunk_count=0`，catalog 仍显示 `ready/ready` 且 `chunk_count=665`；已修复未来删除资料时的 chunk 重算逻辑，继续 LearningPath 前需先修正开发库这条 C 样本数据或重新上传有效资料并入库。
+8. C 语言样本已完成 knowledge_status repair、KG-node 资源生成和 KG-Resource probe 复验：`108/108` active KG 节点 `candidate_count>0`。LearningPath 节点资源 API 已修复 KG 查找链（`d63e919`，走向 `CourseOffering → Catalog.kg_host_course_id`），前端 LearningPath 节点资源面板已可正常展示。2026-06-14 数据库快照：4 个 C catalog chunk_count 一致（663=663），无历史不一致残留；LearningPath 0 条；主 catalog `e21d9fdaaa0c43a3` 的 `kg_host_course_id=NULL` 导致 KG fallback 走不到 active KG（KG 35 节点存在但直接落在教学班 course_id 下）。探针 `learning_path_resource_probe.py` 三个口径均落后于 API，需在下次跑探针前修。
 
 ## 页面真实调用核查
 
@@ -139,17 +139,20 @@
 
 ## 当前下一步队列
 
-1. **C 样本 catalog 数据一致性恢复**
-   删除资料后 chunk 重算逻辑已修复，但真实 C catalog 已处于历史不一致状态。下一步先修正这条开发库数据或重新上传有效资料并入库。
+1. **修复主 C catalog 的 kg_host_course_id**
+   `e21d9fdaaa0c43a3`（主要教学班绑定的 catalog）`kg_host_course_id=NULL`，导致 `_synthesize_kg_fallback_path` 找不到 active KG。修复方式：为该 catalog 创建/绑定隐藏宿主课（已有 `_get_or_create_catalog_kg_host_course` 可用），然后重新生成 KG 或将现有 KG `c5b437f8701b482a` 的 course_id 迁移到宿主课。
 
-2. **#28 Admin 用户停用状态契约**
-   如果继续完善 Admin 用户管理，先扩展 `GET /admin/users` 返回状态字段。
+2. **修复探针口径**
+   `learning_path_resource_probe.py` 的 KG 查找（用 `kg_host_course_id` 链）、LP fallback（合成 KG 节点路径）、资源查询（用 `resource_scope_clause`）三个口径需对齐 API。阻塞第 4 项的批量评估能力。
 
-4. **LearningPath 节点资源挂载验证**
-   KG fallback 已让学习路径页面可显示骨架，下一步验证真实 C 样本的节点资源（weak_point_tutorials/exercises/chapter_materials）是否能在页面上正确展示。当前 resources 表挂载到 KG 节点的数据可能仍缺。
+3. **LearningPath 节点资源挂载验证（探针修好后）**
+   用修复后的探针跑一次 C 样本批量覆盖率，确认 `weak_point_tutorials` / `exercises` / `chapter_materials` 三组资源命中率。
+
+4. **#28 Admin 用户停用状态契约**
+   先扩展 `GET /admin/users` 返回 `is_active`/`status` 字段，再同步 Backend + Frontend。
 
 5. **Evaluation refresh 入口决策**
-   Profile 已具备对话补充和静默同步画像入口；仍需决定 `learningService.refreshEvaluation()` 是否接前端刷新按钮或删除误导性 service。
+   决定 `learningService.refreshEvaluation()` 是否接前端刷新按钮或删除误导性 service。
 
 ## 纠偏记录
 

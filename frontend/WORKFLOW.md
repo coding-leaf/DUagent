@@ -12,15 +12,29 @@
 ## 当前施工状态
 
 - 当前主线以 `docs/feature-ledger.md` 为准。
-- 当前最高优先级：为 C 语言样本生成 / 刷新 LearningPath 后，复跑 LearningPath-KG 资源命中评估；KG-node 资源生成已在 C 语言样本完成真实闭环，正式探针从 `108/108 candidate_count=0` 变为 `108/108 candidate_count>0`。
-- 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、基于知识切片自动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除。
+- KG-node 资源生成已在 C 语言样本完成真实闭环（`108/108 candidate_count>0`），不再作为最高优先级重复验证。
+- API 层 KG fallback 和节点资源接口（`get_node_resources`）已修好，前端 LearningPath 节点资源面板已可展示 `weak_point_tutorials` / `exercises` / `chapter_materials`。先前记录"无 LP 记录"的阻塞已实际解除。
+- 探针工具 `learning_path_resource_probe.py` 仍落后于 API 实现口径：KG 查找未走 `kg_host_course_id` 链路、无 LP fallback、资源查询未用 `resource_scope_clause`。下次跑探针前需修复。
+- C 语言主 catalog `e21d9fdaaa0c43a3`（绑定教学班 `cprogcourse202606120001`）`kg_host_course_id = NULL`，导致 `_synthesize_kg_fallback_path` 无法找到 active KG（KG `c5b437f8701b482a` 35 节点存在但 course_id 直接是教学班 ID）。这是当前 LearningPath KG fallback 的实际阻断点。
+- 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、基于知识切片自动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除；LearningPath 节点资源展示。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
-- 当前待设计阻塞点：LearningPath / KG ready gate 仍后置；真实库 C 课程当前无 LearningPath 记录，需先生成 / 刷新路径，再评估学生学习路径节点资源挂载效果。
+- 当前待推进：#28 Admin 用户停用状态持久展示（需先扩展契约）；Evaluation refresh 入口决策；探针口径修复（非阻塞，但跑探针前必须修）。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
 ### 2026-06-14
+
+- 数据库状态快照与 WORKFLOW 同步：
+  - 验证方式：Docker `eduagent-mysql` 直连 `duagent` 库，SQL 逐表核对。
+  - C 语言体系实际 ID：主 catalog `e21d9fdaaa0c43a3`（`kg_host_course_id=NULL`）、教学班 `cprogcourse202606120001`、active KG `c5b437f8701b482a`（35 节点/35 边, course_id 直接是教学班 ID）。WORKFLOW 之前引用的 `b2444963f0e54587`、`6c698badb60a4809`、`27c3acb1e98a49d1` 在当前库不存在。
+  - 4 个 C catalog 的 `chunk_count` 与 `material.chunk_count` 一致（663=663），无历史不一致残留。
+  - Resources: 80 total（40 带 catalog_id 归属 `460778c3b06c4a54`，40 不带 catalog_id 归属 `cprogcourse202606120001`）。Quiz: 0 题。LearningPath: 0 条记录。
+  - 探针 `learning_path_resource_probe.py` 落后于 API：KG 查找未走 `kg_host_course_id` 链、无 LP fallback、资源查询未用 `resource_scope_clause`。API（`d63e919` 后）已修好。
+  - e21d9fdaaa0c43a3 的 kg_host_course_id=NULL 是 LearningPath KG fallback 的当前阻断点。
+  - 契约说明：纯数据库只读查询，无契约漂移。
+  - WORKFLOW.md 施工状态节已更新。
+
 - AIChat 聊天回答内嵌 Markdown Mermaid 代码块可视化渲染及 React 19 属性警告修复：
   - 问题分析：
     1. 大模型在回答正文中直接输出的 ````mermaid` 代码块，以往被作为常规的高亮文本代码块渲染，未将其转化为 SVG 关系图，导致页面上直接展示 Mermaid 源码。

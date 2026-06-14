@@ -4,7 +4,7 @@ from unittest.mock import patch
 from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
 from agent_service.agents.tutoring_strategy import TutoringStrategy
 from agent_service.memory.tutoring_retrieval import TutoringRetrievalContext
-from agent_service.schemas.tutoring import TutoringChatRequest, TutoringUserProfile
+from agent_service.schemas.tutoring import RecentMessage, TutoringChatRequest, TutoringUserProfile
 
 
 def _make_request() -> TutoringChatRequest:
@@ -112,6 +112,40 @@ def test_react_response_includes_strategy_context_in_user_message() -> None:
     assert "辅导策略：worked_example" in fake_agent.calls[0]
     assert "策略要求：用相似例题或完整过程解释，再回到学生当前问题。" in fake_agent.calls[0]
     assert "策略关注点：链式法则、复合函数" in fake_agent.calls[0]
+
+
+def test_react_user_message_marks_recent_messages_as_short_term_context() -> None:
+    request = _make_request().model_copy(update={
+        "message": "我刚才让你记住的变量名是什么？",
+        "recent_messages": [
+            RecentMessage(role="user", content="请记住：变量名是 alpha_count"),
+            RecentMessage(role="assistant", content="我记住了，变量名是 alpha_count。"),
+        ],
+    })
+    context = _make_context()
+
+    class FakeProvider:
+        model = object()
+        formatter = object()
+
+    fake_agent = FakeReactAgent(
+        output='{"model_text":"你刚才让我记住的变量名是 alpha_count。","knowledge_points":[]}'
+    )
+
+    with patch(
+        "agent_service.agents.tutoring_react_flow.TutorReActAgent",
+        return_value=fake_agent,
+    ):
+        asyncio.run(
+            generate_tutoring_react_response(request, context, FakeProvider())
+        )
+
+    prompt = fake_agent.calls[0]
+    assert "最近对话（短期上下文）" in prompt
+    assert "当前问题提到刚才、上文或之前时，优先依据最近对话回答" in prompt
+    assert "[user] 请记住：变量名是 alpha_count" in prompt
+    assert "[assistant] 我记住了，变量名是 alpha_count。" in prompt
+    assert prompt.rindex("当前问题：我刚才让你记住的变量名是什么？") > prompt.index("最近对话（短期上下文）")
 
 
 def test_react_response_returns_none_for_non_agentscope_provider() -> None:

@@ -88,8 +88,14 @@ def _build_react_user_message(
     if strategy is not None:
         context_lines.append(build_strategy_context_text(strategy))
     parts = ["\n".join(context_lines)]
-    for msg in request.recent_messages:
-        parts.append(f"[{msg.role}] {msg.content}")
+    if request.recent_messages:
+        recent_lines = [
+            "最近对话（短期上下文）：",
+            "当前问题提到刚才、上文或之前时，优先依据最近对话回答；课程知识只作为补充。",
+        ]
+        for msg in request.recent_messages:
+            recent_lines.append(f"[{msg.role}] {msg.content}")
+        parts.append("\n".join(recent_lines))
     parts.append(f"当前问题：{request.message}")
     return "\n\n".join(parts)
 

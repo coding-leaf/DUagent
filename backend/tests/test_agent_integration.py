@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -307,6 +308,57 @@ class TestTutoringChatIntegration:
             r = await client.get("/api/v1/tutoring/conversations", headers=s_h)
             assert r.status_code == 200
             assert "conversations" in r.json()["data"]
+
+    @pytest.mark.asyncio
+    async def test_tutoring_conversation_history_keeps_user_before_assistant_when_same_second(self):
+        """刷新历史时，同秒写入的 user/assistant 消息必须稳定保持 user -> assistant。"""
+        from app.models.conversation import Conversation, Message
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            s_h, course_id = await self._setup_tutoring(client)
+            me = await client.get("/api/v1/users/me", headers=s_h)
+            user_id = me.json()["data"]["id"]
+
+            same_second = datetime(2026, 6, 14, 15, 30, 0)
+            async with async_session_factory() as db:
+                conv = Conversation(
+                    user_id=user_id,
+                    scope="course",
+                    course_id=course_id,
+                    title="history order",
+                    create_time=same_second,
+                    update_time=same_second + timedelta(seconds=2),
+                )
+                db.add(conv)
+                await db.flush()
+                db.add_all([
+                    Message(
+                        conversation_id=conv.id,
+                        role="assistant",
+                        content="我记住了，变量名是 alpha_count。",
+                        create_time=same_second,
+                        update_time=same_second + timedelta(seconds=1),
+                    ),
+                    Message(
+                        conversation_id=conv.id,
+                        role="user",
+                        content="请记住：变量名是 alpha_count",
+                        create_time=same_second,
+                        update_time=same_second,
+                    ),
+                ])
+                await db.commit()
+
+            r = await client.get(f"/api/v1/tutoring/conversations/{conv.id}", headers=s_h)
+
+        assert r.status_code == 200
+        messages = r.json()["data"]["messages"]
+        assert [m["role"] for m in messages] == ["user", "assistant"]
+        assert [m["content"] for m in messages] == [
+            "请记住：变量名是 alpha_count",
+            "我记住了，变量名是 alpha_count。",
+        ]
 
 
 class TestResourcesGenerateIntegration:

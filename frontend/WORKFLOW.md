@@ -25,6 +25,26 @@
 
 ### 2026-06-14
 
+- 二次修复 AIChat 短期记忆失效与刷新后 user/assistant 顺序反转：
+  - 复查结论：上一轮 `done.conversation_id` 修复后，真实 MySQL 最新会话已出现同一 `conversation_id` 下 6 条消息，说明前端会话续接已生效；继续失效的断点不是“每轮新建会话”，而是短期上下文传给 Agent 后不干净 / 不够明确。
+  - 根因：
+    1. Backend `_assemble_tutoring_payload()` 在保存当前 user 消息和空 assistant 占位后查询最近消息，导致 `recent_messages` 混入当前轮 user 和空 assistant placeholder。
+    2. 历史消息接口只按 `create_time ASC` 排序；user/assistant 同秒写入时数据库返回顺序不稳定，刷新后可出现 assistant 在 user 前面的反转。
+    3. Agent ReAct prompt 只是裸拼 `[user] / [assistant]`，没有明确“最近对话（短期上下文）”区块，也没有要求“刚才/上文/之前”类追问优先依据最近对话回答。
+  - 修复：
+    1. `backend/app/api/v1/tutoring.py`：组装 Agent payload 时排除本轮刚写入的 user 消息和 assistant 占位；最近消息和历史详情统一按 `create_time/update_time/user-before-assistant` 稳定排序。
+    2. `agent_service/agents/tutoring_react_flow.py`：将 `recent_messages` 渲染为“最近对话（短期上下文）”区块，并加入追问优先使用最近对话的明确指令。
+    3. 回归测试覆盖 payload 排除当前轮、历史刷新排序、Agent prompt 短期上下文指令。
+  - 契约说明：未修改 Client API / Agent API schema；仅修复实现和 prompt 组装，无 OpenAPI 漂移。
+  - 验证：
+    - `cd backend && ../.venv/bin/python -m pytest tests/test_agent_integration.py::TestTutoringChatIntegration tests/test_tutoring_privacy.py -q -p no:cacheprovider` → `8 passed`。
+    - `cd agent_service && ../.venv/bin/python -m pytest tests/test_tutoring_react_flow.py tests/test_tutoring_retrieval_personalization.py -q -p no:cacheprovider` → `12 passed`。
+    - `npm run lint` → 通过。
+    - `npm run build` → 通过，仍有既有 Vite chunk size warning。
+  - 剩余风险：本轮增强的是短期上下文 prompt 和历史排序；模型是否严格遵循仍取决于 LLM，但已把“刚才/上文”类追问的可用上下文和指令显式前置。
+
+### 2026-06-14
+
 - 修复 AIChat 新建会话后只能单轮回答、无法延续上下文的问题：
   - 根因：Backend `POST /tutoring/chat` 正常代理 Agent SSE 时原样透传 Agent `done` 事件；Agent Service 的 `DoneEvent` 不包含 Client API 契约要求的 `conversation_id`，前端因此无法在新建对话首轮结束后设置 `activeSession`，第二轮继续以空 `conversation_id` 发起，表现为每次都是新会话。
   - 修复：`backend/app/api/v1/tutoring.py` 在 Backend Client API 边界解析到 `type=done` 后，强制补齐真实 `conversation_id` 和 Backend assistant `message_id`，并保留 Agent 返回的知识点 / 练习建议字段；非 done 事件继续透传。

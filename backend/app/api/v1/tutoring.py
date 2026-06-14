@@ -20,6 +20,15 @@ from app.services.course_knowledge_graphs import get_active_knowledge_graph
 router = APIRouter(prefix="/api/v1/tutoring", tags=["tutoring"])
 
 
+def _message_order_key(message: Message):
+    role_rank = 0 if message.role == "user" else 1
+    return (
+        message.create_time or datetime.min,
+        message.update_time or datetime.min,
+        role_rank,
+    )
+
+
 def _build_learner_context(user: User) -> dict:
     """生成可进入 AI 上下文的脱敏学习资料，不包含身份识别字段。"""
     return {
@@ -33,6 +42,7 @@ async def _assemble_tutoring_payload(
     user_id: str, scope: str, course_id: str | None,
     conversation_id: str, message: str, db: AsyncSession,
     catalog_id: str | None = None,
+    exclude_message_ids: set[str] | None = None,
 ) -> dict:
     """组装调用 Agent /tutoring/chat 所需的 payload。"""
     payload: dict = {
@@ -117,14 +127,20 @@ async def _assemble_tutoring_payload(
         payload["conversation_summary"] = conv.summary
 
     # recent_messages: 最近 10 轮消息
-    msgs_r = await db.execute(
+    messages_query = (
         select(Message)
         .where(Message.conversation_id == conversation_id, Message.is_deleted == False)
-        .order_by(Message.create_time.desc())
+    )
+    if exclude_message_ids:
+        messages_query = messages_query.where(Message.id.notin_(exclude_message_ids))
+
+    msgs_r = await db.execute(
+        messages_query
+        .order_by(Message.create_time.desc(), Message.update_time.desc())
         .limit(20)
     )
     recent = list(msgs_r.scalars().all())
-    recent.reverse()
+    recent.sort(key=_message_order_key)
     payload["recent_messages"] = [
         {"role": m.role, "content": m.content or "", "meta": m.meta_json or {}}
         for m in recent
@@ -208,6 +224,7 @@ async def tutoring_chat(
     payload = await _assemble_tutoring_payload(
         current_user.id, req.scope, effective_course_id,
         conversation_id, req.message, db,
+        exclude_message_ids={user_msg.id, a_msg_id},
     )
 
     async def event_generator():
@@ -383,9 +400,9 @@ async def get_conversation(
     m_result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id, Message.is_deleted == False)
-        .order_by(Message.create_time.asc())
+        .order_by(Message.create_time.asc(), Message.update_time.asc())
     )
-    messages = m_result.scalars().all()
+    messages = sorted(m_result.scalars().all(), key=_message_order_key)
 
     return {
         "code": 200,

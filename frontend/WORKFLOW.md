@@ -25,6 +25,29 @@
 
 ### 2026-06-14
 
+- `/learning-effects` KG 节点学习效果看板接入完成：
+  - 问题分析：
+    1. 原页面只有局部掌握度来自 `GET /evaluation`，AI 分析报告、学习路径进度表、资源反馈分布、总交互数等仍是硬编码展示。
+    2. “重新评估”按钮没有调用 `/evaluation/refresh`，`learningService.refreshEvaluation()` 也没有传 `course_id`。
+    3. 用户确认产品口径：没有题目的 KG 节点显示“未测评/默认通过”，不伪装成 A 分；没有真实学习行为采集时，学习耗时显示“暂无记录”。
+  - 修复：
+    1. Backend `GET /evaluation` 新增 `node_progress`，按 active KG 节点聚合题目数、答题记录、掌握分、评估状态和可用耗时；刷新评估时把同一节点行写入 `progress_table.rows`，避免本轮新增数据库字段。
+    2. Client API OpenAPI 和 Markdown 规范补齐 `EvaluationNodeProgress` / `node_progress` 字段与 `scored`、`pending_practice`、`unassessed_default_pass`、`unknown` 状态规则。
+    3. Frontend `LearningEffects.jsx` 移除硬编码报告、路径表和资源反馈分布，改为展示概览、学习效果总结、KG 节点学习进度表、掌握度分布；“重新评估”调用 `POST /evaluation/refresh` 并轮询 `GET /tasks/{task_id}`。
+    4. `learningService.refreshEvaluation(courseId)` 改为按契约提交 `{ course_id }`。
+  - 契约说明：本轮已同步 `../docs/10-client-api/Client-API.openapi.json` 与 `../docs/10-client-api/API_前端接口规范.md`，新增响应字段 `node_progress`；不涉及 Agent API 改动。
+  - 验证：
+    - Backend RED：`tests/test_refresh_async.py` 先失败于 `eval/get → scored node present`，证明旧接口缺少 `node_progress`。
+    - Backend GREEN：`TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/evaluation_node_progress_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_refresh_async.py -q -p no:cacheprovider` 通过，`1 passed`。
+    - OpenAPI：`python3 -m json.tool ../docs/10-client-api/Client-API.openapi.json >/tmp/client-api-openapi-check.json` 通过。
+    - Frontend RED：`npm run test:e2e -- e2e/specs.spec.js -g "Learning effects"` 先失败于找不到真实总结文本。
+    - Frontend GREEN：同一 Playwright 用例通过，`1 passed`。
+    - `npm run lint` 通过。
+    - `npm run build` 通过，仍有既有 Vite chunk size warning。
+  - 剩余风险：
+    - 当前学习耗时主要来自已提交 QuizSession 的 `time_spent`，资源阅读/页面停留类 activity 采集尚未设计；无真实来源时前端显示“暂无记录”。
+    - KG 节点与题目仍依赖 `QuizQuestion.knowledge_point == KG node.name` 的名称映射，后续若要更稳需增加显式 `node_id` 归属。
+
 - 数据库状态快照与 WORKFLOW 同步：
   - 验证方式：Docker `eduagent-mysql` 直连 `duagent` 库，SQL 逐表核对。
   - C 语言体系实际 ID：主 catalog `e21d9fdaaa0c43a3`（`kg_host_course_id=NULL`）、教学班 `cprogcourse202606120001`、active KG `c5b437f8701b482a`（35 节点/35 边, course_id 直接是教学班 ID）。WORKFLOW 之前引用的 `b2444963f0e54587`、`6c698badb60a4809`、`27c3acb1e98a49d1` 在当前库不存在。

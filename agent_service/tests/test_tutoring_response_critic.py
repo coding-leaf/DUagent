@@ -70,6 +70,41 @@ def test_rule_critic_rejects_off_topic_response() -> None:
     assert result.reason == "off_topic"
 
 
+def test_rule_critic_accepts_when_no_trusted_terms_available() -> None:
+    """检索为空且画像/策略均无可对齐术语时，不据相关性判 off_topic（避免把有效回答清零）。"""
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="帮我解释一个核心概念",
+        user_profile=TutoringUserProfile(guidance_level="L2"),
+    )
+    context = TutoringRetrievalContext(
+        user_id="user-1",
+        course_id="course-1",
+        query_text="帮我解释一个核心概念",
+        include_course_knowledge=True,
+        knowledge_points=[],
+        user_memory_facts=[],
+        course_knowledge_chunks=[],
+    )
+    strategy = TutoringStrategy(
+        strategy="worked_example",
+        instruction="用相似例题或完整过程解释，再回到学生当前问题。",
+        focus_points=[],
+        source="rule",
+    )
+    response = TutoringModelResponse(
+        model_text="指针是存放内存地址的变量，通过解引用可以操作目标变量。",
+        knowledge_point_names=["指针"],
+        suggestion_text="动手写一个 swap 函数。",
+    )
+
+    result = evaluate_tutoring_response_by_rule(request, context, response, strategy)
+
+    assert result.accepted is True
+    assert result.reason == "accepted"
+
+
 def test_rule_critic_requires_question_for_clarifying_strategy() -> None:
     response = TutoringModelResponse(
         model_text="我先直接讲导数的定义。",

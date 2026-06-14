@@ -35,8 +35,10 @@ async def generate_tutoring_react_response(
         user_message = _build_react_user_message(request, retrieval_context, strategy=strategy)
         toolkit = None
         if embedding_provider is not None and vector_store is not None:
+            # 课程知识按 catalog_id 入库；缺省回落 course_id 兼容旧路径。
+            knowledge_course_id = getattr(request, "catalog_id", None) or request.course_id
             toolkit = build_tutoring_toolkit(
-                course_id=request.course_id,
+                course_id=knowledge_course_id,
                 embedding_provider=embedding_provider,
                 vector_store=vector_store,
                 user_id=request.user_id,

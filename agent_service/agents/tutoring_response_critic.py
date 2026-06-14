@@ -53,6 +53,10 @@ def _is_relevant(
     trusted_terms.extend(request.user_profile.knowledge_mastered)
     cleaned_terms = [_term_text(item) for item in trusted_terms]
     cleaned_terms = [item for item in cleaned_terms if item]
+    if not cleaned_terms:
+        # 无任何可对齐术语（检索为空且画像/策略均无术语）时，相关性判据无意义，
+        # 不据此判 off_topic，避免把有效回答清零；grounding 校验仅在有术语时生效。
+        return True
     for item in cleaned_terms:
         if item in text:
             return True

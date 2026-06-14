@@ -22,6 +22,7 @@ class TutoringChatRequest(BaseModel):
     user_id: str = Field(..., description="用户 ID")
     scope: Literal["course", "global"] = Field("course", description="course / global，默认 course")
     course_id: str | None = Field(None, description="课程 ID；scope=course 时必填，scope=global 时为空")
+    catalog_id: str | None = Field(None, description="资源库 ID；课程知识检索按此键过滤，缺省回落 course_id")
     conversation_id: str | None = Field(None, description="对话 ID（继续已有对话时传入）")
     message: str = Field(..., description="用户当前消息")
     user_profile: TutoringUserProfile = Field(

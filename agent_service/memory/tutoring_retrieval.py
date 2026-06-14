@@ -69,8 +69,10 @@ async def build_tutoring_retrieval_context_with_ai(
 
     course_results = []
     if context.include_course_knowledge and context.course_id:
+        # 课程知识在 Qdrant 中按 catalog_id 入库；缺省回落 course_id 兼容旧路径。
+        knowledge_course_id = getattr(request, "catalog_id", None) or context.course_id
         try:
-            course_results = await store.search_course_knowledge(context.course_id, query_vector, limit=limit)
+            course_results = await store.search_course_knowledge(knowledge_course_id, query_vector, limit=limit)
         except Exception as exc:
             logger.warning(
                 "Tutoring course knowledge retrieval failed: user_id=%s course_id=%s error=%s",

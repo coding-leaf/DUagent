@@ -30,9 +30,17 @@ def _init_agentscope_studio_if_configured() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _init_agentscope_studio_if_configured()
-    # Startup: ensure Qdrant collections exist via AgentScope QdrantStore
-    build_qdrant_store(settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION)
-    build_qdrant_store(settings.QDRANT_USER_MEMORY_COLLECTION)
+    # Startup: ensure Qdrant collections actually exist（建集合，而非仅构造客户端包装）
+    from agent_service.memory.qdrant_store import ensure_collection_exists
+
+    for collection in (
+        settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION,
+        settings.QDRANT_USER_MEMORY_COLLECTION,
+    ):
+        try:
+            await ensure_collection_exists(build_qdrant_store(collection))
+        except Exception:
+            logger.warning("Failed to ensure Qdrant collection '%s' at startup", collection, exc_info=True)
     yield
 
 app = FastAPI(

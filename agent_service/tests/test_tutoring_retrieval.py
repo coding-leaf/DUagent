@@ -85,6 +85,47 @@ def test_build_tutoring_retrieval_context_with_ai_queries_memory_and_course_know
     ]
 
 
+def test_build_tutoring_retrieval_context_with_ai_uses_catalog_id_for_course_knowledge() -> None:
+    """catalog_id 存在时，课程知识检索按 catalog_id 过滤（offering 的 course_id 仅作身份键）。"""
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="offering-1",
+        catalog_id="catalog-9",
+        message="链式法则怎么用？",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeEmbeddingProvider:
+        async def embed_texts(self, texts):
+            return [[0.1, 0.2, 0.3]]
+
+    class FakeVectorStore:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def search_user_memory(self, user_id, vector, limit=3):
+            self.calls.append(("user_memory", user_id, vector, limit))
+            return []
+
+        async def search_course_knowledge(self, course_id, vector, limit=3):
+            self.calls.append(("course_knowledge", course_id, vector, limit))
+            return [VectorSearchResult(text="链式法则用于复合函数求导", score=0.7, payload={})]
+
+    vector_store = FakeVectorStore()
+
+    context = asyncio.run(
+        build_tutoring_retrieval_context_with_ai(
+            request,
+            embedding_provider=FakeEmbeddingProvider(),
+            vector_store=vector_store,
+        )
+    )
+
+    assert context.course_knowledge_chunks == ["链式法则用于复合函数求导"]
+    course_calls = [c for c in vector_store.calls if c[0] == "course_knowledge"]
+    assert course_calls == [("course_knowledge", "catalog-9", [0.1, 0.2, 0.3], 3)]
+
+
 def test_build_tutoring_retrieval_context_with_ai_skips_course_search_for_global_scope() -> None:
     request = TutoringChatRequest(
         user_id="user-1",

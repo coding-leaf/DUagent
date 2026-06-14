@@ -62,6 +62,8 @@ async def _assemble_tutoring_payload(
             target_catalog_id = offering.catalog_id
 
         if target_catalog_id:
+            # 课程知识在 Qdrant 中按 catalog_id 入库，Agent 据此检索；course_id 仅作 offering 身份键。
+            payload["catalog_id"] = target_catalog_id
             catalog_r = await db.execute(select(CourseCatalog).where(CourseCatalog.id == target_catalog_id))
             catalog = catalog_r.scalar_one_or_none()
             if catalog and catalog.kg_host_course_id:

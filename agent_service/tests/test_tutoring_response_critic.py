@@ -105,6 +105,41 @@ def test_rule_critic_accepts_when_no_trusted_terms_available() -> None:
     assert result.reason == "accepted"
 
 
+def test_rule_critic_accepts_rag_answer_when_focus_is_user_text_fragment() -> None:
+    """RAG 已命中时，不把用户原话截断出的 focus point 当硬性逐字命中条件。"""
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="我想复习C语言2026 01的薄弱点，请帮我规划一周学习安排。",
+        user_profile=TutoringUserProfile(guidance_level="L2"),
+    )
+    context = TutoringRetrievalContext(
+        user_id="user-1",
+        course_id="course-1",
+        query_text=request.message,
+        include_course_knowledge=True,
+        knowledge_points=[],
+        user_memory_facts=[],
+        course_knowledge_chunks=["第1章介绍变量、常量、控制流、函数和基本输入输出。"],
+    )
+    strategy = TutoringStrategy(
+        strategy="worked_example",
+        instruction="用相似例题或完整过程解释，再回到学生当前问题。",
+        focus_points=["我想复习C语言2026 01的薄弱点，请"],
+        source="rule",
+    )
+    response = TutoringModelResponse(
+        model_text="可以按第1章的变量与常量、控制流、函数、输入输出分成七天复习，每天先看概念再做小题。",
+        knowledge_point_names=["变量与常量", "控制流", "函数"],
+        suggestion_text="每天完成一组对应章节练习。",
+    )
+
+    result = evaluate_tutoring_response_by_rule(request, context, response, strategy)
+
+    assert result.accepted is True
+    assert result.reason == "accepted"
+
+
 def test_rule_critic_requires_question_for_clarifying_strategy() -> None:
     response = TutoringModelResponse(
         model_text="我先直接讲导数的定义。",

@@ -47,8 +47,12 @@ def _is_relevant(
     text: str,
 ) -> bool:
     trusted_terms = []
-    trusted_terms.extend(getattr(strategy, "focus_points", []) or [])
     trusted_terms.extend(getattr(retrieval_context, "knowledge_points", []) or [])
+    trusted_terms.extend(
+        node.get("name")
+        for node in (getattr(retrieval_context, "matched_kg_nodes", []) or [])
+        if isinstance(node, dict)
+    )
     trusted_terms.extend(request.user_profile.knowledge_weak)
     trusted_terms.extend(request.user_profile.knowledge_mastered)
     cleaned_terms = [_term_text(item) for item in trusted_terms]

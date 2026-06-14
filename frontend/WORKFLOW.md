@@ -25,6 +25,14 @@
 
 ### 2026-06-15
 
+- Implement Profile Rules Engine:
+  - 在 `backend/app/services/profile_rules.py` 中实现了 `compute_profile_fields` 函数，用于计算学习画像的各个维度。
+  - 将复杂的规则计算逻辑拆分为纯净、可测试的函数（如 `compute_modal_preference`, `compute_knowledge_progress`, `compute_learning_habits`, `compute_discipline_badge`）。
+  - 为所有纯净规则计算函数编写了全面的单元测试 `backend/tests/test_profile_rules.py`，测试全部通过。
+  - 没有产生契约漂移，完全遵循需求。
+
+### 2026-06-15
+
 - Fix Profile Persistence and Extract Shared KG Aggregation:
   - 提取 `_build_node_progress_rows` 和 `_resolve_evaluation_kg` 从 `backend/app/api/v1/evaluation.py` 到新的共享服务 `backend/app/services/knowledge_progress.py`。
   - 更新 `evaluation.py` 的相关调用和导入。

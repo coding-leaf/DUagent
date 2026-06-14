@@ -239,7 +239,8 @@ async def compute_profile_fields(
     total_events_result = await db.execute(
         select(func.count(LearningActivity.id)).where(
             LearningActivity.user_id == user_id, 
-            LearningActivity.course_id == course_id
+            LearningActivity.course_id == course_id,
+            LearningActivity.is_deleted == False
         )
     )
     total_events = total_events_result.scalar() or 0

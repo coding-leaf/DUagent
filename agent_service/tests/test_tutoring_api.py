@@ -43,9 +43,8 @@ def test_tutoring_chat_returns_rule_based_sse_events(monkeypatch) -> None:
         if line.startswith("data: ")
     ]
     payload_events = _non_status_events(events)
-    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done", "review"]
-    assert payload_events[-2]["message_id"] == "msg_user-1_new"
-    assert payload_events[-1]["type"] == "review"
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
+    assert payload_events[-1]["message_id"] == "msg_user-1_new"
     assert events[0]["type"] == "status"
 
 
@@ -129,7 +128,7 @@ def test_tutoring_chat_degrades_when_ai_retrieval_fails(monkeypatch) -> None:
     ]
 
     payload_events = _non_status_events(events)
-    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done", "review"]
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
     assert payload_events[0]["content"].startswith("我会先拆成更小的步骤来讲。")
     assert payload_events[1]["knowledge_points"][0]["name"] == "导数"
 
@@ -441,7 +440,7 @@ def test_tutoring_chat_degrades_when_chat_fails(monkeypatch) -> None:
     ]
 
     payload_events = _non_status_events(events)
-    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done", "review"]
+    assert [event["type"] for event in payload_events] == ["chunk", "knowledge_points", "suggestion", "done"]
 
 
 async def _consume_response_body(body_iterator) -> str:

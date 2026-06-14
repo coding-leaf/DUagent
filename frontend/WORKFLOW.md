@@ -25,6 +25,18 @@
 
 ### 2026-06-14
 
+- 移除 ai-chat（tutoring）链路的规则 Guard，修复 LLM 有效回答被误杀后前端只显示一句摘要的问题：
+  - 根因：`generate_tutoring_sse_events` 在 ReAct 产出后调用 `evaluate_tutoring_response_by_rule` 做相关性（off_topic）校验，要求检索可信术语字面出现在回答里；当前素材 OCR 差、资源与 KG 节点对不齐，术语对不上 → 有效回答被判 off_topic 清零 → 落到 `_build_chunk_content` 兜底句（内含 `conversation_summary`），前端因此只显示“结合已有摘要：…”那段摘要，而 LLM 实际已洋洋洒洒输出完整回答。
+  - 修复（范围：流程移除、保留文件）：
+    1. `agent_service/agents/tutoring.py`：删除首轮/重试/异步审查三处 Guard 调用，删除仅 Guard 使用的 `_empty_response` 与相关 import；ReAct 有产出即采纳；重试仅在 LLM 实际无产出（返回 `None`）时触发；不再发 `review:flagged` 事件（前端琥珀色“该回答可能不准确”徽章相应不再出现）。
+    2. 保留 `agent_service/agents/tutoring_response_critic.py` 与 `tests/test_tutoring_response_critic.py` 作为可复用规则工具，暂不挂在链路上。
+    3. 测试同步：`test_tutoring_agent.py` 删除 off_topic 拦截用例；`test_tutoring_fast_path.py` 改为“空文本走 build 兜底、不重试、无 review”+“仅 None 才重试”两个用例；`test_tutoring_api.py` 三个规则/降级链路用例去掉末尾 `review` 事件断言。
+  - 契约说明：未改 OpenAPI / Client API；`ReviewEvent` schema 保留（仅停止发送），无契约漂移。
+  - 影响：off_topic / grounding 不达标的回答不再被拦截，直接展示 LLM 原文（删 Guard 的预期代价）；LLM 真返回空文本时仍有 build 层规则兜底句。
+  - 测试：`cd agent_service && uv run pytest tests/test_tutoring*.py -q` → `83 passed`。全量 `uv run pytest -q` 为 `9 failed, 465 passed`，9 个失败属既有问题（`test_aichat_hybrid_retrieval.py` 缺 `pytest-asyncio` 标记、`test_assessment_difficulty_balancer.py` 难度均衡器），均未触碰本次改动源码，与本次无关。
+
+### 2026-06-14
+
 - 修复学习效果看板 `study_duration_seconds` 不更新问题：
   - 根因：`GET /evaluation` 在存在 Evaluation 快照时，用 `stored_node_progress` 覆盖了实时聚合的 `node_progress`
   - 修复：`evaluation.py:298` 改为始终返回实时 `node_progress`，不再依赖旧快照

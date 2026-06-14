@@ -1,4 +1,4 @@
-"""快速链路端到端测试：Guard + 重试 + 规则兜底 + review 事件。"""
+"""快速链路端到端测试：ReAct → 重试（仅 LLM 无产出）→ 规则兜底。Guard 已从链路移除。"""
 
 import asyncio
 import json
@@ -62,7 +62,8 @@ def test_fast_path_no_llm_critic_no_fallback(monkeypatch) -> None:
     assert "review" not in types
 
 
-def test_fast_path_guard_reject_triggers_retry_then_rule_fallback(monkeypatch) -> None:
+def test_fast_path_empty_model_text_uses_rule_fallback_without_retry(monkeypatch) -> None:
+    """LLM 返回空文本（model_text=None）时 build 层规则兜底生效；不重试、无 review。"""
     calls = {"count": 0}
 
     async def fake_react(*args, **kwargs):
@@ -78,23 +79,31 @@ def test_fast_path_guard_reject_triggers_retry_then_rule_fallback(monkeypatch) -
 
     assert "chunk" in types
     assert "done" in types
-    assert calls["count"] == 2
+    assert "review" not in types
+    assert calls["count"] == 1
     assert "这次重点看指针" in chunks[-1]
 
 
-def test_fast_path_review_event_after_done_on_rule_fallback(monkeypatch) -> None:
+def test_fast_path_retry_only_when_react_returns_none(monkeypatch) -> None:
+    """LLM 实际无产出（返回 None）才重试一次；重试拿到有效回答则直接采用，无 review。"""
+    calls = {"count": 0}
+
     async def fake_react(*args, **kwargs):
-        return TutoringModelResponse()
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return None
+        return TutoringModelResponse(
+            model_text="指针保存的是变量地址，用 * 取值、用 & 取地址。",
+            knowledge_point_names=["指针"],
+        )
 
     monkeypatch.setattr("agent_service.agents.tutoring_react_flow.generate_tutoring_react_response", fake_react)
     providers = _FakeProviders()
     events = asyncio.run(_collect_events(_make_request(), providers))
 
     types = [event.get("type") for event in events]
-    done_idx = types.index("done")
-    review_idx = types.index("review")
-    review = events[review_idx]
+    chunks = [event["content"] for event in events if event.get("type") == "chunk"]
 
-    assert review_idx > done_idx
-    assert review["status"] == "flagged"
-    assert review["reason"] == "empty_response"
+    assert calls["count"] == 2
+    assert "review" not in types
+    assert "指针保存的是变量地址" in chunks[-1]

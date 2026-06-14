@@ -283,15 +283,10 @@ def _build_retry_request(request: TutoringChatRequest, strategy) -> TutoringChat
     return request.model_copy(update={"message": tightened})
 
 
-def _empty_response() -> TutoringModelResponse:
-    return TutoringModelResponse()
-
-
 async def generate_tutoring_sse_events(request, providers=None):
-    """生成 tutoring SSE 事件流：Retrieval → ReAct → 规则 Guard → 重试一次 → 输出 → 异步审查。"""
+    """生成 tutoring SSE 事件流：Retrieval → ReAct → 重试一次（仅 LLM 无产出时）→ 输出。"""
     import json
 
-    from agent_service.agents.tutoring_response_critic import evaluate_tutoring_response_by_rule
     from agent_service.agents.tutoring_react_flow import generate_tutoring_react_response
     from agent_service.agents.tutoring_strategy import select_tutoring_strategy_by_rule
     from agent_service.core.ai import get_ai_providers
@@ -304,7 +299,6 @@ async def generate_tutoring_sse_events(request, providers=None):
         DiagramEvent,
         DoneEvent,
         KnowledgePointsEvent,
-        ReviewEvent,
         SuggestionEvent,
     )
 
@@ -348,17 +342,12 @@ async def generate_tutoring_sse_events(request, providers=None):
         strategy=strategy,
     )
     if react_response is not None:
-        guard = evaluate_tutoring_response_by_rule(request, retrieval_context, react_response, strategy)
-        if guard.accepted:
-            agent_path = "react"
-            output_source = "react"
-            quality_gate = "accepted"
-        else:
-            quality_gate = "guard_rejected"
-            logger.info("Tutoring ReAct response rejected by guard: reason=%s", guard.reason)
-            react_response = None
+        agent_path = "react"
+        output_source = "react"
+        quality_gate = "accepted"
 
     if react_response is None and chat is not None:
+        # 仅当 LLM 实际无产出（None）时重试一次，不再做相关性 Guard 拦截。
         retry_request = _build_retry_request(request, strategy)
         react_response = await generate_tutoring_react_response(
             retry_request, retrieval_context, chat,
@@ -367,15 +356,9 @@ async def generate_tutoring_sse_events(request, providers=None):
             strategy=strategy,
         )
         if react_response is not None:
-            guard = evaluate_tutoring_response_by_rule(request, retrieval_context, react_response, strategy)
-            if guard.accepted:
-                agent_path = "react_retry"
-                output_source = "react_retry"
-                quality_gate = "accepted_on_retry"
-            else:
-                quality_gate = "guard_rejected_on_retry"
-                logger.info("Tutoring retry response rejected by guard: reason=%s", guard.reason)
-                react_response = None
+            agent_path = "react_retry"
+            output_source = "react_retry"
+            quality_gate = "accepted_on_retry"
 
     runtime_result = build_tutoring_generation_result(
         request, retrieval_context=retrieval_context, model_response=react_response
@@ -405,26 +388,6 @@ async def generate_tutoring_sse_events(request, providers=None):
         ),
     ]:
         yield f"data: {json.dumps(event.model_dump(), ensure_ascii=False)}\n\n"
-
-    async_guard = evaluate_tutoring_response_by_rule(
-        request,
-        retrieval_context,
-        react_response or _empty_response(),
-        strategy,
-    )
-    if not async_guard.accepted:
-        logger.info(
-            "agent_trace interface=tutoring/chat user_id=%s async_review=flagged reason=%s",
-            request.user_id,
-            async_guard.reason,
-        )
-        review = ReviewEvent(status="flagged", reason=async_guard.reason)
-        yield f"data: {json.dumps(review.model_dump(), ensure_ascii=False)}\n\n"
-    else:
-        logger.info(
-            "agent_trace interface=tutoring/chat user_id=%s async_review=accepted",
-            request.user_id,
-        )
 
 
 __all__ = [

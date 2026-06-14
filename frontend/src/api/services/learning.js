@@ -10,8 +10,8 @@ export const learningService = {
   getResources(params) {
     return apiClient.get('/resources', { params });
   },
-  refreshEvaluation() {
-    return apiClient.post('/evaluation/refresh');
+  refreshEvaluation(courseId) {
+    return apiClient.post('/evaluation/refresh', { course_id: courseId });
   },
   getResourceDetail(id) {
     return apiClient.get(`/resources/${id}`);

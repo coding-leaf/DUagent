@@ -171,6 +171,108 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem('course_id'))).toBe(null);
   });
 
+  test('Learning effects renders KG node progress without fake resource distribution', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-student-token');
+      localStorage.setItem('course_id', 'course-effects-e2e');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'student-effects-e2e',
+          email: 'student@example.com',
+          username: 'Student E2E',
+          role: 'student',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'course-effects-e2e',
+            name: '学习效果课程',
+            description: 'KG 节点看板测试',
+          }],
+        },
+      }));
+    });
+
+    await page.route(/\/api\/v1\/evaluation(\?.*)?$/, async (route) => {
+      expect(route.request().method()).toBe('GET');
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get('course_id')).toBe('course-effects-e2e');
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          course_id: 'course-effects-e2e',
+          node_progress: [
+            {
+              node_id: 'n1',
+              node_name: '指针基础',
+              status: '已掌握',
+              study_duration_seconds: 180,
+              mastery_score: 100,
+              mastery_label: 'A',
+              assessment_state: 'scored',
+              question_count: 1,
+              attempt_count: 1,
+              resource_visit_count: null,
+              last_activity_at: null,
+            },
+            {
+              node_id: 'n2',
+              node_name: '数组',
+              status: '待练习',
+              study_duration_seconds: null,
+              mastery_score: null,
+              mastery_label: '待练习',
+              assessment_state: 'pending_practice',
+              question_count: 1,
+              attempt_count: 0,
+              resource_visit_count: null,
+              last_activity_at: null,
+            },
+            {
+              node_id: 'n3',
+              node_name: '动态内存',
+              status: '未测评/默认通过',
+              study_duration_seconds: null,
+              mastery_score: null,
+              mastery_label: '未测评/默认通过',
+              assessment_state: 'unassessed_default_pass',
+              question_count: 0,
+              attempt_count: 0,
+              resource_visit_count: null,
+              last_activity_at: null,
+            },
+          ],
+          progress_table: { columns: [], rows: [] },
+          mastery_table: { columns: [], rows: [] },
+          resource_usage_table: { columns: [], rows: [] },
+          summary_text: '当前指针基础掌握较好，数组节点待练习。',
+          generated_at: '2026-06-14T10:00:00Z',
+        },
+      }));
+    });
+
+    await page.goto('/learning-effects');
+
+    await expect(page.getByText('当前指针基础掌握较好，数组节点待练习。')).toBeVisible();
+    await expect(page.getByRole('cell', { name: '指针基础' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '数组' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '动态内存' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '未测评/默认通过' }).first()).toBeVisible();
+    await expect(page.getByText('动态演示 (60%)')).toHaveCount(0);
+  });
+
   test('UseCase 2: Student switches course -> views learning path & quiz', async ({ page }) => {
     // 1. Log in student
     await loginUser(page, 's@t.com', 'Abc12345');

@@ -48,6 +48,7 @@ async def list_users(
                     "role": u.role,
                     "major": u.major,
                     "grade": u.grade,
+                    "is_active": bool(u.is_active),
                     "created_at": u.create_time.isoformat() if u.create_time else "",
                 }
                 for u in users

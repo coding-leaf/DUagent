@@ -25,8 +25,7 @@ export default function AdminConsole() {
   const [searchQuery, setSearchQuery] = useState('');
   const [userActionError, setUserActionError] = useState('');
   const [removingUserId, setRemovingUserId] = useState(null);
-  const [disabledUserIds, setDisabledUserIds] = useState(() => new Set());
-  
+
   // Log Data State
   const [agentLogs, setAgentLogs] = useState([]);
   const [operationLogs, setOperationLogs] = useState([]);
@@ -119,7 +118,7 @@ export default function AdminConsole() {
 
   const handleRemoveUser = async (targetUser) => {
     const isCurrentUser = targetUser.id === user?.id || targetUser.email === user?.email;
-    if (isCurrentUser || disabledUserIds.has(targetUser.id)) return;
+    if (isCurrentUser || !targetUser.is_active) return;
     const confirmed = window.confirm(`确认停用用户 ${targetUser.username || targetUser.email || targetUser.id}？`);
     if (!confirmed) return;
 
@@ -128,7 +127,6 @@ export default function AdminConsole() {
     try {
       const res = await adminService.removeUser(targetUser.id);
       if (res.code === 200) {
-        setDisabledUserIds((prev) => new Set(prev).add(targetUser.id));
         await fetchUsers();
       } else {
         setUserActionError(res.message || '停用用户失败');
@@ -281,8 +279,8 @@ export default function AdminConsole() {
                     ) : (
                       users.map(u => {
                         const isCurrentUser = u.id === user?.id || u.email === user?.email;
-                        const isDisabledLocally = disabledUserIds.has(u.id);
-                        const isActionDisabled = isCurrentUser || isDisabledLocally || removingUserId === u.id;
+                        const isDisabled = u.is_active === false;
+                        const isActionDisabled = isCurrentUser || isDisabled || removingUserId === u.id;
                         return (
                           <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="px-6 py-4 font-mono text-xs text-slate-500">{u.id}</td>
@@ -310,13 +308,13 @@ export default function AdminConsole() {
                                 title={
                                   isCurrentUser
                                     ? '不可停用当前登录用户'
-                                    : isDisabledLocally
+                                    : isDisabled
                                       ? '该用户已停用'
                                       : '停用用户'
                                 }
                               >
                                 <span className="material-symbols-outlined text-[16px]">person_off</span>
-                                {removingUserId === u.id ? '停用中' : isDisabledLocally ? '已停用' : '停用'}
+                                {removingUserId === u.id ? '停用中' : isDisabled ? '已停用' : '停用'}
                               </button>
                             </td>
                           </tr>

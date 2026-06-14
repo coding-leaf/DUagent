@@ -312,3 +312,30 @@ def test_openai_compatible_reranker_provider_rejects_misaligned_scores() -> None
 
     with pytest.raises(ValueError, match="Reranker response length does not match documents"):
         asyncio.run(provider.score("导数", ["导数定义", "函数图像"]))
+
+
+def test_build_chat_provider_applies_timeout_and_stream(monkeypatch) -> None:
+    from unittest.mock import patch, MagicMock
+    from agent_service.core import ai as ai_module
+
+    monkeypatch.setattr(ai_module.settings, "LLM_PROVIDER", "agentscope_openai")
+    monkeypatch.setattr(ai_module.settings, "LLM_BASE_URL", "https://example.com")
+    monkeypatch.setattr(ai_module.settings, "LLM_API_KEY", "sk-test")
+    monkeypatch.setattr(ai_module.settings, "LLM_MODEL", "test-model")
+    monkeypatch.setattr(ai_module.settings, "LLM_TIMEOUT", 42.0)
+    monkeypatch.setattr(ai_module.settings, "LLM_STREAM", True)
+
+    captured: dict = {}
+
+    class FakeModel:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    with patch("agentscope.model.OpenAIChatModel", FakeModel), \
+         patch("agentscope.formatter.DeepSeekChatFormatter", MagicMock()):
+        provider = ai_module._build_chat_provider_from_settings()
+
+    assert provider is not None
+    assert captured["stream"] is True
+    assert captured["client_kwargs"]["base_url"] == "https://example.com"
+    assert captured["client_kwargs"]["timeout"] == 42.0

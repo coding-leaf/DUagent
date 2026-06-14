@@ -17,6 +17,7 @@ class QuizQuestion(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
+    catalog_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     chapter: Mapped[str] = mapped_column(String(100), default="")
     knowledge_point: Mapped[str] = mapped_column(String(100), default="")
     type: Mapped[str] = mapped_column(String(20), nullable=False)

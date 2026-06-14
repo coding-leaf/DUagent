@@ -1161,6 +1161,8 @@ async def admin_generate_catalog_resources(
     )
     offerings = offerings_result.scalars().all()
     fanout_course_ids = [offering.id for offering in offerings]
+    if not fanout_course_ids and catalog.kg_host_course_id:
+        fanout_course_ids = [catalog.kg_host_course_id]
     if not fanout_course_ids:
         raise _course_offering_missing()
 
@@ -1411,17 +1413,34 @@ async def _run_quiz_generation_background(
             for question_id in (r.get("inserted_question_ids") or [])
         ]
         if inserted_question_ids:
-            for cid in fanout_course_ids:
+            fanout_catalog_id = None
+            for r in results:
+                if isinstance(r, dict) and r.get("fanout_catalog_id"):
+                    fanout_catalog_id = r["fanout_catalog_id"]
+                    break
+            if fanout_catalog_id:
                 await db.execute(
                     update(QuizQuestion)
                     .where(
-                        QuizQuestion.course_id == cid,
+                        QuizQuestion.catalog_id == fanout_catalog_id,
                         QuizQuestion.source == "baseline",
                         QuizQuestion.is_deleted == False,
                         ~QuizQuestion.id.in_(inserted_question_ids),
                     )
                     .values(is_deleted=True)
                 )
+            else:
+                for cid in fanout_course_ids:
+                    await db.execute(
+                        update(QuizQuestion)
+                        .where(
+                            QuizQuestion.course_id == cid,
+                            QuizQuestion.source == "baseline",
+                            QuizQuestion.is_deleted == False,
+                            ~QuizQuestion.id.in_(inserted_question_ids),
+                        )
+                        .values(is_deleted=True)
+                    )
         parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
         parent.progress = 100
         parent.completed_at = _now_utc()
@@ -1452,6 +1471,7 @@ async def _generate_quiz_for_child(
     node_name = child_data.get("node_name", "")
     chapter = child_data.get("chapter") or ""
     course_ids = child_data.get("course_ids") or fanout_course_ids
+    fanout_catalog_id = child_data.get("fanout_catalog_id")
     agent_course_id = child_data.get("agent_course_id") or child_data.get("catalog_id") or child.course_id or ""
 
     try:
@@ -1473,6 +1493,7 @@ async def _generate_quiz_for_child(
                 new_questions.append(QuizQuestion(
                     id=question_id,
                     course_id=cid,
+                    catalog_id=fanout_catalog_id,
                     chapter=chapter,
                     knowledge_point=node_name,
                     type=q.get("type", "single_choice"),
@@ -1508,6 +1529,7 @@ async def _generate_quiz_for_child(
             "status": "completed",
             "question_count": len(new_questions),
             "inserted_question_ids": inserted_question_ids,
+            "fanout_catalog_id": fanout_catalog_id,
         }
     except AgentServiceError as e:
         child.status = "failed"
@@ -1515,14 +1537,14 @@ async def _generate_quiz_for_child(
         child.error_code = str(e.agent_code or "agent_error")
         child.error_message = e.message
         child.completed_at = _now_utc()
-        return {"status": "failed", "error": e.message}
+        return {"status": "failed", "error": e.message, "fanout_catalog_id": fanout_catalog_id}
     except Exception as e:
         child.status = "failed"
         child.progress = 100
         child.error_code = "unexpected_error"
         child.error_message = str(e)[:500]
         child.completed_at = _now_utc()
-        return {"status": "failed", "error": str(e)[:500]}
+        return {"status": "failed", "error": str(e)[:500], "fanout_catalog_id": fanout_catalog_id}
 
 
 def _build_baseline_quiz_payload(
@@ -1660,10 +1682,11 @@ async def admin_generate_catalog_quiz(
         .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
     )
     offerings = offerings_result.scalars().all()
-    if not offerings:
-        raise _course_offering_missing()
-
     fanout_course_ids = [offering.id for offering in offerings]
+    if not fanout_course_ids and catalog.kg_host_course_id:
+        fanout_course_ids = [catalog.kg_host_course_id]
+    if not fanout_course_ids:
+        raise _course_offering_missing()
 
     kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id or "")
     if kg is None:
@@ -1725,6 +1748,7 @@ async def admin_generate_catalog_quiz(
                 "node_name": node_name,
                 "chapter": chapter,
                 "course_ids": fanout_course_ids,
+                "fanout_catalog_id": catalog.id,
             },
         )
         db.add(child)

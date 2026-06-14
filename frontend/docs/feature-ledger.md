@@ -131,7 +131,7 @@
 
 | # | 功能 | 状态 | 当前判断 | 下一步 |
 | --- | --- | --- | --- | --- |
-| 28 | Admin 用户停用状态持久展示 | 📋 待设计 | 当前 `GET /admin/users` 契约未返回 `is_active/status`，页面刷新后无法持久展示停用状态 | 先扩展 Client API，再同步 Backend/Frontend。 |
+| 28 | Admin 用户停用状态持久展示 | ✅ 已可操作 | 2026-06-14：Backend `list_users` 已返回 `is_active`，前端改为从 API 读取停用状态，刷新页面后持久展示。 | 后续可补重新激活端点。 |
 | 29 | AI Chat `knowledge_points[]` 元素类型 | 📋 待设计 | 真实历史响应出现对象元素，OpenAPI 仍声明 string；前端已兼容防白屏 | 做契约审查，决定 string 还是 object union。 |
 | 30 | 复杂教师/Admin 指标 | 📋 待设计 | 排名、覆盖率、动力指数等不能前端补造 | 先设计 SQL/Agent/Client API 来源。 |
 | 31 | 累计学习时长 / 阅读进度 / AIChat 活动摘要 / 资源偏好分布 | ⏸️ 暂缓 | 缺行为采集口径和 activity 表设计 | 单独数据采集专项。 |
@@ -139,20 +139,14 @@
 
 ## 当前下一步队列
 
-1. **修复主 C catalog 的 kg_host_course_id**
-   `e21d9fdaaa0c43a3`（主要教学班绑定的 catalog）`kg_host_course_id=NULL`，导致 `_synthesize_kg_fallback_path` 找不到 active KG。修复方式：为该 catalog 创建/绑定隐藏宿主课（已有 `_get_or_create_catalog_kg_host_course` 可用），然后重新生成 KG 或将现有 KG `c5b437f8701b482a` 的 course_id 迁移到宿主课。
-
-2. **修复探针口径**
-   `learning_path_resource_probe.py` 的 KG 查找（用 `kg_host_course_id` 链）、LP fallback（合成 KG 节点路径）、资源查询（用 `resource_scope_clause`）三个口径需对齐 API。阻塞第 4 项的批量评估能力。
-
-3. **LearningPath 节点资源挂载验证（探针修好后）**
-   用修复后的探针跑一次 C 样本批量覆盖率，确认 `weak_point_tutorials` / `exercises` / `chapter_materials` 三组资源命中率。
-
-4. **#28 Admin 用户停用状态契约**
-   先扩展 `GET /admin/users` 返回 `is_active`/`status` 字段，再同步 Backend + Frontend。
-
-5. **Evaluation refresh 入口决策**
+1. **Evaluation refresh 入口决策**
    决定 `learningService.refreshEvaluation()` 是否接前端刷新按钮或删除误导性 service。
+
+2. **修复探针口径（非阻塞）**
+   `learning_path_resource_probe.py` 的 KG 查找（用 `kg_host_course_id` 链）、LP fallback（合成 KG 节点路径）、资源查询（用 `resource_scope_clause`）三个口径需对齐 API。
+
+3. **AI Chat `knowledge_points[]` 元素类型契约审查（#29）**
+   真实历史响应出现对象元素，OpenAPI 仍声明 string；前端已兼容防白屏，做契约审查决定最终类型。
 
 ## 纠偏记录
 

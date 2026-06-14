@@ -18,7 +18,7 @@
 - C 语言主 catalog `e21d9fdaaa0c43a3`（绑定教学班 `cprogcourse202606120001`）`kg_host_course_id = NULL`，导致 `_synthesize_kg_fallback_path` 无法找到 active KG（KG `c5b437f8701b482a` 35 节点存在但 course_id 直接是教学班 ID）。这是当前 LearningPath KG fallback 的实际阻断点。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、基于知识切片自动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除；LearningPath 节点资源展示。
 - 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
-- 当前待推进：#28 Admin 用户停用状态持久展示（需先扩展契约）；Evaluation refresh 入口决策；探针口径修复（非阻塞，但跑探针前必须修）。
+- 当前待推进：#29 knowledge_points 元素类型契约审查（对象 vs string）；Evaluation refresh 入口决策；探针口径修复（非阻塞）。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证

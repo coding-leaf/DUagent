@@ -46,7 +46,34 @@ async def _resolve_evaluation_kg(db: AsyncSession, course_id: str) -> CourseKnow
         return None
     return await get_active_knowledge_graph(db, catalog.kg_host_course_id)
 
-async def _build_node_progress_rows(user_id: str, course_id: str, db: AsyncSession) -> list[dict]:
+def evaluate_mastery_state(
+    score: float | None, 
+    question_count: int, 
+    attempt_count: int, 
+    latest_score: float | None, 
+    has_activity: bool
+) -> tuple[str, str, str]:
+    """Evaluate mastery state based on score and activity."""
+    if score is not None:
+        min_evidence = min(3, question_count)
+        has_minimum_evidence = attempt_count >= min_evidence
+        
+        if score >= 80 and has_minimum_evidence:
+            return "mastered", "已掌握", _mastery_label(score)
+        elif score < 70 or (latest_score is not None and latest_score < 60):
+            return "weak", "薄弱", _mastery_label(score)
+        else:
+            return "learning", "学习中", _mastery_label(score)
+    elif question_count > 0:
+        return "pending_practice", "待练习", "待练习"
+    else:
+        if has_activity:
+            return "learning", "学习中", "无测评"
+        else:
+            return "unstarted", "未开始", "无测评"
+
+
+async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSession) -> list[dict]:
     kg = await _resolve_evaluation_kg(db, course_id)
     nodes = kg.nodes if kg and isinstance(kg.nodes, list) else []
     if not nodes:
@@ -168,39 +195,17 @@ async def _build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessi
             else None
         )
 
-        # Apply mastery rules from spec
-        if score is not None:
-            # Nodes with questions: minimum evidence is 3 answered questions or all questions if less than 3
-            min_evidence = min(3, question_count)
-            has_minimum_evidence = attempt_count >= min_evidence
-            
-            if score >= 80 and has_minimum_evidence:
-                assessment_state = "mastered"
-                status_text = "已掌握"
-                mastery_label = _mastery_label(score)
-            elif score < 70 or (attempt_stats.get("latest_score", 100) < 60):
-                assessment_state = "weak"
-                status_text = "薄弱"
-                mastery_label = _mastery_label(score)
-            else:
-                assessment_state = "learning"
-                status_text = "学习中"
-                mastery_label = _mastery_label(score)
-        elif question_count > 0:
-            assessment_state = "pending_practice"
-            status_text = "待练习"
-            mastery_label = "待练习"
-        else:
-            activity_stats = activity_by_node.get(node_id, {})
-            has_activity = bool(activity_stats.get("duration") or activity_stats.get("activity_count"))
-            if has_activity:
-                assessment_state = "learning"
-                status_text = "学习中"
-                mastery_label = "无测评"
-            else:
-                assessment_state = "unstarted"
-                status_text = "未开始"
-                mastery_label = "无测评"
+        activity_stats = activity_by_node.get(node_id, {})
+        has_activity = bool(activity_stats.get("duration") or activity_stats.get("activity_count"))
+        latest_score = attempt_stats.get("latest_score", 100) if attempt_stats else None
+        
+        assessment_state, status_text, mastery_label = evaluate_mastery_state(
+            score=score,
+            question_count=question_count,
+            attempt_count=attempt_count,
+            latest_score=latest_score,
+            has_activity=has_activity
+        )
 
         activity_stats = activity_by_node.get(node_id, {})
         activity_duration = int(activity_stats.get("duration") or 0)

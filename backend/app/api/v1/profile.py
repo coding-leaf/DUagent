@@ -61,6 +61,26 @@ async def _release_profile_lock(db: AsyncSession, lock_name: str) -> None:
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
+async def _get_or_create_profile(db: AsyncSession, user_id: str, course_id: str) -> UserProfile:
+    result = await db.execute(
+        select(UserProfile)
+        .where(
+            UserProfile.user_id == user_id,
+            UserProfile.course_id == course_id,
+        )
+        .order_by(UserProfile.generated_at.desc())
+    )
+    pf = result.scalars().first()
+    if pf:
+        if pf.is_deleted:
+            pf.is_deleted = False
+        return pf
+
+    pf = UserProfile(user_id=user_id, course_id=course_id)
+    db.add(pf)
+    return pf
+
+
 def _as_list(value) -> list:
     if value is None:
         return []
@@ -224,37 +244,16 @@ async def initialize_profile(
     # 幂等写入：重复初始化 = 覆盖旧结果（锁 + 软删旧行 → 插新行）
     lock_name = await _acquire_profile_lock(db, current_user.id, req.course_id)
     try:
-        old_result = await db.execute(
-            select(UserProfile).where(
-                UserProfile.user_id == current_user.id,
-                UserProfile.course_id == req.course_id,
-                UserProfile.is_deleted == False,
-            )
-        )
-        pf = old_result.scalars().first()
+        profile = await _get_or_create_profile(db, current_user.id, req.course_id)
         answers = req.answers or {}
         now = datetime.now(timezone.utc)
         
-        if pf:
-            pf.guidance_level_current = answers.get("guidance_level", "L2")
-            pf.guidance_level_updated_at = now
-            pf.modal_preference = {k: 60 for k in (answers.get("modal_preference") or ["text"])}
-            pf.drive_intent = {"type": answers.get("learning_goal", "casual"), "intensity": 50}
-            pf.knowledge_coordinates = [{"name": "入门", "status": "learning", "mastered_at": None}]
-            pf.generated_at = now
-            profile = pf
-        else:
-            profile = UserProfile(
-                user_id=current_user.id,
-                course_id=req.course_id,
-                guidance_level_current=answers.get("guidance_level", "L2"),
-                guidance_level_updated_at=now,
-                modal_preference={k: 60 for k in (answers.get("modal_preference") or ["text"])},
-                drive_intent={"type": answers.get("learning_goal", "casual"), "intensity": 50},
-                knowledge_coordinates=[{"name": "入门", "status": "learning", "mastered_at": None}],
-                generated_at=now,
-            )
-            db.add(profile)
+        profile.guidance_level_current = answers.get("guidance_level", "L2")
+        profile.guidance_level_updated_at = now
+        profile.modal_preference = {k: 60 for k in (answers.get("modal_preference") or ["text"])}
+        profile.drive_intent = {"type": answers.get("learning_goal", "casual"), "intensity": 50}
+        profile.knowledge_coordinates = [{"name": "入门", "status": "learning", "mastered_at": None}]
+        profile.generated_at = now
             
         await db.flush()
         await db.refresh(profile)
@@ -340,24 +339,10 @@ async def dialogue_update_profile(
 
     lock_name = await _acquire_profile_lock(db, current_user.id, req.course_id)
     try:
-        result = await db.execute(
-            select(UserProfile)
-            .where(
-                UserProfile.user_id == current_user.id,
-                UserProfile.course_id == req.course_id,
-                UserProfile.is_deleted == False,
-            )
-            .order_by(UserProfile.generated_at.desc())
-        )
-        pf = result.scalars().first()
-        if pf is None:
-            pf = UserProfile(
-                user_id=current_user.id,
-                course_id=req.course_id,
-                generated_at=datetime.now(timezone.utc),
-            )
-            db.add(pf)
-            await db.flush()
+        pf = await _get_or_create_profile(db, current_user.id, req.course_id)
+        if pf.generated_at is None:
+            pf.generated_at = datetime.now(timezone.utc)
+        await db.flush()
 
         merged = _merge_dialogue_profile(pf, extracted)
         response_data = _profile_data(pf, req.course_id)
@@ -489,21 +474,8 @@ async def _run_profile_refresh_background(
 
             try:
                 now = datetime.now(timezone.utc)
-                old_result = await db.execute(
-                    select(UserProfile).where(
-                        UserProfile.user_id == user_id,
-                        UserProfile.course_id == course_id,
-                        UserProfile.is_deleted == False,
-                    )
-                )
-                pf = old_result.scalars().first()
-                if not pf:
-                    pf = UserProfile(
-                        user_id=user_id,
-                        course_id=course_id,
-                    )
-                    db.add(pf)
-                    await db.flush()
+                pf = await _get_or_create_profile(db, user_id, course_id)
+                await db.flush()
                 pf.generated_at = now
 
                 pf.modal_preference = data.get("modal_preference", {})

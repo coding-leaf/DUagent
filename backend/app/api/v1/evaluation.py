@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
 
 _empty_table = {"columns": [], "rows": []}
 
-from app.services.knowledge_progress import _build_node_progress_rows
+from app.services.knowledge_progress import build_node_progress_rows
 
 
 def _looks_like_node_progress(rows: object) -> bool:
@@ -63,7 +63,7 @@ async def get_evaluation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    node_progress = await _build_node_progress_rows(current_user.id, course_id, db)
+    node_progress = await build_node_progress_rows(current_user.id, course_id, db)
     result = await db.execute(
         select(Evaluation)
         .where(
@@ -188,7 +188,7 @@ async def _run_evaluation_refresh_background(
 
             try:
                 now = datetime.now(timezone.utc)
-                node_progress = await _build_node_progress_rows(user_id, course_id, db)
+                node_progress = await build_node_progress_rows(user_id, course_id, db)
                 progress_table = data.get("progress_table", _empty_table)
                 if not isinstance(progress_table, dict):
                     progress_table = _empty_table

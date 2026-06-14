@@ -122,7 +122,7 @@
 | 21 | LearningPath 刷新 | ⚠️ 前端无入口 + ⏸️ 暂缓 | `learningService.refreshLearningPath()` 和 `/learning-path/refresh` 存在，但页面无调用；KG fallback 已覆盖基础展示 | 当前阶段不需要接刷新 UI；如未来需要 Agent 个性化路径，再评估。 |
 | 22 | KG ready gate | ⏸️ 暂缓 | KG fallback 已让 LearningPath 可用，不再阻塞主流程 | 待 Agent 个性化路径设计后再定。 |
 | 23 | 学生画像展示 / 对话补充 | ✅ 已可操作 | `StudentProfile.jsx` 调 `GET /profile` 展示六维画像，调用 `POST /profile/dialogue-update` 用自然语言补充学习目标、薄弱点和资源偏好，并展示 `/users/me` 基础资料 | 后续新增画像维度仍必须走契约。 |
-| 24 | Profile refresh | ✅ 已可操作 | `StudentProfile.jsx` 提供“同步画像”按钮，调用 `POST /profile/refresh` 创建 `profile_refresh` task，轮询 `GET /tasks/{task_id}`，完成后重新拉取 `GET /profile` | 该入口为静默随学更新，不暴露 prompt 输入。 |
+| 24 | Profile refresh | ✅ 已可操作 | `StudentProfile.jsx` 提供“同步画像”按钮，调用 `POST /profile/refresh` 创建 `profile_refresh` task，轮询 `GET /tasks/{task_id}`，完成后重新拉取 `GET /profile` | 该入口已升级为基于本地行为日志和知识进度的纯规则计算引擎（替代 Agent 生成）。 |
 | 25 | 学习效果展示 | ✅ 已可操作 | `LearningEffects.jsx` 调 `GET /evaluation`，展示 KG 节点级 `node_progress`、掌握度分布和学习效果总结；节点学习耗时优先聚合 `LearningActivity.duration_seconds` | 无活动采集时兼容练习 `time_spent` 或显示“暂无记录”。 |
 | 26 | Evaluation refresh | ✅ 已可操作 | `LearningEffects.jsx` 的“重新评估”调用 `POST /evaluation/refresh` 并轮询 `GET /tasks/{task_id}`，完成后重新拉取 `GET /evaluation` | Agent 生成总结质量仍取决于后端/Agent；失败或 partial 时保留最近一次评估。 |
 | 27 | 教师学生深度报告 | ✅ 已可操作 + 📋 待设计局部口径 | 学生报告页面接 `GET /teaching/classes/{class_id}/students/{student_id}/learning` | `overall_score` 真实计算口径待设计。 |
@@ -170,6 +170,7 @@
 - 2026-06-13 AI Chat Hybrid Retrieval 验证完成：后端已将 `active_kg_nodes` 透传给 Agent Service 的 `TutoringChatRequest`，Agent 内实现了 KG 节点与 User Message 语义匹配打分，并将其作为兜底 Knowledge Points 注入 prompt。新增了探针端点 `/retrieval_probe` 和 CLI 工具（支持分数与 `--json` 输出）。当前已进入「探针与 mock 回归已完成，真实 Hybrid 闭环待验证」状态。
 - 2026-06-14 Tutoring 快速链路重构：删除同步 LLM critic / chat fallback / 策略 LLM；改为规则 Guard + 最多一次 ReAct 重试 + 规则兜底；增加异步 `review` SSE 事件（`done` 之后，`accepted=False` 时发出）；前端整条标灰提示“该回答可能不准确”。同步加强检索个性化：weak chunk 上浮。AI Chat 状态保持 ✅ 已可操作。
 - 2026-06-11 Admin 删除资料一致性修复：删除 CourseCatalog material 后现在会按剩余未删除 material 重算 `catalog.chunk_count`，避免删除最后一个有效资料后 catalog 仍保留历史 chunk 并误判 ready。真实 C catalog 已存在的历史不一致数据不会被代码自动回填，需单独修正或重新入库。
+- 2026-06-14 Profile Evidence-Based Rules: 画像同步 `POST /profile/refresh` 已从调用 Agent 生成彻底重构为后端本地规则引擎。根据用户学习耗时、节点练习正确率和学习天数实时计算学习习惯和知识进度。解决了由于 Agent 返回超时导致的软删并发冲突和死锁问题。
 
 ## 更新规则
 

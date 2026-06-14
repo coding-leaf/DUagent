@@ -6,40 +6,12 @@ import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 import ChatMessage from '../components/chat/ChatMessage';
 import ChatEmptyState from '../components/chat/ChatEmptyState';
-
-const getDisplayText = (value) => {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') {
-    if (value.trim().startsWith('{')) {
-      try {
-        const parsed = JSON.parse(value);
-        if (parsed.model_text || parsed.content) {
-          return parsed.model_text || parsed.content;
-        }
-      } catch {
-        // Ignored
-      }
-    }
-    return value;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (typeof value === 'object') {
-    return value.model_text
-      || value.name
-      || value.title
-      || value.knowledge_point
-      || value.label
-      || value.content
-      || value.id
-      || JSON.stringify(value);
-  }
-  return String(value);
-};
+import { extractModelText } from '../utils/chatContent';
 
 const normalizeTextList = (value) => {
   const list = Array.isArray(value) ? value : [value];
   return list
-    .map(getDisplayText)
+    .map(extractModelText)
     .map(item => item.trim())
     .filter(Boolean);
 };
@@ -71,7 +43,7 @@ const normalizeMessage = (message, index = 0) => {
     if (contentObj.suggestion && !suggestions.length) suggestions = [contentObj.suggestion];
     if (contentObj.suggestions && !suggestions.length) suggestions = contentObj.suggestions;
   } else {
-    displayContent = getDisplayText(message?.content);
+    displayContent = extractModelText(message?.content);
   }
 
   return {

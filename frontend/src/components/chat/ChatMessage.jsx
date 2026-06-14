@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import mermaid from 'mermaid';
 import ToolCallCard from './ToolCallCard';
+import { extractModelText } from '../../utils/chatContent';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -164,28 +165,6 @@ function MermaidDiagram({ content }) {
   return <div className="mermaid-svg-wrapper overflow-x-auto p-2 bg-white rounded-lg border border-slate-100 shadow-inner" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-const getDisplayText = (value) => {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') {
-    if (value.trim().startsWith('{')) {
-      try {
-        const parsed = JSON.parse(value);
-        if (parsed.model_text || parsed.content) {
-          return parsed.model_text || parsed.content;
-        }
-      } catch {
-        // Ignored
-      }
-    }
-    return value;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (typeof value === 'object') {
-    return value.model_text || value.code || value.name || value.title || value.content || JSON.stringify(value);
-  }
-  return String(value);
-};
-
 export default function ChatMessage({ message, onSendMessage }) {
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
@@ -275,7 +254,7 @@ export default function ChatMessage({ message, onSendMessage }) {
               }
             }}
           >
-            {message.content}
+            {extractModelText(message.content)}
           </ReactMarkdown>
         </div>
 
@@ -303,7 +282,7 @@ export default function ChatMessage({ message, onSendMessage }) {
               <span className="material-symbols-outlined text-[16px] text-cyan-600">schema</span>
               <span>图解模式 (Mermaid)</span>
             </div>
-            <MermaidDiagram content={getDisplayText(diag)} />
+            <MermaidDiagram content={extractModelText(diag)} />
           </div>
         ))}
 

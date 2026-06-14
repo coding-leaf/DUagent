@@ -3520,6 +3520,13 @@
           "resource_usage_table": {
             "$ref": "#/components/schemas/TableData"
           },
+          "node_progress": {
+            "type": "array",
+            "description": "按 KG 节点聚合的学习效果进度；无题节点使用 unassessed_default_pass。",
+            "items": {
+              "$ref": "#/components/schemas/EvaluationNodeProgress"
+            }
+          },
           "summary_text": {
             "type": "string",
             "description": "LLM 文字总结"
@@ -3529,6 +3536,67 @@
             "format": "date-time",
             "nullable": true,
             "description": "生成时间；尚未生成时为 null"
+          }
+        }
+      },
+      "EvaluationNodeProgress": {
+        "type": "object",
+        "description": "单个 KG 节点的学习效果聚合行。",
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "description": "KG 节点 ID"
+          },
+          "node_name": {
+            "type": "string",
+            "description": "KG 节点名称"
+          },
+          "status": {
+            "type": "string",
+            "description": "未开始 / 学习中 / 已练习 / 已掌握 / 待练习 / 未测评/默认通过"
+          },
+          "study_duration_seconds": {
+            "type": "integer",
+            "nullable": true,
+            "description": "真实学习耗时秒数；无可靠记录时为 null"
+          },
+          "mastery_score": {
+            "type": "number",
+            "nullable": true,
+            "description": "答题证据形成的掌握分；无答题证据时为 null"
+          },
+          "mastery_label": {
+            "type": "string",
+            "description": "A / B / C / 需复习 / 待练习 / 未测评/默认通过"
+          },
+          "assessment_state": {
+            "type": "string",
+            "enum": [
+              "scored",
+              "pending_practice",
+              "unassessed_default_pass",
+              "unknown"
+            ],
+            "description": "scored=已有答题证据；pending_practice=有题未答；unassessed_default_pass=无题默认通过；unknown=来源不完整"
+          },
+          "question_count": {
+            "type": "integer",
+            "description": "该节点可用题目数"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "description": "该节点已提交答案数"
+          },
+          "resource_visit_count": {
+            "type": "integer",
+            "nullable": true,
+            "description": "该节点资源访问次数；无可靠记录时为 null"
+          },
+          "last_activity_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "最近学习活动时间；无可靠记录时为 null"
           }
         }
       },

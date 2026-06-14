@@ -877,8 +877,27 @@ GET /api/v1/evaluation?course_id={course_id}
 | resource_usage_table | object | 资源使用习惯记录表 |
 | resource_usage_table.columns | array | 表头列 |
 | resource_usage_table.rows | array | 数据行 |
+| node_progress | array | 按 KG 节点聚合的学习效果进度 |
+| node_progress[].node_id | string | KG 节点 ID |
+| node_progress[].node_name | string | KG 节点名称 |
+| node_progress[].status | string | 未开始 / 学习中 / 已练习 / 已掌握 / 待练习 / 未测评/默认通过 |
+| node_progress[].study_duration_seconds | integer/null | 有真实耗时记录时返回秒数，否则为 null |
+| node_progress[].mastery_score | number/null | 有答题证据时返回掌握分，否则为 null |
+| node_progress[].mastery_label | string | A / B / C / 需复习 / 待练习 / 未测评/默认通过 |
+| node_progress[].assessment_state | string | scored / pending_practice / unassessed_default_pass / unknown |
+| node_progress[].question_count | integer | 该节点可用题目数 |
+| node_progress[].attempt_count | integer | 该节点已提交答案数 |
+| node_progress[].resource_visit_count | integer/null | 该节点资源访问次数；无可靠记录时为 null |
+| node_progress[].last_activity_at | string/null | 最近学习活动时间；无可靠记录时为 null |
 | summary_text | string | LLM 文字总结 |
 | generated_at | string | 评估生成时间 |
+
+**节点评估状态规则：**
+
+- 有答题记录：`assessment_state=scored`，返回真实 `mastery_score`，前端展示 A / B / C / 需复习等评分标签。
+- 有题但未答：`assessment_state=pending_practice`，前端展示“待练习”。
+- 无题：`assessment_state=unassessed_default_pass`，前端展示“未测评/默认通过”，不计入真实均分。
+- 来源不完整：`assessment_state=unknown`，前端展示“暂无数据”。
 
 ### 6.2 刷新学习效果评估
 

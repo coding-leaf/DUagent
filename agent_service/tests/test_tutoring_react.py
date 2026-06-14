@@ -34,7 +34,9 @@ class FakeReActAgent:
 
 class FakeChatModel:
     """模拟 AgentScope OpenAIChatModel。"""
-    pass
+
+    def __init__(self, model_name: str = "generic-chat-model") -> None:
+        self.model_name = model_name
 
 
 class FakeFormatter:
@@ -96,6 +98,18 @@ def test_generate_returns_metadata_dict_when_structured_output_present() -> None
     assert result["model_text"] == "讲解指针"
     # structured_model 必须被透传给 ReActAgent
     assert "structured_model" in agent._agent.calls[0]["kwargs"]
+
+
+def test_generate_skips_structured_model_for_deepseek_thinking_model() -> None:
+    model = FakeChatModel(model_name="deepseek-v4-pro")
+    formatter = FakeFormatter()
+    agent = TutorReActAgent(chat_model=model, formatter=formatter)
+    agent._agent = FakeReActAgent(metadata=None)
+
+    result = asyncio.run(agent.generate("讲讲指针"))
+
+    assert isinstance(result, str)
+    assert "structured_model" not in agent._agent.calls[0]["kwargs"]
 
 
 def test_generate_falls_back_to_text_when_metadata_empty() -> None:

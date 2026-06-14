@@ -57,10 +57,15 @@ async def build_tutoring_retrieval_context_with_ai(
         vectors = await embedding_provider.embed_texts([request.message])
         query_vector = vectors[0] if vectors else []
         store = vector_store or QdrantVectorStore()
-        user_results = await store.search_user_memory(request.user_id, query_vector, limit=limit)
     except Exception as exc:
         logger.warning("Tutoring retrieval failed: user_id=%s error=%s", request.user_id, exc)
         return context
+
+    user_results = []
+    try:
+        user_results = await store.search_user_memory(request.user_id, query_vector, limit=limit)
+    except Exception as exc:
+        logger.warning("Tutoring user memory retrieval failed: user_id=%s error=%s", request.user_id, exc)
 
     course_results = []
     if context.include_course_knowledge and context.course_id:

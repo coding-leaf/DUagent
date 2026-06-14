@@ -31,6 +31,7 @@ class TutorReActAgent:
         knowledge=None,
         max_iters: int = 5,
     ) -> None:
+        self._chat_model = chat_model
         self._agent = ReActAgent(
             name="EduTutor",
             sys_prompt=TUTOR_REACT_SYSTEM_PROMPT,
@@ -51,9 +52,12 @@ class TutorReActAgent:
         - None：调用异常，走规则兜底。
         """
         try:
+            kwargs = {}
+            if not _should_skip_structured_model(self._chat_model):
+                kwargs["structured_model"] = TutoringStructuredOutput
             result = await self._agent(
                 Msg(name="user", role="user", content=user_message),
-                structured_model=TutoringStructuredOutput,
+                **kwargs,
             )
             if result.metadata:
                 return result.metadata
@@ -61,3 +65,14 @@ class TutorReActAgent:
         except Exception:
             logger.warning("TutorReActAgent.generate 调用失败，降级到规则兜底", exc_info=True)
             return None
+
+
+def _should_skip_structured_model(chat_model) -> bool:
+    """DeepSeek thinking/reasoning models reject AgentScope's forced tool_choice."""
+    model_name = str(getattr(chat_model, "model_name", "") or "").lower()
+    return "deepseek" in model_name and (
+        "reasoner" in model_name
+        or "r1" in model_name
+        or "v4" in model_name
+        or "thinking" in model_name
+    )

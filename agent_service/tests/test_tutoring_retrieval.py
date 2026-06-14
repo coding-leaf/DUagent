@@ -158,6 +158,39 @@ def test_build_tutoring_retrieval_context_with_ai_keeps_user_memory_when_course_
     assert "Tutoring course knowledge retrieval failed" in caplog.text
 
 
+def test_build_tutoring_retrieval_context_with_ai_keeps_course_when_user_memory_fails(caplog) -> None:
+    request = TutoringChatRequest(
+        user_id="user-1",
+        course_id="course-1",
+        message="链式法则怎么用？",
+        user_profile=TutoringUserProfile(guidance_level="L2", knowledge_weak=["导数"]),
+    )
+
+    class FakeEmbeddingProvider:
+        async def embed_texts(self, texts):
+            return [[0.1, 0.2, 0.3]]
+
+    class FakeVectorStore:
+        async def search_user_memory(self, user_id, vector, limit=3):
+            raise RuntimeError("qdrant user memory collection unavailable")
+
+        async def search_course_knowledge(self, course_id, vector, limit=3):
+            return [VectorSearchResult(text="链式法则用于复合函数求导", score=0.7, payload={})]
+
+    with caplog.at_level("WARNING", logger="agent_service.memory.tutoring_retrieval"):
+        context = asyncio.run(
+            build_tutoring_retrieval_context_with_ai(
+                request,
+                embedding_provider=FakeEmbeddingProvider(),
+                vector_store=FakeVectorStore(),
+            )
+        )
+
+    assert context.user_memory_facts == []
+    assert context.course_knowledge_chunks == ["链式法则用于复合函数求导"]
+    assert "Tutoring user memory retrieval failed" in caplog.text
+
+
 def test_build_tutoring_retrieval_context_with_ai_reranks_results() -> None:
     request = TutoringChatRequest(
         user_id="user-1",

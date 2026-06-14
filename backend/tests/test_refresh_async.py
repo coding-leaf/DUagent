@@ -30,8 +30,9 @@ from app.db.base import Base
 from app.db.session import async_session_factory, engine
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.models.user import RegistrationCode
-from app.models.others import UserProfile, Evaluation, LearningPath
+from app.models.user import RegistrationCode, User
+from app.models.others import UserProfile, Evaluation, LearningPath, CourseKnowledgeGraph
+from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from sqlalchemy import select
 
 
@@ -253,6 +254,67 @@ async def test():
         # 5. evaluation/refresh success
         # =============================================
         print("\n-- 5. evaluation/refresh success --")
+        async with async_session_factory() as db:
+            user_r = await db.execute(select(User).where(User.email == email))
+            current_user = user_r.scalars().first()
+            kg = CourseKnowledgeGraph(
+                course_id=course_id,
+                version=1,
+                is_active=True,
+                source_type="test",
+                generation_strategy="test",
+                nodes=[
+                    {"id": "node_pointer", "name": "指针基础", "chapter": "指针"},
+                    {"id": "node_array", "name": "数组", "chapter": "数组"},
+                    {"id": "node_malloc", "name": "动态内存", "chapter": "动态内存"},
+                ],
+                edges=[],
+            )
+            db.add(kg)
+            question_pointer = QuizQuestion(
+                course_id=course_id,
+                chapter="指针",
+                knowledge_point="指针基础",
+                type="single_choice",
+                source="baseline",
+                content="指针题",
+                options=[{"key": "A", "text": "正确"}],
+                correct_answer="A",
+            )
+            question_array = QuizQuestion(
+                course_id=course_id,
+                chapter="数组",
+                knowledge_point="数组",
+                type="single_choice",
+                source="baseline",
+                content="数组题",
+                options=[{"key": "A", "text": "正确"}],
+                correct_answer="A",
+            )
+            db.add_all([question_pointer, question_array])
+            await db.flush()
+            quiz_session = QuizSession(
+                user_id=current_user.id,
+                course_id=course_id,
+                chapter="指针",
+                score=100,
+                correct_count=1,
+                total_count=1,
+                time_spent=180,
+            )
+            db.add(quiz_session)
+            await db.flush()
+            db.add(
+                QuizAnswer(
+                    quiz_id=quiz_session.id,
+                    question_id=question_pointer.id,
+                    user_answer="A",
+                    is_correct=True,
+                    correct_answer="A",
+                )
+            )
+            await db.commit()
+
         with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {
                 "progress_table": {"columns": [], "rows": []},
@@ -281,6 +343,26 @@ async def test():
                     )
                 )
                 chk("eval/refresh → DB record written", ev_r.scalars().first() is not None)
+
+            r = await client.get(f"/api/v1/evaluation?course_id={course_id}", headers=headers)
+            chk("eval/get → 200", r.status_code == 200)
+            body = r.json()
+            rows = body.get("data", {}).get("node_progress", [])
+            by_id = {row.get("node_id"): row for row in rows}
+            chk("eval/get → scored node present",
+                by_id.get("node_pointer", {}).get("assessment_state") == "scored")
+            chk("eval/get → scored node score",
+                by_id.get("node_pointer", {}).get("mastery_score") == 100)
+            chk("eval/get → scored node label",
+                by_id.get("node_pointer", {}).get("mastery_label") == "A")
+            chk("eval/get → scored node duration",
+                by_id.get("node_pointer", {}).get("study_duration_seconds") == 180)
+            chk("eval/get → pending practice node",
+                by_id.get("node_array", {}).get("assessment_state") == "pending_practice")
+            chk("eval/get → default pass node",
+                by_id.get("node_malloc", {}).get("assessment_state") == "unassessed_default_pass")
+            chk("eval/get → default pass label",
+                by_id.get("node_malloc", {}).get("mastery_label") == "未测评/默认通过")
 
         # =============================================
         # 6. evaluation/refresh Agent failure

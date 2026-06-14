@@ -159,6 +159,8 @@ def _resource_preference_summary(modal_preference: dict) -> str:
 
 def _profile_dimensions(profile: dict) -> list[dict]:
     drive_intent = profile.get("drive_intent") or {}
+    learning_habits = drive_intent.get("learning_habits") or {}
+    knowledge_progress_summary = drive_intent.get("knowledge_progress_summary") or {}
     blindspots = profile.get("cognitive_blindspots") or []
     modal_preference = profile.get("modal_preference") or {}
     knowledge_coordinates = profile.get("knowledge_coordinates") or []
@@ -200,29 +202,31 @@ def _profile_dimensions(profile: dict) -> list[dict]:
         {
             "key": "knowledge_progress",
             "label": "知识进展",
-            "value": len(knowledge_coordinates),
-            "source": "evaluation",
+            "value": knowledge_progress_summary if knowledge_progress_summary else len(knowledge_coordinates),
+            "source": "kg_quiz_activity",
         },
         {
-            "key": "discipline",
-            "label": "学习纪律",
-            "value": discipline_badge or {},
+            "key": "learning_habits",
+            "label": "学习习惯",
+            "value": learning_habits,
             "source": "activity",
         },
     ]
 
 
-def _profile_data(pf: UserProfile | None, course_id: str) -> dict:
+def _profile_data(pf: UserProfile | None, course_id: str, user: User | None = None) -> dict:
     if pf is None:
         data = dict(_default_profile)
         data["course_id"] = course_id
+        if user:
+            data["guidance_level"] = {"current": user.guidance_level or "L2", "updated_at": ""}
         data["profile_dimensions"] = _profile_dimensions(data)
         return data
     data = {
         "course_id": pf.course_id,
         "modal_preference": pf.modal_preference or _default_profile["modal_preference"],
         "guidance_level": {
-            "current": pf.guidance_level_current,
+            "current": user.guidance_level if user and user.guidance_level else (pf.guidance_level_current or "L2"),
             "updated_at": pf.guidance_level_updated_at.isoformat() if pf.guidance_level_updated_at else "",
         },
         "knowledge_coordinates": pf.knowledge_coordinates or [],
@@ -274,7 +278,7 @@ async def initialize_profile(
     finally:
         await _release_profile_lock(db, lock_name)
 
-    return {"code": 200, "message": "success", "data": _profile_data(profile, req.course_id)}
+    return {"code": 200, "message": "success", "data": _profile_data(profile, req.course_id, current_user)}
 
 
 @router.get("")
@@ -294,7 +298,7 @@ async def get_profile(
         .order_by(UserProfile.generated_at.desc())
     )
     pf = result.scalars().first()
-    return {"code": 200, "message": "success", "data": _profile_data(pf, course_id)}
+    return {"code": 200, "message": "success", "data": _profile_data(pf, course_id, current_user)}
 
 
 @router.post("/dialogue-update")
@@ -345,7 +349,7 @@ async def dialogue_update_profile(
         await db.flush()
 
         merged = _merge_dialogue_profile(pf, extracted)
-        response_data = _profile_data(pf, req.course_id)
+        response_data = _profile_data(pf, req.course_id, current_user)
         await db.commit()
     except HTTPException:
         await db.rollback()
@@ -461,8 +465,6 @@ async def _run_profile_refresh_background(
     """
     async with async_session_factory() as db:
         try:
-            data = await agent_client.post_json("/agent/v1/profile/generate", payload)
-
             lock_name = f"profile_{user_id}_{course_id}"
             if db.bind.dialect.name == "sqlite":
                 locked = 1
@@ -478,14 +480,26 @@ async def _run_profile_refresh_background(
                 await db.flush()
                 pf.generated_at = now
 
-                pf.modal_preference = data.get("modal_preference", {})
-                gs = data.get("guidance_level_suggestion") or {}
-                pf.guidance_level_current = gs.get("recommended", "L2")
+                user_result = await db.execute(select(User).where(User.id == user_id))
+                user = user_result.scalars().first()
+                
+                from app.services.knowledge_progress import build_node_progress_rows
+                from app.services.profile_rules import compute_profile_fields
+                node_progress_rows = await build_node_progress_rows(user_id, course_id, db)
+                computed = await compute_profile_fields(user_id, course_id, user, node_progress_rows, db)
+
+                pf.modal_preference = computed["modal_preference"]
+                pf.guidance_level_current = user.guidance_level if user else "L2"
                 pf.guidance_level_updated_at = now
-                pf.knowledge_coordinates = data.get("knowledge_coordinates", [])
-                pf.cognitive_blindspots = data.get("cognitive_blindspots", [])
-                pf.drive_intent = data.get("drive_intent", {})
-                pf.discipline_badge = data.get("discipline_badge", {})
+                pf.knowledge_coordinates = computed["knowledge_coordinates"]
+                pf.cognitive_blindspots = computed["cognitive_blindspots"]
+                
+                drive_intent = pf.drive_intent or {}
+                drive_intent["learning_habits"] = computed["learning_habits"]
+                drive_intent["knowledge_progress_summary"] = computed["knowledge_progress_summary"]
+                pf.drive_intent = drive_intent
+                
+                pf.discipline_badge = computed["discipline_badge"]
 
                 await db.execute(
                     update(AsyncTask)

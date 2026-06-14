@@ -32,12 +32,14 @@ const PROFILE_DIMENSION_LABELS = {
   guidance_level: '辅导方式',
   knowledge_progress: '掌握进度',
   discipline: '学习习惯',
+  learning_habits: '学习习惯',
 };
 
 const PROFILE_EMPTY_TEXT = {
   weak_points: '暂无错题或评测记录',
   knowledge_progress: '暂无评测记录',
   discipline: '暂无连续学习记录',
+  learning_habits: '暂无学习记录',
 };
 
 export default function StudentProfile() {
@@ -318,6 +320,18 @@ export default function StudentProfile() {
 
   const formatDimensionValue = (value, key) => {
     if (key === 'discipline') return formatDisciplineDimension(value);
+    
+    if (key === 'knowledge_progress' && value && typeof value === 'object') {
+      return `已掌握 ${value.mastered_nodes || 0}/${value.total_nodes || 0}，薄弱 ${value.weak_nodes || 0} 个，待练习 ${value.pending_nodes || 0} 个`;
+    }
+    
+    if (key === 'learning_habits') {
+      if (!value || typeof value !== 'object') return PROFILE_EMPTY_TEXT.learning_habits;
+      const labelMap = { new: '新生', inactive: '不活跃', sprint: '突击', stable: '稳定', casual: '随性' };
+      const label = labelMap[value.label] || value.label || '未知';
+      return `状态：${label} · 习惯分：${value.score || 0}`;
+    }
+
     if (key === 'knowledge_progress' && !value) return PROFILE_EMPTY_TEXT.knowledge_progress;
 
     if (Array.isArray(value)) {
@@ -340,6 +354,7 @@ export default function StudentProfile() {
     evaluation: '评测结果',
     activity: '学习记录',
     system_pending: '数据不足',
+    kg_quiz_activity: '图谱+行为',
   }[source] || source || '未知来源');
 
   const handleProfileRefresh = async () => {

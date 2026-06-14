@@ -633,3 +633,15 @@
   - 将左侧历史侧边栏和右侧资源侧边栏在桌面端的高度设置为占满容器（`lg:h-full` / `xl:h-full`），确保中间对话区域可以进行独立滚动。
 - **文件**: `src/pages/AIChat.jsx`
 - **测试**: 运行 `npm run lint` 成功。
+
+### 2026-06-14 tutoring ReAct 结构化输出修复（JSON泄露 / 超时检索失效 / 慢）
+1. **当前完成 / 实现状态**：已完成。改用 AgentScope `structured_model`（新增 `TutoringStructuredOutput`）让 ReActAgent 产出已校验结构化对象，从源头消除前端 JSON 块泄露；ReAct 主路径的 `OpenAIChatModel` 应用有界 `timeout` 与 `stream`（此前超时守卫只在 `AgentScopeChatProvider.complete()`、ReAct 用裸 model 绕过，导致 APITimeoutError 长挂起 + retrieve 被中断 + 降级）；修复 `tutoring_react_flow` 无条件打 "Tutoring ReAct succeeded" 的误导日志；兜底解析器从非贪婪正则改为括号配平（正确跳过 `model_text` 内嵌 ```c 围栏，不再把整段 JSON 当正文）；前端两份重复 `getDisplayText` 抽成共享 `extractModelText` 防御层，兜旧脏数据。
+2. **修改文件**：
+   - 后端 `agent_service/`：`core/config.py`、`core/ai.py`、`schemas/tutoring.py`、`agents/tutoring.py`、`agents/tutoring_react.py`、`agents/tutoring_react_flow.py`、`prompts/tutoring.py` 及对应 7 个 `tests/` 文件。
+   - 前端：`src/utils/chatContent.js`（新增）、`src/components/chat/ChatMessage.jsx`、`src/pages/AIChat.jsx`。
+   - 文档：`docs/superpowers/specs/2026-06-14-tutoring-react-structured-output-fix-design.md`、`docs/superpowers/plans/2026-06-14-tutoring-react-structured-output-fix.md`。
+3. **测试结果**：后端 in-scope 7 个测试文件 `uv run pytest` → 80 passed；全量 → 9 failed / 461 passed，9 个失败为既有且与本次无关（`test_assessment_difficulty_balancer` 3 个 + `test_aichat_hybrid_retrieval` 6 个，后者为 `pytest.mark.asyncio` 未注册的环境问题）。前端 node 逻辑脚本 7 条全 PASS；`npm run lint`、`npm run build` 通过。
+4. **OpenAPI/契约是否漂移**：否。SSE 事件与 Client API 字段不变，未改 `../docs/`，未改 `.env`。
+5. **git commit**：`3c261df`(spec)、`7f63fbf`(plan)、`522c044`(前端防御层)、`c9e38b1`(后端超时/stream)、`c1b9a10`(后端结构化输出)。未 push。
+6. **剩余风险**：依赖模型稳定调用 `generate_response`（未调用时回退文本兜底 + 规则兜底）；结构化输出为原子返回，正文非逐字流式（已与用户确认取舍）；既有 9 个失败测试（assessment 难度均衡 + KG 混合检索 pytest-asyncio）待另行处理。
+7. **下一步建议**：在有真实 LLM/Qdrant 的环境对 /ai-chat 做端到端联调，确认不再泄露 JSON、超时可控、检索生效；另起任务修 `pytest-asyncio` 配置与既有失败测试。

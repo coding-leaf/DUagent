@@ -7,6 +7,7 @@
 - `guidance_level` can be manually changed by the user, while profile refresh may currently overwrite course profile guidance.
 - `modal_preference` and `resource_preference` are partly derived from available course resource counts, which does not prove student preference.
 - `knowledge_coordinates` and `cognitive_blindspots` can be empty because they depend on quiz chapter history rather than the course KG node range.
+- `drive_intent` exists as a profile field, but its source must be explicit if core profile fields move to Backend rules.
 - `discipline_badge` currently behaves like a rough score label, not a transparent achievement.
 - Agent-generated profile fields make the source of truth hard to verify and hard to explain.
 
@@ -224,8 +225,16 @@ Mastery rules:
 - A node is `weak` when cumulative correctness is below `70%`, or the latest node practice score is below `60%`.
 - Intermediate scored nodes are `learning`.
 - Nodes without questions cannot be marked `mastered`.
-- Nodes without questions but with learning activity are `learning` or `studied`.
+- Nodes without questions but with learning activity are `learning`.
 - Nodes without questions and without learning activity are `unstarted`.
+
+Mastery score:
+
+- `mastery_score` is the cumulative correctness percentage for answered quiz questions mapped to the KG node.
+- If a node has quiz evidence but has not met the minimum evidence threshold, `mastery_score` is still returned as the current cumulative correctness percentage, and `evidence_status = insufficient_quiz_evidence` may be included for UI explanation.
+- If a node has questions but no answered quiz evidence, `mastery_score = null`.
+- If a node has no quiz questions, `mastery_score = null`; learning activity alone never creates a mastery score.
+- `mastery_label` may still use presentation buckets such as A/B/C, but those labels are derived from `mastery_score` and are not the authoritative score.
 
 Weak-point rules:
 
@@ -247,6 +256,7 @@ Knowledge coordinates:
 - `name`
 - `status`
 - `mastery_score`
+- `evidence_status`, optional
 - `evidence`: `quiz`, `activity`, or `none`
 
 Profile progress summary:
@@ -323,15 +333,19 @@ learning_habit_score =
 
 Output labels:
 
-| Label | Meaning |
-| --- | --- |
-| `stable` | regular learning and meaningful effort |
-| `sprint` | high recent effort but weaker continuity |
-| `casual` | some activity but unstable |
-| `inactive` | little or no recent learning behavior |
-| `new` | insufficient data |
+Labels are assigned by ordered rules, not only by one score range:
 
-`profile_dimensions.discipline` returns structured evidence:
+| Label | Rule | Meaning |
+| --- | --- | --- |
+| `new` | total effective activity events `< 2` and no quiz evidence | insufficient data |
+| `inactive` | no `last_activity_at`, or latest activity is older than 7 days, or `learning_habit_score < 20` | little or no recent learning behavior |
+| `sprint` | `effort_score >= 70` and `continuity_score < 40` | high recent effort but weaker continuity |
+| `stable` | `learning_habit_score >= 60` and latest activity is within 7 days | regular learning and meaningful effort |
+| `casual` | otherwise, when there is some activity evidence | some activity but unstable |
+
+The rule order matters: `new` and `inactive` are checked before `sprint`, then `stable`, then `casual`.
+
+`learning_habits` returns structured evidence:
 
 ```json
 {
@@ -346,11 +360,11 @@ Output labels:
 
 ## Discipline Badge
 
-The discipline badge is a composite achievement based on learning habit and knowledge progress.
+The discipline badge is a composite achievement based on `learning_habits` and knowledge progress.
 
 Inputs:
 
-- Learning habit score: 40%
+- `learning_habits.score`: 40%
 - Knowledge mastery/progress score: 50%
 - Weak-point penalty: 10%
 
@@ -404,12 +418,12 @@ The response should keep the existing keys and make their values more structured
 
 | Key | Value shape | Source | Display intent |
 | --- | --- | --- | --- |
-| `learning_goal` | string | `profile_dialogue` or `system_profile` | Student's stated or inferred learning direction |
+| `learning_goal` | string | `profile_dialogue`, `activity`, or `system_pending` | Student's stated or activity-derived learning direction |
 | `weak_points` | array of weak node names | `quiz` | Top weak KG nodes from answer evidence |
 | `resource_preference` | string or array of top modal labels | `activity` | Top modal/resource forms by effective study duration |
 | `guidance_level` | `L1` / `L2` / `L3` | `manual` | User-selected tutoring preference |
 | `knowledge_progress` | structured summary object | `kg_quiz_activity` | KG node progress summary |
-| `discipline` | structured learning habit object | `activity` | Learning regularity and effort |
+| `learning_habits` | structured learning habit object | `activity` | Learning regularity and effort |
 
 Allowed source labels:
 
@@ -423,7 +437,13 @@ Allowed source labels:
 | `system_profile` | Rule fallback when explicit evidence is missing |
 | `system_pending` | Not enough evidence yet |
 
-Frontend may continue using the generic dimension grid, but it must render structured `knowledge_progress` and `discipline` values explicitly rather than dumping object keys.
+Frontend may continue using the generic dimension grid, but it must render structured `knowledge_progress` and `learning_habits` values explicitly rather than dumping object keys.
+
+Compatibility:
+
+- If legacy `profile_dimensions` still contains key `discipline`, frontend may map it to the new learning habits display during migration.
+- New refresh output should use `learning_habits` for the habit dimension.
+- `discipline_badge` remains the separate top-level composite achievement field.
 
 ## API Contract
 
@@ -452,7 +472,43 @@ Potential additive fields:
 - `guidance_level_suggestion`
 - `profile_summary_text`
 
-Field compatibility:
+## Drive Intent
+
+`drive_intent` remains a top-level profile field, but it is also rule-computed by Backend.
+
+Inputs:
+
+- `learning_goal` from profile dialogue, when present.
+- `study_duration_7d`.
+- `practice_count_7d`.
+- `active_days_7d`.
+
+Rules:
+
+- If the student explicitly provides a learning goal through profile dialogue, preserve it as `drive_intent.learning_goal` and set `source = profile_dialogue`.
+- `intensity` is computed from recent activity:
+
+```text
+duration_score = min(study_duration_7d / 7200, 1) * 60
+practice_score = min(practice_count_7d / 5, 1) * 25
+active_day_score = active_days_7d / 7 * 15
+intensity = duration_score + practice_score + active_day_score
+```
+
+- `type` is derived from activity pattern unless profile dialogue provides a more specific goal:
+  - `exam_sprint`: `intensity >= 75` or high recent effort with short continuity.
+  - `daily_homework`: `intensity >= 35` and recurring activity exists.
+  - `casual`: otherwise.
+- `source = activity` when type/intensity are computed from learning behavior.
+- `source = system_pending` when there is no dialogue and no recent activity.
+
+`profile_dimensions.learning_goal` uses:
+
+1. `drive_intent.learning_goal` with `source = profile_dialogue`, if present.
+2. `drive_intent.type` with `source = activity`, if activity exists.
+3. `待补充` with `source = system_pending`, if no evidence exists.
+
+## API Field Compatibility
 
 - `knowledge_mastered` and `knowledge_weak` columns may be populated with `mastered_nodes` and `weak_nodes` for legacy summaries, but they are not the authoritative profile API shape.
 - Do not remove these columns in this implementation.
@@ -562,6 +618,9 @@ Backend tests should cover:
 11. Profile refresh succeeds twice for the same `(user_id, course_id)`.
 12. `profile_dimensions` returns the defined key/source/value shapes.
 13. Evaluation and profile share the same weak/mastered node classification for the same evidence.
+14. `knowledge_coordinates.mastery_score` is cumulative correctness percentage when quiz evidence exists, and `null` when no quiz evidence exists.
+15. `learning_habits.label` follows the ordered `new` / `inactive` / `sprint` / `stable` / `casual` rules.
+16. `drive_intent` source is `profile_dialogue`, `activity`, or `system_pending` according to the evidence source.
 
 Frontend verification:
 

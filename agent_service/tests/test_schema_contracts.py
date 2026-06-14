@@ -175,5 +175,26 @@ class SchemaContractTests(unittest.TestCase):
             MemoryMessage(role="user", content="hello")
 
 
+def test_tutoring_structured_output_schema() -> None:
+    from agent_service.schemas.tutoring import TutoringStructuredOutput
+
+    obj = TutoringStructuredOutput(
+        model_text="指针是存储地址的变量。",
+        knowledge_points=["指针", "解引用"],
+        suggestion="练习指针作为函数参数。",
+        diagram="flowchart TD\n A-->B",
+    )
+    assert obj.model_text == "指针是存储地址的变量。"
+    assert obj.knowledge_points == ["指针", "解引用"]
+    assert obj.suggestion == "练习指针作为函数参数。"
+    assert obj.diagram == "flowchart TD\n A-->B"
+
+    # suggestion / diagram 可选，knowledge_points 可空
+    minimal = TutoringStructuredOutput(model_text="只有正文")
+    assert minimal.knowledge_points == []
+    assert minimal.suggestion is None
+    assert minimal.diagram is None
+
+
 if __name__ == "__main__":
     unittest.main()

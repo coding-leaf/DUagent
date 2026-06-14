@@ -35,12 +35,12 @@ def _make_context() -> TutoringRetrievalContext:
 class FakeReactAgent:
     """模拟 TutorReActAgent，可配置 generate 的返回值和行为。"""
 
-    def __init__(self, output: str | None = None, should_raise: bool = False) -> None:
+    def __init__(self, output=None, should_raise: bool = False) -> None:
         self._output = output
         self._should_raise = should_raise
         self.calls = []
 
-    async def generate(self, user_message: str) -> str | None:
+    async def generate(self, user_message: str):
         self.calls.append(user_message)
         if self._should_raise:
             raise RuntimeError("agent failure")
@@ -187,3 +187,59 @@ def test_react_response_parses_plain_text_as_model_text() -> None:
     assert result.model_text == "链式法则需要从外层函数开始，逐步向内层求导。这是一个常见考点。"
     assert result.knowledge_point_names == []
     assert result.suggestion_text is None
+
+
+def test_react_response_builds_from_metadata_dict() -> None:
+    request = _make_request()
+    context = _make_context()
+
+    class FakeProvider:
+        model = object()
+        formatter = object()
+
+    fake_agent = FakeReactAgent(
+        output={
+            "model_text": "链式法则先看外层函数，再乘内层导数。",
+            "knowledge_points": ["链式法则", "复合函数"],
+            "suggestion": "先确认外层，再检查内层。",
+            "diagram": "flowchart TD\n A-->B",
+        }
+    )
+
+    with patch(
+        "agent_service.agents.tutoring_react_flow.TutorReActAgent",
+        return_value=fake_agent,
+    ):
+        result = asyncio.run(
+            generate_tutoring_react_response(request, context, FakeProvider())
+        )
+
+    assert result is not None
+    assert result.model_text == "链式法则先看外层函数，再乘内层导数。"
+    assert result.knowledge_point_names == ["链式法则", "复合函数"]
+    assert result.suggestion_text == "先确认外层，再检查内层。"
+    assert result.diagram == "flowchart TD\n A-->B"
+
+
+def test_react_response_does_not_log_succeeded_when_none(caplog) -> None:
+    import logging
+
+    class FakeProvider:
+        model = object()
+        formatter = object()
+
+    fake_agent = FakeReactAgent(output=None)
+
+    with patch(
+        "agent_service.agents.tutoring_react_flow.TutorReActAgent",
+        return_value=fake_agent,
+    ):
+        with caplog.at_level(logging.INFO, logger="agent_service.agents.tutoring_react_flow"):
+            result = asyncio.run(
+                generate_tutoring_react_response(
+                    _make_request(), _make_context(), FakeProvider()
+                )
+            )
+
+    assert result is None
+    assert "Tutoring ReAct succeeded" not in caplog.text

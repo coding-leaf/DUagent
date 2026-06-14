@@ -9,6 +9,7 @@ from agentscope.message import Msg
 
 from agent_service.core.logging import get_logger
 from agent_service.prompts.tutoring import TUTOR_REACT_SYSTEM_PROMPT
+from agent_service.schemas.tutoring import TutoringStructuredOutput
 
 logger = get_logger(__name__)
 
@@ -18,7 +19,7 @@ class TutorReActAgent:
 
     输入：chat_model (OpenAIChatModel)、formatter (DeepSeekChatFormatter)、
           可选 toolkit、memory、knowledge、max_iters。
-    输出：generate() 返回模型文本或 None（降级）。
+    输出：generate() 返回 structured metadata(dict)/文本(str)/None。
     """
 
     def __init__(
@@ -41,12 +42,21 @@ class TutorReActAgent:
             max_iters=max_iters,
         )
 
-    async def generate(self, user_message: str) -> str | None:
-        """调用 ReActAgent 生成回答，输入用户消息文本，输出模型回复或 None（失败走规则兜底）。"""
+    async def generate(self, user_message: str) -> dict | str | None:
+        """调用 ReActAgent 生成回答。
+
+        返回值：
+        - dict：成功产出 structured_model（来自 result.metadata），含 model_text 等字段；
+        - str：未产出结构化输出时回退到纯文本（交由上游兜底解析）；
+        - None：调用异常，走规则兜底。
+        """
         try:
             result = await self._agent(
                 Msg(name="user", role="user", content=user_message),
+                structured_model=TutoringStructuredOutput,
             )
+            if result.metadata:
+                return result.metadata
             return result.get_text_content()
         except Exception:
             logger.warning("TutorReActAgent.generate 调用失败，降级到规则兜底", exc_info=True)

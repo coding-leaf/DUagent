@@ -1,6 +1,10 @@
 """ReActAgent tutoring 编排胶水层，负责将 request + retrieval_context 转换为 ReActAgent 输入并解析输出。"""
 
-from agent_service.agents.tutoring import parse_tutoring_model_response, TutoringModelResponse
+from agent_service.agents.tutoring import (
+    build_tutoring_response_from_metadata,
+    parse_tutoring_model_response,
+    TutoringModelResponse,
+)
 from agent_service.agents.tutoring_react import TutorReActAgent
 from agent_service.agents.tutoring_tools import build_tutoring_toolkit
 from agent_service.core.ai import ChatProvider, EmbeddingProvider
@@ -43,9 +47,12 @@ async def generate_tutoring_react_response(
             toolkit=toolkit,
         )
         model_output = await agent.generate(user_message)
-        logger.info("Tutoring ReAct succeeded")
         if model_output is None:
+            logger.info("Tutoring ReAct degraded: no model output, falling back")
             return None
+        logger.info("Tutoring ReAct succeeded")
+        if isinstance(model_output, dict):
+            return build_tutoring_response_from_metadata(model_output)
         return parse_tutoring_model_response(model_output)
     except Exception:
         logger.warning("ReActAgent tutoring failed, degrading to chat JSON path", exc_info=True)

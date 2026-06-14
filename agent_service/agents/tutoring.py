@@ -12,7 +12,6 @@ from agent_service.schemas.tutoring import (
 )
 
 _AGENT_RESULT_PATTERN = re.compile(r"<agent_result>(.*?)</agent_result>", re.DOTALL)
-_MARKDOWN_JSON_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
 logger = get_logger(__name__)
 
 
@@ -91,23 +90,70 @@ def parse_tutoring_model_response(model_output: str) -> TutoringModelResponse:
 
 
 def _try_parse_markdown_json_output(model_output: str) -> TutoringModelResponse | None:
-    """尝试解析 Markdown fenced JSON，避免将结构化 JSON 代码块泄露给前端正文。"""
-    stripped = model_output.strip()
-    for match in _MARKDOWN_JSON_PATTERN.finditer(stripped):
-        try:
-            payload = json.loads(match.group(1).strip())
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict):
-            continue
-        if not any(key in payload for key in ("model_text", "knowledge_points", "suggestion", "diagram")):
+    """从含 Markdown 围栏/散文的输出里提取结构化 JSON，避免泄露到前端正文。
+
+    用括号配平定位首个"携带 model_text 且能解析"的 JSON object（即泄露到正文的完整
+    结构化信封）；扫描时跳过字符串字面量内的括号与转义，因此 model_text 内嵌的
+    ```c 代码块或花括号不会截断解析。仅作为 model_text 的信封时才接管，
+    不抢占 <agent_result> 旁挂元数据（无 model_text）那条解析路径。
+    """
+    for payload in _iter_json_objects(model_output):
+        if "model_text" not in payload:
             continue
         model_text = payload.get("model_text")
-        if isinstance(model_text, str) and model_text.strip():
-            clean_text = model_text.strip()
-        else:
-            clean_text = _MARKDOWN_JSON_PATTERN.sub("", stripped).strip() or None
+        clean_text = (
+            model_text.strip()
+            if isinstance(model_text, str) and model_text.strip()
+            else None
+        )
         return _build_response_from_payload(clean_text, payload)
+    return None
+
+
+def _iter_json_objects(text: str):
+    """惰性产出文本中按括号配平、且能 json.loads 成功的 JSON object（dict）。"""
+    i = 0
+    n = len(text)
+    while i < n:
+        start = text.find("{", i)
+        if start == -1:
+            return
+        end = _scan_balanced_object_end(text, start)
+        if end is None:
+            i = start + 1
+            continue
+        try:
+            parsed = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            yield parsed
+        i = end + 1
+
+
+def _scan_balanced_object_end(text: str, start: int) -> int | None:
+    """从 start 处 '{' 起做括号配平，返回匹配 '}' 的索引；跳过字符串内括号与转义；未配平返回 None。"""
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
     return None
 
 
@@ -148,6 +194,20 @@ def _build_response_from_payload(model_text: str | None, payload: dict) -> Tutor
         suggestion_text=parsed_suggestion,
         diagram=parsed_diagram,
     )
+
+
+def build_tutoring_response_from_metadata(metadata: dict) -> TutoringModelResponse:
+    """把 ReActAgent structured_model 的 metadata dict 映射为 TutoringModelResponse。
+
+    复用 _build_response_from_payload，因此 knowledge_points 截断到 3 个、字段做 strip。
+    """
+    model_text = metadata.get("model_text")
+    clean_text = (
+        model_text.strip()
+        if isinstance(model_text, str) and model_text.strip()
+        else None
+    )
+    return _build_response_from_payload(clean_text, metadata)
 
 
 def _build_knowledge_points(
@@ -371,6 +431,7 @@ __all__ = [
     "TutoringModelResponse",
     "TutoringGenerationResult",
     "build_tutoring_generation_result",
+    "build_tutoring_response_from_metadata",
     "generate_tutoring_sse_events",
     "parse_tutoring_model_response",
 ]

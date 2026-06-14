@@ -41,6 +41,22 @@ class TutoringChatRequest(BaseModel):
         return self
 
 
+class TutoringStructuredOutput(BaseModel):
+    """ReActAgent structured_model 输出契约：由 AgentScope generate_response 工具按此 schema 校验。
+
+    字段直接映射到 SSE 输出，因此 model_text 必须是面向学生的纯文本，不要包裹 JSON 或代码围栏。
+    """
+
+    model_text: str = Field(..., description="面向学生的自然语言讲解正文（纯文本，可含 Markdown，不要包 JSON）")
+    knowledge_points: list[str] = Field(
+        default_factory=list, description="本轮涉及的知识点名称，1 到 3 个；优先取自图谱节点名称"
+    )
+    suggestion: str | None = Field(None, description="下一步学习建议；无则留空")
+    diagram: str | None = Field(
+        None, description="可选：涉及数据结构操作流程或复杂逻辑流程时的 Mermaid 语法代码；否则留空"
+    )
+
+
 class ChunkEvent(BaseModel):
     type: Literal["chunk"] = "chunk"
     content: str = Field(..., description="文本片段")

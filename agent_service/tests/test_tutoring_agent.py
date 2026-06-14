@@ -362,3 +362,53 @@ def test_generate_tutoring_sse_events_rejects_bad_react_response_and_uses_rule_f
 
     assert "今天天气不错" not in "\n".join(chunks)
     assert "这次重点看导数" in chunks[-1]
+
+
+def test_build_tutoring_response_from_metadata_maps_and_caps() -> None:
+    from agent_service.agents.tutoring import build_tutoring_response_from_metadata
+
+    metadata = {
+        "model_text": "  指针是核心概念。  ",
+        "knowledge_points": ["指针", "解引用", "地址", "第四个被截断"],
+        "suggestion": "  练习指针。  ",
+        "diagram": "flowchart TD\n A-->B",
+    }
+
+    r = build_tutoring_response_from_metadata(metadata)
+
+    assert r.model_text == "指针是核心概念。"
+    assert r.knowledge_point_names == ["指针", "解引用", "地址"]
+    assert r.suggestion_text == "练习指针。"
+    assert r.diagram == "flowchart TD\n A-->B"
+
+
+def test_build_tutoring_response_from_metadata_handles_missing_fields() -> None:
+    from agent_service.agents.tutoring import build_tutoring_response_from_metadata
+
+    r = build_tutoring_response_from_metadata({"model_text": "只有正文"})
+
+    assert r.model_text == "只有正文"
+    assert r.knowledge_point_names == []
+    assert r.suggestion_text is None
+    assert r.diagram is None
+
+
+def test_parse_tutoring_model_response_strips_fenced_json_with_nested_code_fence() -> None:
+    # 真实泄露形态：散文前缀 + ```json 围栏，且 model_text 内部嵌 ```c 代码块（含花括号）
+    model_output = (
+        "根据策略要求，我为用户讲解指针。\n\n```json\n"
+        "{\"model_text\": \"指针是核心概念。\\n\\n```c\\nint main() {int a=10; int *p=&a; return 0;}\\n```\\n完。\", "
+        "\"knowledge_points\": [\"指针\", \"解引用\"], "
+        "\"suggestion\": \"练习指针作为函数参数。\", "
+        "\"diagram\": \"flowchart TD\\n A-->B\"}\n```"
+    )
+
+    parsed = parse_tutoring_model_response(model_output)
+
+    assert "```json" not in (parsed.model_text or "")
+    assert "\"model_text\"" not in (parsed.model_text or "")
+    assert parsed.model_text.startswith("指针是核心概念")
+    assert "```c" in parsed.model_text  # 内层代码围栏应保留
+    assert parsed.knowledge_point_names == ["指针", "解引用"]
+    assert parsed.suggestion_text == "练习指针作为函数参数。"
+    assert parsed.diagram == "flowchart TD\n A-->B"

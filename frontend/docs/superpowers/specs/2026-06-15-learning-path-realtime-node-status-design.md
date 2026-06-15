@@ -1,8 +1,8 @@
 # 学习路径节点状态实时计算设计
 
 **日期**：2026-06-15  
-**状态**：已审核  
-**范围**：Backend `GET /learning-path` 实时返回节点状态
+**状态**：已审核（v2，修订自代码审查意见）  
+**范围**：Backend `GET /learning-path` 实时叠加节点状态
 
 ---
 
@@ -20,33 +20,40 @@
 
 ## 设计目标
 
-每次前端打开 `/learning-path` 页面时，节点状态实时反映：
+每次前端打开 `/learning-path` 页面时，节点状态实时反映做题正确率（QuizAnswer）和学习活动记录（LearningActivity），同时保留 Agent 快照中的个性化字段（reason、order、edges、current_position）。
 
-- 做题正确率（QuizAnswer）
-- 学习活动记录（LearningActivity）
+---
 
-不依赖 Agent，不需要手动刷新。
+## 核心策略：实时状态叠加快照（Merge）
+
+不绕过快照，而是以快照为基础，用实时计算结果覆盖 `status` 和 `mastery` 两个字段，其余字段从快照继承。
 
 ---
 
 ## 数据流架构
 
 ```
-前端 GET /learning-path?course_id=xxx
+GET /learning-path?course_id=xxx
   ↓
-Backend GET /api/v1/learning-path
-  ├─ 1. 解析 KG（CourseOffering → CourseCatalog → kg_host_course_id → active KG）
-  ├─ 2. KG 存在 → 进入实时计算路径
-  │       a. build_node_progress_rows(user_id, course_id, db)
-  │          ↳ 查 QuizAnswer + QuizSession → 计算各节点正确率
-  │          ↳ 查 LearningActivity → 计算学习时长和活动次数
-  │          ↳ evaluate_mastery_state() → assessment_state
-  │       b. _map_assessment_to_status(assessment_state) → 前端 status
-  │       c. 拓扑排序节点（复用 _topo_sort_kg_nodes）
-  │       d. 组装 nodes 列表，返回 source="realtime"
-  │
-  ├─ 3. KG 不存在，有历史快照 → 返回快照（source="snapshot"，兜底）
-  └─ 4. KG 不存在，无快照 → 返回空节点列表
+1. build_node_progress_rows(user_id, course_id, db)
+   → 得到 progress_by_id: {node_id: {assessment_state, mastery_score}}
+   
+2. 查询 LearningPath 快照（现有逻辑）
+
+   [快照存在] → Merge 模式
+     遍历快照 nodes：
+       - status  = _map_assessment_to_status(progress_by_id[node.id].assessment_state)
+                   若 node_id 在 progress_by_id 中，否则保留快照原值
+       - mastery = progress_by_id[node.id].mastery_score（同上，否则保留原值）
+       - reason, order, edges, current_position 全部保留快照原值
+     source = "realtime_merged"
+
+   [快照不存在，KG 存在] → KG 构建模式（现有 _synthesize_kg_fallback_path 逻辑）
+     - 节点 status 来自实时映射（替换原来的全部 "recommended"）
+     - current_position 取第一个非 pending 节点
+     - source = "kg_realtime"
+
+   [快照不存在，KG 不存在] → 返回空节点列表（不变）
 ```
 
 ---
@@ -61,7 +68,7 @@ Backend GET /api/v1/learning-path
 | `pending_practice` | `pending` | 有题目但从未做 |
 | `unstarted` | `pending` | 无任何记录 |
 
-`mastery_score`（0-100）直接映射到前端 `mastery` 字段（进度条）。
+`mastery_score`（0-100）映射到前端 `mastery` 字段（进度条）。
 
 ---
 
@@ -88,22 +95,34 @@ def _map_assessment_to_status(assessment_state: str) -> str:
 
 ### GET endpoint 改写逻辑
 
-1. 先解析 KG（现有逻辑已有，从 `_synthesize_kg_fallback_path` 拆出复用）
-2. KG 存在时，调用 `build_node_progress_rows` 获取进度，映射状态，拓扑排序后返回
-3. KG 不存在时，查历史快照返回（现有兜底逻辑不变）
+```
+原流程：
+  有快照 → 直接返回快照
+  无快照 → KG fallback（全部 recommended）
+
+新流程：
+  Step 1. 调用 build_node_progress_rows → progress_by_id
+  Step 2. 有快照 → Merge：覆盖 status/mastery，保留其余字段
+  Step 3. 无快照，KG 存在 → KG 构建 + 实时状态映射
+  Step 4. 均无 → 返回空
+```
+
+### 字段对齐
+
+`build_node_progress_rows` 返回的行以 `node_id` 为 key 索引，快照 `nodes` 中每个节点有 `id` 字段，两者通过 `id == node_id` 对齐。未命中（节点在快照中存在但无做题记录）时保留快照原值。
 
 ### 返回格式不变
 
-前端 `LearningPath.jsx` 已正确处理四种状态，`node.mastery` 字段名保持一致，**前端零修改**。
+响应结构（nodes/edges/current_position/source）不变，前端 `LearningPath.jsx` 零修改。
 
 ---
 
 ## 不修改的内容
 
-- `GET /learning-path` 的响应结构不变
-- `/learning-path/refresh` endpoint 保留但前端不调用（暂留空）
-- Agent 学习路径生成逻辑不改（`agent_service/agents/learning_path.py`）
-- 前端 `LearningPath.jsx` 零修改
+- `GET /learning-path` 的响应结构
+- `/learning-path/refresh` endpoint（保留，暂不使用）
+- Agent 学习路径生成逻辑（`agent_service/agents/learning_path.py`）
+- 前端 `LearningPath.jsx`
 
 ---
 
@@ -111,6 +130,19 @@ def _map_assessment_to_status(assessment_state: str) -> str:
 
 | 风险 | 处置 |
 |---|---|
-| `build_node_progress_rows` 每次 GET 都查 DB | 查询已有索引（course_id, user_id），正常用户节点数 <50，可接受 |
-| KG 节点名与 QuizQuestion.knowledge_point 不匹配 | 现有逻辑按名称精确匹配，不匹配的节点 assessment_state 为 `unstarted`，显示 `pending`，与现状一致 |
-| 历史快照数据被绕过 | KG 存在时优先实时计算，KG 不存在时用快照兜底，不丢失历史数据 |
+| `build_node_progress_rows` 每次 GET 同步查多张表 | 当前用户规模可接受；后续可加 Redis TTL=30s 缓存，但不在本次范围 |
+| KG 节点 id 与快照 node.id 不对齐 | 未命中时保留快照原 status，降级行为与现状一致 |
+| KG 节点名与 QuizQuestion.knowledge_point 不匹配 | 不匹配节点 assessment_state 为 `unstarted`，显示 `pending`，与现状一致 |
+| 未来重开 Agent 刷新入口 | Merge 模式天然兼容：新快照写入后，下次 GET 自动以新快照为基础叠加实时状态 |
+
+---
+
+## v1 → v2 变更说明
+
+v1 设计在 KG 存在时完全绕过快照，导致：
+
+1. Agent 生成的 `reason`、`order` 丢失
+2. `current_position` 和 `edges` 未处理
+3. 快照永久失效（未来 Agent 刷新失去意义）
+
+v2 改为 Merge 策略，只覆盖 `status` 和 `mastery` 两个字段，其余从快照继承，上述问题全部消除。

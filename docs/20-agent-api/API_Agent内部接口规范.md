@@ -185,6 +185,10 @@ POST /agent/v1/evaluation/generate
 | resource_usage | object | 是 | 资源使用统计 |
 | resource_usage.by_type | object | 是 | `{document: N, mindmap: N, reading: N, code: N, video: N}` |
 | resource_usage.by_chapter | object | 否 | 各章节资源使用分布 |
+| student_profile | object | 否 | 用户基础画像，如专业、年级、引导级别 |
+| profile_context | object | 否 | Backend 规则生成的课程画像上下文 |
+| kg_context | object | 否 | 课程 KG 节点与节点进度上下文 |
+| learning_activity | object | 否 | 学习行为统计上下文 |
 
 **响应 `data`：**
 
@@ -200,6 +204,8 @@ POST /agent/v1/evaluation/generate
 | resource_usage_table.columns | array | 表头 |
 | resource_usage_table.rows | array | 数据行 |
 | summary_text | string | LLM 综合文字总结 |
+
+说明：`progress_table`、`mastery_table`、`resource_usage_table` 是规则保护字段，Agent 不应改写表格行、列或核心数值；LLM 只允许基于 KG、个人资料、课程画像和学习行为上下文生成 `summary_text`。
 
 ---
 

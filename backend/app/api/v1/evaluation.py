@@ -12,7 +12,7 @@ from app.api.deps import get_current_user, get_db
 from app.db.session import async_session_factory
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import CourseEnrollment
-from app.models.others import AsyncTask, CourseKnowledgeGraph, Evaluation, LearningActivity, Resource
+from app.models.others import AsyncTask, CourseKnowledgeGraph, Evaluation, LearningActivity, Resource, UserProfile
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
@@ -113,6 +113,80 @@ async def _assemble_evaluation_payload(
     """组装调用 Agent /evaluation/generate 所需的 payload。"""
     payload: dict = {"user_id": user_id, "course_id": course_id}
     resource_scope = await resolve_course_resource_scope(db, course_id)
+    node_progress = await build_node_progress_rows(user_id, course_id, db)
+
+    user_result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+    user = user_result.scalar_one_or_none()
+    if user:
+        payload["student_profile"] = {
+            "major": user.major,
+            "grade": user.grade,
+            "guidance_level": user.guidance_level,
+        }
+
+    profile_result = await db.execute(
+        select(UserProfile)
+        .where(
+            UserProfile.user_id == user_id,
+            UserProfile.course_id == course_id,
+            UserProfile.is_deleted == False,
+        )
+        .order_by(UserProfile.generated_at.desc())
+    )
+    profile = profile_result.scalars().first()
+    if profile:
+        payload["profile_context"] = {
+            "modal_preference": profile.modal_preference,
+            "knowledge_coordinates": profile.knowledge_coordinates,
+            "cognitive_blindspots": profile.cognitive_blindspots,
+            "drive_intent": profile.drive_intent,
+            "discipline_badge": profile.discipline_badge,
+            "generated_at": profile.generated_at.isoformat() if profile.generated_at else None,
+        }
+
+    kg = await get_active_knowledge_graph(db, course_id)
+    if kg is None:
+        offering_result = await db.execute(
+            select(CourseOffering).where(
+                CourseOffering.id == course_id,
+                CourseOffering.is_deleted == False,
+            )
+        )
+        offering = offering_result.scalar_one_or_none()
+        if offering:
+            catalog_result = await db.execute(
+                select(CourseCatalog).where(
+                    CourseCatalog.id == offering.catalog_id,
+                    CourseCatalog.is_deleted == False,
+                )
+            )
+            catalog = catalog_result.scalar_one_or_none()
+            if catalog and catalog.kg_host_course_id:
+                kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
+    payload["kg_context"] = {
+        "nodes": kg.nodes if kg and isinstance(kg.nodes, list) else [],
+        "node_progress": node_progress,
+    }
+
+    activity_result = await db.execute(
+        select(
+            func.count(LearningActivity.id),
+            func.coalesce(func.sum(LearningActivity.duration_seconds), 0),
+            func.count(func.distinct(func.date(LearningActivity.occurred_at))),
+            func.max(LearningActivity.occurred_at),
+        ).where(
+            LearningActivity.user_id == user_id,
+            LearningActivity.course_id == course_id,
+            LearningActivity.is_deleted == False,
+        )
+    )
+    activity_count, total_duration, active_days, last_activity_at = activity_result.one()
+    payload["learning_activity"] = {
+        "total_events": int(activity_count or 0),
+        "total_duration_seconds": int(total_duration or 0),
+        "active_days": int(active_days or 0),
+        "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+    }
 
     # learning_progress (简化：按课程资源章节统计)
     chapters_r = await db.execute(

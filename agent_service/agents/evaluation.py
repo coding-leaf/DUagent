@@ -174,17 +174,6 @@ def _enrich_evaluation_result(
     llm_data: dict,
 ) -> EvaluationData:
     enriched = rule_result.model_copy(deep=True)
-    observed_chapters = _observed_chapters(request)
-    observed_resources = set(request.resource_usage.by_type.keys())
-    enriched.progress_table = _coerce_progress_table(
-        llm_data.get("progress_table"), rule_result.progress_table, observed_chapters
-    )
-    enriched.mastery_table = _coerce_mastery_table(
-        llm_data.get("mastery_table"), rule_result.mastery_table, observed_chapters
-    )
-    enriched.resource_usage_table = _coerce_resource_usage_table(
-        llm_data.get("resource_usage_table"), rule_result.resource_usage_table, observed_resources
-    )
     summary = llm_data.get("summary_text")
     if isinstance(summary, str) and summary.strip():
         enriched.summary_text = summary.strip()

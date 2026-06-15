@@ -123,6 +123,63 @@ def _dedupe_limit(items: list, limit: int = 10) -> list:
     return result
 
 
+_LEARNING_GOAL_KEYWORDS = (
+    ("exam_sprint", ("备考", "考试", "期末", "冲刺", "考研", "考证")),
+    ("daily_homework", ("课后", "作业", "巩固", "复习", "日常")),
+    ("casual", ("兴趣", "拓展", "了解", "自学")),
+)
+
+_RESOURCE_PREFERENCE_KEYWORDS = (
+    ("video_animation", ("视频", "动画")),
+    ("chart_logic", ("图解", "图表", "思维导图", "流程图", "diagram", "mindmap")),
+    ("code_practice", ("代码", "实操", "编程", "练习")),
+    ("text_analysis", ("文本", "文档", "阅读", "文字")),
+    ("formula_derivation", ("公式", "推导")),
+)
+
+
+def _classify_learning_goal(value: object) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text in {"exam_sprint", "daily_homework", "casual"}:
+        return text
+    for goal, keywords in _LEARNING_GOAL_KEYWORDS:
+        if any(keyword in text for keyword in keywords):
+            return goal
+    return None
+
+
+def _classify_resource_preferences(values: list) -> list[str]:
+    preferences: list[str] = []
+    for raw in values:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        if text in _default_profile["modal_preference"]:
+            preferences.append(text)
+            continue
+        for preference, keywords in _RESOURCE_PREFERENCE_KEYWORDS:
+            if any(keyword.lower() in text.lower() for keyword in keywords):
+                preferences.append(preference)
+    return _dedupe_limit(preferences, limit=5)
+
+
+def _normalize_dialogue_profile(extracted: dict) -> dict:
+    raw_goal = extracted.get("learning_goal") or extracted.get("drive_intent")
+    raw_preferences = _as_list(
+        extracted.get("preferred_resources")
+        or extracted.get("learning_preferences")
+        or extracted.get("resource_preference")
+    )
+    raw_preferences.extend(_as_list(raw_goal))
+    return {
+        **extracted,
+        "learning_goal": _classify_learning_goal(raw_goal),
+        "preferred_resources": _classify_resource_preferences(raw_preferences),
+    }
+
+
 def _merge_dialogue_profile(pf: UserProfile, extracted: dict) -> dict:
     now = datetime.now(timezone.utc)
     learning_goal = extracted.get("learning_goal")
@@ -371,6 +428,7 @@ async def dialogue_update_profile(
             pf.generated_at = datetime.now(timezone.utc)
         await db.flush()
 
+        extracted = _normalize_dialogue_profile(extracted)
         merged = _merge_dialogue_profile(pf, extracted)
         response_data = _profile_data(pf, req.course_id, current_user)
         await db.commit()

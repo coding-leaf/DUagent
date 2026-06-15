@@ -80,7 +80,7 @@ class FakeChatProvider:
         return self._output
 
 
-def test_generate_evaluation_with_llm_enriches_full_evaluation_data() -> None:
+def test_generate_evaluation_with_llm_enriches_summary_text_only() -> None:
     import json as _json
     from agent_service.agents.evaluation import generate_evaluation_with_llm
 
@@ -131,10 +131,65 @@ def test_generate_evaluation_with_llm_enriches_full_evaluation_data() -> None:
 
     assert result is not None
     assert "structured_model" in provider.calls[0][1]
-    assert result.progress_table.rows[1]["progress_insight"] == "进度偏慢"
-    assert result.mastery_table.rows[1]["root_cause"] == "极限概念不牢"
-    assert result.resource_usage_table.rows[1]["effectiveness_hint"] == "可增加视频辅助理解"
+    assert result.progress_table == rule_result.progress_table
+    assert result.mastery_table == rule_result.mastery_table
+    assert result.resource_usage_table == rule_result.resource_usage_table
     assert "导数正确率55%" in (result.summary_text or "")
+
+
+def test_generate_evaluation_with_llm_only_replaces_summary_text() -> None:
+    import json as _json
+    from agent_service.agents.evaluation import generate_evaluation_with_llm
+
+    request = _build_request()
+    rule_result = generate_evaluation_data(request)
+    provider = FakeChatProvider(output=_json.dumps({
+        "progress_table": {
+            "columns": [{"key": "chapter", "title": "章节"}],
+            "rows": [{"chapter": "导数", "completion_rate": 99, "time_spent": 999}],
+        },
+        "mastery_table": {
+            "columns": [{"key": "chapter", "title": "章节"}],
+            "rows": [{"chapter": "导数", "average_score": 99, "quiz_count": 99, "mastery_level": "strong"}],
+        },
+        "resource_usage_table": {
+            "columns": [{"key": "resource_type", "title": "资源类型"}],
+            "rows": [{"resource_type": "video", "count": 99}],
+        },
+        "summary_text": "基于 KG 和个人资料的模板化总结。",
+    }))
+
+    result = asyncio.run(generate_evaluation_with_llm(request, rule_result, provider))
+
+    assert result is not None
+    assert result.progress_table == rule_result.progress_table
+    assert result.mastery_table == rule_result.mastery_table
+    assert result.resource_usage_table == rule_result.resource_usage_table
+    assert result.summary_text == "基于 KG 和个人资料的模板化总结。"
+
+
+def test_evaluation_prompt_includes_profile_kg_and_learning_context() -> None:
+    from agent_service.agents.evaluation import generate_evaluation_with_llm
+
+    request = _build_request()
+    request.student_profile = {"major": "计算机科学", "grade": "2026", "guidance_level": "L3"}
+    request.profile_context = {"learning_habits": {"label": "stable", "score": 76}}
+    request.kg_context = {
+        "nodes": [{"id": "node_var", "name": "变量", "chapter": "基础"}],
+        "node_progress": [{"node_id": "node_var", "node_name": "变量", "assessment_state": "weak"}],
+    }
+    request.learning_activity = {"active_days_7d": 3, "study_duration_7d": 3600}
+    rule_result = generate_evaluation_data(request)
+    provider = FakeChatProvider(output='{"summary_text":"模板总结"}')
+
+    result = asyncio.run(generate_evaluation_with_llm(request, rule_result, provider))
+
+    assert result is not None
+    user_message = provider.calls[0][0][1].content
+    assert "计算机科学" in user_message
+    assert "变量" in user_message
+    assert "stable" in user_message
+    assert "active_days_7d" in user_message
 
 
 def test_generate_evaluation_with_llm_structured_model_fails_and_falls_back() -> None:
@@ -155,7 +210,7 @@ def test_generate_evaluation_with_llm_structured_model_fails_and_falls_back() ->
     assert result.summary_text == "回落后总结"
 
 
-def test_generate_evaluation_with_llm_rejects_invalid_or_fabricated_rows() -> None:
+def test_generate_evaluation_with_llm_ignores_invalid_or_fabricated_rows() -> None:
     import json as _json
     from agent_service.agents.evaluation import generate_evaluation_with_llm
 
@@ -189,9 +244,9 @@ def test_generate_evaluation_with_llm_rejects_invalid_or_fabricated_rows() -> No
     result = asyncio.run(generate_evaluation_with_llm(request, rule_result, provider))
 
     assert result is not None
-    assert result.progress_table.rows == [{"chapter": "导数", "completion_rate": 100.0, "time_spent": 0, "progress_insight": "保留有效章节"}]
-    assert result.mastery_table.rows == [{"chapter": "导数", "average_score": 0.0, "quiz_count": 0, "mastery_level": "weak"}]
-    assert result.resource_usage_table.rows == [{"resource_type": "video", "count": 0, "effectiveness_hint": "保留有效资源"}]
+    assert result.progress_table == rule_result.progress_table
+    assert result.mastery_table == rule_result.mastery_table
+    assert result.resource_usage_table == rule_result.resource_usage_table
     assert result.summary_text == "有效总结。"
 
 

@@ -4086,7 +4086,7 @@
               },
               "learning_goal": {
                 "type": "string",
-                "description": "学习目标，自然语言补充后可返回"
+                "description": "学习方向枚举：exam_sprint / daily_homework / casual；资源偏好类补充不写入该字段"
               },
               "source": {
                 "type": "string",

@@ -24,6 +24,13 @@
 ## 最近验证
 
 ### 2026-06-15
+- Tighten Profile Direction and LLM Evaluation Summary:
+  - 将 `/profile/dialogue-update` 的学习方向收紧为枚举：`exam_sprint`（备考冲刺）、`daily_homework`（课后巩固）、`casual`（兴趣拓展）；“我喜欢视频/图解/代码”等资源偏好输入归类到标准模态偏好，不再写入当前学习方向。
+  - 扩展 Backend `evaluation/refresh` 传给 Agent 的上下文：用户专业/年级/引导级别、规则画像、KG 节点与节点进度、学习行为统计。
+  - Agent Service `evaluation/generate` 改为 LLM 只生成 `summary_text`，表格和核心数值继续由规则结果保护；prompt 要求按“学习范围 / 当前掌握 / 学习行为 / 下一步建议”模板输出总结。
+  - 同步扩展 `../docs/20-agent-api/*` 与 `../docs/10-client-api/*` 参考契约。
+  - 验证：Backend profile/dialogue 与规则测试 `21 passed`；Agent Service evaluation + OpenAPI alignment `40 passed`；Agent/Backend 语法检查通过；`npm run lint`、`npm run build` 通过（仅 Vite chunk size warning）。
+
 - Complete Profile Capability Chain:
   - 补全 `/profile` 新画像能力：保留扩展契约 `learning_habits`、`knowledge_progress_summary`、`kg_quiz_activity`，并让默认画像返回稳定结构。
   - 修复 KG 节点状态链路：`mastered / weak / learning / pending_practice / unstarted` 现在在 `/profile` 和 `/learning-effects` 前端展示中均有明确中文状态、图标和统计口径。

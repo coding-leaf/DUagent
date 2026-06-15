@@ -1015,7 +1015,7 @@ GET /api/v1/profile?course_id={course_id}
 | drive_intent | object | 驱动意图（状态光环） |
 | drive_intent.type | string | 类型：exam_sprint / daily_homework / casual |
 | drive_intent.intensity | number | 近期学习强度 0-100 |
-| drive_intent.learning_goal | string | 学习目标，自然语言补充后可返回 |
+| drive_intent.learning_goal | string | 学习方向枚举：exam_sprint / daily_homework / casual；资源偏好类补充不写入该字段 |
 | drive_intent.source | string | 来源标记，如 profile_dialogue |
 | drive_intent.learning_habits | object | 本地规则引擎生成的学习习惯摘要 |
 | drive_intent.learning_habits.label | string | new / inactive / sprint / stable / casual |
@@ -1049,7 +1049,7 @@ GET /api/v1/profile?course_id={course_id}
 POST /api/v1/profile/dialogue-update
 ```
 
-**说明：** 将学生自然语言补充的学习目标、薄弱点、资源偏好等信息提交给 Agent 解析，并合并到当前课程画像。Agent 解析失败时不覆盖已有画像。
+**说明：** 将学生自然语言补充的学习方向、薄弱点、资源偏好等信息提交给 Agent 解析，并合并到当前课程画像。学习方向仅保留 `exam_sprint` / `daily_homework` / `casual` 三类枚举；“我喜欢视频/图解/代码”等资源偏好类输入归入标准模态偏好，不写入学习方向。Agent 解析失败时不覆盖已有画像。
 
 **请求体 `application/json`：**
 

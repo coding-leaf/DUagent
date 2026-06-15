@@ -472,16 +472,32 @@
               }
             }
           },
-          "resource_usage": {
-            "type": "object",
-            "description": "资源使用统计",
-            "properties": {
-              "by_type": { "type": "object", "description": "{document: N, mindmap: N, reading: N, code: N, video: N}" },
-              "by_chapter": { "type": "object", "description": "各章节资源使用分布" }
-            }
-          }
-        }
-      },
+	          "resource_usage": {
+	            "type": "object",
+	            "description": "资源使用统计",
+	            "properties": {
+	              "by_type": { "type": "object", "description": "{document: N, mindmap: N, reading: N, code: N, video: N}" },
+	              "by_chapter": { "type": "object", "description": "各章节资源使用分布" }
+	            }
+	          },
+	          "student_profile": {
+	            "type": "object",
+	            "description": "用户基础画像，如专业、年级、引导级别"
+	          },
+	          "profile_context": {
+	            "type": "object",
+	            "description": "Backend 规则生成的课程画像上下文"
+	          },
+	          "kg_context": {
+	            "type": "object",
+	            "description": "课程 KG 节点与节点进度上下文"
+	          },
+	          "learning_activity": {
+	            "type": "object",
+	            "description": "学习行为统计上下文"
+	          }
+	        }
+	      },
       "EvaluationData": {
         "type": "object",
         "properties": {

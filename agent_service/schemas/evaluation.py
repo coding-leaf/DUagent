@@ -33,6 +33,10 @@ class EvaluationGenerateRequest(BaseModel):
     learning_progress: LearningProgress = Field(..., description="学习进度数据（Backend SQL 统计）")
     quiz_results: list[QuizResultItem] = Field(..., description="各次练习结果汇总")
     resource_usage: ResourceUsage = Field(..., description="资源使用统计")
+    student_profile: dict[str, Any] | None = Field(None, description="用户基础画像，如专业、年级、引导级别")
+    profile_context: dict[str, Any] | None = Field(None, description="Backend 规则生成的课程画像上下文")
+    kg_context: dict[str, Any] | None = Field(None, description="课程 KG 节点与节点进度上下文")
+    learning_activity: dict[str, Any] | None = Field(None, description="学习行为统计上下文")
 
 
 class TableColumn(BaseModel):

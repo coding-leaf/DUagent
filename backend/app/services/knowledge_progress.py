@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import CourseCatalog, CourseOffering
@@ -73,6 +74,54 @@ def evaluate_mastery_state(
             return "unstarted", "未开始", "无测评"
 
 
+def summarize_attempt_answers(rows: list[tuple[str, bool, str, int, datetime | None]]) -> dict[str, dict]:
+    attempts: dict[str, dict] = defaultdict(
+        lambda: {
+            "correct": 0,
+            "total": 0,
+            "duration": 0,
+            "sessions": set(),
+            "latest_score": None,
+            "_latest_time": None,
+        }
+    )
+    session_kp_stats: dict[tuple[str, str], dict] = defaultdict(
+        lambda: {"correct": 0, "total": 0, "duration": 0, "created_at": None}
+    )
+
+    for knowledge_point, is_correct, session_id, time_spent, created_at in rows:
+        if not knowledge_point or not session_id:
+            continue
+        stats = attempts[knowledge_point]
+        stats["total"] += 1
+        stats["correct"] += 1 if is_correct else 0
+        if session_id not in stats["sessions"]:
+            stats["sessions"].add(session_id)
+            stats["duration"] += int(time_spent or 0)
+
+        session_stats = session_kp_stats[(knowledge_point, session_id)]
+        session_stats["total"] += 1
+        session_stats["correct"] += 1 if is_correct else 0
+        session_stats["duration"] = int(time_spent or 0)
+        session_stats["created_at"] = created_at
+
+    for (knowledge_point, _session_id), session_stats in session_kp_stats.items():
+        total = session_stats["total"]
+        if not total:
+            continue
+        latest_time = session_stats["created_at"]
+        stats = attempts[knowledge_point]
+        previous_time = stats.get("_latest_time")
+        if previous_time is None or (latest_time is not None and latest_time >= previous_time):
+            stats["_latest_time"] = latest_time
+            stats["latest_score"] = round((session_stats["correct"] / total) * 100, 1)
+
+    for stats in attempts.values():
+        stats.pop("_latest_time", None)
+
+    return attempts
+
+
 async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSession) -> list[dict]:
     kg = await _resolve_evaluation_kg(db, course_id)
     nodes = kg.nodes if kg and isinstance(kg.nodes, list) else []
@@ -113,9 +162,7 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
     sessions = session_result.scalars().all()
     session_by_id = {session.id: session for session in sessions}
 
-    attempts: dict[str, dict] = defaultdict(
-        lambda: {"correct": 0, "total": 0, "duration": 0, "sessions": set()}
-    )
+    attempts: dict[str, dict] = {}
     if session_by_id and question_to_kp:
         answer_result = await db.execute(
             select(QuizAnswer).where(
@@ -124,17 +171,22 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
                 QuizAnswer.is_deleted == False,
             )
         )
+        attempt_rows = []
         for answer in answer_result.scalars().all():
             knowledge_point = question_to_kp.get(answer.question_id)
             session = session_by_id.get(answer.quiz_id)
             if not knowledge_point or session is None:
                 continue
-            stats = attempts[knowledge_point]
-            stats["total"] += 1
-            stats["correct"] += 1 if answer.is_correct else 0
-            stats["sessions"].add(session.id)
-        for stats in attempts.values():
-            stats["duration"] = sum(session_by_id[sid].time_spent or 0 for sid in stats["sessions"])
+            attempt_rows.append(
+                (
+                    knowledge_point,
+                    bool(answer.is_correct),
+                    session.id,
+                    int(session.time_spent or 0),
+                    session.create_time,
+                )
+            )
+        attempts = summarize_attempt_answers(attempt_rows)
 
     node_ids = [
         str(node.get("id") or node.get("node_id") or f"node_{index}")

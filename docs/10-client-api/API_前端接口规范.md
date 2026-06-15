@@ -1002,10 +1002,12 @@ GET /api/v1/profile?course_id={course_id}
 | guidance_level | object | 引导粒度 |
 | guidance_level.current | string | 当前级别：L1 / L2 / L3 |
 | guidance_level.updated_at | string | 更新时间 |
-| knowledge_coordinates | array | 知识坐标（已掌握+正在学，时间轴+标签） |
+| knowledge_coordinates | array | 知识坐标（按 KG 节点、学习行为和练习证据生成） |
 | knowledge_coordinates[].name | string | 知识点名称 |
-| knowledge_coordinates[].status | string | 状态：mastered / learning |
+| knowledge_coordinates[].status | string | 状态：mastered / weak / learning / pending_practice / unstarted |
 | knowledge_coordinates[].mastered_at | string | 掌握时间（learning 时为 null） |
+| knowledge_coordinates[].mastery_score | number | 节点掌握分，未练习时可为 null |
+| knowledge_coordinates[].evidence | string | 证据来源：quiz / activity / none |
 | cognitive_blindspots | array | 认知盲区（易错点标签） |
 | cognitive_blindspots[].name | string | 知识点名称 |
 | cognitive_blindspots[].error_count | integer | 错误次数 |
@@ -1015,15 +1017,30 @@ GET /api/v1/profile?course_id={course_id}
 | drive_intent.intensity | number | 近期学习强度 0-100 |
 | drive_intent.learning_goal | string | 学习目标，自然语言补充后可返回 |
 | drive_intent.source | string | 来源标记，如 profile_dialogue |
+| drive_intent.learning_habits | object | 本地规则引擎生成的学习习惯摘要 |
+| drive_intent.learning_habits.label | string | new / inactive / sprint / stable / casual |
+| drive_intent.learning_habits.score | integer | 学习习惯分 0-100 |
+| drive_intent.learning_habits.streak_days | integer | 连续学习天数 |
+| drive_intent.learning_habits.active_days_7d | integer | 最近 7 日活跃天数 |
+| drive_intent.learning_habits.study_duration_7d | integer | 最近 7 日学习秒数 |
+| drive_intent.knowledge_progress_summary | object | KG 知识进度摘要 |
+| drive_intent.knowledge_progress_summary.total_nodes | integer | KG 节点总数 |
+| drive_intent.knowledge_progress_summary.mastered_nodes | integer | 已掌握节点数 |
+| drive_intent.knowledge_progress_summary.learning_nodes | integer | 学习中节点数 |
+| drive_intent.knowledge_progress_summary.weak_nodes | integer | 薄弱节点数 |
+| drive_intent.knowledge_progress_summary.pending_nodes | integer | 待练习节点数 |
+| drive_intent.knowledge_progress_summary.unstarted_nodes | integer | 未开始节点数 |
+| drive_intent.knowledge_progress_summary.practiced_nodes | integer | 有练习或学习证据节点数 |
+| drive_intent.knowledge_progress_summary.mastery_rate | integer | 已掌握节点占比 0-100 |
 | discipline_badge | object | 学科底座徽章 |
 | discipline_badge.subject | string | 学科名称 |
 | discipline_badge.level | string | 徽章等级 |
 | discipline_badge.streak_days | integer | 连续学习天数 |
 | profile_dimensions | array | 六维画像摘要，供前端直接渲染 |
-| profile_dimensions[].key | string | 维度键：learning_goal / weak_points / resource_preference / guidance_level / knowledge_progress / discipline |
+| profile_dimensions[].key | string | 维度键：learning_goal / weak_points / resource_preference / guidance_level / knowledge_progress / learning_habits |
 | profile_dimensions[].label | string | 维度展示名 |
 | profile_dimensions[].value | any | 维度值，可能是字符串、数组、数字或对象 |
-| profile_dimensions[].source | string | 维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending |
+| profile_dimensions[].source | string | 维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending / kg_quiz_activity |
 | generated_at | string | 画像生成时间 |
 
 ### 7.3 对话补充用户画像

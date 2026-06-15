@@ -21,6 +21,9 @@ const PROFILE_VALUE_LABELS = {
   L2: '分步伴学',
   L3: '详细讲解',
   starter: '入门起步',
+  steady: '稳步提升',
+  advanced: '进阶掌握',
+  excellent: '表现优秀',
   active: '稳定学习',
   focused: '高频投入',
 };
@@ -326,9 +329,11 @@ export default function StudentProfile() {
     }
     
     if (key === 'learning_habits') {
-      if (!value || typeof value !== 'object') return PROFILE_EMPTY_TEXT.learning_habits;
+      if (!value || typeof value !== 'object' || Object.keys(value).length === 0) {
+        return PROFILE_EMPTY_TEXT.learning_habits;
+      }
       const labelMap = { new: '新生', inactive: '不活跃', sprint: '突击', stable: '稳定', casual: '随性' };
-      const label = labelMap[value.label] || value.label || '未知';
+      const label = labelMap[value.label] || value.label || '暂无学习记录';
       return `状态：${label} · 习惯分：${value.score || 0}`;
     }
 
@@ -657,26 +662,49 @@ export default function StudentProfile() {
               {knowledge_coordinates.length > 0 ? (
                 <div className="flex flex-wrap gap-3">
                   {knowledge_coordinates.map((node, i) => {
-                    const isMastered = node.status === 'mastered';
-                    const isLearning = node.status === 'learning';
-                    const colorClass = isMastered
-                      ? 'bg-green-50 text-green-700 border-green-100'
-                      : isLearning
-                        ? 'bg-amber-50 text-amber-700 border-amber-100'
-                        : 'bg-slate-100 text-slate-400 border-slate-200';
-                    const icon = isMastered ? 'check_circle' : isLearning ? 'sync' : 'help';
-                    const label = isMastered ? '已掌握' : isLearning ? '学习中' : '未知';
+                    const state = node.status || 'unstarted';
+                    const stateConfig = {
+                      mastered: {
+                        color: 'bg-green-50 text-green-700 border-green-100',
+                        icon: 'check_circle',
+                        label: '已掌握',
+                      },
+                      weak: {
+                        color: 'bg-red-50 text-red-700 border-red-100',
+                        icon: 'warning',
+                        label: '薄弱',
+                      },
+                      learning: {
+                        color: 'bg-amber-50 text-amber-700 border-amber-100',
+                        icon: 'sync',
+                        label: '学习中',
+                      },
+                      pending_practice: {
+                        color: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+                        icon: 'quiz',
+                        label: '待练习',
+                      },
+                      unstarted: {
+                        color: 'bg-slate-100 text-slate-500 border-slate-200',
+                        icon: 'radio_button_unchecked',
+                        label: '未开始',
+                      },
+                    }[state] || {
+                      color: 'bg-slate-100 text-slate-500 border-slate-200',
+                      icon: 'help',
+                      label: labelValue(state) || '未知',
+                    };
                     return (
                       <span
                         key={i}
-                        className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 ${colorClass}`}
+                        className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 ${stateConfig.color}`}
                       >
                         <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: '"FILL" 1' }}>
-                          {icon}
+                          {stateConfig.icon}
                         </span>
                         {node.name}
-                        <span className="text-xs font-normal opacity-60">{label}</span>
-                        {isMastered && node.mastered_at && (
+                        <span className="text-xs font-normal opacity-60">{stateConfig.label}</span>
+                        {state === 'mastered' && node.mastered_at && (
                           <span className="text-green-400 text-xs font-normal ml-1">
                             · {daysAgoText(node.mastered_at, '掌握')}
                           </span>

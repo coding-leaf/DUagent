@@ -3726,13 +3726,22 @@
           },
           "status": {
             "type": "string",
-            "description": "mastered / learning"
+            "description": "mastered / weak / learning / pending_practice / unstarted"
           },
           "mastered_at": {
             "type": "string",
             "format": "date-time",
             "nullable": true,
             "description": "掌握时间（learning 时为 null）"
+          },
+          "mastery_score": {
+            "type": "number",
+            "nullable": true,
+            "description": "节点掌握分，未练习时可为 null"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "quiz / activity / none"
           }
         }
       },
@@ -4082,6 +4091,67 @@
               "source": {
                 "type": "string",
                 "description": "来源标记，如 profile_dialogue"
+              },
+              "learning_habits": {
+                "type": "object",
+                "description": "本地规则引擎生成的学习习惯摘要",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "description": "new / inactive / sprint / stable / casual"
+                  },
+                  "score": {
+                    "type": "integer",
+                    "description": "学习习惯分 0-100"
+                  },
+                  "streak_days": {
+                    "type": "integer",
+                    "description": "连续学习天数"
+                  },
+                  "active_days_7d": {
+                    "type": "integer",
+                    "description": "最近 7 日活跃天数"
+                  },
+                  "study_duration_7d": {
+                    "type": "integer",
+                    "description": "最近 7 日学习秒数"
+                  },
+                  "last_activity_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  }
+                }
+              },
+              "knowledge_progress_summary": {
+                "type": "object",
+                "description": "KG 知识进度摘要",
+                "properties": {
+                  "total_nodes": {
+                    "type": "integer"
+                  },
+                  "mastered_nodes": {
+                    "type": "integer"
+                  },
+                  "learning_nodes": {
+                    "type": "integer"
+                  },
+                  "weak_nodes": {
+                    "type": "integer"
+                  },
+                  "pending_nodes": {
+                    "type": "integer"
+                  },
+                  "unstarted_nodes": {
+                    "type": "integer"
+                  },
+                  "practiced_nodes": {
+                    "type": "integer"
+                  },
+                  "mastery_rate": {
+                    "type": "integer"
+                  }
+                }
               }
             }
           },
@@ -4122,7 +4192,7 @@
         "properties": {
           "key": {
             "type": "string",
-            "description": "维度键：learning_goal / weak_points / resource_preference / guidance_level / knowledge_progress / discipline"
+            "description": "维度键：learning_goal / weak_points / resource_preference / guidance_level / knowledge_progress / learning_habits"
           },
           "label": {
             "type": "string",
@@ -4133,7 +4203,7 @@
           },
           "source": {
             "type": "string",
-            "description": "维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending"
+            "description": "维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending / kg_quiz_activity"
           }
         }
       },

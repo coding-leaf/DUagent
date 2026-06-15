@@ -27,7 +27,28 @@ _default_profile = {
     "guidance_level": {"current": "L2", "updated_at": ""},
     "knowledge_coordinates": [],
     "cognitive_blindspots": [],
-    "drive_intent": {"type": "casual", "intensity": 30},
+    "drive_intent": {
+        "type": "casual",
+        "intensity": 30,
+        "learning_habits": {
+            "label": "new",
+            "score": 0,
+            "streak_days": 0,
+            "active_days_7d": 0,
+            "study_duration_7d": 0,
+            "last_activity_at": None,
+        },
+        "knowledge_progress_summary": {
+            "total_nodes": 0,
+            "mastered_nodes": 0,
+            "learning_nodes": 0,
+            "weak_nodes": 0,
+            "pending_nodes": 0,
+            "unstarted_nodes": 0,
+            "practiced_nodes": 0,
+            "mastery_rate": 0,
+        },
+    },
     "discipline_badge": {"subject": "", "level": "", "streak_days": 0},
     "generated_at": None,
 }
@@ -106,7 +127,11 @@ def _merge_dialogue_profile(pf: UserProfile, extracted: dict) -> dict:
     now = datetime.now(timezone.utc)
     learning_goal = extracted.get("learning_goal")
     weak_points = _as_list(extracted.get("weak_points") or extracted.get("cognitive_blindspots"))
-    preferred_resources = _as_list(extracted.get("preferred_resources"))
+    preferred_resources = _as_list(
+        extracted.get("preferred_resources")
+        or extracted.get("learning_preferences")
+        or extracted.get("resource_preference")
+    )
     guidance_level = extracted.get("guidance_level")
 
     drive_intent = dict(pf.drive_intent or _default_profile["drive_intent"])

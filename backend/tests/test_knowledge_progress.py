@@ -1,5 +1,7 @@
 import pytest
-from app.services.knowledge_progress import evaluate_mastery_state
+from datetime import datetime, timedelta
+
+from app.services.knowledge_progress import evaluate_mastery_state, summarize_attempt_answers
 
 def test_evaluate_mastery_state_with_no_questions_and_no_activity():
     # Empty state
@@ -115,3 +117,19 @@ def test_evaluate_mastery_state_learning():
     assert assessment_state == "learning"
     assert status_text == "学习中"
     assert mastery_label == "B"
+
+def test_summarize_attempt_answers_tracks_latest_score_per_knowledge_point():
+    base_time = datetime(2023, 1, 15, 12, 0)
+    rows = [
+        ("变量", True, "s1", 30, base_time),
+        ("变量", True, "s1", 30, base_time),
+        ("变量", True, "s2", 20, base_time + timedelta(hours=1)),
+        ("变量", False, "s2", 20, base_time + timedelta(hours=1)),
+    ]
+
+    attempts = summarize_attempt_answers(rows)
+
+    assert attempts["变量"]["total"] == 4
+    assert attempts["变量"]["correct"] == 3
+    assert attempts["变量"]["duration"] == 50
+    assert attempts["变量"]["latest_score"] == 50.0

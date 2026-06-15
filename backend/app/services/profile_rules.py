@@ -5,6 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.others import LearningActivity, Resource
 from app.models.user import User
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
 def compute_modal_preference(activities: List[Tuple[str, int]]) -> Dict[str, int]:
     modal_durations = {
         "video_animation": 0, 
@@ -48,10 +53,13 @@ def compute_knowledge_progress(node_progress_rows: List[Dict[str, Any]]) -> Tupl
     learning_nodes = 0
     weak_count = 0
     pending_nodes = 0
+    unstarted_nodes = 0
+    practiced_nodes = 0
 
     for row in node_progress_rows:
         status = row["assessment_state"]
         score = row["mastery_score"]
+        attempt_count = int(row.get("attempt_count") or 0)
         evidence = "quiz" if row.get("attempt_count", 0) > 0 else ("activity" if row.get("study_duration_seconds", 0) else "none")
         
         knowledge_coordinates.append({
@@ -61,6 +69,9 @@ def compute_knowledge_progress(node_progress_rows: List[Dict[str, Any]]) -> Tupl
             "mastery_score": score,
             "evidence": evidence
         })
+
+        if attempt_count > 0 or status in {"mastered", "weak", "learning"}:
+            practiced_nodes += 1
         
         if status == "mastered":
             mastered_nodes += 1
@@ -77,6 +88,8 @@ def compute_knowledge_progress(node_progress_rows: List[Dict[str, Any]]) -> Tupl
             learning_nodes += 1
         elif status == "pending_practice":
             pending_nodes += 1
+        elif status == "unstarted":
+            unstarted_nodes += 1
 
     mastery_rate = int((mastered_nodes / total_nodes * 100)) if total_nodes > 0 else 0
     
@@ -86,10 +99,47 @@ def compute_knowledge_progress(node_progress_rows: List[Dict[str, Any]]) -> Tupl
         "learning_nodes": learning_nodes,
         "weak_nodes": weak_count,
         "pending_nodes": pending_nodes,
+        "unstarted_nodes": unstarted_nodes,
+        "practiced_nodes": practiced_nodes,
         "mastery_rate": mastery_rate
     }
     
     return knowledge_coordinates, weak_nodes, knowledge_progress_summary
+
+def compute_streak_days(activity_datetimes: List[datetime], now: datetime) -> int:
+    if not activity_datetimes:
+        return 0
+
+    active_dates = {_as_utc(value).date() for value in activity_datetimes if value}
+    current_date = _as_utc(now).date()
+    streak = 0
+
+    if current_date in active_dates:
+        cursor = current_date
+    elif current_date - timedelta(days=1) in active_dates:
+        cursor = current_date - timedelta(days=1)
+    else:
+        return 0
+
+    while cursor in active_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+def count_recent_practice_events(
+    activity_rows: List[Tuple[str, datetime]],
+    now: datetime,
+    days: int = 7,
+) -> int:
+    start = _as_utc(now) - timedelta(days=days)
+    return sum(
+        1
+        for activity_type, occurred_at in activity_rows
+        if activity_type == "node_practice_submit"
+        and occurred_at
+        and _as_utc(occurred_at) >= start
+        and _as_utc(occurred_at) <= _as_utc(now)
+    )
 
 def compute_learning_habits(
     last_activity_at: datetime | None,
@@ -244,9 +294,19 @@ async def compute_profile_fields(
         )
     )
     total_events = total_events_result.scalar() or 0
-    
-    streak_days = 0 
-    practice_count_7d = 0
+
+    activity_events_result = await db.execute(
+        select(LearningActivity.activity_type, LearningActivity.occurred_at).where(
+            LearningActivity.user_id == user_id,
+            LearningActivity.course_id == course_id,
+            LearningActivity.occurred_at >= thirty_days_ago,
+            LearningActivity.is_deleted == False
+        )
+    )
+    activity_events = list(activity_events_result.all())
+    activity_datetimes = [occurred_at for _activity_type, occurred_at in activity_events]
+    streak_days = compute_streak_days(activity_datetimes, now)
+    practice_count_7d = count_recent_practice_events(activity_events, now, days=7)
     
     learning_habits, learning_habit_score = compute_learning_habits(
         last_activity_at=last_activity_at,

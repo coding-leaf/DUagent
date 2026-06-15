@@ -24,6 +24,12 @@
 ## 最近验证
 
 ### 2026-06-15
+- Complete Profile Capability Chain:
+  - 补全 `/profile` 新画像能力：保留扩展契约 `learning_habits`、`knowledge_progress_summary`、`kg_quiz_activity`，并让默认画像返回稳定结构。
+  - 修复 KG 节点状态链路：`mastered / weak / learning / pending_practice / unstarted` 现在在 `/profile` 和 `/learning-effects` 前端展示中均有明确中文状态、图标和统计口径。
+  - 修复规则引擎真实计算：新增连续学习天数、7 日练习次数、未开始节点和已练习节点汇总；修复最近一次低分不参与 weak 判定的聚合缺口。
+  - 扩展 `../docs/10-client-api/API_前端接口规范.md` 与 `Client-API.openapi.json`，记录新画像维度、来源和知识坐标状态。
+  - 验证：`tests/test_profile_rules.py tests/test_knowledge_progress.py` 18 passed；`python3 -m json.tool` 校验 OpenAPI JSON 通过；`npm run lint` 通过；`npm run build` 通过（仅 Vite chunk size warning）。
 
 - Implement Profile Rules Engine:
   - 在 `backend/app/services/profile_rules.py` 中实现了 `compute_profile_fields` 函数，用于计算学习画像的各个维度。
@@ -706,3 +712,12 @@
 5. **git commit**：`3c261df`(spec)、`7f63fbf`(plan)、`522c044`(前端防御层)、`c9e38b1`(后端超时/stream)、`c1b9a10`(后端结构化输出)。未 push。
 6. **剩余风险**：依赖模型稳定调用 `generate_response`（未调用时回退文本兜底 + 规则兜底）；结构化输出为原子返回，正文非逐字流式（已与用户确认取舍）；既有 9 个失败测试（assessment 难度均衡 + KG 混合检索 pytest-asyncio）待另行处理。
 7. **下一步建议**：在有真实 LLM/Qdrant 的环境对 /ai-chat 做端到端联调，确认不再泄露 JSON、超时可控、检索生效；另起任务修 `pytest-asyncio` 配置与既有失败测试。
+
+### 2026-06-15
+- **Task**: 实现基于规则的画像刷新 (Task 3: Backend API, Task 4: Frontend Display)
+- **Modified Files**:
+  - `backend/app/api/v1/profile.py`: 移除 agent 调用，直接调用 `compute_profile_fields`，更新 `_profile_dimensions`，替换 `discipline` 为 `learning_habits`
+  - `frontend/src/pages/StudentProfile.jsx`: 增加 `learning_habits` 和 `knowledge_progress` 的前端定制化渲染逻辑
+- **Status**: 已完成
+- **Testing**: 后端运行 `uv run python -m py_compile` 语法检查通过，前端运行 `npm run lint` 检查通过
+- **Git**: 提交消息 `feat(profile): integrate evidence-based profile rules into API and update frontend display`

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
 import { learningActivityService } from '../api/services/learningActivity';
+import { profileService } from '../api/services/profile';
 import { useCourse } from '../context/CourseContext';
 import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
@@ -106,6 +107,10 @@ export default function Quiz() {
       };
       const res = await quizService.submitQuiz(submitData);
       if (res.code === 200) {
+        // 后台触发画像刷新，不阻塞跳转
+        if (activeCourseId) {
+          profileService.refreshProfile(activeCourseId).catch(() => {});
+        }
         navigate('/quiz/result', { state: { result: res.data } });
       }
     } catch (error) {

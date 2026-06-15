@@ -81,7 +81,7 @@ def compute_knowledge_progress(node_progress_rows: List[Dict[str, Any]]) -> Tupl
             weak_nodes.append({
                 "name": row["node_name"],
                 "severity": severity,
-                "error_count": 0, # Could be enriched later
+                "error_count": row.get("wrong_count", 0),
                 "source": "quiz"
             })
         elif status == "learning":

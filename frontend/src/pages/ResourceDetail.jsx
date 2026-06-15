@@ -45,9 +45,13 @@ function MermaidDiagram({ content }) {
         return;
       }
 
+      let renderId = '';
       try {
-        const id = `resource-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const result = await mermaid.render(id, source);
+        renderId = `resource-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const result = await mermaid.render(renderId, source);
+        if (result.svg.includes('error in text')) {
+          throw new Error('Mermaid syntax error');
+        }
         if (!cancelled) {
           setSvg(result.svg);
           setError('');
@@ -57,6 +61,11 @@ function MermaidDiagram({ content }) {
         if (!cancelled) {
           setSvg('');
           setError('思维导图渲染失败，已显示原始内容。');
+        }
+      } finally {
+        if (renderId) {
+          document.getElementById(renderId)?.remove();
+          document.getElementById(`d${renderId}`)?.remove();
         }
       }
     };
@@ -141,7 +150,8 @@ export default function ResourceDetail() {
         metadata: { source: 'resource_detail' }
       });
     };
-  }, [resource, nodeContext.id, nodeContext.name, nodeContext.node_id, nodeContext.node_name]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resource]);
 
   if (loading) {
     return (

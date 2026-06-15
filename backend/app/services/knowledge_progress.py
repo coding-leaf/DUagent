@@ -264,6 +264,8 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
         quiz_duration = int(attempt_stats["duration"]) if attempt_stats and attempt_stats["duration"] else 0
         duration = activity_duration or quiz_duration or None
         last_activity_at = activity_stats.get("last_activity_at")
+        correct_count = int(attempt_stats["correct"]) if attempt_stats else 0
+        wrong_count = attempt_count - correct_count
         rows.append(
             {
                 "node_id": node_id,
@@ -275,6 +277,7 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
                 "assessment_state": assessment_state,
                 "question_count": question_count,
                 "attempt_count": attempt_count,
+                "wrong_count": wrong_count,
                 "resource_visit_count": activity_stats.get("resource_visit_count"),
                 "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
             }

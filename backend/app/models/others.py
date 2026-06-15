@@ -214,3 +214,21 @@ class OperationLog(Base):
     update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
     update_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class UserPersonalizedResource(Base):
+    __tablename__ = "user_personalized_resources"
+    __table_args__ = (
+        Index("idx_upr_user_course", "user_id", "course_id", "is_deleted"),
+        Index("idx_upr_task", "task_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=gen_id)
+    user_id: Mapped[str] = mapped_column(String(32), ForeignKey("users.id"), nullable=False)
+    course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("resources.id"), nullable=True)
+    question_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("quiz_questions.id"), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    task_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("async_tasks.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)

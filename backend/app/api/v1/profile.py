@@ -277,7 +277,7 @@ def _profile_dimensions(profile: dict) -> list[dict]:
         {
             "key": "learning_goal",
             "label": "学习目标",
-            "value": drive_intent.get("learning_goal") or drive_intent.get("type") or "待补充",
+            "value": drive_intent.get("type") or "待补充",
             "source": drive_intent.get("source") or "system_profile",
         },
         {
@@ -526,6 +526,7 @@ async def update_learning_goal(
     pf = await _get_or_create_profile(db, current_user.id, req.course_id)
     drive_intent = dict(pf.drive_intent or _default_profile["drive_intent"])
     drive_intent["type"] = req.goal_type
+    drive_intent.pop("learning_goal", None)
     pf.drive_intent = drive_intent
     flag_modified(pf, "drive_intent")
     await db.commit()

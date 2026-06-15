@@ -134,10 +134,10 @@ function MermaidDiagram({ content }) {
           setError('');
         }
       } catch (err) {
-        console.error('Mermaid render failed in ChatMessage:', err);
+        console.warn('Mermaid render failed, showing source:', err?.message);
         if (!cancelled) {
           setSvg('');
-          setError('图解渲染失败，已显示原始内容。');
+          setError('fallback');
         }
       }
     };
@@ -151,10 +151,7 @@ function MermaidDiagram({ content }) {
 
   if (error) {
     return (
-      <div>
-        <div className="text-red-500 text-xs mb-2">{error}</div>
-        <pre className="text-xs p-3 bg-slate-100 rounded-lg overflow-x-auto font-mono text-slate-600 border border-slate-200">{source}</pre>
-      </div>
+      <pre className="text-xs p-3 bg-slate-100 rounded-lg overflow-x-auto font-mono text-slate-600 border border-slate-200 whitespace-pre-wrap">{source}</pre>
     );
   }
 

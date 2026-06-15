@@ -96,6 +96,8 @@ def _map_assessment_to_status(assessment_state: str) -> str:
         "mastered": "completed",
         "learning": "in_progress",
         "weak": "recommended",
+        "pending_practice": "pending",
+        "unstarted": "pending",
     }.get(assessment_state, "pending")
 
 

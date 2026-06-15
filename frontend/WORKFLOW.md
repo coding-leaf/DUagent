@@ -744,3 +744,28 @@
 - **Status**: 已完成
 - **Testing**: 后端运行 `uv run python -m py_compile` 语法检查通过，前端运行 `npm run lint` 检查通过
 - **Git**: 提交消息 `feat(profile): integrate evidence-based profile rules into API and update frontend display`
+
+## 2026-06-15 学习路径节点状态实时计算
+
+### 修改文件
+- `backend/app/api/v1/learning_path.py`：新增 `_map_assessment_to_status`、`_apply_progress_to_nodes`、`_build_current_position_from_nodes`；改写 `get_learning_path` 为 Merge 策略
+
+### 新增文件
+- `backend/tests/test_learning_path_realtime.py`：映射函数和 merge 逻辑单元测试（13 个测试）
+
+### 变更说明
+GET /learning-path 每次调用 build_node_progress_rows 实时计算节点状态，用 assessment_state→前端 status 映射后 merge 到快照节点，mastery_score 同步更新进度条。快照的 reason/order/edges/current_position 全部保留。KG fallback 路径也改为实时状态映射，current_position 取第一个非 pending 节点（全 pending 时取第一个）。
+
+### 测试结果
+- test_learning_path_fallback.py: 同步测试 PASS（异步测试因环境缺 pytest-asyncio 跳过，改动前已存在）
+- test_learning_path_realtime.py: 13/13 PASS
+- 总计：19 passed, 3 failed (async, pre-existing)
+
+### 契约漂移
+无。响应结构不变，source 字段新增 "realtime_merged"/"kg_realtime" 值（前端未使用该字段）。
+
+### 剩余风险
+build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后续加 Redis TTL 缓存。
+
+### git commit
+`docs: 更新 WORKFLOW.md，记录实时节点状态改造施工`

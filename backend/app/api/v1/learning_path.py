@@ -91,6 +91,14 @@ def _topo_sort_kg_nodes(
     return [node_map[nid] for nid in sorted_ids if nid in node_map]
 
 
+def _map_assessment_to_status(assessment_state: str) -> str:
+    return {
+        "mastered": "completed",
+        "learning": "in_progress",
+        "weak": "recommended",
+    }.get(assessment_state, "pending")
+
+
 async def _synthesize_kg_fallback_path(
     db: AsyncSession,
     course_id: str,

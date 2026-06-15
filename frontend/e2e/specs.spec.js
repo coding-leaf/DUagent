@@ -273,6 +273,85 @@ test.describe('Vite Multi-Agent Learning System E2E Suite', () => {
     await expect(page.getByText('动态演示 (60%)')).toHaveCount(0);
   });
 
+  test('Learning effects refresh failure shows task error detail', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-student-token');
+      localStorage.setItem('course_id', 'course-effects-e2e');
+    });
+
+    await page.route('**/api/v1/users/me', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          id: 'student-effects-e2e',
+          email: 'student@example.com',
+          username: 'Student E2E',
+          role: 'student',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/courses**', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          courses: [{
+            id: 'course-effects-e2e',
+            name: '学习效果课程',
+            description: 'KG 节点看板测试',
+          }],
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/evaluation/refresh', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 202,
+        message: 'accepted',
+        data: { task_id: 'eval-task-failed-e2e' },
+      }, 202));
+    });
+
+    await page.route(/\/api\/v1\/evaluation(\?.*)?$/, async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          course_id: 'course-effects-e2e',
+          node_progress: [],
+          progress_table: { columns: [], rows: [] },
+          mastery_table: { columns: [], rows: [] },
+          resource_usage_table: { columns: [], rows: [] },
+          summary_text: '最近一次可用评估',
+          generated_at: '2026-06-14T10:00:00Z',
+        },
+      }));
+    });
+
+    await page.route('**/api/v1/tasks/eval-task-failed-e2e', async (route) => {
+      await route.fulfill(jsonResponse({
+        code: 200,
+        message: 'success',
+        data: {
+          task_id: 'eval-task-failed-e2e',
+          task_type: 'evaluation_refresh',
+          status: 'failed',
+          progress: 0,
+          error_code: 'agent_error',
+          error_message: 'Agent 评估服务不可用',
+          completed_at: '2026-06-14T10:01:00Z',
+        },
+      }));
+    });
+
+    await page.goto('/learning-effects');
+    await page.getByRole('button', { name: '重新评估' }).click();
+
+    await expect(page.getByText('Agent 评估服务不可用')).toBeVisible({ timeout: 5000 });
+  });
+
   test('UseCase 2: Student switches course -> views learning path & quiz', async ({ page }) => {
     // 1. Log in student
     await loginUser(page, 's@t.com', 'Abc12345');

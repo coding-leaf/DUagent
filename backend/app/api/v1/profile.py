@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.deps import get_current_user, get_db
 from app.db.session import async_session_factory
@@ -78,6 +79,26 @@ async def _release_profile_lock(db: AsyncSession, lock_name: str) -> None:
     if db.bind.dialect.name == "sqlite":
         return
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+
+
+async def _get_processing_refresh_task(
+    db: AsyncSession,
+    task_type: str,
+    user_id: str,
+    course_id: str,
+) -> AsyncTask | None:
+    result = await db.execute(
+        select(AsyncTask)
+        .where(
+            AsyncTask.task_type == task_type,
+            AsyncTask.user_id == user_id,
+            AsyncTask.course_id == course_id,
+            AsyncTask.status == "processing",
+            AsyncTask.is_deleted == False,
+        )
+        .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
+    )
+    return result.scalars().first()
 
 
 async def _get_or_create_profile(db: AsyncSession, user_id: str, course_id: str) -> UserProfile:
@@ -327,6 +348,7 @@ async def initialize_profile(
 ):
     # 幂等写入：重复初始化 = 覆盖旧结果（锁 + 在原行覆盖数据）
     lock_name = await _acquire_profile_lock(db, current_user.id, req.course_id)
+    lock_acquired = db.bind.dialect.name != "sqlite"
     try:
         profile = await _get_or_create_profile(db, current_user.id, req.course_id)
         answers = req.answers or {}
@@ -341,11 +363,20 @@ async def initialize_profile(
             
         await db.flush()
         await db.refresh(profile)
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
+            lock_acquired = False
         await db.commit()
     except HTTPException:
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
+            lock_acquired = False
         await db.rollback()
         raise
     except Exception as e:
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
+            lock_acquired = False
         await db.rollback()
         logger.error(
             "Profile initialize: error user_id=%s course_id=%s type=%s message=%s",
@@ -356,7 +387,8 @@ async def initialize_profile(
             detail={"code": 50000, "message": "初始化失败", "data": None},
         )
     finally:
-        await _release_profile_lock(db, lock_name)
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
 
     return {"code": 200, "message": "success", "data": _profile_data(profile, req.course_id, current_user)}
 
@@ -422,6 +454,7 @@ async def dialogue_update_profile(
         )
 
     lock_name = await _acquire_profile_lock(db, current_user.id, req.course_id)
+    lock_acquired = db.bind.dialect.name != "sqlite"
     try:
         pf = await _get_or_create_profile(db, current_user.id, req.course_id)
         if pf.generated_at is None:
@@ -431,11 +464,21 @@ async def dialogue_update_profile(
         extracted = _normalize_dialogue_profile(extracted)
         merged = _merge_dialogue_profile(pf, extracted)
         response_data = _profile_data(pf, req.course_id, current_user)
+        await db.flush()
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
+            lock_acquired = False
         await db.commit()
     except HTTPException:
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
+            lock_acquired = False
         await db.rollback()
         raise
     except Exception as e:
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
+            lock_acquired = False
         await db.rollback()
         logger.error(
             "Profile dialogue update: error user_id=%s course_id=%s type=%s message=%s",
@@ -446,7 +489,8 @@ async def dialogue_update_profile(
             detail={"code": 50000, "message": "画像补充失败", "data": None},
         ) from e
     finally:
-        await _release_profile_lock(db, lock_name)
+        if lock_acquired:
+            await _release_profile_lock(db, lock_name)
 
     sources = {key: "profile_dialogue" for key, value in merged.items() if value}
     return {
@@ -473,8 +517,9 @@ async def _run_profile_refresh_background(
     - 失败时记录结构化日志 + 落 task failed，不抛异常。
     """
     async with async_session_factory() as db:
+        lock_name = f"profile_{user_id}_{course_id}"
+        lock_acquired = False
         try:
-            lock_name = f"profile_{user_id}_{course_id}"
             if db.bind.dialect.name == "sqlite":
                 locked = 1
             else:
@@ -482,6 +527,7 @@ async def _run_profile_refresh_background(
                 locked = lock_result.scalar()
             if not locked:
                 raise RuntimeError(f"GET_LOCK timeout: {lock_name}")
+            lock_acquired = True
 
             try:
                 now = datetime.now(timezone.utc)
@@ -503,10 +549,13 @@ async def _run_profile_refresh_background(
                 pf.knowledge_coordinates = computed["knowledge_coordinates"]
                 pf.cognitive_blindspots = computed["cognitive_blindspots"]
                 
-                drive_intent = pf.drive_intent or {}
-                drive_intent["learning_habits"] = computed["learning_habits"]
-                drive_intent["knowledge_progress_summary"] = computed["knowledge_progress_summary"]
+                drive_intent = {
+                    **(pf.drive_intent or {}),
+                    "learning_habits": computed["learning_habits"],
+                    "knowledge_progress_summary": computed["knowledge_progress_summary"],
+                }
                 pf.drive_intent = drive_intent
+                flag_modified(pf, "drive_intent")
                 
                 pf.discipline_badge = computed["discipline_badge"]
 
@@ -519,19 +568,24 @@ async def _run_profile_refresh_background(
                         completed_at=now,
                     )
                 )
+                await db.flush()
+                if db.bind.dialect.name != "sqlite":
+                    await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+                lock_acquired = False
                 await db.commit()
                 logger.info(
                     "Profile refresh background: completed task_id=%s user_id=%s course_id=%s",
                     task_id, user_id, course_id,
                 )
             finally:
-                try:
-                    if db.bind.dialect.name != "sqlite":
+                if lock_acquired and db.bind.dialect.name != "sqlite":
+                    try:
                         await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
-                except Exception:
-                    logger.warning(
-                        "Profile refresh background: RELEASE_LOCK failed lock_name=%s", lock_name,
-                    )
+                        lock_acquired = False
+                    except Exception:
+                        logger.warning(
+                            "Profile refresh background: RELEASE_LOCK failed lock_name=%s", lock_name,
+                        )
         except Exception as e:
             await db.rollback()
             error_msg = str(e)[:500]
@@ -582,6 +636,13 @@ async def refresh_profile(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": 40300, "message": "未加入该课程", "data": None},
             )
+
+    existing_task = await _get_processing_refresh_task(db, "profile_refresh", current_user.id, course_id)
+    if existing_task:
+        return JSONResponse(
+            status_code=202,
+            content={"code": 202, "message": "accepted", "data": {"task_id": existing_task.id}},
+        )
 
     # 创建任务并立即提交
     task = AsyncTask(

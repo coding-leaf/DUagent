@@ -197,6 +197,9 @@ export default function LearningEffects() {
 
   const refreshInProgress = refreshTask?.status === 'processing';
   const refreshFailed = refreshTask && terminalTaskStates.has(refreshTask.status) && refreshTask.status !== 'completed';
+  const refreshFailureMessage = refreshTask?.error_message
+    || (refreshTask?.error_code ? `错误码：${refreshTask.error_code}` : '')
+    || '重新评估未完整完成，当前页面保留最近一次可用评估。';
 
   return (
     <div className="bg-background text-on-surface font-body-md min-h-screen">
@@ -262,7 +265,7 @@ export default function LearningEffects() {
 
             {refreshFailed && (
               <div className="bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-4 py-3 text-sm">
-                重新评估未完整完成，当前页面保留最近一次可用评估。
+                {refreshFailureMessage}
               </div>
             )}
 

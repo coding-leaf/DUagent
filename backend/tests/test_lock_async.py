@@ -10,6 +10,7 @@ import os
 import time
 import uuid
 from unittest.mock import AsyncMock, patch
+import pytest
 
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
@@ -66,6 +67,7 @@ async def _poll_task(client, task_id, headers, timeout=15):
     return None
 
 
+@pytest.mark.asyncio
 async def test():
     transport = ASGITransport(app=app)
     ok = fail = 0

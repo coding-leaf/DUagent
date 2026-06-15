@@ -24,6 +24,22 @@
 ## 最近验证
 
 ### 2026-06-15
+- Fix Profile/Evaluation Refresh Lock and Failure Feedback:
+  - 修复 Backend `profile_refresh` / `evaluation_refresh` 后台任务的 MySQL named lock 生命周期：`GET_LOCK`、写库、`RELEASE_LOCK` 保持在同一 DB session/连接内完成，并在 `commit()` 前释放，避免连接归还连接池后用错误连接释放锁。
+  - 同步收口 `profile/initialize` 与 `profile/dialogue-update` 的同名 profile 写锁释放顺序，避免对话补充画像后阻塞后续同步画像。
+  - 修复 `profile_refresh` 写 `drive_intent.learning_habits` 和 `drive_intent.knowledge_progress_summary` 时的 JSON 持久化：改为新 dict 合并并显式 `flag_modified`，保留既有 `learning_goal/type/source`。
+  - `POST /profile/refresh` 和 `POST /evaluation/refresh` 对同一 user/course 已有 `processing` 任务时复用已有 `task_id`，避免重复点击制造竞争任务。
+  - `/learning-effects` 重新评估失败时优先展示 `task.error_message`，其次展示 `error_code`，不再只显示泛化失败文案。
+  - 契约说明：未新增请求参数，未删除响应字段；复用既有 `GET /tasks/{task_id}` 的 `error_code/error_message`，无 OpenAPI 漂移。
+  - 验证：
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/profile_refresh_red_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_refresh_async.py -q -p no:cacheprovider` → `1 passed`。
+    - `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/profile_refresh_red_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_lock_async.py -q -p no:cacheprovider` → `1 passed`。
+    - `../.venv/bin/python -m pytest tests/test_profile_rules.py -q -p no:cacheprovider` → `8 passed`。
+    - `npm run test:e2e -- e2e/specs.spec.js -g "Learning effects refresh failure shows task error detail"` → `1 passed`。
+    - `npm run lint` → 通过。
+    - `npm run build` → 通过，仍有既有 Vite chunk size warning。
+  - 运行态恢复：检查 MySQL `performance_schema.metadata_locks` 当前无 USER LEVEL LOCK；停止旧 Agent Service `:8002` 进程 `1640316`，并从 `agent_service/` 启动新进程 `1970256`，服务监听 `http://127.0.0.1:8002`。启动时 AgentScope Studio `localhost:3000` 未运行仅产生 warning，应用启动完成。
+
 - Tighten Profile Direction and LLM Evaluation Summary:
   - 将 `/profile/dialogue-update` 的学习方向收紧为枚举：`exam_sprint`（备考冲刺）、`daily_homework`（课后巩固）、`casual`（兴趣拓展）；“我喜欢视频/图解/代码”等资源偏好输入归类到标准模态偏好，不再写入当前学习方向。
   - 扩展 Backend `evaluation/refresh` 传给 Agent 的上下文：用户专业/年级/引导级别、规则画像、KG 节点与节点进度、学习行为统计。

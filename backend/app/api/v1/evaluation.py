@@ -57,6 +57,26 @@ async def _release_evaluation_lock(db: AsyncSession, lock_name: str) -> None:
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
+async def _get_processing_refresh_task(
+    db: AsyncSession,
+    task_type: str,
+    user_id: str,
+    course_id: str,
+) -> AsyncTask | None:
+    result = await db.execute(
+        select(AsyncTask)
+        .where(
+            AsyncTask.task_type == task_type,
+            AsyncTask.user_id == user_id,
+            AsyncTask.course_id == course_id,
+            AsyncTask.status == "processing",
+            AsyncTask.is_deleted == False,
+        )
+        .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
+    )
+    return result.scalars().first()
+
+
 @router.get("")
 async def get_evaluation(
     course_id: str = Query(...),
@@ -248,10 +268,11 @@ async def _run_evaluation_refresh_background(
     - 失败时记录结构化日志 + 落 task failed，不抛异常。
     """
     async with async_session_factory() as db:
+        lock_name = f"evaluation_{user_id}_{course_id}"
+        lock_acquired = False
         try:
             data = await agent_client.post_json("/agent/v1/evaluation/generate", payload)
 
-            lock_name = f"evaluation_{user_id}_{course_id}"
             if db.bind.dialect.name == "sqlite":
                 locked = 1
             else:
@@ -259,6 +280,7 @@ async def _run_evaluation_refresh_background(
                 locked = lock_result.scalar()
             if not locked:
                 raise RuntimeError(f"GET_LOCK timeout: {lock_name}")
+            lock_acquired = True
 
             try:
                 now = datetime.now(timezone.utc)
@@ -300,19 +322,24 @@ async def _run_evaluation_refresh_background(
                         completed_at=now,
                     )
                 )
+                await db.flush()
+                if db.bind.dialect.name != "sqlite":
+                    await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+                lock_acquired = False
                 await db.commit()
                 logger.info(
                     "Evaluation refresh background: completed task_id=%s user_id=%s course_id=%s",
                     task_id, user_id, course_id,
                 )
             finally:
-                try:
-                    if db.bind.dialect.name != "sqlite":
+                if lock_acquired and db.bind.dialect.name != "sqlite":
+                    try:
                         await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
-                except Exception:
-                    logger.warning(
-                        "Evaluation refresh background: RELEASE_LOCK failed lock_name=%s", lock_name,
-                    )
+                        lock_acquired = False
+                    except Exception:
+                        logger.warning(
+                            "Evaluation refresh background: RELEASE_LOCK failed lock_name=%s", lock_name,
+                        )
         except AgentServiceError as e:
             await db.rollback()
             await db.execute(
@@ -378,6 +405,13 @@ async def refresh_evaluation(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": 40300, "message": "未加入该课程", "data": None},
             )
+
+    existing_task = await _get_processing_refresh_task(db, "evaluation_refresh", current_user.id, course_id)
+    if existing_task:
+        return JSONResponse(
+            status_code=202,
+            content={"code": 202, "message": "accepted", "data": {"task_id": existing_task.id}},
+        )
 
     # 组装 payload（需要 DB，在请求内完成）
     payload = await _assemble_evaluation_payload(current_user.id, course_id, db)

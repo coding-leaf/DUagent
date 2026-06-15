@@ -101,6 +101,38 @@ def _map_assessment_to_status(assessment_state: str) -> str:
     }.get(assessment_state, "pending")
 
 
+def _apply_progress_to_nodes(
+    nodes: list[dict],
+    progress_by_id: dict[str, dict],
+) -> list[dict]:
+    """用实时进度覆盖节点的 status 和 mastery，其余字段保留。"""
+    result = []
+    for node in nodes:
+        node_id = node.get("id") or node.get("node_id", "")
+        progress = progress_by_id.get(node_id)
+        if progress is None:
+            result.append(dict(node))
+            continue
+        updated = dict(node)
+        updated["status"] = _map_assessment_to_status(progress.get("assessment_state", "unstarted"))
+        mastery_score = progress.get("mastery_score")
+        if mastery_score is not None:
+            updated["mastery"] = mastery_score
+        result.append(updated)
+    return result
+
+
+def _build_current_position_from_nodes(nodes: list[dict]) -> dict | None:
+    """取第一个非 pending 节点作为 current_position；全为 pending 时取第一个节点。"""
+    if not nodes:
+        return None
+    for node in nodes:
+        if node.get("status") != "pending":
+            return {"node_id": node.get("id", ""), "node_name": node.get("name", "")}
+    first = nodes[0]
+    return {"node_id": first.get("id", ""), "node_name": first.get("name", "")}
+
+
 async def _synthesize_kg_fallback_path(
     db: AsyncSession,
     course_id: str,

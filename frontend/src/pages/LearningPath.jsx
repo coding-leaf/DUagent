@@ -218,7 +218,9 @@ export default function LearningPath() {
                       );
                     } else {
                       return (
-                        <div key={node.id} className={`relative z-10 flex-shrink-0 w-64 px-sm flex flex-col items-center ${index > 2 ? 'opacity-40' : 'opacity-60'} grayscale group hover:opacity-100 transition-all`}>
+                        <div key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          className={`relative z-10 flex-shrink-0 w-64 px-sm flex flex-col items-center ${index > 2 ? 'opacity-40' : 'opacity-60'} grayscale group hover:opacity-100 hover:grayscale-0 transition-all cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-gray-400 mb-sm border-2 border-white">
                             <span className="material-symbols-outlined">lock</span>
                           </div>

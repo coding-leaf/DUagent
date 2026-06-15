@@ -235,6 +235,11 @@ async def get_learning_path(
     if lp is not None:
         # Merge 模式：用实时状态覆盖快照节点的 status/mastery，其余字段保留
         merged_nodes = _apply_progress_to_nodes(lp.nodes or [], progress_by_id)
+        # merged_nodes 为空时快照中的 current_node_id 可能指向不存在节点，返回 None
+        if merged_nodes and lp.current_node_id:
+            current_position = {"node_id": lp.current_node_id, "node_name": lp.current_node_name}
+        else:
+            current_position = None
         return {
             "code": 200,
             "message": "success",
@@ -242,10 +247,7 @@ async def get_learning_path(
                 "course_id": lp.course_id,
                 "nodes": merged_nodes,
                 "edges": lp.edges or [],
-                "current_position": {
-                    "node_id": lp.current_node_id,
-                    "node_name": lp.current_node_name,
-                } if lp.current_node_id else None,
+                "current_position": current_position,
                 "source": "realtime_merged",
                 "generated_at": lp.generated_at.isoformat() if lp.generated_at else None,
             },
@@ -256,14 +258,17 @@ async def get_learning_path(
     if fallback is not None:
         kg_nodes = _apply_progress_to_nodes(fallback["nodes"], progress_by_id)
         current_position = _build_current_position_from_nodes(kg_nodes)
+        # 显式组装字段，避免 **fallback unpack 导致 current_position 被隐式覆盖
         return {
             "code": 200,
             "message": "success",
             "data": {
-                **fallback,
+                "course_id": fallback["course_id"],
                 "nodes": kg_nodes,
+                "edges": fallback.get("edges") or [],
                 "current_position": current_position,
                 "source": "kg_realtime",
+                "generated_at": fallback.get("generated_at"),
             },
         }
 

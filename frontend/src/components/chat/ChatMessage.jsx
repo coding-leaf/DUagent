@@ -11,6 +11,8 @@ mermaid.initialize({
   startOnLoad: false,
   securityLevel: 'strict',
   theme: 'default',
+  suppressErrors: true,
+  errorCallback: () => {},
 });
 
 const normalizeMermaidSource = (content) => {
@@ -126,15 +128,20 @@ function MermaidDiagram({ content }) {
         return;
       }
 
+      let renderId = '';
       try {
-        const id = `chat-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const result = await mermaid.render(id, source);
+        renderId = `chat-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const result = await mermaid.render(renderId, source);
         if (!cancelled) {
           setSvg(result.svg);
           setError('');
         }
       } catch (err) {
         console.warn('Mermaid render failed, showing source:', err?.message);
+        if (renderId) {
+          document.getElementById(renderId)?.remove();
+          document.getElementById(`d${renderId}`)?.remove();
+        }
         if (!cancelled) {
           setSvg('');
           setError('fallback');

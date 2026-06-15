@@ -2,252 +2,123 @@
 
 ## Scope
 
-This file applies to `frontend/`.
-
-If a subdirectory contains another AGENTS.md, the more specific file takes precedence.
+This file applies to `frontend/`. Subdirectory AGENTS.md takes precedence if present.
 
 ---
 
-## 背景
+## 项目现状（2026-06）
 
-本文件是前后端联调与开发流程约束文件，用于规范 AI 编程助手在本项目中的代码修改、测试、提交和进度记录行为。
+这是一个 AI 教育助手全栈项目，技术栈：React 前端 + FastAPI 后端 + Python Agent Service + MySQL。
 
----
+**真实运行状态：**
 
-## 权威文档来源
+- 前端页面：Login / Register / Dashboard / LearningPath / Quiz / StudentProfile / AIChat / ResourceDetail / TeacherConsole / AdminConsole
+- 后端 API 模块：auth / courses / learning-path / quiz / profile / evaluation / learning-activities / resources / profile / teaching / tutoring / catalogs（admin）
+- Agent Service：tutoring / evaluation / learning_path / profile / assessment / resources
+- 数据库活跃表：learning_activities（259）/ quiz_questions（117）/ resources（88）/ quiz_sessions（31）/ evaluations（23）
 
-需要理解接口、契约、需求或项目状态时，优先参考以下文件。
+**项目开发阶段：**
 
-权威优先级从高到低：
-
-1. `../docs/10-client-api/Client-API.openapi.json`
-2. `../docs/10-client-api/API_前端接口规范.md`
-3. `../docs/00-overview/需求规格说明书1.1.docx`
-4. 当前项目代码
-5. `docs/feature-ledger.md`
-6. `docs/project-direction.md`
-7. `docs/project-coverage-audit.md`
-8. `WORKFLOW.md`
-9. `README.md`
-
-说明：
-
-- 接口契约以 OpenAPI 和前端接口规范为准。
-- 需求规格说明书是业务需求依据。
-- 当前项目代码用于理解已有实现和兼容现状。
-- 功能整体进度和主线以 `docs/feature-ledger.md`（功能进度看板）为准；具体某次改动的施工记录和最近验证查 `WORKFLOW.md`。
-- 断层恢复方向、项目结构和恢复流程查 `docs/project-direction.md`；带文件路径的覆盖证据查 `docs/project-coverage-audit.md`。
-- 如果文档与历史实现冲突，优先以当前非归档文档为准。
-- 如果文档之间冲突，先说明冲突点和影响，不要直接猜测修改。
-
-进度类文档分工：
-
-- `docs/feature-ledger.md`：功能级看板，回答"现在到哪了、卡在哪、下一个做什么"。主线看这份。
-- `WORKFLOW.md`：按日期的施工日记，回答"那天改了什么、跑了什么测试"。回溯看这份。
-- `docs/project-direction.md`：方向与断层恢复流程。
-- `docs/project-coverage-audit.md`：带文件路径的深度证据表，核验用。
-- `docs/goals.md` / `docs/decisions.md` / `docs/glossary.md`：目标、决策记录、术语表。
-
-从本文件开始恢复上下文时，建议按以下顺序读取：
-
-1. `docs/feature-ledger.md`：先确认当前主线和下一步。
-2. `docs/project-direction.md`：确认项目结构、边界和断层恢复流程。
-3. `docs/project-coverage-audit.md`：需要证据时查页面/API/Backend/Agent/测试对应关系。
-4. `WORKFLOW.md`：回看最近施工和验证。
-5. `../docs/10-client-api/*`：涉及接口或契约时核对正式 Client API。
-6. 当前代码：最终以实际代码行为核验。
+当前处于**功能打通阶段**，不是契约维护阶段。核心目标是让用户操作前端 UI 时，数据能端到端流通——点击有响应、做题有记录、画像有更新、学习路径有变化。
 
 ---
 
-## Documentation Boundary
+## 权威来源（按优先级）
 
-- `../docs/` 下的文档是开发基础和契约来源。
-- 默认不修改 `../docs/` 下任何文件；只有用户明确要求时才允许修改。
-- 如果代码与 `../docs/` 冲突，默认修改代码或测试以贴合文档。
-- `frontend/docs/superpowers/` 下的 specs 和 plans 是本工作区的正式设计与实施计划来源。
-- `frontend/docs/` 中 superpowers 目录以外的历史副本、草案或归档资料，不作为正式契约来源。
-- `WORKFLOW.md` 是施工日记，可以按已确认任务同步更新。
-- 临时进度、当前任务、下一步队列写入 `WORKFLOW.md` 或 `docs/feature-ledger.md`，不要写入 `AGENTS.md`。
+判断"该怎么做"时，按以下顺序查证：
 
----
+1. **当前运行代码**：前端 `src/`、后端 `backend/app/`、Agent `agent_service/`。代码是最终事实。
+2. **`docs/superpowers/specs/`**：本 session 产出的设计文档，近期决策在这里。
+3. **`WORKFLOW.md`**：按日期的施工记录，回溯某次改了什么、跑了什么。
+4. **`docs/feature-ledger.md`**：功能级看板，但已与实际实现存在较大偏差，**只作参考，不作约束**。用它了解历史意图，不用它判断现状。
+5. **`../docs/10-client-api/` OpenAPI 和前端接口规范**：历史契约，**已过时**，仅在核对某个字段来源时参考，不作为实现约束。
 
-## Incremental Development
-
-推荐流程：
-
-1. 阅读相关文档和现有代码，git 查询最近修改。
-2. 进行代码修改前审查
-3. 写或补测试。
-4. 运行测试，确认当前失败或缺失。
-5. 最小实现。
-6. 运行相关测试。
-7. 更新 `WORKFLOW.md`。
-8. 总结修改内容。
-9. 在用户确认范围内进行 git commit，不进行 git push。
+**不要用文档推翻实际运行代码的行为。如果文档和代码冲突，以代码为准，顺带在 WORKFLOW.md 记一笔。**
 
 ---
 
-## 代码修改前审查
+## 开发原则
 
-每次修改代码前，必须先输出以下内容，用户允许计划后才可继续修改：
+### 以 UI 行为为真相
 
-1. 问题分析
-2. 计划修改的文件
-3. 修改方案
-4. 可能影响的功能
-5. 计划运行的测试命令
+前端页面能显示什么、用户能操作什么，这就是"功能是否完成"的判断标准。
 
----
+- 后端有接口但前端没有入口 → 不算完成
+- Agent 能力存在但数据没有流到页面 → 不算完成
+- 字段在 OpenAPI 里定义了但前端显示是空或错的 → 没意义
 
-## 审查输出规范
+### 最小修改原则
 
-当用户发送“审查 / 修改总结”时，按以下顺序输出：
+改一个功能只动它需要的文件。不借机重构，不顺手清理无关代码，不引入新依赖。
 
-1. git 回顾 — 通过 git diff / git show / git status 回顾本次实际修改文件与核心改动。
-2. 审批意见 — 明确给出：通过 / 有条件通过 / 不通过。
-3. 发现的问题 — 优先写实际已确认的问题，按严重程度排序。
-4. 实际可能问题 — 高风险但暂未完全验证的问题或潜在回归点；说明这部分是推断，不要写成已确认事实。
-5. 问题出现方式 — 说明问题在什么场景、什么操作路径下出现，必要时写最小复现步骤。
-6. 相关文件与行号 — 每个问题都尽量附具体文件和代码行号。
-7. 契约/需求检查 — 说明是否符合 OpenAPI、需求文档、设计 spec；若有漂移，明确指出漂移点。
-8. 验证情况 — 说明实际查看了什么、运行了什么、哪些未验证。
-9. 最终结论 — 简短总结是否建议合并 / 是否需先修复问题。
+修改边界：一个接口、一个组件、一个数据字段。
 
-输出要求：
+改动超过 3 个文件，或涉及数据库结构、Agent prompt、核心 service 逻辑时，先说明范围和影响，等确认后再动。
 
-- 先写问题，再写总结。
-- 如果没有发现问题，要明确写“未发现阻塞性问题”。
-- 不要只复述对方总结，必须基于实际代码和 git 变更审查。
-- 不要没有看代码就直接给“通过”。
-- 发现的问题必须尽量附文件路径和行号。
+### 数据真实性
+
+- 不允许 mock 数据、假数据、前端硬编码假字段
+- 数据库只用 MySQL
+- 不允许修改 `.env`、密钥文件、volume 数据
+
+### 接口漂移处理
+
+OpenAPI 已过时，不以它为强约束。但改动接口时：
+
+- 要同时改前后端对应的调用点（不能只改一侧）
+- 在 WORKFLOW.md 记录漂移点（改了什么字段、为什么）
+- 不需要审批，但需要记录
 
 ---
 
-## 代码修改规则
+## 改动规模分级
 
-- 最小修改原则，方便溯源。
-- 保持命名风格和当前项目结构。
-- 以接口或明确子能力为修改边界。
-- 不要为了一个接口改动大量无关模块。
-- 不要过度工程化；除非能简化代码或减少真实重复，否则不要引入复杂抽象。
-- 不要引入不必要的新依赖。
-- 不要硬编码密钥、token、数据库密码、私有地址。
-- 如果确需跨边界修改，必须先说明原因、范围和风险。
-- 可申请大范围文件修改权限，但申请时必须说明修改范围、必要性和可能后果。
-- 不允许mock等假数据内容
-- 数据库使用限制：只允许用 MySQL。
----
-
-## 契约纪律
-
-接口契约以 OpenAPI 和前端接口规范为准，默认不允许产生 OpenAPI/契约漂移。
-
-通用约束：
-
-- 不要静默删除字段。
-- 不要为了测试通过而削弱接口契约。
-- 不要破坏已有前后端联调约定。
-- 当前前端页面目标与现有 Client API 规范存在缺口；缺口未完成契约审查前，不要靠前端硬编码字段、Mock 数据或假接口补齐正式能力。
-
-涉及接口修改时，必须检查：      
-- 请求路径、方法、参数是否与 OpenAPI 一致；
-- 响应字段是否与 OpenAPI 一致；
-- 错误响应格式是否与现有约定一致；
-- 前端调用是否需要同步调整。
-
-修改接口相关代码时，需要同时关注以下联调面，不要只改后端而忽略前端调用，也不要只改前端而绕过接口契约：
-
-- 后端 route/controller；
-- 后端 schema/DTO；
-- 后端 service；
-- 前端 API 调用封装；
-- 前端页面使用位置；
-- 测试或调试脚本；
-- OpenAPI 契约。
-
-如果实现必须偏离 OpenAPI，需要先说明：偏离点、原因、影响范围、是否需要更新文档。
+| 规模 | 判断标准 | 操作方式 |
+|------|---------|---------|
+| 小修 | 1-2 个文件，局部字段/逻辑 | 直接修改，commit，记录 |
+| 中等 | 3-5 个文件，跨前后端联调 | 说明范围和影响，确认后修改 |
+| 大改 | 涉及数据结构/Agent/核心 service/多页面 | 先写 spec（`docs/superpowers/specs/`），走设计流程 |
 
 ---
 
-## 测试与检查命令
+## 测试与检查
 
-优先查看 `README.md`、`WORKFLOW.md` 或项目脚本，确认当前项目实际可用命令。
-
-常见命令如下，只有在项目中存在对应环境时才运行。
-
-Python / FastAPI：
+每次修改后运行：
 
 ```bash
-uv run pytest
-uv run python -m pytest
-```
-
-前端：
-
-```bash
+# 前端
 npm run lint
 npm run build
+
+# 后端语法
+python3 -m py_compile <修改的 .py 文件>
+
+# 后端测试（如果涉及已有测试）
+cd backend && python3 -m pytest tests/<相关测试文件> -v
 ```
 
-如果项目提供了更具体的测试命令，优先使用项目已有命令。
+构建失败必须修复后再 commit。如果测试失败需说明：命令、失败位置、是否修复。
 
-如果命令失败，需要在总结中说明：运行的命令、失败位置、关键错误信息、是否已修复；如果未修复，说明原因。
-- 数据库使用限制：只允许用 MySQL。
 ---
 
 ## Git
 
-- 避免在 `master`、`main`、`dev` 等主分支直接开发。
-- 默认在 `feat/功能分区` 或用户当前指定的功能分支开发。
-- 不要自行切换分支，除非用户明确要求。
-- 全量git
-- 不要运行 `git reset --hard`。
-- 不要运行 `git clean -fd`。
-- 不要 force push。
-- 不要 git push，除非用户明确要求。
-- 如需使用 `git stash`，必须先告知用户原因和影响。
-- 每完成一批文件修改后，必须进行 git commit。
-- commit message 使用简洁中文。
-
-commit message 示例：
-
-```text
-修复聊天接口响应字段不一致问题
-```
+- 当前分支：`feat/backend-agent-integration`，不切换分支
+- 不运行 `git reset --hard`、`git clean -fd`、`git push --force`
+- 不运行 `git push`，除非用户明确要求
+- 每完成一批文件修改后 commit
+- commit message 用简洁中文，描述做了什么
 
 ---
 
-## Progress Tracking 与 Completion Summary
+## 进度记录
 
-完成接口、页面能力、联调节点、测试闭环或阶段性开发任务后，更新 `WORKFLOW.md`（施工记录），并在功能状态发生变化时同步 `docs/feature-ledger.md`（看板状态与下一步）。纯格式、文案、局部修复、只读审查或无代码变更任务，可以不更新，但最终总结需说明原因。
+完成一个功能点后，在 `WORKFLOW.md` 末尾追加：日期、改了什么文件、核心改动、测试结果、是否有接口漂移。
 
-功能整体状态和主线以 `docs/feature-ledger.md` 为准，单次改动的施工记录以 `WORKFLOW.md` 为准。不能以更新进度为理由扩大业务代码修改范围。
-
-每次完成开发任务后，最终回复（以及同步到 `WORKFLOW.md` 的内容）必须包含：
-
-1. 当前完成 / 实现状态；
-2. 修改文件；
-3. 测试结果（已运行的命令和结果）；
-4. OpenAPI/契约是否漂移；
-5. git commit 信息：如已提交，写 commit message；如未提交，说明未提交原因；
-6. 剩余风险；
-7. 下一步建议。
+`docs/feature-ledger.md` 不要频繁更新，它已经偏移，更新它的收益低于维护成本。
 
 ---
 
-## 禁止修改内容
+## 禁止修改
 
-除非用户明确要求，不要修改或删除：
-
-- `.env`
-- `.env.local`
-- 密钥文件
-- 凭据文件
-- 数据库数据文件
-- Qdrant 存储数据
-- MySQL volume 数据
-- 用户上传文件
-- 构建产物
-- 虚拟环境目录
-- node_modules
-- 缓存目录
+`.env` / `.env.local` / 密钥文件 / 凭据文件 / MySQL volume 数据 / 用户上传文件 / 构建产物 / `node_modules` / 缓存目录

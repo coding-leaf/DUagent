@@ -393,11 +393,22 @@ export default function StudentProfile() {
   const handleGoalChange = async (goalType) => {
     if (goalSubmitting) return;
     setGoalSubmitting(true);
+    // 乐观更新：立即反映到 UI
+    setProfileData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        drive_intent: { ...(prev.drive_intent || {}), type: goalType },
+        profile_dimensions: (prev.profile_dimensions || []).map((d) =>
+          d.key === 'learning_goal' ? { ...d, value: goalType } : d
+        ),
+      };
+    });
     try {
       await profileService.updateLearningGoal(activeCourseId, goalType);
-      await fetchProfile();
     } catch (err) {
       console.error('更新学习方向失败:', err);
+      await fetchProfile();
     } finally {
       setGoalSubmitting(false);
     }

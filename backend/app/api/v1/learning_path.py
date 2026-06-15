@@ -18,6 +18,7 @@ from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.resource_scope import ensure_course_resource_access, resolve_course_resource_scope, resource_scope_clause
 from app.schemas.ai_features import RefreshRequest
+from app.services.knowledge_progress import build_node_progress_rows
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
@@ -213,7 +214,13 @@ async def get_learning_path(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # 永远读最新一条（幂等写入可能遗留多行在软删窗口期）
+    # 1. 实时进度字典（node_id → {assessment_state, mastery_score}）
+    progress_rows = await build_node_progress_rows(current_user.id, course_id, db)
+    progress_by_id: dict[str, dict] = {
+        row["node_id"]: row for row in progress_rows
+    }
+
+    # 2. 查最新快照
     result = await db.execute(
         select(LearningPath)
         .where(
@@ -225,36 +232,52 @@ async def get_learning_path(
     )
     lp = result.scalars().first()
 
-    if lp is None:
-        fallback = await _synthesize_kg_fallback_path(db, course_id)
-        if fallback is not None:
-            return {"code": 200, "message": "success", "data": fallback}
+    if lp is not None:
+        # Merge 模式：用实时状态覆盖快照节点的 status/mastery，其余字段保留
+        merged_nodes = _apply_progress_to_nodes(lp.nodes or [], progress_by_id)
         return {
             "code": 200,
             "message": "success",
             "data": {
-                "course_id": course_id,
-                "nodes": [],
-                "edges": [],
-                "current_position": None,
-                "source": "kg_fallback",
-                "generated_at": None,
+                "course_id": lp.course_id,
+                "nodes": merged_nodes,
+                "edges": lp.edges or [],
+                "current_position": {
+                    "node_id": lp.current_node_id,
+                    "node_name": lp.current_node_name,
+                } if lp.current_node_id else None,
+                "source": "realtime_merged",
+                "generated_at": lp.generated_at.isoformat() if lp.generated_at else None,
             },
         }
 
+    # 3. 无快照，尝试 KG 构建模式
+    fallback = await _synthesize_kg_fallback_path(db, course_id)
+    if fallback is not None:
+        kg_nodes = _apply_progress_to_nodes(fallback["nodes"], progress_by_id)
+        current_position = _build_current_position_from_nodes(kg_nodes)
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {
+                **fallback,
+                "nodes": kg_nodes,
+                "current_position": current_position,
+                "source": "kg_realtime",
+            },
+        }
+
+    # 4. 均无数据
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "course_id": lp.course_id,
-            "nodes": lp.nodes or [],
-            "edges": lp.edges or [],
-            "current_position": {
-                "node_id": lp.current_node_id,
-                "node_name": lp.current_node_name,
-            } if lp.current_node_id else None,
-            "source": "learning_path",
-            "generated_at": lp.generated_at.isoformat() if lp.generated_at else None,
+            "course_id": course_id,
+            "nodes": [],
+            "edges": [],
+            "current_position": None,
+            "source": "kg_fallback",
+            "generated_at": None,
         },
     }
 

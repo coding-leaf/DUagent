@@ -142,8 +142,7 @@ def test_lifespan_initializes_studio_before_qdrant_store(monkeypatch) -> None:
     ]
 
 
-def test_settings_declares_llm_timeout_and_stream_defaults() -> None:
+def test_settings_declares_llm_timeout_default() -> None:
     from agent_service.core.config import Settings
 
     assert Settings.model_fields["LLM_TIMEOUT"].default == 60.0
-    assert Settings.model_fields["LLM_STREAM"].default is True

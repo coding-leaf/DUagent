@@ -51,9 +51,11 @@ export default function StudentProfile() {
   const { user, refreshUser } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [guidanceSubmitting, setGuidanceSubmitting] = useState(false);
-  const [dialogueMessage, setDialogueMessage] = useState('');
-  const [dialogueSubmitting, setDialogueSubmitting] = useState(false);
-  const [dialogueError, setDialogueError] = useState('');
+  const [customInstruction, setCustomInstruction] = useState('');
+  const [instructionSubmitting, setInstructionSubmitting] = useState(false);
+  const [instructionError, setInstructionError] = useState('');
+  const [instructionSuccess, setInstructionSuccess] = useState(false);
+  const [goalSubmitting, setGoalSubmitting] = useState(false);
   const [profileError, setProfileError] = useState(null);
   const [refreshTask, setRefreshTask] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,6 +102,8 @@ export default function StudentProfile() {
       if (activeCourseRef.current !== activeCourseId) return;
       if (res.code === 200) {
         setProfileData(res.data);
+        const ci = res.data?.drive_intent?.custom_instruction;
+        if (typeof ci === 'string') setCustomInstruction(ci);
       } else {
         setProfileError(res.message || '加载失败，请重试');
       }
@@ -386,30 +390,37 @@ export default function StudentProfile() {
     }
   };
 
-  const handleDialogueSubmit = async () => {
-    const message = dialogueMessage.trim();
-    if (!message || dialogueSubmitting) return;
-
-    setDialogueSubmitting(true);
-    setDialogueError('');
+  const handleGoalChange = async (goalType) => {
+    if (goalSubmitting) return;
+    setGoalSubmitting(true);
     try {
-      const res = await profileService.updateProfileByDialogue(activeCourseId, message);
+      await profileService.updateLearningGoal(activeCourseId, goalType);
+      await fetchProfile();
+    } catch (err) {
+      console.error('更新学习方向失败:', err);
+    } finally {
+      setGoalSubmitting(false);
+    }
+  };
+
+  const handleInstructionSubmit = async () => {
+    if (instructionSubmitting) return;
+    setInstructionSubmitting(true);
+    setInstructionError('');
+    setInstructionSuccess(false);
+    try {
+      const res = await profileService.updateCustomInstruction(activeCourseId, customInstruction.trim());
       if (res.code === 200) {
-        const nextProfile = res.data?.profile_data;
-        if (nextProfile) {
-          setProfileData(nextProfile);
-        } else {
-          await fetchProfile();
-        }
-        setDialogueMessage('');
+        setInstructionSuccess(true);
+        setTimeout(() => setInstructionSuccess(false), 3000);
       } else {
-        setDialogueError(res.message || '画像补充失败，请稍后重试');
+        setInstructionError(res.message || '保存失败，请稍后重试');
       }
     } catch (err) {
-      console.error('画像补充失败:', err);
-      setDialogueError(err.response?.data?.detail?.message || '画像补充失败，请稍后重试');
+      console.error('保存个性化偏好失败:', err);
+      setInstructionError(err.response?.data?.detail?.message || '保存失败，请稍后重试');
     } finally {
-      setDialogueSubmitting(false);
+      setInstructionSubmitting(false);
     }
   };
 
@@ -511,35 +522,71 @@ export default function StudentProfile() {
               )}
             </section>
 
-            <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-              <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
-                <span className="material-symbols-outlined text-cyan-500">edit_note</span> 补充学习画像
-              </h3>
-              <p className="text-sm text-secondary mb-4">
-                用一句话说明目标、薄弱点或资源偏好，系统会补充到当前课程画像。
-              </p>
-              <textarea
-                value={dialogueMessage}
-                onChange={(event) => {
-                  setDialogueMessage(event.target.value);
-                  if (dialogueError) setDialogueError('');
-                }}
-                maxLength={1000}
-                rows={5}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-on-surface outline-none focus:border-cyan-400 focus:bg-white transition-colors resize-none"
-                placeholder="例如：我想两周内补齐 C 语言指针和动态内存分配，最好多给代码练习。"
-              />
-              <div className="flex items-center justify-between mt-3">
-                <span className={`text-xs ${dialogueError ? 'text-red-500' : 'text-slate-400'}`}>
-                  {dialogueError || `${dialogueMessage.length}/1000`}
-                </span>
-                <button
-                  onClick={handleDialogueSubmit}
-                  disabled={!dialogueMessage.trim() || dialogueSubmitting}
-                  className="px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
-                >
-                  {dialogueSubmitting ? '补充中...' : '补充画像'}
-                </button>
+            <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-6">
+              {/* 学习方向 */}
+              <div>
+                <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
+                  <span className="material-symbols-outlined text-cyan-500">flag</span> 当前学习方向
+                </h3>
+                <p className="text-sm text-secondary mb-4">选择你学这门课的主要目的，影响 AI 辅导策略。</p>
+                <div className="flex gap-3">
+                  {[
+                    { key: 'exam_sprint', label: '备考冲刺', icon: 'school' },
+                    { key: 'daily_homework', label: '课后巩固', icon: 'menu_book' },
+                    { key: 'casual', label: '兴趣拓展', icon: 'lightbulb' },
+                  ].map(({ key, label, icon }) => {
+                    const active = drive_intent.type === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => handleGoalChange(key)}
+                        disabled={goalSubmitting}
+                        className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          active
+                            ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-cyan-300 hover:bg-cyan-50/50'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-xl">{icon}</span>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 个性化偏好 */}
+              <div>
+                <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
+                  <span className="material-symbols-outlined text-cyan-500">tune</span> 个性化偏好
+                </h3>
+                <p className="text-sm text-secondary mb-3">
+                  告诉 AI 你希望它怎么跟你说话，每次对话都会遵循这个偏好。
+                </p>
+                <textarea
+                  value={customInstruction}
+                  onChange={(e) => {
+                    setCustomInstruction(e.target.value);
+                    if (instructionError) setInstructionError('');
+                    if (instructionSuccess) setInstructionSuccess(false);
+                  }}
+                  maxLength={500}
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-on-surface outline-none focus:border-cyan-400 focus:bg-white transition-colors resize-none"
+                  placeholder="例如：回答要简洁，多用代码举例，不要长篇大论。遇到我不懂的概念先打比方再讲原理。"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className={`text-xs ${instructionError ? 'text-red-500' : instructionSuccess ? 'text-green-600' : 'text-slate-400'}`}>
+                    {instructionError || (instructionSuccess ? '已保存' : `${customInstruction.length}/500`)}
+                  </span>
+                  <button
+                    onClick={handleInstructionSubmit}
+                    disabled={instructionSubmitting}
+                    className="px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
+                  >
+                    {instructionSubmitting ? '保存中...' : '保存'}
+                  </button>
+                </div>
               </div>
             </section>
           </div>

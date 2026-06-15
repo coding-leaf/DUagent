@@ -40,7 +40,6 @@ class Settings(BaseSettings):
     LLM_STRUCTURED_OUTPUT_ENABLED: bool = False
     LLM_JSON_MODE_ENABLED: bool | None = None
     LLM_TIMEOUT: float = 60.0
-    LLM_STREAM: bool = True
 
     # Webhook auth — shared secret with Backend
     WEBHOOK_SECRET: str = ""

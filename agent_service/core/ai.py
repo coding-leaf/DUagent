@@ -173,7 +173,7 @@ def _build_chat_provider_from_settings() -> ChatProvider | None:
             model=OpenAIChatModel(
                 model_name=settings.LLM_MODEL,
                 api_key=settings.LLM_API_KEY,
-                stream=getattr(settings, "LLM_STREAM", True),
+                stream=False,
                 client_kwargs={
                     "base_url": settings.LLM_BASE_URL,
                     "timeout": getattr(settings, "LLM_TIMEOUT", 60.0),

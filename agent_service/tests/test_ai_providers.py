@@ -314,7 +314,7 @@ def test_openai_compatible_reranker_provider_rejects_misaligned_scores() -> None
         asyncio.run(provider.score("导数", ["导数定义", "函数图像"]))
 
 
-def test_build_chat_provider_applies_timeout_and_stream(monkeypatch) -> None:
+def test_build_chat_provider_applies_timeout_and_stream_false(monkeypatch) -> None:
     from unittest.mock import patch, MagicMock
     from agent_service.core import ai as ai_module
 
@@ -323,7 +323,6 @@ def test_build_chat_provider_applies_timeout_and_stream(monkeypatch) -> None:
     monkeypatch.setattr(ai_module.settings, "LLM_API_KEY", "sk-test")
     monkeypatch.setattr(ai_module.settings, "LLM_MODEL", "test-model")
     monkeypatch.setattr(ai_module.settings, "LLM_TIMEOUT", 42.0)
-    monkeypatch.setattr(ai_module.settings, "LLM_STREAM", True)
 
     captured: dict = {}
 
@@ -336,6 +335,6 @@ def test_build_chat_provider_applies_timeout_and_stream(monkeypatch) -> None:
         provider = ai_module._build_chat_provider_from_settings()
 
     assert provider is not None
-    assert captured["stream"] is True
+    assert captured["stream"] is False
     assert captured["client_kwargs"]["base_url"] == "https://example.com"
     assert captured["client_kwargs"]["timeout"] == 42.0

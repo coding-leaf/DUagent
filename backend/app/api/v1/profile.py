@@ -322,6 +322,7 @@ def _profile_data(pf: UserProfile | None, course_id: str, user: User | None = No
         if user:
             data["guidance_level"] = {"current": user.guidance_level or "L2", "updated_at": ""}
         data["profile_dimensions"] = _profile_dimensions(data)
+        data["custom_instruction"] = ""
         return data
     data = {
         "course_id": pf.course_id,
@@ -337,6 +338,7 @@ def _profile_data(pf: UserProfile | None, course_id: str, user: User | None = No
         "generated_at": pf.generated_at.isoformat() if pf.generated_at else None,
     }
     data["profile_dimensions"] = _profile_dimensions(data)
+    data["custom_instruction"] = (pf.drive_intent or {}).get("custom_instruction", "") if pf else ""
     return data
 
 
@@ -502,6 +504,52 @@ async def dialogue_update_profile(
             "profile_data": response_data,
         },
     }
+
+
+class LearningGoalRequest(BaseModel):
+    course_id: str = Field(..., description="课程 ID")
+    goal_type: str = Field(..., description="学习目标类型：exam_sprint / daily_homework / casual")
+
+
+@router.post("/learning-goal")
+async def update_learning_goal(
+    req: LearningGoalRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    valid_goals = {"exam_sprint", "daily_homework", "casual"}
+    if req.goal_type not in valid_goals:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": 42200, "message": f"goal_type 必须是 {valid_goals} 之一", "data": None},
+        )
+    pf = await _get_or_create_profile(db, current_user.id, req.course_id)
+    drive_intent = dict(pf.drive_intent or _default_profile["drive_intent"])
+    drive_intent["type"] = req.goal_type
+    pf.drive_intent = drive_intent
+    flag_modified(pf, "drive_intent")
+    await db.commit()
+    return {"code": 200, "message": "success", "data": None}
+
+
+class CustomInstructionRequest(BaseModel):
+    course_id: str = Field(..., description="课程 ID")
+    instruction: str = Field("", max_length=500, description="个性化偏好文本")
+
+
+@router.post("/custom-instruction")
+async def update_custom_instruction(
+    req: CustomInstructionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    pf = await _get_or_create_profile(db, current_user.id, req.course_id)
+    drive_intent = dict(pf.drive_intent or _default_profile["drive_intent"])
+    drive_intent["custom_instruction"] = req.instruction.strip()
+    pf.drive_intent = drive_intent
+    flag_modified(pf, "drive_intent")
+    await db.commit()
+    return {"code": 200, "message": "success", "data": None}
 
 
 async def _run_profile_refresh_background(

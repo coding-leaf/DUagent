@@ -10,6 +10,7 @@ class TutoringUserProfile(BaseModel):
     modal_preference: ModalPreference | dict[str, Any] | None = Field(None, description="模态偏好")
     knowledge_mastered: list[str] = Field(default_factory=list, description="已掌握知识点名称列表")
     knowledge_weak: list[str] = Field(default_factory=list, description="薄弱知识点名称列表")
+    custom_instruction: str = Field("", description="用户个性化偏好，注入 AI 对话 system prompt")
 
 
 class RecentMessage(BaseModel):

@@ -5,13 +5,16 @@ export const profileService = {
     return apiClient.get('/profile', { params: { course_id: courseId } });
   },
 
-  // 刷新用户画像 (触发 Agent 重新生成)
   refreshProfile: async (courseId) => {
     return apiClient.post('/profile/refresh', { course_id: courseId });
   },
 
-  updateProfileByDialogue: async (courseId, message) => {
-    return apiClient.post('/profile/dialogue-update', { course_id: courseId, message });
+  updateLearningGoal: async (courseId, goalType) => {
+    return apiClient.post('/profile/learning-goal', { course_id: courseId, goal_type: goalType });
+  },
+
+  updateCustomInstruction: async (courseId, instruction) => {
+    return apiClient.post('/profile/custom-instruction', { course_id: courseId, instruction });
   },
 
   getLearningEffects(courseId) {

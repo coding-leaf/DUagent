@@ -112,6 +112,7 @@ async def _assemble_tutoring_payload(
                     kc["name"] for kc in (pf.knowledge_coordinates or [])
                     if kc.get("status") != "mastered"
                 ],
+                "custom_instruction": (pf.drive_intent or {}).get("custom_instruction", ""),
             }
         else:
             payload["user_profile"] = {"guidance_level": "L2"}

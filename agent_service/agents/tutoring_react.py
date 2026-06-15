@@ -30,11 +30,15 @@ class TutorReActAgent:
         memory=None,
         knowledge=None,
         max_iters: int = 5,
+        custom_instruction: str = "",
     ) -> None:
         self._chat_model = chat_model
+        sys_prompt = TUTOR_REACT_SYSTEM_PROMPT
+        if custom_instruction and custom_instruction.strip():
+            sys_prompt = sys_prompt + f"\n\n用户偏好（请严格遵守）：{custom_instruction.strip()}"
         self._agent = ReActAgent(
             name="EduTutor",
-            sys_prompt=TUTOR_REACT_SYSTEM_PROMPT,
+            sys_prompt=sys_prompt,
             model=chat_model,
             formatter=formatter,
             toolkit=toolkit,

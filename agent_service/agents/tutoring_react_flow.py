@@ -47,6 +47,7 @@ async def generate_tutoring_react_response(
             chat_model=chat_provider.model,
             formatter=chat_provider.formatter,
             toolkit=toolkit,
+            custom_instruction=request.user_profile.custom_instruction,
         )
         model_output = await agent.generate(user_message)
         if model_output is None:

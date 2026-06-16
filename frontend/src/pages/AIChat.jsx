@@ -598,23 +598,44 @@ export default function AIChat() {
               <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
                 <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
                 {sessions.map(session => (
-                  <div 
-                    key={session.id} 
-                    onClick={() => {
-                      if (abortControllerRef.current) {
-                        abortControllerRef.current();
-                        abortControllerRef.current = null;
-                      }
-                      setActiveSession(session.id);
-                      setLeftDrawerOpen(false); // Close mobile history drawer
-                    }}
-                    className={`px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
-                      activeSession === session.id 
-                        ? 'bg-slate-100 text-slate-800 font-semibold' 
-                        : 'text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    {session.title}
+                  <div key={session.id} className="group/session flex items-center">
+                    <div
+                      onClick={() => {
+                        if (abortControllerRef.current) {
+                          abortControllerRef.current();
+                          abortControllerRef.current = null;
+                        }
+                        setActiveSession(session.id);
+                        setLeftDrawerOpen(false);
+                      }}
+                      className={`flex-1 px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
+                        activeSession === session.id
+                          ? 'bg-slate-100 text-slate-800 font-semibold'
+                          : 'text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {session.title}
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!window.confirm('确定删除该对话？删除后不可恢复。')) return;
+                        try {
+                          await chatService.deleteSession(session.id);
+                          setSessions(prev => prev.filter(s => s.id !== session.id));
+                          if (activeSession === session.id) {
+                            setActiveSession(null);
+                            setMessages([]);
+                          }
+                        } catch (err) {
+                          console.error('删除对话失败:', err);
+                        }
+                      }}
+                      className="opacity-0 group-hover/session:opacity-100 px-2 py-1 text-slate-400 hover:text-red-500 cursor-pointer transition-all"
+                      title="删除对话"
+                    >
+                      <Icon name="delete" className="material-symbols-outlined text-[16px]"/>
+                    </button>
                   </div>
                 ))}
                 {sessions.length === 0 && (

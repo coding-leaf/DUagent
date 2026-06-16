@@ -1,9 +1,9 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import mermaid from 'mermaid';
 import { learningService } from '../api/services/learning';
 import { learningActivityService } from '../api/services/learningActivity';
 import Icon from '../components/Icon';
+import MarkdownViewer from '../components/common/MarkdownViewer';
 
 const TYPE_LABELS = {
   document: '文档',
@@ -18,12 +18,6 @@ const getDisplayContent = (resource) => {
   return resource.content || resource.content_preview || '';
 };
 
-const normalizeMermaidSource = (content) => {
-  const trimmed = (content || '').trim();
-  const fenced = trimmed.match(/^```(?:mermaid)?\s*([\s\S]*?)```$/i);
-  return fenced ? fenced[1].trim() : trimmed;
-};
-
 // 工具函数：美化标签 (清理诸如 kg_node:xx 之类的开发用语)
 const formatTag = (tag) => {
   if (!tag) return '';
@@ -31,82 +25,6 @@ const formatTag = (tag) => {
   if (tag.startsWith('support_band:')) return ''; // 直接忽略
   return tag;
 };
-
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  theme: 'default',
-});
-
-function MermaidDiagram({ content }) {
-  const [svg, setSvg] = useState('');
-  const [error, setError] = useState('');
-  const source = normalizeMermaidSource(content);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const renderDiagram = async () => {
-      if (!source) {
-        setSvg('');
-        setError('');
-        return;
-      }
-
-      let renderId = '';
-      try {
-        renderId = `resource-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const result = await mermaid.render(renderId, source);
-        if (result.svg.includes('error in text')) {
-          throw new Error('Mermaid syntax error');
-        }
-        if (!cancelled) {
-          setSvg(result.svg);
-          setError('');
-        }
-      } catch (err) {
-        console.error('Mermaid render failed:', err);
-        if (!cancelled) {
-          setSvg('');
-          setError('思维导图渲染失败，已显示原始内容。');
-        }
-      } finally {
-        if (renderId) {
-          document.getElementById(renderId)?.remove();
-          document.getElementById(`d${renderId}`)?.remove();
-        }
-      }
-    };
-
-    renderDiagram();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [source]);
-
-  return (
-    <div className="rounded-2xl border border-cyan-100 bg-cyan-50/30 p-6 my-8">
-      <div className="mb-4 flex items-center gap-2 text-cyan-700">
-        <Icon name="schema" className="material-symbols-outlined text-xl"/>
-        <span className="text-base font-bold">思维导图解析</span>
-      </div>
-      {svg ? (
-        <div
-          className="overflow-x-auto rounded-xl bg-white p-6 shadow-sm [&_svg]:mx-auto [&_svg]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ) : (
-        <p className="text-body-md whitespace-pre-wrap text-slate-700">{source}</p>
-      )}
-      {error && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ResourceDetail() {
   const navigate = useNavigate();
@@ -189,6 +107,13 @@ export default function ResourceDetail() {
   // 清洗展示标签
   const displayTags = (resource.tags || []).map(formatTag).filter(Boolean);
 
+  let finalContent = getDisplayContent(resource) || '';
+  if (resource.type === 'mindmap' && !/^```/m.test(finalContent)) {
+    finalContent = `\`\`\`mermaid\n${finalContent}\n\`\`\``;
+  } else if (resource.type === 'code' && !finalContent.includes('```') && !/^#+\s/m.test(finalContent)) {
+    finalContent = `\`\`\`\n${finalContent}\n\`\`\``; 
+  }
+
   return (
     <div className="bg-slate-50 text-slate-800 font-['Plus_Jakarta_Sans',sans-serif] min-h-screen relative selection:bg-cyan-200 selection:text-cyan-900">
       
@@ -242,27 +167,13 @@ export default function ResourceDetail() {
                 )}
               </header>
 
-              <section className="prose prose-slate prose-lg max-w-none text-slate-700 marker:text-cyan-500 prose-headings:text-slate-800 prose-a:text-cyan-600 hover:prose-a:text-cyan-700">
-                {getDisplayContent(resource) ? (
-                  resource.type === 'code' ? (
-                    <div className="relative group">
-                      <pre className="rounded-2xl bg-slate-900 p-6 text-sm text-slate-50 overflow-x-auto shadow-inner border border-slate-800 font-mono">
-                        <code>{getDisplayContent(resource)}</code>
-                      </pre>
-                    </div>
-                  ) : resource.type === 'mindmap' ? (
-                    <MermaidDiagram content={getDisplayContent(resource)} />
-                  ) : (
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {getDisplayContent(resource)}
-                    </div>
-                  )
+              <section className="max-w-none">
+                {finalContent ? (
+                  <MarkdownViewer content={finalContent} className="text-[15px] text-slate-700" />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                     <Icon name="do_not_disturb_off" className="material-symbols-outlined text-slate-300 text-5xl mb-4"/>
-                    <p className="text-slate-500 font-medium">
-                      暂无内容数据
-                    </p>
+                    <p className="text-slate-500 font-medium">暂无内容数据</p>
                   </div>
                 )}
               </section>

@@ -42,28 +42,38 @@ def _build_progress_table(request: EvaluationGenerateRequest) -> TableData:
 
 
 def _build_mastery_table(request: EvaluationGenerateRequest) -> TableData:
-    scores_by_chapter: dict[str, list[float]] = defaultdict(list)
+    # 按 knowledge_point 聚合（优先），fallback 到 chapter
+    scores_by_kp: dict[str, list[float]] = defaultdict(list)
+    kp_to_chapter: dict[str, str] = {}
+    personalized_by_kp: dict[str, int] = {}
+
     for item in request.quiz_results:
-        scores_by_chapter[item.chapter].append(item.score)
+        key = item.knowledge_point or item.chapter
+        scores_by_kp[key].append(item.score)
+        kp_to_chapter[key] = item.chapter
+        if item.personalized_count:
+            personalized_by_kp[key] = personalized_by_kp.get(key, 0) + item.personalized_count
 
     rows = []
-    for chapter in sorted(scores_by_chapter):
-        scores = scores_by_chapter[chapter]
+    for kp in sorted(scores_by_kp):
+        scores = scores_by_kp[kp]
         average_score = round(sum(scores) / len(scores), 1)
-        rows.append(
-            {
-                "chapter": chapter,
-                "average_score": average_score,
-                "quiz_count": len(scores),
-                "mastery_level": _mastery_level(average_score),
-            }
-        )
+        rows.append({
+            "knowledge_point": kp,
+            "chapter": kp_to_chapter.get(kp, ""),
+            "average_score": average_score,
+            "quiz_count": len(scores),
+            "personalized_count": personalized_by_kp.get(kp, 0),
+            "mastery_level": _mastery_level(average_score),
+        })
 
     return TableData(
         columns=[
+            TableColumn(key="knowledge_point", title="知识点"),
             TableColumn(key="chapter", title="章节"),
             TableColumn(key="average_score", title="平均正确率"),
             TableColumn(key="quiz_count", title="练习次数"),
+            TableColumn(key="personalized_count", title="强化练习次数"),
             TableColumn(key="mastery_level", title="掌握水平"),
         ],
         rows=rows,
@@ -87,13 +97,19 @@ def _build_summary_text(request: EvaluationGenerateRequest) -> str:
     progress_items = request.learning_progress.chapter_progress
     average_completion = _average([item.completion_rate for item in progress_items])
     average_quiz_score = _average([item.score for item in request.quiz_results])
-    weak_chapters = [item.chapter for item in request.quiz_results if item.score < 60]
+    weak_kps = [
+        (item.knowledge_point or item.chapter)
+        for item in request.quiz_results if item.score < 60
+    ]
 
-    weak_text = "暂无明显薄弱章节" if not weak_chapters else f"薄弱章节：{'、'.join(sorted(set(weak_chapters)))}"
+    weak_text = "暂无明显薄弱知识点" if not weak_kps else f"薄弱知识点：{'、'.join(sorted(set(weak_kps)))}"
+    personalized_total = sum(item.personalized_count or 0 for item in request.quiz_results)
+    personalized_text = f"，已进行 {personalized_total} 次个性化强化练习" if personalized_total > 0 else ""
     return (
         f"已学习 {len(progress_items)} 个章节，"
         f"平均完成率 {average_completion:.1f}%，"
-        f"平均练习正确率 {average_quiz_score:.1f}%。"
+        f"平均练习正确率 {average_quiz_score:.1f}%"
+        f"{personalized_text}。"
         f"{weak_text}。"
     )
 
@@ -186,12 +202,14 @@ def _observed_chapters(request: EvaluationGenerateRequest) -> set[str]:
         chapters.add(item.chapter)
     for item in request.quiz_results:
         chapters.add(item.chapter)
+        if item.knowledge_point:
+            chapters.add(item.knowledge_point)
     return chapters
 
 
 _ALLOWED_EXTRA_COLUMNS: dict[str, set[str]] = {
     "progress_table": {"progress_insight"},
-    "mastery_table": {"root_cause"},
+    "mastery_table": {"root_cause", "knowledge_point", "personalized_count"},
     "resource_usage_table": {"effectiveness_hint"},
 }
 

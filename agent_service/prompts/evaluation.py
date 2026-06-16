@@ -51,14 +51,18 @@ def build_evaluation_user_message(
     for item in request.learning_progress.chapter_progress:
         parts.append(f"  - {item.chapter}：完成率 {item.completion_rate}%，学习 {item.time_spent} 分钟")
     parts.append("")
-    parts.append("练习结果（按时间排序，可用于趋势分析）：")
-    sorted_quizzes = sorted(request.quiz_results, key=lambda x: x.created_at)
-    for item in sorted_quizzes:
-        parts.append(f"  - {item.chapter}：正确率 {item.score}%，时间 {item.created_at.isoformat()}")
-    if len(sorted_quizzes) >= 2:
-        first = sorted_quizzes[0]
-        last = sorted_quizzes[-1]
-        parts.append(f"  （首次练习：{first.chapter} {first.score}%，末次练习：{last.chapter} {last.score}%）")
+    parts.append("练习结果（按知识点聚合，含个性化强化情况）：")
+    for item in request.quiz_results:
+        kp_label = item.knowledge_point or item.chapter
+        trend_text = f"，近期趋势 {item.recent_trend:.1f}%" if item.recent_trend is not None else ""
+        personalized_text = f"，其中个性化强化 {item.personalized_count} 次" if item.personalized_count else ""
+        total_text = f"，共答 {item.total_answers} 题" if item.total_answers is not None else ""
+        parts.append(
+            f"  - 「{kp_label}」：正确率 {item.score:.1f}%{total_text}{personalized_text}{trend_text}"
+        )
+    if len(request.quiz_results) >= 2:
+        scores = [i.score for i in request.quiz_results]
+        parts.append(f"  （知识点覆盖 {len(request.quiz_results)} 个，平均正确率 {sum(scores)/len(scores):.1f}%）")
     parts.append("")
     parts.append("掌握度表格摘要：")
     if rule_result.mastery_table:

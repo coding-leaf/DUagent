@@ -220,7 +220,7 @@ async def _assemble_evaluation_payload(
     ]
     payload["learning_progress"] = {"chapter_progress": chapter_progress}
 
-    # quiz_results
+    # quiz_results：按知识点聚合，含个性化练习情况
     qz_r = await db.execute(
         select(QuizSession)
         .where(QuizSession.user_id == user_id, QuizSession.course_id == course_id, QuizSession.is_deleted == False)
@@ -228,13 +228,55 @@ async def _assemble_evaluation_payload(
         .limit(50)
     )
     quizzes = qz_r.scalars().all()
+    quiz_ids = [q.id for q in quizzes]
+
+    kp_stats: dict[str, dict] = {}
+    if quiz_ids:
+        qa_result = await db.execute(
+            select(
+                QuizAnswer.is_correct,
+                QuizAnswer.create_time,
+                QuizQuestion.knowledge_point,
+                QuizQuestion.chapter,
+                QuizQuestion.personalized,
+            )
+            .join(QuizQuestion, QuizAnswer.question_id == QuizQuestion.id)
+            .where(
+                QuizAnswer.quiz_id.in_(quiz_ids),
+                QuizAnswer.is_deleted == False,
+                QuizQuestion.is_deleted == False,
+            )
+            .order_by(QuizAnswer.create_time.asc())
+        )
+        for row in qa_result.all():
+            kp = row.knowledge_point or "未分类"
+            if kp not in kp_stats:
+                kp_stats[kp] = {
+                    "chapter": row.chapter or "",
+                    "total": 0,
+                    "correct": 0,
+                    "personalized_count": 0,
+                    "recent_scores": [],
+                }
+            kp_stats[kp]["total"] += 1
+            if row.is_correct:
+                kp_stats[kp]["correct"] += 1
+            if row.personalized:
+                kp_stats[kp]["personalized_count"] += 1
+            if len(kp_stats[kp]["recent_scores"]) < 10:
+                kp_stats[kp]["recent_scores"].append(1 if row.is_correct else 0)
+
     payload["quiz_results"] = [
         {
-            "chapter": q.chapter,
-            "score": q.score,
-            "created_at": q.create_time.isoformat() if q.create_time else "",
+            "knowledge_point": kp,
+            "chapter": stats["chapter"],
+            "score": round(stats["correct"] / stats["total"] * 100, 1) if stats["total"] > 0 else 0.0,
+            "total_answers": stats["total"],
+            "personalized_count": stats["personalized_count"],
+            "recent_trend": round(sum(stats["recent_scores"]) / len(stats["recent_scores"]) * 100, 1)
+                            if stats["recent_scores"] else 0.0,
         }
-        for q in quizzes
+        for kp, stats in kp_stats.items()
     ]
 
     # resource_usage

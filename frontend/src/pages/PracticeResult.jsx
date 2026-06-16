@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
 import { useCourse } from '../context/CourseContext';
 import { personalizedResourcesService } from '../api/services/personalizedResources';
+import { learningService } from '../api/services/learning';
 
 export default function PracticeResult() {
   const navigate = useNavigate();
@@ -57,6 +58,15 @@ export default function PracticeResult() {
   };
 
   const accuracy = resultData ? Math.round((resultData.correct_count / (resultData.total_count || 1)) * 100) : 0;
+
+  // 正确率 >= 60% 时自动触发后台评估刷新，让学习效果页反映最新进展
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (accuracy >= 60 && activeCourseId && resultData) {
+      learningService.refreshEvaluation(activeCourseId).catch(() => {});
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [accuracy, activeCourseId, resultData]);
 
   const wrongQuestionIds = resultData?.per_question_results
     ?.filter(q => !q.is_correct)

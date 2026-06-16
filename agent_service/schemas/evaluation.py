@@ -19,7 +19,12 @@ class LearningProgress(BaseModel):
 class QuizResultItem(BaseModel):
     chapter: str = Field(..., description="章节")
     score: float = Field(..., ge=0, le=100, description="正确率")
-    created_at: datetime = Field(..., description="完成时间")
+    created_at: datetime | None = Field(None, description="完成时间（session级数据有，知识点聚合数据无）")
+    # 知识点级聚合字段（可选，向下兼容）
+    knowledge_point: str | None = Field(None, description="知识点名称")
+    total_answers: int | None = Field(None, description="答题总数")
+    personalized_count: int | None = Field(None, description="个性化强化练习次数")
+    recent_trend: float | None = Field(None, description="最近10次答题正确率趋势")
 
 
 class ResourceUsage(BaseModel):

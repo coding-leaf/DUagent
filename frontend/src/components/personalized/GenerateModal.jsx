@@ -108,37 +108,37 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b border-surface-container">
-          <div className="flex items-center justify-between">
+        <div className="px-6 pt-5 pb-4 border-b border-surface-container flex-shrink-0">
+          <div className="flex flex-row items-center justify-between">
             <h2 className="font-h3 text-on-surface">生成个性化资源</h2>
-            <button onClick={onClose} className="text-secondary hover:text-on-surface transition-colors">
+            <button onClick={onClose} className="text-secondary hover:text-on-surface transition-colors flex-shrink-0">
               <Icon name="close" className="material-symbols-outlined"/>
             </button>
           </div>
           {/* Step indicator */}
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex flex-row items-center gap-2 mt-3">
             {[1, 2, 3].map(s => (
-              <div key={s} className="flex items-center gap-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors ${
+              <div key={s} className="flex flex-row items-center gap-2">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors flex-shrink-0 ${
                   s < step ? 'bg-primary-container text-white' :
                   s === step ? 'bg-cyan-600 text-white' :
                   'bg-surface-container text-secondary'
                 }`}>
                   {s < step ? <Icon name="check" className="material-symbols-outlined text-[14px]"/> : s}
                 </div>
-                {s < 3 && <div className={`h-px w-8 ${s < step ? 'bg-primary-container' : 'bg-surface-container-high'}`} />}
+                {s < 3 && <div className={`h-px w-8 flex-shrink-0 ${s < step ? 'bg-primary-container' : 'bg-surface-container-high'}`} />}
               </div>
             ))}
-            <span className="text-label-sm text-secondary ml-2">
+            <span className="text-label-sm text-secondary ml-2 whitespace-nowrap">
               {step === 1 ? '选择章节' : step === 2 ? '选择知识点' : '选择资源类型'}
             </span>
           </div>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 min-h-[200px]">
+        <div className="px-6 py-5 min-h-[200px] overflow-y-auto flex-1">
           {loadingPath ? (
             <div className="flex items-center justify-center py-10">
               <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-3xl text-primary"/>
@@ -232,10 +232,11 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-surface-container flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-surface-container flex flex-row items-center justify-between flex-shrink-0 w-full">
           <button
             onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-            className="px-4 py-2 text-secondary hover:text-on-surface transition-colors text-body-md whitespace-nowrap flex-shrink-0"
+            className="min-w-[80px] px-4 py-2 text-secondary hover:text-on-surface transition-colors font-bold text-center block whitespace-nowrap flex-shrink-0"
+            style={{ wordBreak: 'keep-all', whiteSpace: 'nowrap' }}
           >
             {step > 1 ? '上一步' : '取消'}
           </button>
@@ -243,7 +244,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
             <button
               onClick={handleSubmit}
               disabled={!canSubmit || generating}
-              className="flex items-center gap-2 px-5 py-2 bg-primary-container text-white rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex flex-row items-center gap-2 px-5 py-2 bg-primary-container text-white rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
             >
               {generating ? (
                 <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-[16px]"/>

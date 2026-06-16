@@ -1,8 +1,8 @@
 import apiClient from '../client';
 
 export const quizService = {
-  getQuestions(courseId, nodeId) {
-    const params = { course_id: courseId };
+  getQuestions(courseId, nodeId, extraParams = {}) {
+    const params = { course_id: courseId, ...extraParams };
     if (nodeId) params.node_id = nodeId;
     return apiClient.get('/quiz/questions', { params });
   },

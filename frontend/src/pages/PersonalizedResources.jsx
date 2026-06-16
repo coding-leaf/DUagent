@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
@@ -21,6 +21,51 @@ const SOURCE_LABEL = {
   quiz_wrong_answer: '错题触发',
   manual: '手动生成',
 };
+
+// 按知识点分组题目，返回 [{ knowledge_point, items[] }]
+function groupQuestionsByKp(items) {
+  const map = new Map();
+  for (const item of items) {
+    if (!item.question) continue;
+    const kp = item.question.knowledge_point || '未分类';
+    if (!map.has(kp)) map.set(kp, []);
+    map.get(kp).push(item);
+  }
+  return Array.from(map.entries()).map(([kp, kpItems]) => ({ knowledge_point: kp, items: kpItems }));
+}
+
+function QuizGroupCard({ kp, kpItems, courseId, navigate }) {
+  const count = kpItems.length;
+  const sourceTypes = [...new Set(kpItems.map(i => i.source_type))];
+  return (
+    <div className="bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
+      <div className="flex items-center justify-between gap-md">
+        <div className="flex items-center gap-md min-w-0">
+          <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container flex-shrink-0">
+            <span className="material-symbols-outlined">quiz</span>
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-sm flex-wrap mb-xs">
+              <span className="text-label-sm text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full font-medium">{kp}</span>
+              {sourceTypes.map(s => (
+                <span key={s} className="text-label-sm text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{SOURCE_LABEL[s] || s}</span>
+              ))}
+            </div>
+            <p className="text-body-md font-medium text-on-surface">{count} 道个性化练习题</p>
+            <p className="text-label-sm text-secondary mt-0.5 line-clamp-1">{kpItems[0]?.question?.content}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate(`/quiz?course_id=${courseId}&source=personalized&knowledge_point=${encodeURIComponent(kp)}`)}
+          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 bg-primary-container text-white rounded-xl text-label-sm font-bold hover:brightness-110 active:scale-95 transition-all"
+        >
+          <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+          开始练习
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ResourceCard({ item }) {
   if (item.task_status === 'processing') {
@@ -46,27 +91,6 @@ function ResourceCard({ item }) {
         <div>
           <p className="text-body-md font-medium text-error">生成失败</p>
           <p className="text-label-sm text-gray-400">可重新尝试生成</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (item.question) {
-    const q = item.question;
-    return (
-      <div className="bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
-        <div className="flex items-start gap-md">
-          <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container flex-shrink-0">
-            <span className="material-symbols-outlined">{TYPE_ICON[q.type] || 'quiz'}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-sm mb-xs flex-wrap">
-              <span className="text-label-sm text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full">{q.knowledge_point}</span>
-              <span className="text-label-sm text-gray-400">{q.difficulty}</span>
-              <span className="text-label-sm text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{SOURCE_LABEL[item.source_type]}</span>
-            </div>
-            <p className="text-body-md text-on-surface line-clamp-2">{q.content}</p>
-          </div>
         </div>
       </div>
     );
@@ -99,9 +123,11 @@ function ResourceCard({ item }) {
 export default function PersonalizedResources() {
   const { activeCourseId } = useCourse();
   const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [processingCount, setProcessingCount] = useState(0);  const [filterSource, setFilterSource] = useState('all');
+  const [processingCount, setProcessingCount] = useState(0);
+  const [filterSource, setFilterSource] = useState('all');
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [total, setTotal] = useState(0);
   const pollRef = useRef(null);
@@ -211,10 +237,45 @@ export default function PersonalizedResources() {
               <p className="text-body-md mt-2">完成练习后正确率低于 60% 会自动触发生成，或点击"生成资源"手动创建</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {items.map(item => (
-                <ResourceCard key={item.id} item={item} />
-              ))}
+            <div className="space-y-6">
+              {/* 生成中/失败的任务卡片 */}
+              {items.filter(i => !i.question && !i.resource).length > 0 && (
+                <div className="space-y-3">
+                  {items.filter(i => !i.question && !i.resource).map(item => (
+                    <ResourceCard key={item.id} item={item} />
+                  ))}
+                </div>
+              )}
+
+              {/* 练习题：按知识点分组，每组一个"开始练习"入口 */}
+              {groupQuestionsByKp(items).length > 0 && (
+                <div>
+                  <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化练习题</h3>
+                  <div className="space-y-3">
+                    {groupQuestionsByKp(items).map(({ knowledge_point: kp, items: kpItems }) => (
+                      <QuizGroupCard
+                        key={kp}
+                        kp={kp}
+                        kpItems={kpItems}
+                        courseId={activeCourseId}
+                        navigate={navigate}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 学习资源卡片 */}
+              {items.filter(i => i.resource).length > 0 && (
+                <div>
+                  <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化学习资源</h3>
+                  <div className="space-y-3">
+                    {items.filter(i => i.resource).map(item => (
+                      <ResourceCard key={item.id} item={item} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

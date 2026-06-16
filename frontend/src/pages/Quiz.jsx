@@ -12,6 +12,8 @@ export default function Quiz() {
   const { activeCourseId, courses } = useCourse();
   const [searchParams] = useSearchParams();
   const nodeId = searchParams.get('node_id');
+  const sourceParam = searchParams.get('source');
+  const knowledgePointParam = searchParams.get('knowledge_point');
   const [quizData, setQuizData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -27,7 +29,10 @@ export default function Quiz() {
         setLoading(true);
         setCurrentQuestionIndex(0);
         setAnswers({});
-        const res = await quizService.getQuestions(activeCourseId, nodeId || undefined);
+        const extraParams = {};
+        if (sourceParam) extraParams.source = sourceParam;
+        if (knowledgePointParam) extraParams.knowledge_point = knowledgePointParam;
+        const res = await quizService.getQuestions(activeCourseId, nodeId || undefined, extraParams);
         if (res.code === 200) {
           setQuizData(res.data);
           quizStartRef.current = Date.now();
@@ -39,7 +44,7 @@ export default function Quiz() {
       }
     };
     fetchQuestions();
-  }, [activeCourseId, nodeId]);
+  }, [activeCourseId, nodeId, sourceParam, knowledgePointParam]);
 
   useEffect(() => {
     if (!activeCourseId || !nodeId || !quizData?.quiz_id) return;

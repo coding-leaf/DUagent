@@ -116,7 +116,16 @@ export default function Quiz() {
         if (activeCourseId) {
           profileService.refreshProfile(activeCourseId).catch(() => {});
         }
-        navigate('/quiz/result', { state: { result: res.data } });
+        navigate('/quiz/result', {
+          state: {
+            result: res.data,
+            quizContext: {
+              node_id: nodeId || null,
+              knowledge_point: knowledgePointParam || quizData.questions?.[0]?.knowledge_point || null,
+              source: sourceParam || null,
+            },
+          },
+        });
       }
     } catch (error) {
       console.error("Failed to submit quiz", error);

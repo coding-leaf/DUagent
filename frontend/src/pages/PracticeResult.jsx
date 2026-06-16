@@ -13,6 +13,11 @@ export default function PracticeResult() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
 
+  const quizContext = location.state?.quizContext || null;
+  const contextKp = quizContext?.knowledge_point || null;
+  const contextSource = quizContext?.source || null;
+  const contextNodeId = quizContext?.node_id || null;
+
   useEffect(() => {
     if (!resultData && activeCourseId) {
       const fetchResult = async () => {
@@ -69,15 +74,25 @@ export default function PracticeResult() {
         source_type: 'quiz_wrong_answer',
         count: 5,
       };
-      if (wrongQuestionIds.length > 0) {
-        payload.wrong_question_ids = wrongQuestionIds;
-      }
+      if (wrongQuestionIds.length > 0) payload.wrong_question_ids = wrongQuestionIds;
+      if (contextKp) payload.knowledge_point = contextKp;
       await personalizedResourcesService.generate(payload);
       navigate('/personalized-resources', { state: { newTaskId: 'triggered' } });
     } catch {
       setGenerateError('生成失败，请稍后重试');
       setGenerating(false);
     }
+  };
+
+  const handleRetry = () => {
+    const params = new URLSearchParams({ course_id: activeCourseId });
+    if (contextSource === 'personalized' && contextKp) {
+      params.set('source', 'personalized');
+      params.set('knowledge_point', contextKp);
+    } else if (contextNodeId) {
+      params.set('node_id', contextNodeId);
+    }
+    navigate(`/quiz?${params.toString()}`);
   };
 
   return (
@@ -111,7 +126,7 @@ export default function PracticeResult() {
           <div className="px-xl pt-lg pb-md flex justify-between items-end border-b border-surface-container">
             <div>
               <h2 className="font-h2 text-h2 text-on-surface mb-xs">训练完成</h2>
-              <p className="font-body-md text-secondary">第4章：树形结构 - 平衡二叉树专项练习</p>
+              <p className="font-body-md text-secondary">{contextKp ? `知识点：${contextKp}` : '综合练习'}</p>
             </div>
             <div className="text-right">
               <span className="font-label-sm text-label-sm text-primary uppercase tracking-widest bg-primary-container/10 px-3 py-1 rounded-full">Practice Report</span>
@@ -200,24 +215,39 @@ export default function PracticeResult() {
           {/* Modal Footer (Actions) */}
           <div className="px-xl py-lg bg-surface-container-low border-t border-surface-container flex flex-col gap-md">
             {accuracy < 60 && resultData && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                <span className="material-symbols-outlined text-amber-500 flex-shrink-0 mt-0.5">warning</span>
-                <div className="flex-1">
-                  <p className="text-body-md font-medium text-amber-800">本次正确率较低（{accuracy}%）</p>
-                  <p className="text-label-sm text-amber-600 mt-0.5">是否生成针对错题的个性化练习，帮助你巩固薄弱知识点？</p>
-                  {generateError && <p className="text-error text-label-sm mt-1">{generateError}</p>}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="material-symbols-outlined text-amber-500 flex-shrink-0 mt-0.5">warning</span>
+                  <div>
+                    <p className="text-body-md font-medium text-amber-800">
+                      本次正确率较低（{accuracy}%）{contextKp ? `· 「${contextKp}」` : ''}
+                    </p>
+                    <p className="text-label-sm text-amber-600 mt-0.5">选择下一步：</p>
+                  </div>
                 </div>
-                <button
-                  onClick={handleGenerateWrongAnswerQuiz}
-                  disabled={generating}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-lg text-label-sm font-bold hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {generating
-                    ? <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
-                    : <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                  }
-                  {generating ? '生成中...' : '生成针对性练习'}
-                </button>
+                <div className="flex gap-2">
+                  {(contextKp || contextNodeId) && (
+                    <button
+                      onClick={handleRetry}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-amber-400 text-amber-700 rounded-xl text-label-sm font-bold hover:bg-amber-100 active:scale-95 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">replay</span>
+                      再练一遍
+                    </button>
+                  )}
+                  <button
+                    onClick={handleGenerateWrongAnswerQuiz}
+                    disabled={generating}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-xl text-label-sm font-bold hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generating
+                      ? <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                      : <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                    }
+                    {generating ? '生成中...' : '生成新一批'}
+                  </button>
+                </div>
+                {generateError && <p className="text-error text-label-sm mt-2">{generateError}</p>}
               </div>
             )}
             <div className="flex gap-md justify-center">

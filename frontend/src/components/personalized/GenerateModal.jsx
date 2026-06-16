@@ -108,7 +108,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-[500px] max-w-[90vw] max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-surface-container flex-shrink-0">
           <div className="flex flex-row items-center justify-between">

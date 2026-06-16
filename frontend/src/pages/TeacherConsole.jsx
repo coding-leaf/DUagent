@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { teachingService } from '../api/services/teaching';
 import { learningService } from '../api/services/learning';
@@ -34,6 +34,23 @@ export default function TeacherConsole() {
   const [resourcesError, setResourcesError] = useState(null);
   const [pendingCreatedClassId, setPendingCreatedClassId] = useState(null);
   const [copiedCourseCode, setCopiedCourseCode] = useState(false);
+  const [expandedChapter, setExpandedChapter] = useState(null);
+
+  const groupedResources = useMemo(() => {
+    return resources.reduce((acc, resource) => {
+      const chapter = resource.chapter || '未分类资源';
+      if (!acc[chapter]) acc[chapter] = [];
+      acc[chapter].push(resource);
+      return acc;
+    }, {});
+  }, [resources]);
+
+  useEffect(() => {
+    const chapters = Object.keys(groupedResources).sort();
+    if (chapters.length > 0 && (!expandedChapter || !chapters.includes(expandedChapter))) {
+      setExpandedChapter(chapters[0]);
+    }
+  }, [groupedResources, expandedChapter]);
 
   // 获取教学班列表
   const refreshClasses = useCallback(async (silent = false) => {
@@ -281,7 +298,7 @@ export default function TeacherConsole() {
                 </span>
               </div>
 
-              <div className="p-md">
+              <div className="p-md max-h-[500px] overflow-y-auto custom-scrollbar">
                 {resourcesLoading ? (
                   <div className="py-8 flex justify-center">
                     <FeedbackStatus status="loading" title="加载学习资源..." />
@@ -295,37 +312,64 @@ export default function TeacherConsole() {
                     <FeedbackStatus status="empty" title="本班暂无学习资源，请联系管理员生成" />
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {resources.map((resource) => (
-                      <button
-                        key={resource.id}
-                        type="button"
-                        data-testid="teacher-resource-card"
-                        onClick={() => navigate(`/resource/${resource.id}`)}
-                        className="text-left rounded-xl border border-outline-variant bg-surface-container-lowest p-4 hover:border-primary/50 hover:shadow-sm transition-all"
-                      >
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div>
-                            <p className="font-semibold text-on-surface line-clamp-1">{resource.title}</p>
-                            <p className="text-xs text-outline mt-1">
-                              {resourceTypeLabels[resource.type] || resource.type || '资源'}
-                            </p>
-                          </div>
-                          <span className="material-symbols-outlined text-primary text-lg">open_in_new</span>
-                        </div>
-                        {resource.description && (
-                          <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{resource.description}</p>
-                        )}
-                        <div className="flex flex-wrap gap-2 text-xs text-outline">
-                          {resource.chapter && (
-                            <span className="px-2 py-1 rounded bg-surface-container-high">章节：{resource.chapter}</span>
+                  <div className="space-y-3">
+                    {Object.keys(groupedResources).sort().map((chapter) => {
+                      const isExpanded = expandedChapter === chapter;
+                      const chapterResources = groupedResources[chapter];
+                      return (
+                        <div key={chapter} className="border border-outline-variant rounded-xl overflow-hidden bg-surface-container-lowest transition-all duration-200">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedChapter(isExpanded ? null : chapter)}
+                            className="w-full flex items-center justify-between p-4 bg-cyan-50/40 hover:bg-cyan-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-on-surface text-lg">{chapter}</span>
+                              <span className="px-2.5 py-0.5 rounded-full bg-cyan-100/80 text-cyan-800 text-xs font-bold">
+                                {chapterResources.length} 篇
+                              </span>
+                            </div>
+                            <span className={`material-symbols-outlined text-outline transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                              expand_more
+                            </span>
+                          </button>
+                          
+                          {isExpanded && (
+                            <div className="p-4 border-t border-outline-variant bg-white">
+                              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {chapterResources.map((resource) => (
+                                  <button
+                                    key={resource.id}
+                                    type="button"
+                                    data-testid="teacher-resource-card"
+                                    onClick={() => navigate(`/resource/${resource.id}`)}
+                                    className="text-left rounded-xl border border-outline-variant bg-surface-container-lowest p-4 hover:border-primary/50 hover:shadow-sm transition-all group"
+                                  >
+                                    <div className="flex items-start justify-between gap-3 mb-3">
+                                      <div>
+                                        <p className="font-semibold text-on-surface line-clamp-1 group-hover:text-primary transition-colors">{resource.title}</p>
+                                        <p className="text-xs text-outline mt-1">
+                                          {resourceTypeLabels[resource.type] || resource.type || '资源'}
+                                        </p>
+                                      </div>
+                                      <span className="material-symbols-outlined text-outline group-hover:text-primary text-lg transition-colors">open_in_new</span>
+                                    </div>
+                                    {resource.description && (
+                                      <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{resource.description}</p>
+                                    )}
+                                    <div className="flex flex-wrap gap-2 text-xs text-outline">
+                                      {resource.knowledge_point && (
+                                        <span className="px-2 py-1 rounded bg-surface-container-high truncate max-w-full">知识点：{resource.knowledge_point}</span>
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           )}
-                          {resource.knowledge_point && (
-                            <span className="px-2 py-1 rounded bg-surface-container-high">知识点：{resource.knowledge_point}</span>
-                          )}
                         </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

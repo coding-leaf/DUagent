@@ -108,7 +108,7 @@ export default function PracticeResult() {
   if (loading) {
     return (
       <div className="bg-slate-50 min-h-screen flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white border border-gray-100 rounded-3xl shadow-xl p-8 flex flex-col items-center text-center">
+        <div className="max-w-[448px] w-full bg-white border border-gray-100 rounded-3xl shadow-xl p-8 flex flex-col items-center text-center">
           <div className="relative flex items-center justify-center h-24 w-24 mb-6">
             {/* Outer spinning progress ring */}
             <div className="absolute inset-0 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin"></div>

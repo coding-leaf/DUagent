@@ -272,7 +272,7 @@ export default function Login() {
 
     {showForgotModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowForgotModal(false)}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[384px] mx-4 p-6 text-center" onClick={(e) => e.stopPropagation()}>
           <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
             <Icon name="lock" className="material-symbols-outlined text-amber-500 text-2xl"/>
           </div>

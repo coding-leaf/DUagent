@@ -520,7 +520,7 @@ export default function AdminConsole() {
                         >
                           <td className="px-6 py-4">
                             <div className="font-bold text-slate-900">{catalog.title || '未命名资源库'}</div>
-                            <div className="mt-1 max-w-xl text-xs text-slate-500">{catalog.description || '暂无描述'}</div>
+                            <div className="mt-1 max-w-[576px] text-xs text-slate-500">{catalog.description || '暂无描述'}</div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-wrap gap-2">
@@ -746,7 +746,7 @@ export default function AdminConsole() {
 
       {resetPasswordTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[384px] mx-4 p-6">
             <h2 className="text-lg font-bold text-slate-900 mb-1">重置密码</h2>
             <p className="text-sm text-slate-500 mb-4">
               为 <span className="font-semibold text-slate-700">{resetPasswordTarget.username}</span>（{resetPasswordTarget.email}）设置新密码

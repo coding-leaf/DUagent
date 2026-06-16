@@ -307,7 +307,7 @@ export default function PersonalizedResources() {
       <Navbar />
       <Sidebar />
       <main className="ml-0 lg:ml-64 pt-16 min-h-screen">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="max-w-[896px] mx-auto px-6 py-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>

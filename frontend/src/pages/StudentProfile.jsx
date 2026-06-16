@@ -178,7 +178,7 @@ export default function StudentProfile() {
           <div className="max-w-[1280px] mx-auto px-6 py-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
             <Icon name="person_search" className="material-symbols-outlined text-6xl text-slate-300 mb-6"/>
             <h2 className="font-h1 text-2xl text-on-surface mb-3">还没有可查看的课程画像</h2>
-            <p className="text-body-md text-secondary max-w-md mb-8">
+            <p className="text-body-md text-secondary max-w-[448px] mb-8">
               加入一门课程后，这里会展示你的模态偏好、引导粒度、知识坐标和学习状态。
             </p>
             <button

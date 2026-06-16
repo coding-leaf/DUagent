@@ -235,7 +235,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
         <div className="px-6 py-4 border-t border-surface-container flex items-center justify-between">
           <button
             onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-            className="text-secondary hover:text-on-surface transition-colors text-body-md"
+            className="px-4 py-2 text-secondary hover:text-on-surface transition-colors text-body-md whitespace-nowrap flex-shrink-0"
           >
             {step > 1 ? '上一步' : '取消'}
           </button>

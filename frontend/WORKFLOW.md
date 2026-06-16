@@ -17,14 +17,24 @@
 - 探针工具 `learning_path_resource_probe.py` 仍落后于 API 实现口径：KG 查找未走 `kg_host_course_id` 链路、无 LP fallback、资源查询未用 `resource_scope_clause`。下次跑探针前需修复。
 - C 语言主 catalog `e21d9fdaaa0c43a3`（绑定教学班 `cprogcourse202606120001`）`kg_host_course_id = NULL`，导致 `_synthesize_kg_fallback_path` 无法找到 active KG（KG `c5b437f8701b482a` 35 节点存在但 course_id 直接是教学班 ID）。这是当前 LearningPath KG fallback 的实际阻断点。
 - 已确认可操作能力：Admin 课程资源库创建、资料上传、触发入库向量化、任务轮询、知识库状态展示、基于知识切片自动刷新课程知识图谱、按资源库触发学习资源生成、生成资源列表、资料/资源软删除；LearningPath 节点资源展示。
-- 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。
-- 当前待推进：#29 knowledge_points 元素类型契约审查（对象 vs string）；Evaluation refresh 入口决策；探针口径修复（非阻塞）。
+- 当前前端契约作废 / 不接入能力：资源生成 `/resources/generate`、Quiz 生成 `/quiz/generate`；教师端不提供生成资源入口，练习页不提供触发生题入口。**注：个性化资源功能通过新接口 `/personalized-resources/generate` 绕开权限限制，学生可用，见 2026-06-16 设计。**
+- 当前待推进：个性化资源功能（设计已完成，待实现）；#29 knowledge_points 元素类型契约审查（对象 vs string）；Evaluation refresh 入口决策；探针口径修复（非阻塞）。
 - 当前工作区注意：`AGENTS.md` 已更新为新文档分工入口；未跟踪文件和存储产物不要混入提交。
 
 ## 最近验证
 
 ### 2026-06-15
-- Fix Profile/Evaluation Refresh Lock and Failure Feedback:
+
+- Admin 注册码管理、忘记密码弹窗、Admin 重置密码：
+  - 新增 `GET/POST/DELETE /admin/registration-codes` 三个接口（`backend/app/api/v1/admin.py`）；schema 新增 `CreateRegistrationCodeRequest`（`backend/app/schemas/admin.py`）；注册码用 `secrets.token_urlsafe(8)` 随机生成，吊销走软删除。
+  - 前端 `AdminConsole.jsx` 新增「注册码管理」tab：列表展示码值/角色/生成时间，支持一键复制（1.5s 回显对勾）和吊销；右上角「生成教师码」「生成学生码」按钮。
+  - `AdminConsole.jsx` 用户行新增「重置密码」按钮，点击弹 modal 输入新密码，复用已有 `PUT /admin/users/{id}` + `new_password` 字段（后端早已支持）。
+  - `Login.jsx` 「忘记密码」链接改为弹 modal，提示"请联系管理员重置账号密码"，点遮罩或「知道了」关闭。
+  - 前端 service `admin.js` 新增 `getRegistrationCodes / createRegistrationCode / revokeRegistrationCode`。
+  - 契约说明：新增 `/admin/registration-codes` 接口族，无现有字段改动，无 OpenAPI 漂移。
+  - 验证：`python3 -m py_compile backend/app/api/v1/admin.py` → OK；`npm run build` → 通过（仅既有 Vite chunk size warning）。
+
+
   - 修复 Backend `profile_refresh` / `evaluation_refresh` 后台任务的 MySQL named lock 生命周期：`GET_LOCK`、写库、`RELEASE_LOCK` 保持在同一 DB session/连接内完成，并在 `commit()` 前释放，避免连接归还连接池后用错误连接释放锁。
   - 同步收口 `profile/initialize` 与 `profile/dialogue-update` 的同名 profile 写锁释放顺序，避免对话补充画像后阻塞后续同步画像。
   - 修复 `profile_refresh` 写 `drive_intent.learning_habits` 和 `drive_intent.knowledge_progress_summary` 时的 JSON 持久化：改为新 dict 合并并显式 `flag_modified`，保留既有 `learning_goal/type/source`。
@@ -769,3 +779,38 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 
 ### git commit
 `docs: 更新 WORKFLOW.md，记录实时节点状态改造施工`
+
+---
+
+## 2026-06-15 教师报告页小修复
+
+### 改动文件
+- `src/pages/TeacherStudentReport.jsx`
+
+### 核心改动
+1. **avg_time 显示**：`< 60s` 时改为显示 `< 1m`（原先 `Math.round(秒/60)` 导致不足1分钟全显示 `0m`）
+2. **modal_preference 中文化**：前端加映射表 `{ video_animation: '视频/动画', chart_logic: '图表/逻辑', text_analysis: '文本阅读', code_practice: '代码练习', formula_derivation: '公式推导' }`，后端 key 不变
+
+### 存档（未改动，留后续）
+- 教师报告路径进度卡片：大部分学生无 `learning_paths` 记录（因为从未触发 Agent 生成），后续需考虑基于 KG 节点重新定义语义
+- `POST /api/v1/learning-path/refresh`：后端完整，前端 service 有方法（`learningService.refreshPath`）但无 UI 入口，后续加"刷新路径"按钮时直接调用
+
+### 测试结果
+- `npm run build` 通过，无报错
+
+### 2026-06-16
+
+- 个性化资源功能（spec：`docs/superpowers/specs/2026-06-16-personalized-resources-design.md`，plan：`docs/superpowers/plans/2026-06-16-personalized-resources.md`）：
+  - 新建表 `user_personalized_resources`（DDL 已执行），新增 `UserPersonalizedResource` SQLAlchemy model（`backend/app/models/others.py`）
+  - 新建 `backend/app/schemas/personalized.py`：`PersonalizedResourceGenerateRequest`
+  - 新建 `backend/app/api/v1/personalized_resources.py`：`GET /api/v1/personalized-resources`（全量 processing_count 统计）、`POST /api/v1/personalized-resources/generate`（quiz 同步路径 + resource 异步 Webhook 路径）
+  - 修改 `backend/app/main.py`：注册 `personalized_resources.router`
+  - 修改 `backend/app/api/v1/webhooks.py`：resource_generation 回调补全 `user_personalized_resources.resource_id`，使用 `scalars().first()` 防多行崩溃
+  - 新建 `frontend/src/api/services/personalizedResources.js`
+  - 新建 `frontend/src/pages/PersonalizedResources.jsx`：独立页面，3s 轮询，筛选栏，空/loading/processing/failed/question/resource 卡片
+  - 新建 `frontend/src/components/personalized/GenerateModal.jsx`：三步引导（章节→知识点→资源类型），全失败时保持 Modal 开启
+  - 修改 `frontend/src/pages/PracticeResult.jsx`：accuracy<60 显示橙黄横幅，fallback 路径也可触发（不强依赖 wrongQuestionIds，后端用历史错题上下文）
+  - 修改 `frontend/src/components/Sidebar.jsx`：添加"个性化资源"导航入口（psychology 图标）
+  - 修改 `frontend/src/App.jsx`：注册 `/personalized-resources` 路由
+  - 接口漂移：新增 `/api/v1/personalized-resources` 接口族（学生可用），`personalization_context.wrong_points` 新增 `content` 字段
+  - 验证：`py_compile` 全通过（5/5）；`npm run build` 通过（774ms）；lint 无新增 error

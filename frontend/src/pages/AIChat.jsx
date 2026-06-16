@@ -825,6 +825,7 @@ export default function AIChat() {
                     </button>
                   ) : (
                     <button
+                      data-testid="send-message-button"
                       onClick={() => handleSendMessage()}
                       disabled={!inputValue.trim() || !activeCourseId}
                       className="w-8 h-8 rounded-lg bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"

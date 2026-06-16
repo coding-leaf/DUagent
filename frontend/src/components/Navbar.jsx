@@ -25,9 +25,9 @@ export default function Navbar({ searchTerm, onSearch }) {
       <div className="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
         
         {/* Brand & Course Selector */}
-        <div className="flex items-center space-x-md">
+        <div className="flex-1 flex items-center space-x-md">
           <Link to="/dashboard" className="text-xl font-bold tracking-tight text-cyan-600 hover:opacity-90 transition-opacity">
-            数据结构智能助手
+            智能学习助手
           </Link>
           
           <div className="flex items-center space-x-2">
@@ -60,7 +60,7 @@ export default function Navbar({ searchTerm, onSearch }) {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="hidden md:flex items-center space-x-8">
+        <div className="hidden md:flex items-center justify-center space-x-8">
           <Link
             to="/profile"
             className={`transition-colors ${isActive('/profile') ? 'text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1' : 'text-gray-600 hover:text-cyan-500'}`}
@@ -75,6 +75,7 @@ export default function Navbar({ searchTerm, onSearch }) {
           </Link>
           <Link
             to="/dashboard"
+            data-testid="nav-dashboard"
             className={`transition-colors ${isActive('/dashboard') ? 'text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1' : 'text-gray-600 hover:text-cyan-500'}`}
           >
             资源库
@@ -87,6 +88,7 @@ export default function Navbar({ searchTerm, onSearch }) {
           </Link>
           <Link
             to="/ai-chat"
+            data-testid="nav-ai-chat"
             className={`transition-colors ${isActive('/ai-chat') ? 'text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1' : 'text-gray-600 hover:text-cyan-500'}`}
           >
             AI答疑
@@ -100,7 +102,7 @@ export default function Navbar({ searchTerm, onSearch }) {
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center space-x-4">
+        <div className="flex-1 flex items-center justify-end space-x-4">
           
           {/* Conditional Search Input (For Dashboard integration) */}
           {onSearch !== undefined && (

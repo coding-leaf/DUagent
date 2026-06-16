@@ -135,11 +135,6 @@ export default function Dashboard() {
             </Link>
           </div>
         </nav>
-        <div className="px-6 mt-auto">
-          <button className="w-full py-3 bg-primary-container text-on-primary-container rounded-xl font-bold active:scale-95 transition-all shadow-sm">
-            启动新任务
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}

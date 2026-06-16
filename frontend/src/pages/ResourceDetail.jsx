@@ -274,14 +274,6 @@ export default function ResourceDetail() {
                     <span className="text-label-sm">分享</span>
                   </button>
                 </div>
-                <div className="flex gap-4">
-                  <button className="px-6 py-2 rounded-lg border border-primary text-primary font-semibold hover:bg-primary-container/10 transition-all active:scale-95 cursor-pointer">
-                    收藏笔记
-                  </button>
-                  <button className="px-8 py-2 rounded-lg bg-primary-container text-on-primary-container font-bold shadow-lg shadow-primary-container/20 hover:brightness-105 transition-all active:scale-95 cursor-pointer">
-                    下一章节
-                  </button>
-                </div>
               </footer>
           </article>
 

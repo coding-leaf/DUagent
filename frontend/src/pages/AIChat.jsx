@@ -583,7 +583,7 @@ export default function AIChat() {
                     </div>
                     <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
                     <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
-                      完成检索能力验证后，这里会展示与本轮知识点相关的课程资源。
+                      这里会根据您的学习进度，为您推荐合适的课程资源。
                     </div>
                   </div>
                 )}

@@ -110,8 +110,6 @@ export default function Success() {
             <div className="flex justify-center space-x-md text-label-sm text-secondary font-medium text-xs">
               <a className="hover:text-primary transition-colors" href="#">隐私政策</a>
               <a className="hover:text-primary transition-colors" href="#">服务条款</a>
-              <span className="text-outline-variant">|</span>
-              <span>By: 害虫杀手队</span>
             </div>
           </footer>
         </div>

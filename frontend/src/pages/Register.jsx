@@ -271,9 +271,9 @@ export default function Register() {
                       value={formData.guidanceLevel}
                       onChange={handleChange}
                     >
-                      <option value="L1">L1</option>
-                      <option value="L2">L2</option>
-                      <option value="L3">L3</option>
+                      <option value="L1">L1 - 自主学习 (最少干预)</option>
+                      <option value="L2">L2 - 适度引导 (平衡干预)</option>
+                      <option value="L3">L3 - 逐步指导 (最高干预)</option>
                     </select>
                   </div>
                 </div>

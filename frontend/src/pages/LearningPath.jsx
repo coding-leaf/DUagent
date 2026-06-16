@@ -188,9 +188,7 @@ export default function LearningPath() {
                               </div>
                             </div>
                             <div className="mt-md space-y-sm">
-                              <div className="bg-surface-container rounded-lg p-sm border border-outline-variant">
-                                <p className="text-label-sm font-bold text-on-surface">智能体提示将在路径 Agent 输出接入后展示</p>
-                              </div>
+
                               <Link to="/dashboard" state={{ search: node.name }} className="w-full py-2 bg-primary text-white rounded-lg text-label-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors">
                                 <span className="material-symbols-outlined text-sm">auto_stories</span>前往资源库继续闯关
                               </Link>

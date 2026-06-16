@@ -12,7 +12,7 @@ export default function Sidebar() {
             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
           </div>
           <div>
-            <h3 className="text-lg font-black text-cyan-600 leading-tight">数据结构掌控者</h3>
+            <h3 className="text-lg font-black text-cyan-600 leading-tight">智能学习助手</h3>
             <p className="text-[10px] text-gray-400 uppercase tracking-widest">多智能体学习系统</p>
           </div>
         </div>
@@ -33,11 +33,6 @@ export default function Sidebar() {
           </Link>
         </div>
       </nav>
-      <div className="px-6 mt-auto">
-        <button className="w-full py-3 bg-primary-container text-on-primary-container rounded-xl font-bold active:scale-95 transition-all shadow-sm">
-          启动新任务
-        </button>
-      </div>
     </aside>
   );
 }

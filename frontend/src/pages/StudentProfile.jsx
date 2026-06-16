@@ -232,6 +232,15 @@ export default function StudentProfile() {
     profile_dimensions = [],
   } = profile;
 
+  const habits = drive_intent.learning_habits ?? {};
+  const streakScore = Math.min((habits.streak_days ?? 0) / 7, 1.0) * 100;
+  const activeScore = ((habits.active_days_7d ?? 0) / 7) * 100;
+  const hoursSince = habits.last_activity_at
+    ? (now - new Date(habits.last_activity_at)) / 3600000
+    : Infinity;
+  const recencyScore = hoursSince <= 24 ? 100 : hoursSince <= 72 ? 70 : hoursSince <= 168 ? 40 : 0;
+  const driveScore = Math.round(streakScore * 0.40 + activeScore * 0.40 + recencyScore * 0.20);
+
   // 姓名优先级：real_name → username → 兜底
   const displayName = user?.real_name || user?.username || '学生';
   const displayInitial = (user?.real_name || user?.username || '学').charAt(0);
@@ -695,7 +704,7 @@ export default function StudentProfile() {
                       : 'bg-white border-slate-200 hover:border-cyan-300'
                   }`}></div>
                   <div className="mt-6 text-center">
-                    <p className={`text-label-sm font-bold transition-colors duration-300 ${localGuidanceLevel === 'L3' ? 'text-cyan-600' : 'text-slate-400'}`}>L3: 保姆生成</p>
+                    <p className={`text-label-sm font-bold transition-colors duration-300 ${localGuidanceLevel === 'L3' ? 'text-cyan-600' : 'text-slate-400'}`}>L3: 逐步指导</p>
                     <p className="text-[10px] text-slate-400 mt-1">全自动代码生成</p>
                   </div>
                 </button>
@@ -822,7 +831,7 @@ export default function StudentProfile() {
             {/* 驱动力 */}
             <div className="mb-6">
               <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-3">驱动力</p>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 mb-3">
                 <span className="px-3 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg text-sm font-bold border border-cyan-100">
                   {{
                     exam_sprint: '备考冲刺',
@@ -830,12 +839,31 @@ export default function StudentProfile() {
                     casual: '兴趣拓展',
                   }[drive_intent.type] || labelValue(drive_intent.type)}
                 </span>
+                {habits.label && (
+                  <span className="px-3 py-1.5 rounded-lg text-sm font-bold border {{
+                    new: 'bg-slate-50 text-slate-500 border-slate-200',
+                    inactive: 'bg-red-50 text-red-500 border-red-100',
+                    sprint: 'bg-orange-50 text-orange-600 border-orange-100',
+                    stable: 'bg-green-50 text-green-700 border-green-100',
+                    casual: 'bg-slate-50 text-slate-500 border-slate-200',
+                  }[habits.label] || 'bg-slate-50 text-slate-500 border-slate-200'}">
+                    {{
+                      new: '新生',
+                      inactive: '不活跃',
+                      sprint: '突击',
+                      stable: '稳定',
+                      casual: '随性',
+                    }[habits.label] || habits.label}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
                 <div className="flex-1">
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${drive_intent.intensity}%` }}></div>
+                    <div className="h-full bg-cyan-500 rounded-full transition-all" style={{ width: `${driveScore}%` }}></div>
                   </div>
                 </div>
-                <span className="text-xs text-slate-500 font-bold w-8 text-right">{drive_intent.intensity}%</span>
+                <span className="text-xs text-slate-500 font-bold w-8 text-right">{driveScore}%</span>
               </div>
             </div>
 

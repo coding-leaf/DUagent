@@ -4,6 +4,7 @@ import { quizService } from '../api/services/quiz';
 import { useCourse } from '../context/CourseContext';
 import { personalizedResourcesService } from '../api/services/personalizedResources';
 import { learningService } from '../api/services/learning';
+import { profileService } from '../api/services/profile';
 
 export default function PracticeResult() {
   const navigate = useNavigate();
@@ -18,6 +19,16 @@ export default function PracticeResult() {
   const contextKp = quizContext?.knowledge_point || null;
   const contextSource = quizContext?.source || null;
   const contextNodeId = quizContext?.node_id || null;
+
+  const accuracy = resultData ? Math.round((resultData.correct_count / (resultData.total_count || 1)) * 100) : 0;
+
+  // 答题完成后后台刷新评估和画像（≥60%说明有明显进步；<60%仍需继续练）
+  useEffect(() => {
+    if (accuracy >= 60 && activeCourseId && resultData) {
+      learningService.refreshEvaluation(activeCourseId).catch(() => {});
+      profileService.refreshProfile(activeCourseId).catch(() => {});
+    }
+  }, [accuracy, activeCourseId, resultData]);
 
   useEffect(() => {
     if (!resultData && activeCourseId) {
@@ -57,16 +68,6 @@ export default function PracticeResult() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const accuracy = resultData ? Math.round((resultData.correct_count / (resultData.total_count || 1)) * 100) : 0;
-
-  // 正确率 >= 60% 时自动触发后台评估刷新，让学习效果页反映最新进展
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    if (accuracy >= 60 && activeCourseId && resultData) {
-      learningService.refreshEvaluation(activeCourseId).catch(() => {});
-    }
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [accuracy, activeCourseId, resultData]);
 
   const wrongQuestionIds = resultData?.per_question_results
     ?.filter(q => !q.is_correct)

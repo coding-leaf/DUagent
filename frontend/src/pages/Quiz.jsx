@@ -47,15 +47,16 @@ export default function Quiz() {
   }, [activeCourseId, nodeId, sourceParam, knowledgePointParam]);
 
   useEffect(() => {
-    if (!activeCourseId || !nodeId || !quizData?.quiz_id) return;
+    const trackKp = knowledgePointParam || quizData?.questions?.[0]?.knowledge_point || null;
+    if (!activeCourseId || (!nodeId && !trackKp) || !quizData?.quiz_id) return;
     if (practiceStartTrackedRef.current === quizData.quiz_id) return;
     practiceStartTrackedRef.current = quizData.quiz_id;
     const firstQuestion = quizData.questions?.[0];
     learningActivityService.trackActivity({
       course_id: activeCourseId,
       activity_type: 'node_practice_start',
-      node_id: nodeId,
-      node_name: firstQuestion?.knowledge_point || null,
+      node_id: nodeId || null,
+      node_name: firstQuestion?.knowledge_point || trackKp || null,
       quiz_id: quizData.quiz_id,
       metadata: { source: 'quiz' }
     });
@@ -130,15 +131,16 @@ export default function Quiz() {
     } catch (error) {
       console.error("Failed to submit quiz", error);
     } finally {
-      if (nodeId && activeCourseId) {
+      const trackKp = knowledgePointParam || quizData.questions?.[0]?.knowledge_point || null;
+      if (activeCourseId && (nodeId || trackKp)) {
         learningActivityService.trackActivity({
           course_id: activeCourseId,
           activity_type: 'node_practice_submit',
-          node_id: nodeId,
-          node_name: quizData.questions?.[0]?.knowledge_point || null,
+          node_id: nodeId || null,
+          node_name: trackKp,
           quiz_id: quizData.quiz_id,
           duration_seconds: elapsedSeconds,
-          metadata: { source: 'quiz' }
+          metadata: { source: sourceParam || 'quiz' }
         });
       }
       setSubmitting(false);

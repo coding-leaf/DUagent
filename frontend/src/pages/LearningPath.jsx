@@ -110,7 +110,9 @@ export default function LearningPath() {
       // Only intercept if it's primarily a vertical scroll
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault();
-        container.scrollLeft += e.deltaY;
+        // Multiply deltaY to make it feel less heavy/exhausting
+        const speedMultiplier = 2.5; 
+        container.scrollLeft += e.deltaY * speedMultiplier;
       }
     };
 
@@ -155,7 +157,7 @@ export default function LearningPath() {
             </div>
 
             {/* Horizontal Scrolling Path */}
-            <div ref={scrollContainerRef} className="relative flex items-center py-xl overflow-x-auto no-scrollbar scroll-smooth min-h-[300px]">
+            <div ref={scrollContainerRef} className="relative flex items-center py-xl overflow-x-auto no-scrollbar min-h-[300px]">
               {loading ? (
                 <div className="w-full flex justify-center"><Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-cyan-500"/></div>
               ) : (

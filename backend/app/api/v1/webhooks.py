@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, verify_webhook_secret
-from app.models.others import AsyncTask, Resource
+from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.schemas.webhook import AgentWebhookRequest
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
@@ -218,6 +218,7 @@ async def agent_webhook(
         if not primary_course_id:
             raise _bad_webhook_request("resource_generation 任务缺少 course_id")
 
+        newly_created_resources = []
         for r in resources_data:
             chapter, knowledge_point, tags = _metadata_for_resource(task, r)
             resource = Resource(
@@ -235,6 +236,7 @@ async def agent_webhook(
                 create_by=task.user_id,
             )
             db.add(resource)
+            newly_created_resources.append(resource)
 
         task.status = "completed"
         task.result = {
@@ -244,6 +246,25 @@ async def agent_webhook(
         }
         task.progress = 100
         task.completed_at = datetime.now(timezone.utc)
+        # 补全 user_personalized_resources.resource_id（若该任务由个性化生成触发）
+        upr_result = await db.execute(
+            select(UserPersonalizedResource).where(
+                UserPersonalizedResource.task_id == task.id,
+                UserPersonalizedResource.is_deleted == False,
+            )
+        )
+        upr_row = upr_result.scalars().first()
+        if upr_row and newly_created_resources:
+            upr_row.resource_id = newly_created_resources[0].id
+            for extra_resource in newly_created_resources[1:]:
+                db.add(UserPersonalizedResource(
+                    user_id=upr_row.user_id,
+                    course_id=upr_row.course_id,
+                    resource_id=extra_resource.id,
+                    source_type=upr_row.source_type,
+                    task_id=task.id,
+                    is_deleted=False,
+                ))
         await _recompute_parent_resource_generation_task(db, task)
     elif req.status == "failed":
         if not req.error_message or not req.error_message.strip():

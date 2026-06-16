@@ -115,12 +115,7 @@ export default function LearningPath() {
             <div>
               <h1 className="font-h1 text-h1 text-on-background">学习路径规划</h1>
             </div>
-            <div className="flex space-x-sm">
-              <div className="flex items-center space-x-xs px-sm py-xs bg-surface-container rounded-full border border-outline-variant">
-                <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                <span className="text-label-sm font-label-sm text-on-surface">分析智能体在线</span>
-              </div>
-            </div>
+
           </header>
 
           {/* Learning Path Visualizer */}
@@ -148,7 +143,6 @@ export default function LearningPath() {
                 <>
                   {/* Path Line */}
                   <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-100 -translate-y-1/2 z-0"></div>
-                  <div className="absolute top-1/2 left-0 w-[45%] h-[2.5px] bg-cyan-500 -translate-y-1/2 z-0"></div>
 
                   {learningPath?.nodes.map((node, index) => {
                     if (node.status === 'completed') {

@@ -882,3 +882,19 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - [ ] 抽取全局状态管理和重复的 Context
 - [ ] 标准化接口请求层（Axios）与统一错误处理
 - [ ] 梳理冗余 UI 组件并迁移至统一组件库
+
+### 2026-06-17 (前端AIChat解耦与架构梳理)
+- **修改文件**: `src/pages/AIChat.jsx`, `src/context/ChatContext.jsx`, `src/App.jsx`, `src/utils/chatContent.js`, `tests/e2e/chat-persistence.spec.js`, `tests/unit/chatContent.test.js`
+- **核心改动**: 创建全局 `ChatContext` 剥离 `AIChat.jsx` 中超过 500 行的流状态管理代码。修复因组件卸载导致的连接中断 Bug。引入基于 Node 的单元测试与 Playwright E2E 自动化测试保障流功能稳定性。顺带清理了原有的 `setTimeout` 状态管理反模式、渲染性能抖动问题。
+- **测试结果**: 单元测试、E2E 测试通过，lint 与 build 全绿。
+- **接口漂移**: 无。
+
+---
+
+# 阶段二：全栈架构重构与规范化 (Phase 2)
+*(自 2026-06-17 开启)*
+
+> **Git 状态标记**：大重构启动前的项目快照已被安全封存至 Git Tag `v1.0.0-pre-refactor` 中。若未来的架构调整中出现不可逆问题，可随时退回该版本以恢复一阶段打通的基础功能。
+
+由于前期的“功能打通阶段”已实现闭环，后续开发正式迈入“架构治理与重构阶段”。
+未来的任务核心为：理清前后端/Agent功能界限、收敛代码坏味道、梳理环境变量与虚拟环境，引入现代化系统架构（高内聚、低耦合），最终目的是让项目架构清晰明了、提升开发者阅读与维护体验。

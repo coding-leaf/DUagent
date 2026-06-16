@@ -1,187 +1,12 @@
-import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import mermaid from 'mermaid';
 import ToolCallCard from './ToolCallCard';
 import { extractModelText } from '../../utils/chatContent';
 import Icon from '../Icon';
-
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  theme: 'default',
-  suppressErrors: true,
-  errorCallback: () => {},
-});
-
-const normalizeMermaidSource = (content) => {
-  const trimmed = (content || '').trim();
-  const fenced = trimmed.match(/^```(?:mermaid)?\s*([\s\S]*?)```$/i);
-  return fenced ? fenced[1].trim() : trimmed;
-};
-
-const sanitizeMermaidSource = (content) => {
-  let source = normalizeMermaidSource(content);
-
-  // Define the opening patterns we want to match, ordered by specificity
-  const patterns = [
-    { open: '((', close: '))', openChar: '(', closeChar: ')' },
-    { open: '{{', close: '}}', openChar: '{', closeChar: '}' },
-    { open: '[/', close: '/]', openChar: '[', closeChar: ']' },
-    { open: '[\\', close: '\\]', openChar: '[', closeChar: ']' },
-    { open: '[', close: ']', openChar: '[', closeChar: ']' },
-    { open: '(', close: ')', openChar: '(', closeChar: ')' },
-    { open: '{', close: '}', openChar: '{', closeChar: '}' },
-    { open: '>', close: ']', openChar: '[', closeChar: ']' }
-  ];
-
-  // Regexp to find a word boundary, an identifier, optional spaces, and one of the openings
-  const escapedOpens = patterns.map(p => p.open.split('').map(c => '\\' + c).join('')).join('|');
-  const regex = new RegExp(`\\b(\\w+)\\s*(${escapedOpens})`, 'g');
-
-  let match;
-  let lastIndex = 0;
-  let result = '';
-
-  while ((match = regex.exec(source)) !== null) {
-    const id = match[1];
-    const openStr = match[2];
-    const matchStart = match.index;
-    
-    const config = patterns.find(p => p.open === openStr);
-    if (!config) {
-      result += source.substring(lastIndex, regex.lastIndex);
-      lastIndex = regex.lastIndex;
-      continue;
-    }
-
-    const { close: closeStr, openChar, closeChar } = config;
-    
-    // Scan forward from regex.lastIndex to find the matching closeStr
-    let nesting = 1;
-    let i = regex.lastIndex;
-    let foundCloseIndex = -1;
-
-    while (i < source.length) {
-      if (source.substring(i, i + closeStr.length) === closeStr) {
-        nesting--;
-        if (nesting === 0) {
-          foundCloseIndex = i;
-          break;
-        }
-        i += closeStr.length;
-        continue;
-      }
-      
-      // If we see a nested open character
-      if (source.charAt(i) === openChar) {
-        nesting++;
-      } else if (source.charAt(i) === closeChar) {
-        nesting--;
-        if (nesting === 0) {
-          foundCloseIndex = i;
-          break;
-        }
-      }
-      i++;
-    }
-
-    if (foundCloseIndex !== -1) {
-      const labelStart = regex.lastIndex;
-      const labelEnd = foundCloseIndex;
-      let label = source.substring(labelStart, labelEnd);
-
-      const isQuoted = (label.startsWith('"') && label.endsWith('"')) || (label.startsWith("'") && label.endsWith("'"));
-      if (!isQuoted) {
-        const escapedLabel = label.replace(/"/g, '\\"');
-        label = `"${escapedLabel}"`;
-      }
-
-      result += source.substring(lastIndex, matchStart);
-      result += `${id}${openStr}${label}${closeStr}`;
-      
-      lastIndex = foundCloseIndex + closeStr.length;
-      regex.lastIndex = lastIndex;
-    } else {
-      result += source.substring(lastIndex, regex.lastIndex);
-      lastIndex = regex.lastIndex;
-    }
-  }
-
-  result += source.substring(lastIndex);
-  return result;
-};
-
-function MermaidDiagram({ content }) {
-  const [svg, setSvg] = useState('');
-  const [error, setError] = useState('');
-  const source = sanitizeMermaidSource(content);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const renderDiagram = async () => {
-      if (!source) {
-        setSvg('');
-        setError('');
-        return;
-      }
-
-      let renderId = '';
-      try {
-        renderId = `chat-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const result = await mermaid.render(renderId, source);
-        if (result.svg.includes('error in text')) {
-          throw new Error('Mermaid syntax error');
-        }
-        if (!cancelled) {
-          setSvg(result.svg);
-          setError('');
-        }
-      } catch (err) {
-        console.warn('Mermaid render failed, showing source:', err?.message);
-        if (!cancelled) {
-          setSvg('');
-          setError('fallback');
-        }
-      } finally {
-        if (renderId) {
-          document.getElementById(renderId)?.remove();
-          document.getElementById(`d${renderId}`)?.remove();
-        }
-      }
-    };
-
-    renderDiagram();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [source]);
-
-  if (error) {
-    return (
-      <pre className="text-xs p-3 bg-slate-100 rounded-lg overflow-x-auto font-mono text-slate-600 border border-slate-200 whitespace-pre-wrap">{source}</pre>
-    );
-  }
-
-  if (!svg) {
-    return <div className="text-slate-400 text-xs py-4 text-center">正在生成可视化图解...</div>;
-  }
-
-  return <div className="mermaid-svg-wrapper overflow-x-auto p-2 bg-white rounded-lg border border-slate-100 shadow-inner" dangerouslySetInnerHTML={{ __html: svg }} />;
-}
+import MarkdownViewer from '../common/MarkdownViewer';
 
 export default function ChatMessage({ message, onSendMessage }) {
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
   
-  const handleCopy = (text) => {
-    navigator.clipboard?.writeText(text).catch(console.error);
-  };
-
   return (
     <div className={`flex gap-4 max-w-[100%] group ${isUser ? 'ml-auto flex-row-reverse' : ''} ${isReviewFlagged ? 'opacity-60' : ''}`}>
       <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${isUser ? 'bg-cyan-600 text-white shadow-sm' : 'bg-sky-100 text-cyan-600'}`}>
@@ -208,61 +33,10 @@ export default function ChatMessage({ message, onSendMessage }) {
 
         {/* Markdown Content */}
         <div className={`markdown-body break-words leading-[1.7] ${isUser ? 'text-white' : 'text-slate-700 text-[15px]'}`}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              code({ inline, className, children, ...rest }) {
-                const match = /language-(\w+)/.exec(className || '');
-                const codeStr = String(children).replace(/\n$/, '');
-                
-                if (!inline && match) {
-                  if (match[1] === 'mermaid') {
-                    return (
-                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 mt-4 mb-2 shadow-sm">
-                        <div className="flex items-center gap-2 mb-2 text-xs text-slate-500 font-medium uppercase tracking-wide">
-                          <Icon name="schema" className="material-symbols-outlined text-[16px] text-cyan-600"/>
-                          <span>图解模式 (Mermaid)</span>
-                        </div>
-                        <MermaidDiagram content={codeStr} />
-                      </div>
-                    );
-                  }
-                  
-                  return (
-                    <div className="relative rounded-xl overflow-hidden my-4 group/code shadow-sm border border-slate-200">
-                      <div className="flex items-center justify-between px-4 py-2 bg-slate-50 text-slate-500 text-[11px] font-mono uppercase tracking-wider border-b border-slate-200">
-                        <span>{match[1]}</span>
-                        <button 
-                          onClick={() => handleCopy(codeStr)}
-                          className="opacity-0 group-hover/code:opacity-100 focus:opacity-100 transition-opacity hover:text-slate-700 flex items-center gap-1 cursor-pointer"
-                          title="Copy code"
-                        >
-                          <Icon name="content_copy" className="material-symbols-outlined text-[14px]"/>
-                          Copy
-                        </button>
-                      </div>
-                      <SyntaxHighlighter
-                        {...rest}
-                        children={codeStr}
-                        style={vscDarkPlus}
-                        language={match[1]}
-                        PreTag="div"
-                        customStyle={{ margin: 0, padding: '1rem', borderTopLeftRadius: 0, borderTopRightRadius: 0, fontSize: '13px', lineHeight: '1.5' }}
-                      />
-                    </div>
-                  );
-                }
-                
-                return (
-                  <code {...rest} className={`${className || ''} bg-slate-100 text-cyan-700 px-1.5 py-0.5 rounded text-[13px] font-mono border border-slate-200`.trim()}>
-                    {children}
-                  </code>
-                );
-              }
-            }}
-          >
-            {extractModelText(message.content)}
-          </ReactMarkdown>
+          <MarkdownViewer 
+            content={extractModelText(message.content)} 
+            className={isUser ? 'text-white' : 'text-slate-700 text-[15px]'} 
+          />
         </div>
 
         {/* Loading Indicator */}
@@ -284,13 +58,10 @@ export default function ChatMessage({ message, onSendMessage }) {
 
         {/* Diagrams */}
         {!isUser && message.diagrams && message.diagrams.map((diag, index) => (
-          <div key={`diagram-${index}`} className="bg-slate-50 rounded-xl p-4 border border-slate-200 mt-4 mb-2 shadow-sm">
-            <div className="flex items-center gap-2 mb-2 text-xs text-slate-500 font-medium uppercase tracking-wide">
-              <Icon name="schema" className="material-symbols-outlined text-[16px] text-cyan-600"/>
-              <span>图解模式 (Mermaid)</span>
-            </div>
-            <MermaidDiagram content={extractModelText(diag)} />
-          </div>
+          <MarkdownViewer 
+            key={`diagram-${index}`}
+            content={`\`\`\`mermaid\n${extractModelText(diag)}\n\`\`\``} 
+          />
         ))}
 
         {/* Suggestions */}

@@ -88,3 +88,42 @@ export function extractModelText(value) {
   // 3. 普通文本
   return str;
 }
+
+export const normalizeTextList = (value) => {
+  const list = Array.isArray(value) ? value : [value];
+  return list.map(extractModelText).map(item => item?.trim()).filter(Boolean);
+};
+
+export const normalizeMessage = (message, index = 0) => {
+  const normalizedId = message?.id || message?.message_id || `${message?.role || 'message'}-${message?.timestamp || index}`;
+  let contentObj = message?.content;
+  if (typeof contentObj === 'string' && contentObj.trim().startsWith('{')) {
+    try { contentObj = JSON.parse(contentObj); } catch { /* ignore */ }
+  }
+  let displayContent;
+  let diagrams = message?.diagrams || [];
+  let knowledge_points = message?.knowledge_points || [];
+  let suggestions = message?.suggestions || [];
+
+  if (typeof contentObj === 'object' && contentObj !== null) {
+    displayContent = contentObj.model_text || contentObj.content || JSON.stringify(contentObj);
+    if (contentObj.diagram && !diagrams.length) diagrams = [contentObj.diagram];
+    if (contentObj.diagrams && !diagrams.length) diagrams = contentObj.diagrams;
+    if (contentObj.knowledge_points && !knowledge_points.length) knowledge_points = contentObj.knowledge_points;
+    if (contentObj.suggestion && !suggestions.length) suggestions = [contentObj.suggestion];
+    if (contentObj.suggestions && !suggestions.length) suggestions = contentObj.suggestions;
+  } else {
+    displayContent = extractModelText(message?.content);
+  }
+
+  return {
+    ...message,
+    id: normalizedId,
+    content: displayContent,
+    diagrams: Array.isArray(diagrams) ? diagrams : (diagrams ? [diagrams] : []),
+    knowledge_points: normalizeTextList(knowledge_points),
+    suggestions: normalizeTextList(suggestions),
+  };
+};
+
+export const normalizeMessages = (items) => (Array.isArray(items) ? items.map(normalizeMessage) : []);

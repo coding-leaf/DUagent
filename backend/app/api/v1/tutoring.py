@@ -38,6 +38,32 @@ def _build_learner_context(user: User) -> dict:
     }
 
 
+async def _get_last_messages(
+    db: AsyncSession, conversation_id: str
+) -> tuple[Message | None, Message | None]:
+    """返回 (last_user_msg, last_assistant_msg)。"""
+    r = await db.execute(
+        select(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.is_deleted == False,
+        )
+        .order_by(Message.create_time.desc(), Message.update_time.desc())
+        .limit(20)
+    )
+    all_msgs = list(r.scalars().all())
+    last_user = None
+    last_assistant = None
+    for m in all_msgs:
+        if m.role == "user" and last_user is None:
+            last_user = m
+        elif m.role == "assistant" and last_assistant is None:
+            last_assistant = m
+        if last_user is not None and last_assistant is not None:
+            break
+    return (last_user, last_assistant)
+
+
 async def _assemble_tutoring_payload(
     user_id: str, scope: str, course_id: str | None,
     conversation_id: str, message: str, db: AsyncSession,
@@ -166,8 +192,17 @@ async def tutoring_chat(
 
     effective_course_id: str | None = req.course_id if req.scope == "course" else None
 
-    # Create or validate conversation
-    if req.conversation_id:
+    is_edit = req.action == "edit"
+    is_regenerate = req.action == "regenerate"
+
+    # ---- 三路分流 ----
+    if is_edit:
+        # edit: 必须已有 conversation，更新最后一条 user 消息 + 清空 assistant
+        if not req.conversation_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40001, "message": "edit 模式必须提供 conversation_id", "data": None},
+            )
         result = await db.execute(
             select(Conversation).where(
                 Conversation.id == req.conversation_id,
@@ -181,51 +216,147 @@ async def tutoring_chat(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": 40400, "message": "对话不存在", "data": None},
             )
-    else:
-        title = req.message[:50] + ("..." if len(req.message) > 50 else "")
-        conv = Conversation(
-            user_id=current_user.id,
-            scope=req.scope,
-            course_id=effective_course_id,
-            title=title,
+        conversation_id = conv.id
+
+        # 取最后一对消息
+        last_user, last_assistant = await _get_last_messages(db, conversation_id)
+        if last_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40001, "message": "edit 模式需要至少一条用户消息", "data": None},
+            )
+
+        # 更新用户消息内容
+        last_user.content = req.message
+        db.add(last_user)
+
+        user_msg_id = last_user.id
+        if last_assistant:
+            last_assistant.content = ""
+            last_assistant.diagrams = None
+            last_assistant.knowledge_points = None
+            db.add(last_assistant)
+            a_msg_id = last_assistant.id
+        else:
+            # 没有 assistant 消息时创建一个占位
+            assistant_msg = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content="",
+                meta_json={"scope": req.scope, "course_id": req.course_id},
+            )
+            db.add(assistant_msg)
+            await db.flush()
+            a_msg_id = assistant_msg.id
+
+    elif is_regenerate:
+        # regenerate: 必须已有 conversation，不清除用户消息，只清空 assistant
+        if not req.conversation_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40001, "message": "regenerate 模式必须提供 conversation_id", "data": None},
+            )
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == req.conversation_id,
+                Conversation.user_id == current_user.id,
+                Conversation.is_deleted == False,
+            )
         )
-        db.add(conv)
+        conv = result.scalar_one_or_none()
+        if conv is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": 40400, "message": "对话不存在", "data": None},
+            )
+        conversation_id = conv.id
+
+        last_user, last_assistant = await _get_last_messages(db, conversation_id)
+        user_msg_id = last_user.id if last_user else None
+
+        if last_assistant:
+            last_assistant.content = ""
+            last_assistant.diagrams = None
+            last_assistant.knowledge_points = None
+            db.add(last_assistant)
+            a_msg_id = last_assistant.id
+        else:
+            assistant_msg = Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content="",
+                meta_json={"scope": req.scope, "course_id": req.course_id},
+            )
+            db.add(assistant_msg)
+            await db.flush()
+            a_msg_id = assistant_msg.id
+
+    else:
+        # chat（默认）：新建或沿用对话，创建新消息
+        if req.conversation_id:
+            result = await db.execute(
+                select(Conversation).where(
+                    Conversation.id == req.conversation_id,
+                    Conversation.user_id == current_user.id,
+                    Conversation.is_deleted == False,
+                )
+            )
+            conv = result.scalar_one_or_none()
+            if conv is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": 40400, "message": "对话不存在", "data": None},
+                )
+        else:
+            title = req.message[:50] + ("..." if len(req.message) > 50 else "")
+            conv = Conversation(
+                user_id=current_user.id,
+                scope=req.scope,
+                course_id=effective_course_id,
+                title=title,
+            )
+            db.add(conv)
+            await db.flush()
+            await db.refresh(conv)
+
+        conversation_id = conv.id
+
+        # Save user message
+        user_msg = Message(
+            conversation_id=conversation_id,
+            role="user",
+            content=req.message,
+            meta_json={"scope": req.scope, "course_id": req.course_id},
+        )
+        db.add(user_msg)
         await db.flush()
-        await db.refresh(conv)
+        user_msg_id = user_msg.id
 
-    # Save user message
-    user_msg = Message(
-        conversation_id=conv.id,
-        role="user",
-        content=req.message,
-        meta_json={"scope": req.scope, "course_id": req.course_id},
-    )
-    db.add(user_msg)
-    await db.flush()
+        # Create placeholder for assistant message
+        assistant_msg = Message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content="",
+            meta_json={"scope": req.scope, "course_id": req.course_id},
+        )
+        db.add(assistant_msg)
+        await db.flush()
+        a_msg_id = assistant_msg.id
 
-    # Create placeholder for assistant message
-    conversation_id = conv.id
-    assistant_msg = Message(
-        conversation_id=conv.id,
-        role="assistant",
-        content="",
-        meta_json={"scope": req.scope, "course_id": req.course_id},
-    )
-    db.add(assistant_msg)
-    await db.flush()
-    a_msg_id = assistant_msg.id
-
+    # ---- 共享收尾 ----
     conv.update_time = datetime.now(timezone.utc)
     await db.flush()
-
-    # Commit pre-stream DB writes so session doesn't hold lock during SSE
     await db.commit()
 
-    # Assemble Agent payload (use new session for read-only payload assembly)
+    exclude_ids = set()
+    if user_msg_id:
+        exclude_ids.add(user_msg_id)
+    if a_msg_id:
+        exclude_ids.add(a_msg_id)
     payload = await _assemble_tutoring_payload(
         current_user.id, req.scope, effective_course_id,
         conversation_id, req.message, db,
-        exclude_message_ids={user_msg.id, a_msg_id},
+        exclude_message_ids=exclude_ids,
     )
 
     async def event_generator():

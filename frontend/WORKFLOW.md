@@ -844,3 +844,41 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
   - 修改了 `frontend/src/pages/PracticeResult.jsx`，增加了 `LOADING_TEXTS` 和 `currentTextIndex` 状态，将等待时间从 1.5 秒延长到 5 秒，每 1.25 秒轮询更新加载状态文字，在第 4 步后停止。
   - 优化了加载卡片样式以适配原生的浅色主题（显示“智能教练评估中”，配以 outer spin 进度环和 inner pulse 机器人图标）。
   - 验证：`npm run build` 成功通过，无编译报错；`src/pages/PracticeResult.jsx` 无新增 lint 问题。
+
+2026-06-16 AI Chat 交互增强
+- 后端: TutoringChatRequest 新增 action 字段 (d1caeeb); /chat 三路分流(chat/edit/regenerate) (328984f); 复审修复 last_user 为空守卫 (7837624); DELETE /conversations/{id} 软删除会话 (24c6a7c)
+- 前端: chatService 支持 action 参数 + deleteSession (dd7a526); 停止生成按钮 (4a04179); 编辑消息/重新生成/复制消息 (5f741cd); 删除历史对话 (d59ae4d)
+- 关键改动: streamTargetIdRef 替代硬编码 'ai-placeholder'; SSE 回调提取为 ref 模式 (streamOnMessageRef/streamOnDoneRef/streamOnErrorRef)
+- 架构变化: handleSendMessage / handleRegenerate / handleEditSubmit 复用同一组 SSE 回调 ref，仅 targetId 不同
+- 验证: py_compile全通过; npm run build通过; lint无新增error
+
+### 2026-06-17
+- **修改文件**：`frontend/src/components/chat/ChatMessage.jsx`
+- **核心改动**：在 `sanitizeMermaidSource` 增加正则表达式，用于捕获包含空格、引号或方括号等无效字符的非法 `subgraph` 标题（例如 `subgraph 数组 int arr["5"] 的内存布局`），并自动将其转换为带双引号的合法语法（`subgraph "..."`）。
+- **测试结果**：无代码运行报错，成功解决 Mermaid 因为语法解析异常导致的渲染失败。
+- **接口漂移**：无
+
+### 2026-06-17 (前端标题修改)
+- **修改文件**：`index.html`, `src/components/Navbar.jsx`, `src/pages/Success.jsx`, `src/pages/AdminConsole.jsx`
+- **核心改动**：根据反馈将过于狭窄的前端标题“数据结构智能助手”（及相关的 DS_MASTERY_AI 等）统一修改为“智能学习助手”，以匹配业务需求（保持和登录注册页一致的文案）。
+- **测试结果**：无代码运行报错。
+- **接口漂移**：无
+
+### 2026-06-17 (前端UI重构-全局去除学生端侧边栏)
+- **修改文件**：`src/pages/Dashboard.jsx`, `src/pages/LearningEffects.jsx`, `src/pages/StudentProfile.jsx`, `src/pages/LearningPath.jsx`, `src/pages/PersonalizedResources.jsx`, 删除 `src/components/Sidebar.jsx`
+- **核心改动**：彻底清理了学生端所有页面中冗余的侧边栏组件。移除了 `<Sidebar />` 引用以及硬编码的 `<aside>`，统一采用全局顶部 `Navbar` 导航模型。同步移除了对应 `<main>` 容器预留的左侧边距（如 `lg:ml-64`、`lg:pl-64`、`md:pl-64`），使主内容区在宽屏下重新恢复居中显示。
+- **测试结果**：无代码运行报错，组件删除无遗留依赖。
+- **接口漂移**：无
+
+### 2026-06-17
+- **更新文件**: `src/utils/mermaid.js`, `src/components/common/MarkdownViewer.jsx`, `src/components/chat/ChatMessage.jsx`, `src/pages/ResourceDetail.jsx`
+- **核心改动**: 提取全局复用的 `MarkdownViewer` 组件解决 `ResourceDetail` Markdown 解析失效问题。将散落的 mermaid 配置统一收拢至工具包，同时彻底清理 ChatMessage 和 ResourceDetail 内部耦合的富文本渲染逻辑。
+- **测试结果**: 前端 lint/build 成功。
+- **接口漂移**: 无。跨组件接口重构成功。
+
+---
+
+## 全局重构与技术债清理计划 (Agenda)
+- [ ] 抽取全局状态管理和重复的 Context
+- [ ] 标准化接口请求层（Axios）与统一错误处理
+- [ ] 梳理冗余 UI 组件并迁移至统一组件库

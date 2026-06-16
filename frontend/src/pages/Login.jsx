@@ -8,6 +8,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
+  const [showForgotModal, setShowForgotModal] = useState(false);
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
 
@@ -77,66 +78,59 @@ export default function Login() {
   };
 
   return (
+    <>
     <main className="flex-grow flex flex-col lg:flex-row min-h-screen">
       {/* Sidebar: Welcome/Info Section (Left) */}
-      <section className="lg:w-[40%] xl:w-[35%] relative min-h-[400px] lg:min-h-screen flex flex-col p-gutter lg:p-xl overflow-hidden">
-        {/* Background Image Integration */}
-        <div className="absolute inset-0 z-0">
-          <img
-            alt="Data Structure Visualization"
-            className="w-full h-full object-cover"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiTJ_GAvDOuHMFdWLbS_M3BaLYbfT_iMZXA7ArGiPh-z_Kab_HsFo9xK-2e808gHSfRdF-Php-Eyburwv7uA_G-8_j_4iF6L0qtv7KKE1OIzzECIYeOxzF8OuMgIcnVXy3hye1g4vlO0tW8JAm-zNRp_ijrtayb8VDfhPlz-19NB2vj16XtZdOHUMHKYj4rKv2yueL-y6DcA2vpuzgeDOLFBDSuvbS15e3N4iTGeMO_-iS5CTLvmkN3OguQGyepZMnLuShCBAIE2Xd"
-          />
-          <div className="absolute inset-0 bg-primary/40 backdrop-blur-[2px] mix-blend-multiply"></div>
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/40 to-transparent"></div>
+      <section className="lg:w-[40%] xl:w-[35%] relative min-h-[400px] lg:min-h-screen flex flex-col p-8 lg:p-12 overflow-hidden bg-gradient-to-br from-cyan-600 to-cyan-900">
+        {/* Decorative elements */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+          <div className="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] rounded-full bg-cyan-400/20 blur-[80px]"></div>
+          <div className="absolute bottom-[10%] -right-[10%] w-[60%] h-[60%] rounded-full bg-blue-500/20 blur-[100px]"></div>
+          <div className="absolute top-[40%] left-[20%] w-[40%] h-[40%] rounded-full bg-teal-400/10 blur-[60px]"></div>
         </div>
 
         {/* Content Overlay */}
         <div className="relative z-10 flex flex-col h-full text-white justify-between">
           <div>
             {/* Brand */}
-            <div className="flex items-center space-x-xs mb-xl">
-              <span className="material-symbols-outlined text-primary-fixed" style={{ fontSize: '32px' }}>hub</span>
-              <h1 className="font-['Public_Sans'] text-2xl font-black tracking-tighter">数据结构智能助手</h1>
+            <div className="flex items-center space-x-2 mb-16">
+              <span className="material-symbols-outlined text-cyan-300" style={{ fontSize: '32px' }}>school</span>
+              <h1 className="font-['Plus_Jakarta_Sans',sans-serif] text-2xl font-bold tracking-tight">智能学习助手</h1>
             </div>
             
-            <div className="space-y-lg my-auto">
-              <div className="space-y-sm">
-                <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm">
-                  <span className="material-symbols-outlined text-primary-fixed text-sm mr-2">neurology</span>
-                  <span className="text-label-sm font-bold uppercase tracking-wider">Multi-Agent Learning System</span>
+            <div className="space-y-10 my-auto">
+              <div className="space-y-4">
+                <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md">
+                  <span className="material-symbols-outlined text-cyan-300 text-sm mr-2">psychology</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-cyan-50">EduAgent Platform</span>
                 </div>
-                <h2 className="font-h1 leading-tight text-3xl lg:text-4xl text-left">
-                  数据结构智能助手 <br />
-                  <span className="text-primary-fixed">核心调度器</span>
+                <h2 className="font-['Plus_Jakarta_Sans',sans-serif] text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight">
+                  开启您的 <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-teal-200">智能学习之旅</span>
                 </h2>
-                <p className="font-body-lg text-white/80 max-w-[448px] text-left text-sm lg:text-base">
-                  基于大模型的个性化资源生成与学习多智能体系统。探索数据结构的奥秘，由智能体引导的沉浸式学习体验。
+                <p className="text-cyan-50/80 max-w-[400px] text-base leading-relaxed mt-4">
+                  结合大模型与多智能体技术，为您提供量身定制的学习路径、互动答疑与沉浸式的知识探索体验。
                 </p>
               </div>
 
               {/* Features Summary */}
-              <div className="grid grid-cols-1 gap-md text-left pt-4">
-                <div className="bg-white/10 backdrop-blur-md p-md rounded-xl border border-white/20 shadow-sm border-l-4 border-primary-fixed">
-                  <span className="material-symbols-outlined text-primary-fixed mb-2">account_tree</span>
-                  <h4 className="font-h3 text-sm font-bold mb-1">结构化解析</h4>
-                  <p className="text-label-sm text-white/70">利用多智能体协作，深度拆解复杂数据结构逻辑。</p>
+              <div className="grid grid-cols-1 gap-4 text-left pt-6">
+                <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:bg-white/15 transition-colors group">
+                  <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <span className="material-symbols-outlined text-cyan-300">route</span>
+                  </div>
+                  <h4 className="text-base font-bold mb-1 text-white">个性化路径规划</h4>
+                  <p className="text-sm text-cyan-50/70 leading-relaxed">动态评估您的掌握程度，实时生成最适合的专属学习节点与挑战。</p>
                 </div>
-                <div className="bg-white/10 backdrop-blur-md p-md rounded-xl border border-white/20 shadow-sm border-l-4 border-white/40">
-                  <span className="material-symbols-outlined text-white/60 mb-2">auto_awesome</span>
-                  <h4 className="font-h3 text-sm font-bold mb-1">个性化生成</h4>
-                  <p className="text-label-sm text-white/70">根据学习进度动态生成个性化习题与解析资源。</p>
+                
+                <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:bg-white/15 transition-colors group">
+                  <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <span className="material-symbols-outlined text-teal-300">forum</span>
+                  </div>
+                  <h4 className="text-base font-bold mb-1 text-white">沉浸式互动引导</h4>
+                  <p className="text-sm text-cyan-50/70 leading-relaxed">提供随时随地的 1V1 智能辅导，帮您深度剖析每一个代码细节。</p>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Status Card (Footer of Sidebar) */}
-          <div className="mt-xl p-md rounded-xl bg-white/5 border border-white/10 flex items-center space-x-md text-left">
-            <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
-            <div>
-              <p className="text-label-sm font-bold opacity-80 uppercase tracking-widest text-xs">System Status</p>
-              <p className="text-body-md text-white/90 text-sm">智能体集群已就绪，等待指令...</p>
             </div>
           </div>
         </div>
@@ -146,12 +140,12 @@ export default function Login() {
       <section className="flex-grow flex flex-col justify-center items-center p-gutter lg:p-xl bg-surface-container-low min-h-screen">
         <div className="max-w-[1000px] w-full">
           {/* Mobile Branding (Hidden on Large Screens) */}
-          <div className="lg:hidden flex flex-col items-center mb-lg">
-            <div className="flex items-center space-x-xs mb-2">
-              <span className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}>hub</span>
-              <h2 className="font-['Public_Sans'] text-xl font-black text-on-surface">数据结构智能助手</h2>
+          <div className="lg:hidden flex flex-col items-center mb-8">
+            <div className="flex items-center space-x-2 mb-2">
+              <span className="material-symbols-outlined text-cyan-600" style={{ fontSize: '28px' }}>school</span>
+              <h2 className="font-['Plus_Jakarta_Sans',sans-serif] text-2xl font-bold text-slate-800">智能学习助手</h2>
             </div>
-            <p className="text-label-sm text-secondary uppercase tracking-widest text-xs">Multi-Agent Learning System</p>
+            <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold">EduAgent Platform</p>
           </div>
 
           <div className="glass-panel p-gutter lg:p-xl rounded-2xl shadow-xl border border-surface-container-highest bg-white/80 backdrop-blur-md">
@@ -241,7 +235,7 @@ export default function Login() {
                     />
                     <span className="text-label-sm text-secondary text-xs">记住我</span>
                   </label>
-                  <a className="text-label-sm text-primary hover:underline font-medium text-xs" href="#">忘记密码?</a>
+                  <a className="text-label-sm text-primary hover:underline font-medium text-xs cursor-pointer" onClick={() => setShowForgotModal(true)}>忘记密码?</a>
                 </div>
 
                 <button
@@ -265,16 +259,34 @@ export default function Login() {
 
           {/* Footer Info */}
           <footer className="mt-xl text-center">
-            <p className="text-label-sm text-outline mb-xs text-xs">© 2024 数据结构智能助手 核心调度器. All rights reserved.</p>
+            <p className="text-label-sm text-outline mb-xs text-xs">© 2026 智能学习助手 (EduAgent). All rights reserved.</p>
             <div className="flex justify-center space-x-md text-label-sm text-secondary font-medium text-xs">
               <a className="hover:text-primary transition-colors" href="#">隐私政策</a>
               <a className="hover:text-primary transition-colors" href="#">服务条款</a>
-              <span className="text-outline-variant">|</span>
-              <span>By: 害虫杀手队</span>
             </div>
           </footer>
         </div>
       </section>
     </main>
+
+    {showForgotModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowForgotModal(false)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 text-center" onClick={(e) => e.stopPropagation()}>
+          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+            <span className="material-symbols-outlined text-amber-500 text-2xl">lock</span>
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-2">忘记密码？</h2>
+          <p className="text-sm text-slate-500 mb-6">请联系管理员重置您的账号密码。</p>
+          <button
+            type="button"
+            onClick={() => setShowForgotModal(false)}
+            className="w-full py-2.5 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            知道了
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

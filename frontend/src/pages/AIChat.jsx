@@ -485,13 +485,27 @@ export default function AIChat() {
                     </button>
                   </div>
                   
-                  <button 
-                    onClick={() => handleSendMessage()}
-                    disabled={isSending || !inputValue.trim() || !activeCourseId}
-                    className="w-8 h-8 rounded-lg bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"
-                  >
-                    <Icon name="arrow_upward" className="material-symbols-outlined text-[16px]"/>
-                  </button>
+                  {isSending ? (
+                    <button
+                      onClick={() => {
+                        abortControllerRef.current?.();
+                        abortControllerRef.current = null;
+                        setIsSending(false);
+                      }}
+                      className="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center cursor-pointer hover:bg-red-600 active:scale-95 transition-all shadow-sm"
+                      title="停止生成"
+                    >
+                      <Icon name="close" className="material-symbols-outlined text-[16px]"/>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSendMessage()}
+                      disabled={!inputValue.trim() || !activeCourseId}
+                      className="w-8 h-8 rounded-lg bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"
+                    >
+                      <Icon name="arrow_upward" className="material-symbols-outlined text-[16px]"/>
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="text-center mt-2 text-[11px] text-slate-400">

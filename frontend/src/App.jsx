@@ -14,6 +14,7 @@ import LearningEffects from './pages/LearningEffects';
 import PracticeResult from './pages/PracticeResult';
 import AdminConsole from './pages/AdminConsole';
 import ResourceDetail from './pages/ResourceDetail';
+import PersonalizedResources from './pages/PersonalizedResources';
 import { AuthProvider } from './context/AuthContext';
 import { CourseProvider } from './context/CourseContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -38,6 +39,7 @@ function App() {
             <Route path="/quiz/result" element={<ProtectedRoute allowedRoles={['student']}><PracticeResult /></ProtectedRoute>} />
             <Route path="/ai-chat" element={<ProtectedRoute allowedRoles={['student']}><AIChat /></ProtectedRoute>} />
             <Route path="/learning-effects" element={<ProtectedRoute allowedRoles={['student']}><LearningEffects /></ProtectedRoute>} />
+            <Route path="/personalized-resources" element={<ProtectedRoute allowedRoles={['student']}><PersonalizedResources /></ProtectedRoute>} />
             
             {/* Teacher / Admin routes */}
             <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherConsole /></ProtectedRoute>} />

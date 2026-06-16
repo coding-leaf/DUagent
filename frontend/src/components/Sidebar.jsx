@@ -27,6 +27,10 @@ export default function Sidebar() {
             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>library_books</span>
             <span className="font-body-md">资源库</span>
           </Link>
+          <Link to="/personalized-resources" className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ease-in-out cursor-pointer hover:pl-5 ${isActive('/personalized-resources') ? 'bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <span className="material-symbols-outlined">psychology</span>
+            <span className="font-body-md">个性化资源</span>
+          </Link>
         </div>
       </nav>
       <div className="px-6 mt-auto">

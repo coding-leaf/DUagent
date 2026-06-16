@@ -577,11 +577,11 @@ export default function AIChat() {
           fixed top-0 left-0 h-full w-64 shadow-2xl lg:shadow-none lg:static lg:h-full
           ${leftDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           /* Desktop Collapse Style */
-          ${leftCollapsed ? 'lg:w-0 lg:opacity-0 lg:border-transparent' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
+          ${leftCollapsed ? 'lg:w-16 lg:border-r lg:border-slate-200' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
         `}>
           {/* Wrapper to handle overflow clipping during width transitions without hiding absolute handle */}
-          <div className="w-full h-full overflow-hidden flex flex-col">
-            <div className="flex-1 flex flex-col min-w-[256px] h-full">
+          <div className="w-64 h-full overflow-hidden flex flex-col">
+            <div className="flex-1 flex flex-col w-64 h-full">
               <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2 font-bold text-slate-800">
                   <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
@@ -608,13 +608,15 @@ export default function AIChat() {
                         setActiveSession(session.id);
                         setLeftDrawerOpen(false);
                       }}
-                      className={`flex-1 px-3 py-2 rounded-lg cursor-pointer text-[13px] truncate transition-colors ${
+                      className={`flex-1 px-3 py-2 rounded-lg cursor-pointer text-[13px] transition-colors flex items-center gap-2 ${
                         activeSession === session.id
                           ? 'bg-slate-100 text-slate-800 font-semibold'
                           : 'text-slate-500 hover:bg-slate-50'
                       }`}
+                      title={session.title}
                     >
-                      {session.title}
+                      <Icon name="chat_bubble_outline" className="material-symbols-outlined text-[16px] flex-shrink-0"/>
+                      <span className="truncate">{session.title}</span>
                     </div>
                     <button
                       onClick={async (e) => {

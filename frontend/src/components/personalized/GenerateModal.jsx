@@ -94,12 +94,15 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
     }
 
     const results = await Promise.allSettled(promises);
+    const allFailed = results.every(r => r.status === 'rejected');
     const hasError = results.some(r => r.status === 'rejected');
     if (hasError) {
-      setError('部分生成请求失败，已提交的任务仍在执行中');
+      setError(allFailed ? '生成请求失败，请重试' : '部分生成请求失败，已提交的任务仍在执行中');
     }
     setGenerating(false);
-    onGenerated();
+    if (!allFailed) {
+      onGenerated();
+    }
   };
 
   return (

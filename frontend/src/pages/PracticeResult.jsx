@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { quizService } from '../api/services/quiz';
 import { useCourse } from '../context/CourseContext';
+import { personalizedResourcesService } from '../api/services/personalizedResources';
 
 export default function PracticeResult() {
   const navigate = useNavigate();
@@ -9,6 +10,8 @@ export default function PracticeResult() {
   const { activeCourseId } = useCourse();
   const [resultData, setResultData] = useState(location.state?.result || null);
   const [loading, setLoading] = useState(!location.state?.result);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState(null);
 
   useEffect(() => {
     if (!resultData && activeCourseId) {
@@ -50,6 +53,32 @@ export default function PracticeResult() {
 
   const accuracy = resultData ? Math.round((resultData.correct_count / (resultData.total_count || 1)) * 100) : 0;
 
+  const wrongQuestionIds = resultData?.per_question_results
+    ?.filter(q => !q.is_correct)
+    .map(q => q.question_id)
+    .filter(Boolean) || [];
+
+  const handleGenerateWrongAnswerQuiz = async () => {
+    if (!activeCourseId) return;
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const payload = {
+        course_id: activeCourseId,
+        generate_type: 'quiz',
+        source_type: 'quiz_wrong_answer',
+        count: 5,
+      };
+      if (wrongQuestionIds.length > 0) {
+        payload.wrong_question_ids = wrongQuestionIds;
+      }
+      await personalizedResourcesService.generate(payload);
+      navigate('/personalized-resources', { state: { newTaskId: 'triggered' } });
+    } catch {
+      setGenerateError('生成失败，请稍后重试');
+      setGenerating(false);
+    }
+  };
 
   return (
     <div className="bg-surface text-on-surface min-h-screen">
@@ -169,21 +198,44 @@ export default function PracticeResult() {
           </div>
 
           {/* Modal Footer (Actions) */}
-          <div className="px-xl py-lg bg-surface-container-low border-t border-surface-container flex gap-md justify-center">
-            <button 
-              onClick={() => navigate('/dashboard')}
-              className="flex-1 max-w-[200px] h-12 rounded-xl border-2 border-primary-container text-primary font-bold hover:bg-primary-container/5 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span className="material-symbols-outlined">home</span>
-              返回主页
-            </button>
-            <button 
-              onClick={() => navigate('/quiz')}
-              className="flex-1 max-w-[200px] h-12 rounded-xl bg-primary-container text-white font-bold shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              下一组练习
-              <span className="material-symbols-outlined">arrow_forward</span>
-            </button>
+          <div className="px-xl py-lg bg-surface-container-low border-t border-surface-container flex flex-col gap-md">
+            {accuracy < 60 && resultData && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <span className="material-symbols-outlined text-amber-500 flex-shrink-0 mt-0.5">warning</span>
+                <div className="flex-1">
+                  <p className="text-body-md font-medium text-amber-800">本次正确率较低（{accuracy}%）</p>
+                  <p className="text-label-sm text-amber-600 mt-0.5">是否生成针对错题的个性化练习，帮助你巩固薄弱知识点？</p>
+                  {generateError && <p className="text-error text-label-sm mt-1">{generateError}</p>}
+                </div>
+                <button
+                  onClick={handleGenerateWrongAnswerQuiz}
+                  disabled={generating}
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-lg text-label-sm font-bold hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generating
+                    ? <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                    : <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                  }
+                  {generating ? '生成中...' : '生成针对性练习'}
+                </button>
+              </div>
+            )}
+            <div className="flex gap-md justify-center">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="flex-1 max-w-[200px] h-12 rounded-xl border-2 border-primary-container text-primary font-bold hover:bg-primary-container/5 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span className="material-symbols-outlined">home</span>
+                返回主页
+              </button>
+              <button
+                onClick={() => navigate('/quiz')}
+                className="flex-1 max-w-[200px] h-12 rounded-xl bg-primary-container text-white font-bold shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                下一组练习
+                <span className="material-symbols-outlined">arrow_forward</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

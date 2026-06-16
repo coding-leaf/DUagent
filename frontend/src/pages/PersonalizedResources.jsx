@@ -124,12 +124,12 @@ export default function PersonalizedResources() {
     }
   }, [activeCourseId, filterSource]);
 
-  // 初始加载
+  // 初始加载 + filter 切换时重置 loading
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      fetchItems();
-    }, 0);
-    return () => window.clearTimeout(timer);
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetchItems();
   }, [fetchItems]);
 
   // 轮询：processingCount > 0 时每 3 秒刷新一次

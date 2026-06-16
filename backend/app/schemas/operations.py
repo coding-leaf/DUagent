@@ -21,6 +21,7 @@ class QuizGenerateRequest(BaseModel):
 
 class TutoringChatRequest(BaseModel):
     message: str
+    action: str = "chat"  # "chat" | "edit" | "regenerate"
     scope: str = "course"
     course_id: Optional[str] = None
     conversation_id: Optional[str] = None

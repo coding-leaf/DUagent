@@ -6,14 +6,23 @@ import { personalizedResourcesService } from '../api/services/personalizedResour
 import { learningService } from '../api/services/learning';
 import { profileService } from '../api/services/profile';
 
+const LOADING_TEXTS = [
+  "正在接收本次作答数据...",
+  "正在分析知识点掌握情况...",
+  "正在评估薄弱环节与能力表现...",
+  "正在生成个性化学习建议..."
+];
+
 export default function PracticeResult() {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeCourseId } = useCourse();
   const [resultData, setResultData] = useState(location.state?.result || null);
-  const [loading, setLoading] = useState(!location.state?.result);
+  const [diagnosisData, setDiagnosisData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
+  const [currentTextIndex, setCurrentTextIndex] = useState(0);
 
   const quizContext = location.state?.quizContext || null;
   const contextKp = quizContext?.knowledge_point || null;
@@ -31,33 +40,85 @@ export default function PracticeResult() {
   }, [accuracy, activeCourseId, resultData]);
 
   useEffect(() => {
-    if (!resultData && activeCourseId) {
-      const fetchResult = async () => {
+    let isMounted = true;
+    let intervalTimer = null;
+    let fetchTimer = null;
+
+    if (activeCourseId) {
+      const fetchDiagnosis = async () => {
         try {
           const res = await quizService.getResult(activeCourseId);
-          if (res.code === 200) {
-            setResultData({
-              score: res.data.latest_quiz.score,
-              time_spent: res.data.latest_quiz.time_spent,
-              total_count: 10,
-              correct_count: Math.round((res.data.latest_quiz.score / 100) * 10),
-              per_question_results: []
-            });
+          if (res.code === 200 && isMounted) {
+            setDiagnosisData(res.data.diagnosis);
+            if (!resultData && res.data.latest_quiz) {
+              setResultData({
+                score: res.data.latest_quiz.score,
+                time_spent: res.data.latest_quiz.time_spent,
+                total_count: 10,
+                correct_count: Math.round((res.data.latest_quiz.score / 100) * 10),
+                per_question_results: []
+              });
+            }
           }
         } catch (error) {
-          console.error("Failed to fetch result", error);
+          console.error("Failed to fetch diagnosis result", error);
         } finally {
-          setLoading(false);
+          if (isMounted) {
+            setLoading(false);
+            if (intervalTimer) clearInterval(intervalTimer);
+          }
         }
       };
-      fetchResult();
+
+      // Progressively update text index every 1250ms
+      intervalTimer = setInterval(() => {
+        if (isMounted) {
+          setCurrentTextIndex((prev) => {
+            if (prev < LOADING_TEXTS.length - 1) {
+              return prev + 1;
+            }
+            return prev;
+          });
+        }
+      }, 1250);
+      
+      // Delay fetching slightly to allow backend AI task to complete
+      fetchTimer = setTimeout(() => {
+        fetchDiagnosis();
+      }, 5000);
+
+      return () => {
+        isMounted = false;
+        if (intervalTimer) clearInterval(intervalTimer);
+        clearTimeout(fetchTimer);
+      };
+    } else {
+      fetchTimer = setTimeout(() => {
+        if (isMounted) setLoading(false);
+      }, 0);
+      return () => {
+        isMounted = false;
+        clearTimeout(fetchTimer);
+      };
     }
-  }, [resultData, activeCourseId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCourseId]); // 仅依赖 activeCourseId，挂载后获取一次
 
   if (loading) {
     return (
-      <div className="bg-surface min-h-screen flex items-center justify-center">
-        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+      <div className="bg-surface min-h-screen flex items-center justify-center p-md">
+        <div className="max-w-md w-full bg-white border border-outline-variant rounded-2xl shadow-[0px_8px_40px_rgba(0,0,0,0.04)] p-xl flex flex-col items-center text-center">
+          <div className="relative flex items-center justify-center h-20 w-20 mb-md">
+            {/* Outer spinning progress ring */}
+            <div className="absolute inset-0 border-4 border-primary-container/20 border-t-primary rounded-full animate-spin"></div>
+            {/* Inner pulsing AI robot icon */}
+            <span className="material-symbols-outlined text-primary text-3xl animate-pulse">smart_toy</span>
+          </div>
+          <h3 className="font-h3 text-h3 text-on-surface mb-xs">智能教练评估中</h3>
+          <p className="font-body-md text-secondary min-h-[24px]">
+            {LOADING_TEXTS[currentTextIndex]}
+          </p>
+        </div>
       </div>
     );
   }
@@ -179,15 +240,30 @@ export default function PracticeResult() {
                     <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-primary-container flex items-center justify-center text-white shadow-lg">
                       <span className="material-symbols-outlined">smart_toy</span>
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar pr-2">
                       <h4 className="font-body-lg font-bold text-on-surface mb-1">AI 智能教练建议</h4>
-                      <p className="font-body-md text-on-surface-variant leading-relaxed text-sm">
-                        {accuracy >= 80 ? (
-                          <>总体表现优异！你在<span className="text-primary font-bold">基础知识点</span>上非常熟练。继续保持！</>
+                      <div className="font-body-md text-on-surface-variant leading-relaxed text-sm space-y-1">
+                        {diagnosisData ? (
+                          <>
+                            <p className="text-primary-container font-medium">{diagnosisData.summary}</p>
+                            {diagnosisData.suggestions && diagnosisData.suggestions.length > 0 && (
+                              <ul className="list-disc list-inside pl-1 text-on-surface">
+                                {diagnosisData.suggestions.map((sug, idx) => (
+                                  <li key={idx} className="break-words whitespace-normal">{sug}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </>
                         ) : (
-                          <>表现一般，部分知识点仍需加强。建议针对错题进行强化训练。</>
+                          <p>
+                            {accuracy >= 80 ? (
+                              <>总体表现优异！你在<span className="text-primary font-bold">基础知识点</span>上非常熟练。继续保持！</>
+                            ) : (
+                              <>表现一般，部分知识点仍需加强。建议针对错题进行强化训练。</>
+                            )}
+                          </p>
                         )}
-                      </p>
+                      </div>
                     </div>
                   </div>
                 </div>

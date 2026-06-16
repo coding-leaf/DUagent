@@ -814,3 +814,8 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
   - 修改 `frontend/src/App.jsx`：注册 `/personalized-resources` 路由
   - 接口漂移：新增 `/api/v1/personalized-resources` 接口族（学生可用），`personalization_context.wrong_points` 新增 `content` 字段
   - 验证：`py_compile` 全通过（5/5）；`npm run build` 通过（774ms）；lint 无新增 error
+
+- 答题后加载动画与动态文案优化：
+  - 修改了 `frontend/src/pages/PracticeResult.jsx`，增加了 `LOADING_TEXTS` 和 `currentTextIndex` 状态，将等待时间从 1.5 秒延长到 5 秒，每 1.25 秒轮询更新加载状态文字，在第 4 步后停止。
+  - 优化了加载卡片样式以适配原生的浅色主题（显示“智能教练评估中”，配以 outer spin 进度环和 inner pulse 机器人图标）。
+  - 验证：`npm run build` 成功通过，无编译报错；`src/pages/PracticeResult.jsx` 无新增 lint 问题。

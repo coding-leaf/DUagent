@@ -99,6 +99,25 @@ export default function LearningPath() {
     });
   }, [activeCourseId, learningPath, selectedNodeId]);
 
+  const scrollContainerRef = useRef(null);
+
+  // Convert vertical mouse wheel scroll to horizontal scroll for the learning path nodes
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e) => {
+      // Only intercept if it's primarily a vertical scroll
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        container.scrollLeft += e.deltaY;
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [loading]);
+
   return (
     <div className="font-body-md bg-background min-h-screen text-on-background">
       {/* TopNavBar Implementation */}
@@ -136,7 +155,7 @@ export default function LearningPath() {
             </div>
 
             {/* Horizontal Scrolling Path */}
-            <div className="relative flex items-center py-xl overflow-x-auto no-scrollbar scroll-smooth min-h-[300px]">
+            <div ref={scrollContainerRef} className="relative flex items-center py-xl overflow-x-auto no-scrollbar scroll-smooth min-h-[300px]">
               {loading ? (
                 <div className="w-full flex justify-center"><Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-cyan-500"/></div>
               ) : (
@@ -166,14 +185,14 @@ export default function LearningPath() {
                       return (
                         <div key={node.id}
                           onClick={() => setSelectedNodeId(node.id)}
-                          className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-80 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-blue-500 ring-offset-2 rounded-xl' : ''}`}>
-                          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center mb-3 shadow-md">
-                            <Icon name="play_arrow" className="text-2xl"/>
+                          className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-blue-500 ring-offset-2 rounded-xl' : ''}`}>
+                          <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center mb-3 shadow-md">
+                            <Icon name="play_arrow" className="text-xl"/>
                           </div>
-                          <div className="bg-white p-6 rounded-xl border border-blue-600 shadow-md w-full relative transition-all duration-200 group-hover:shadow-lg">
-                            <div className="absolute -top-2.5 left-6 bg-blue-600 text-white text-[10px] font-bold tracking-wide px-2 py-0.5 rounded shadow-sm">进行中</div>
+                          <div className="bg-white p-5 rounded-xl border border-blue-600 shadow-md w-full relative transition-all duration-200 group-hover:shadow-lg">
+                            <div className="absolute -top-2.5 left-5 bg-blue-600 text-white text-[10px] font-bold tracking-wide px-2 py-0.5 rounded shadow-sm">进行中</div>
                             <span className="text-[11px] font-semibold text-blue-600 tracking-wider mb-1 block">阶段 {node.order}</span>
-                            <p className="text-lg font-semibold text-slate-900 mb-5">{node.name}</p>
+                            <p className="text-base font-medium text-slate-900 mb-4">{node.name}</p>
                             <div className="space-y-1.5">
                               <div className="flex justify-between text-[11px] font-medium text-slate-500">
                                 <span>当前进度</span>
@@ -183,8 +202,8 @@ export default function LearningPath() {
                                 <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${node.mastery}%` }}></div>
                               </div>
                             </div>
-                            <div className="mt-5">
-                              <Link to="/dashboard" state={{ search: node.name }} className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-blue-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-colors border border-slate-200">
+                            <div className="mt-4">
+                              <Link to="/dashboard" state={{ search: node.name }} className="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-blue-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-colors border border-slate-200">
                                 <Icon name="auto_stories" className="text-sm"/> 继续学习
                               </Link>
                             </div>
@@ -215,7 +234,7 @@ export default function LearningPath() {
                       return (
                         <div key={node.id}
                           onClick={() => setSelectedNodeId(node.id)}
-                          className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-64 cursor-pointer opacity-80 hover:opacity-100 transition-opacity ${node.id === selectedNodeId ? 'ring-2 ring-slate-300 ring-offset-2 rounded-xl' : ''}`}>
+                          className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer opacity-80 hover:opacity-100 transition-opacity ${node.id === selectedNodeId ? 'ring-2 ring-slate-300 ring-offset-2 rounded-xl' : ''}`}>
                           <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center mb-3 transition-colors group-hover:bg-slate-200 group-hover:text-slate-500">
                             <Icon name="explore" className="text-xl"/>
                           </div>

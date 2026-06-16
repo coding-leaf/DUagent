@@ -60,11 +60,12 @@ async def get_questions(
         (QuizQuestion.source.in_(["common", "baseline"]))
         | ((QuizQuestion.source == "personalized") & (QuizQuestion.owner_user_id == current_user.id)),
     )
-    if question_ids:
-        # 如果传入了具体的题目 ID，直接过滤，忽略其它条件（或者保留基础过滤），并忽略 limit
-        ids_list = [qid.strip() for qid in question_ids.split(",") if qid.strip()]
-        if ids_list:
-            query = query.where(QuizQuestion.id.in_(ids_list))
+    ids_list = [qid.strip() for qid in (question_ids or "").split(",") if qid.strip()]
+
+    if ids_list:
+        if len(ids_list) > 100:
+            raise HTTPException(status_code=400, detail="Too many question IDs requested at once")
+        query = query.where(QuizQuestion.id.in_(ids_list))
     else:
         # 原有的条件过滤和 limit 仅在没有明确 question_ids 时生效
         if chapter:

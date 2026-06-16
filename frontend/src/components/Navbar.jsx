@@ -79,6 +79,12 @@ export default function Navbar({ searchTerm, onSearch }) {
             资源库
           </Link>
           <Link
+            to="/personalized-resources"
+            className={`transition-colors ${isActive('/personalized-resources') ? 'text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1' : 'text-gray-600 hover:text-cyan-500'}`}
+          >
+            个性化资源
+          </Link>
+          <Link
             to="/ai-chat"
             className={`transition-colors ${isActive('/ai-chat') ? 'text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1' : 'text-gray-600 hover:text-cyan-500'}`}
           >

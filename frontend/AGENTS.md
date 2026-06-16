@@ -32,7 +32,7 @@ This file applies to `frontend/`. Subdirectory AGENTS.md takes precedence if pre
 3. **`WORKFLOW.md`**：按日期的施工记录，回溯某次改了什么、跑了什么。
 4. **`docs/feature-ledger.md`**：功能级看板，但已与实际实现存在较大偏差，**只作参考，不作约束**。用它了解历史意图，不用它判断现状。
 5. **`../docs/10-client-api/` OpenAPI 和前端接口规范**：历史契约，**已过时**，仅在核对某个字段来源时参考，不作为实现约束。
-
+6. `/home/yezisama/workspace/workflow/EDUagent/frontend/docs/requirements-coverage.md`为接口实现功能记录,可参考
 **不要用文档推翻实际运行代码的行为。如果文档和代码冲突，以代码为准，顺带在 WORKFLOW.md 记一笔。**
 
 ---
@@ -116,7 +116,7 @@ cd backend && python3 -m pytest tests/<相关测试文件> -v
 完成一个功能点后，在 `WORKFLOW.md` 末尾追加：日期、改了什么文件、核心改动、测试结果、是否有接口漂移。
 
 `docs/feature-ledger.md` 不要频繁更新，它已经偏移，更新它的收益低于维护成本。
-
+` /home/yezisama/workspace/workflow/EDUagent/frontend/docs/requirements-coverage.md`内部需要更新功能/接口实现记录
 ---
 
 ## 禁止修改

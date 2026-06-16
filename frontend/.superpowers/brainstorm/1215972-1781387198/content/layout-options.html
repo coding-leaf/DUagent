@@ -1,0 +1,47 @@
+<h2>选择侧边栏的交互布局方案</h2>
+<p class="subtitle">这决定了左侧历史会话与右侧推荐资源在桌面端和移动端下的展示与折叠方式</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>方案 A: 桌面端支持折叠 / 移动端悬浮抽屉 (推荐)</h3>
+      <p><strong>桌面端：</strong>侧边栏常驻，但可以点击按钮向侧边平滑收缩折叠为 0 宽度，完全释放主聊天区；<br>
+      <strong>移动端：</strong>通过顶部栏按钮唤起半透明遮罩背景的滑出式抽屉（Drawer）。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>方案 B: 悬浮浮动面板式 (始终不占位)</h3>
+      <p><strong>桌面与移动端：</strong>侧边栏以悬浮卡片/浮动层（Popover/Drawer）形式覆盖在主聊天区上方。可通过悬浮球或边缘触发，完全不影响核心布局，但在小屏下容易遮挡信息。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>方案 C: 简易开关显示 (不带侧边栏)</h3>
+      <p>彻底移除左侧和右侧的独立栏，改为在主对话区域内提供浮动菜单气泡，点击气泡以对话框 Modal 形式弹出历史列表和资源列表。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案对比与优劣势</h3>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>方案 A (推荐) 优势</h4>
+      <ul>
+        <li>符合主流 AI 聊天工具 (如 ChatGPT, Claude) 的交互直觉</li>
+        <li>在大屏幕下保证数据一览性，可随时收起，且完美适配小屏的响应式抽屉</li>
+        <li>侧边栏收起时，主区域自动拉伸，体验流畅</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>劣势</h4>
+      <ul>
+        <li>方案 A 的开发复杂度略高于方案 B/C</li>
+      </ul>
+    </div>
+  </div>
+</div>

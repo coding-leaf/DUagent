@@ -80,4 +80,16 @@ export const adminService = {
   startQuizGeneration: async (catalogId) => {
     return apiClient.post(`/admin/course-catalogs/${catalogId}/quiz/generations`);
   },
+
+  getRegistrationCodes: async (role) => {
+    return apiClient.get('/admin/registration-codes', { params: role ? { role } : undefined });
+  },
+
+  createRegistrationCode: async (role) => {
+    return apiClient.post('/admin/registration-codes', { role });
+  },
+
+  revokeRegistrationCode: async (codeId) => {
+    return apiClient.delete(`/admin/registration-codes/${codeId}`);
+  },
 };

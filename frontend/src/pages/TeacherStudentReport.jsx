@@ -162,7 +162,7 @@ export default function TeacherStudentReport() {
                   <span className="text-[10px] text-secondary">平均分</span>
                 </div>
                 <div className="bg-surface-container rounded p-3 text-center">
-                  <span className="text-xl font-bold text-on-surface block">{Math.round((report.quiz_stats?.avg_time_spent || 0) / 60)}m</span>
+                  <span className="text-xl font-bold text-on-surface block">{(report.quiz_stats?.avg_time_spent || 0) < 60 ? '< 1m' : `${Math.round((report.quiz_stats.avg_time_spent) / 60)}m`}</span>
                   <span className="text-[10px] text-secondary">均时</span>
                 </div>
               </div>
@@ -202,11 +202,14 @@ export default function TeacherStudentReport() {
               </h3>
               <div className="flex flex-wrap gap-2">
                 {report.profile_summary?.modal_preference && report.profile_summary.modal_preference.length > 0 ? (
-                  report.profile_summary.modal_preference.map((p, idx) => (
+                  report.profile_summary.modal_preference.map((p, idx) => {
+                    const modalLabels = { video_animation: '视频/动画', chart_logic: '图表/逻辑', text_analysis: '文本阅读', code_practice: '代码练习', formula_derivation: '公式推导' };
+                    return (
                     <span key={idx} className="px-3 py-1.5 bg-cyan-50 text-cyan-700 text-xs font-bold rounded-lg border border-cyan-100 flex items-center gap-1">
-                      <span className="text-[10px] opacity-60">#{idx + 1}</span> {p}
+                      <span className="text-[10px] opacity-60">#{idx + 1}</span> {modalLabels[p] || p}
                     </span>
-                  ))
+                    );
+                  })
                 ) : (
                   <p className="text-xs text-outline italic text-center py-4">暂无偏好数据</p>
                 )}

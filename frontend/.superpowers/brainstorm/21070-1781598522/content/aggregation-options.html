@@ -1,0 +1,48 @@
+<h2>聚合错题的几种方案</h2>
+<p class="subtitle">针对如何将独立的个性化错题一并练习，这里有三种可能的交互方式。</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>按生成批次/来源分组 (推荐)</h3>
+      <p>自动将同一次测试中产生的多道错题打包成一个"练习任务"。保留了错误发生时的上下文。</p>
+      <div style="margin-top: 10px; padding: 10px; background: #f1f5f9; border-radius: 8px;">
+        <span class="label">示例 UI</span>
+        <div style="font-size: 13px; margin-top: 5px;">
+          <strong>🎯 随堂测验错题集 (共4题)</strong><br>
+          包含: React Hooks, 组件生命周期
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>自由勾选组卷（错题本/购物车模式）</h3>
+      <p>列表展示所有独立的错题或错题组，用户像加购物车一样自由勾选，然后点击"一键组卷"开始批量练习。</p>
+      <div style="margin-top: 10px; padding: 10px; background: #f1f5f9; border-radius: 8px;">
+        <span class="label">示例 UI</span>
+        <div style="font-size: 13px; margin-top: 5px;">
+          <input type="checkbox" checked disabled> [知识点A] 题目1<br>
+          <input type="checkbox" checked disabled> [知识点B] 题目2<br>
+          <button style="padding: 4px 8px; font-size: 12px; margin-top: 5px; background: #0ea5e9; color: white; border: none; border-radius: 4px;">开始练习 (2)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>当前“按知识点”分组升级（允许合并）</h3>
+      <p>在现有卡片基础上，增加“快速组合”功能，可以勾选多个知识点的卡片一起练习。</p>
+      <div style="margin-top: 10px; padding: 10px; background: #f1f5f9; border-radius: 8px;">
+        <span class="label">示例 UI</span>
+        <div style="font-size: 13px; margin-top: 5px;">
+          <input type="checkbox" checked disabled> 知识点：React Hooks (3题)<br>
+          <input type="checkbox" checked disabled> 知识点：组件通信 (2题)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

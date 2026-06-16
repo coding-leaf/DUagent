@@ -25,11 +25,23 @@ export default function AdminConsole() {
   const [searchQuery, setSearchQuery] = useState('');
   const [userActionError, setUserActionError] = useState('');
   const [removingUserId, setRemovingUserId] = useState(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   // Log Data State
   const [agentLogs, setAgentLogs] = useState([]);
   const [operationLogs, setOperationLogs] = useState([]);
   const [activeLogType, setActiveLogType] = useState('agent');
+
+  // Registration Code State
+  const [regCodes, setRegCodes] = useState([]);
+  const [loadingRegCodes, setLoadingRegCodes] = useState(false);
+  const [regCodeError, setRegCodeError] = useState('');
+  const [generatingRole, setGeneratingRole] = useState(null);
+  const [revokingCodeId, setRevokingCodeId] = useState(null);
+  const [copiedCodeId, setCopiedCodeId] = useState(null);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
   // Course Catalog State
@@ -98,6 +110,19 @@ export default function AdminConsole() {
     }
   }, []);
 
+  const fetchRegCodes = useCallback(async () => {
+    setLoadingRegCodes(true);
+    setRegCodeError('');
+    try {
+      const res = await adminService.getRegistrationCodes();
+      if (res.code === 200) setRegCodes(res.data?.codes || []);
+    } catch (e) {
+      setRegCodeError(getErrorMessage(e, '注册码加载失败'));
+    } finally {
+      setLoadingRegCodes(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (activeTab === 'users') {
@@ -106,10 +131,12 @@ export default function AdminConsole() {
         fetchLogs();
       } else if (activeTab === 'catalogs') {
         fetchCatalogs();
+      } else if (activeTab === 'regcodes') {
+        fetchRegCodes();
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [activeTab, fetchUsers, fetchLogs, fetchCatalogs]);
+  }, [activeTab, fetchUsers, fetchLogs, fetchCatalogs, fetchRegCodes]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -137,6 +164,71 @@ export default function AdminConsole() {
     } finally {
       setRemovingUserId(null);
     }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetPasswordTarget || !resetPasswordValue.trim()) return;
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,32}$/.test(resetPasswordValue)) {
+      setResetPasswordError('密码需包含大小写字母和数字，8-32位');
+      return;
+    }
+    setResettingPassword(true);
+    setResetPasswordError('');
+    try {
+      const res = await adminService.updateUser(resetPasswordTarget.id, { new_password: resetPasswordValue });
+      if (res.code === 200) {
+        setResetPasswordTarget(null);
+        setResetPasswordValue('');
+      } else {
+        setResetPasswordError(res.message || '重置失败');
+      }
+    } catch (e) {
+      setResetPasswordError(getErrorMessage(e, '重置失败'));
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  const handleGenerateCode = async (role) => {
+    setGeneratingRole(role);
+    setRegCodeError('');
+    try {
+      const res = await adminService.createRegistrationCode(role);
+      if (res.code === 201 || res.code === 200) {
+        await fetchRegCodes();
+      } else {
+        setRegCodeError(res.message || '生成失败');
+      }
+    } catch (e) {
+      setRegCodeError(getErrorMessage(e, '生成失败'));
+    } finally {
+      setGeneratingRole(null);
+    }
+  };
+
+  const handleRevokeCode = async (codeId) => {
+    if (!window.confirm('确认吊销该注册码？吊销后无法用于注册。')) return;
+    setRevokingCodeId(codeId);
+    setRegCodeError('');
+    try {
+      const res = await adminService.revokeRegistrationCode(codeId);
+      if (res.code === 200) {
+        await fetchRegCodes();
+      } else {
+        setRegCodeError(res.message || '吊销失败');
+      }
+    } catch (e) {
+      setRegCodeError(getErrorMessage(e, '吊销失败'));
+    } finally {
+      setRevokingCodeId(null);
+    }
+  };
+
+  const handleCopyCode = (c) => {
+    navigator.clipboard.writeText(c.code).then(() => {
+      setCopiedCodeId(c.id);
+      setTimeout(() => setCopiedCodeId(null), 1500);
+    });
   };
 
   const handleCreateCatalog = async (event) => {
@@ -229,6 +321,15 @@ export default function AdminConsole() {
             <span className="material-symbols-outlined text-lg">terminal</span>
             系统日志
           </button>
+          <button
+            onClick={() => setActiveTab('regcodes')}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm cursor-pointer ${
+              activeTab === 'regcodes' ? 'bg-cyan-50 text-cyan-700 border-r-4 border-cyan-500' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg">key</span>
+            注册码管理
+          </button>
         </aside>
 
         {/* Content Area */}
@@ -296,26 +397,37 @@ export default function AdminConsole() {
                             </td>
                             <td className="px-6 py-4 text-slate-500 text-xs">{formatDateTime(u.created_at)}</td>
                             <td className="px-6 py-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveUser(u)}
-                                disabled={isActionDisabled}
-                                className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                                  isActionDisabled
-                                    ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
-                                    : 'cursor-pointer border-red-200 bg-white text-red-600 hover:bg-red-50'
-                                }`}
-                                title={
-                                  isCurrentUser
-                                    ? '不可停用当前登录用户'
-                                    : isDisabled
-                                      ? '该用户已停用'
-                                      : '停用用户'
-                                }
-                              >
-                                <span className="material-symbols-outlined text-[16px]">person_off</span>
-                                {removingUserId === u.id ? '停用中' : isDisabled ? '已停用' : '停用'}
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setResetPasswordTarget(u); setResetPasswordValue(''); setResetPasswordError(''); }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                                  title="重置密码"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">lock_reset</span>
+                                  重置密码
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveUser(u)}
+                                  disabled={isActionDisabled}
+                                  className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                    isActionDisabled
+                                      ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+                                      : 'cursor-pointer border-red-200 bg-white text-red-600 hover:bg-red-50'
+                                  }`}
+                                  title={
+                                    isCurrentUser
+                                      ? '不可停用当前登录用户'
+                                      : isDisabled
+                                        ? '该用户已停用'
+                                        : '停用用户'
+                                  }
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">person_off</span>
+                                  {removingUserId === u.id ? '停用中' : isDisabled ? '已停用' : '停用'}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -535,6 +647,95 @@ export default function AdminConsole() {
               </div>
             </div>
           )}
+
+          {activeTab === 'regcodes' && (
+            <div className="animate-in fade-in duration-500">
+              <div className="flex justify-between items-end mb-6">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900 mb-1">注册码管理</h1>
+                  <p className="text-sm text-slate-500">生成注册码分发给用户，用于注册时验证身份和角色。</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateCode('teacher')}
+                    disabled={generatingRole === 'teacher'}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    {generatingRole === 'teacher' ? '生成中…' : '生成教师码'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateCode('student')}
+                    disabled={generatingRole === 'student'}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    {generatingRole === 'student' ? '生成中…' : '生成学生码'}
+                  </button>
+                  <button onClick={fetchRegCodes} className="flex items-center gap-1 text-cyan-600 hover:underline text-sm font-medium cursor-pointer">
+                    <span className="material-symbols-outlined text-[18px]">refresh</span>
+                  </button>
+                </div>
+              </div>
+              {regCodeError && <p className="text-sm text-red-500 mb-4">{regCodeError}</p>}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="px-6 py-4 font-medium text-left">注册码</th>
+                      <th className="px-6 py-4 font-medium text-left">角色</th>
+                      <th className="px-6 py-4 font-medium text-left">生成时间</th>
+                      <th className="px-6 py-4 font-medium text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {loadingRegCodes ? (
+                      <tr><td colSpan="4" className="text-center py-12 text-slate-400">加载中…</td></tr>
+                    ) : regCodes.length === 0 ? (
+                      <tr><td colSpan="4" className="text-center py-12 text-slate-400">暂无注册码，点击右上角按钮生成</td></tr>
+                    ) : (
+                      regCodes.map((c) => (
+                        <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 font-mono font-bold text-slate-800 tracking-wider">{c.code}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2.5 py-1 rounded text-xs font-bold ${
+                              c.role === 'teacher' ? 'bg-amber-100 text-amber-700' : 'bg-cyan-100 text-cyan-700'
+                            }`}>{c.role === 'teacher' ? '教师' : '学生'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-500 text-xs">{formatDateTime(c.create_time)}</td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCode(c)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">
+                                  {copiedCodeId === c.id ? 'check' : 'content_copy'}
+                                </span>
+                                {copiedCodeId === c.id ? '已复制' : '复制'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRevokeCode(c.id)}
+                                disabled={revokingCodeId === c.id}
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">block</span>
+                                {revokingCodeId === c.id ? '吊销中' : '吊销'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </main>
       </div>
       <CourseCatalogDrawer
@@ -543,6 +744,45 @@ export default function AdminConsole() {
         onClose={handleCloseCatalog}
         onChanged={fetchCatalogs}
       />
+
+      {resetPasswordTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">重置密码</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              为 <span className="font-semibold text-slate-700">{resetPasswordTarget.username}</span>（{resetPasswordTarget.email}）设置新密码
+            </p>
+            <input
+              type="password"
+              value={resetPasswordValue}
+              onChange={(e) => { setResetPasswordValue(e.target.value); setResetPasswordError(''); }}
+              placeholder="新密码（大小写字母+数字，8-32位）"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-3"
+              autoFocus
+            />
+            {resetPasswordError && (
+              <p className="text-xs text-red-500 mb-3">{resetPasswordError}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => { setResetPasswordTarget(null); setResetPasswordValue(''); setResetPasswordError(''); }}
+                className="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={resettingPassword || !resetPasswordValue.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                {resettingPassword ? '重置中…' : '确认重置'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,9 +19,13 @@ export const chatService = {
     return client.get(`/tutoring/conversations/${sessionId}`);
   },
 
+  deleteSession: (sessionId) => {
+    return client.delete(`/tutoring/conversations/${sessionId}`);
+  },
+
   // 发送流式消息
   streamChat: (params, onMessage, onDone, onError) => {
-    const { message, scope = 'course', course_id, conversation_id } = params;
+    const { message, action = 'chat', scope = 'course', course_id, conversation_id } = params;
 
     if (useMock) {
       // Simulate stream response for mockup mode
@@ -79,6 +83,7 @@ export const chatService = {
       },
       body: JSON.stringify({
         message,
+        action,
         scope,
         course_id,
         conversation_id: conversation_id || null

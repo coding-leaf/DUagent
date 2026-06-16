@@ -34,7 +34,7 @@ function groupQuestionsByKp(items) {
   return Array.from(map.entries()).map(([kp, kpItems]) => ({ knowledge_point: kp, items: kpItems }));
 }
 
-function QuizGroupCard({ kp, kpItems, courseId, navigate }) {
+function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   
@@ -64,7 +64,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate }) {
       navigate(`/quiz?course_id=${courseId}&source=personalized&knowledge_point=${encodeURIComponent(kp)}`);
     } else {
       // 勾选了具体题目
-      navigate(`/quiz?course_id=${courseId}&question_ids=${selectedIds.join(',')}`);
+      navigate(`/quiz?course_id=${courseId}&knowledge_point=${encodeURIComponent(kp)}&question_ids=${selectedIds.join(',')}`);
     }
   };
 
@@ -143,6 +143,13 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate }) {
                     </div>
                     <p className="text-sm font-medium text-slate-800 break-words">{summary}</p>
                   </div>
+                  <button 
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+                    title="删除"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
                 </div>
               );
             })}
@@ -153,7 +160,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate }) {
   );
 }
 
-function ResourceCard({ item }) {
+function ResourceCard({ item, onDelete }) {
   if (item.task_status === 'processing') {
     return (
       <div className="bg-white border border-dashed border-cyan-300 rounded-xl p-md flex items-center gap-md animate-pulse">
@@ -170,14 +177,25 @@ function ResourceCard({ item }) {
 
   if (item.task_status === 'failed') {
     return (
-      <div className="bg-white border border-error/20 rounded-xl p-md flex items-center gap-md">
-        <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
-          <span className="material-symbols-outlined">error</span>
+      <div className="bg-white border border-error/20 rounded-xl p-md flex justify-between items-center gap-md">
+        <div className="flex items-center gap-md">
+          <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
+            <span className="material-symbols-outlined">error</span>
+          </div>
+          <div>
+            <p className="text-body-md font-medium text-error">生成失败</p>
+            <p className="text-label-sm text-gray-400">可重新尝试生成</p>
+          </div>
         </div>
-        <div>
-          <p className="text-body-md font-medium text-error">生成失败</p>
-          <p className="text-label-sm text-gray-400">可重新尝试生成</p>
-        </div>
+        {onDelete && (
+          <button 
+            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+            onClick={() => onDelete(item.id)}
+            title="删除"
+          >
+            <span className="material-symbols-outlined text-[20px]">delete</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -185,7 +203,8 @@ function ResourceCard({ item }) {
   if (item.resource) {
     const r = item.resource;
     return (
-      <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
+      <div className="relative group">
+        <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
         <div className="flex items-start gap-md">
           <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-secondary flex-shrink-0">
             <span className="material-symbols-outlined">{TYPE_ICON[r.type] || 'article'}</span>
@@ -200,6 +219,16 @@ function ResourceCard({ item }) {
           </div>
         </div>
       </Link>
+      {onDelete && (
+        <button 
+          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); }}
+          title="删除"
+        >
+          <span className="material-symbols-outlined text-[20px]">delete</span>
+        </button>
+      )}
+    </div>
     );
   }
 
@@ -243,6 +272,19 @@ export default function PersonalizedResources() {
     /* eslint-enable react-hooks/set-state-in-effect */
     fetchItems();
   }, [fetchItems]);
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('确定要删除这项资源吗？')) return;
+    try {
+      const res = await personalizedResourcesService.delete(id);
+      if (res.code === 200) {
+        fetchItems();
+      }
+    } catch (e) {
+      console.error('Failed to delete', e);
+      alert('删除失败，请稍后重试');
+    }
+  };
 
   // 轮询：processingCount > 0 时每 3 秒刷新一次
   useEffect(() => {
@@ -328,7 +370,7 @@ export default function PersonalizedResources() {
               {items.filter(i => !i.question && !i.resource).length > 0 && (
                 <div className="space-y-3">
                   {items.filter(i => !i.question && !i.resource).map(item => (
-                    <ResourceCard key={item.id} item={item} />
+                    <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
                   ))}
                 </div>
               )}
@@ -345,6 +387,7 @@ export default function PersonalizedResources() {
                         kpItems={kpItems}
                         courseId={activeCourseId}
                         navigate={navigate}
+                        onDelete={handleDelete}
                       />
                     ))}
                   </div>
@@ -357,7 +400,7 @@ export default function PersonalizedResources() {
                   <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化学习资源</h3>
                   <div className="space-y-3">
                     {items.filter(i => i.resource).map(item => (
-                      <ResourceCard key={item.id} item={item} />
+                      <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
                     ))}
                   </div>
                 </div>

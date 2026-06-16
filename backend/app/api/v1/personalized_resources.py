@@ -209,8 +209,8 @@ async def generate_personalized_resource(
             new_q = QuizQuestion(
                 course_id=req.course_id,
                 catalog_id=catalog_context.catalog_id,
-                chapter=q.get("chapter", req.chapter or ""),
-                knowledge_point=q.get("knowledge_point", req.knowledge_point or ""),
+                chapter=req.chapter or q.get("chapter", ""),
+                knowledge_point=req.knowledge_point or q.get("knowledge_point", ""),
                 type=q.get("type", "single_choice"),
                 source="personalized",
                 personalized=True,
@@ -301,3 +301,45 @@ async def generate_personalized_resource(
                 "data": {"task_id": task.id, "generate_type": "resource"},
             },
         )
+
+
+@router.delete("/{id}")
+async def delete_personalized_resource(
+    id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserPersonalizedResource).where(
+            UserPersonalizedResource.id == id,
+            UserPersonalizedResource.user_id == current_user.id,
+            UserPersonalizedResource.is_deleted == False
+        )
+    )
+    upr = result.scalar_one_or_none()
+    if not upr:
+        return JSONResponse(status_code=404, content={"code": 404, "message": "Resource not found"})
+
+    upr.is_deleted = True
+
+    if upr.question_id:
+        q_result = await db.execute(
+            select(QuizQuestion).where(
+                QuizQuestion.id == upr.question_id,
+                QuizQuestion.owner_user_id == current_user.id
+            )
+        )
+        q = q_result.scalar_one_or_none()
+        if q:
+            q.is_deleted = True
+
+    if upr.resource_id:
+        r_result = await db.execute(
+            select(Resource).where(Resource.id == upr.resource_id)
+        )
+        r = r_result.scalar_one_or_none()
+        if r and r.create_by == current_user.id:
+            r.is_deleted = True
+
+    await db.commit()
+    return {"code": 200, "message": "success", "data": None}

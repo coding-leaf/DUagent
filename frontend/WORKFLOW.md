@@ -23,6 +23,31 @@
 
 ## 最近验证
 
+### 2026-06-16
+
+- 个性化错题购物车 (Personalized Quiz Cart) 接入完成：
+  - 问题分析：原“个性化资源”页面下，知识点的错题是单独一条条的练习入口，用户无法选中多个错题进行一并练习。
+  - 修复：
+    1. Backend `GET /api/v1/quiz/questions` 新增 `question_ids` 查询参数；若包含此参数，按 ID 过滤并**忽略 limit**、绕过其它过滤条件，只返回指定的题目，同时增加 `len(ids_list) > 100` 的防攻击上限校验。
+    2. Frontend `Quiz.jsx` 从 URL 的 `searchParams` 中提取 `question_ids`，并在初始化拉取题目时传入 `extraParams` 以供后端进行精确组卷。
+    3. Frontend `PersonalizedResources.jsx` 中将 `QuizGroupCard` 改造成带折叠状态的组件：外层展示知识点和题目数；展开后展示可复选的题目列表（题干自动截断前 50 字符并显示难度/来源）。支持“全选”，点击“开始练习”时携带选中 ID 跳转至 `/quiz?course_id=...&question_ids=id1,id2`。未选中时 fallback 至原有 `knowledge_point` 整组练习路由。
+  - 契约说明：API 后端新增了可选的查询参数，前端路由与取参方式对齐，原有请求和参数行为没有破坏，无破坏性契约漂移。
+  - 验证：
+    - Frontend `npx eslint src/pages/Quiz.jsx src/pages/PersonalizedResources.jsx` 检查修改的文件通过。
+    - Frontend `npm run build` 成功。
+    - Backend `python3 -m py_compile` 语法通过。
+
+- 修复错题生成打断 KG 图谱节点统计的隐患：
+  - 问题分析：原逻辑下，后端在生成新的个性化资源时优先信任 LLM 传回的 `knowledge_point`。由于大模型倾向于追加细节后缀（如 `Input/Output - printf函数`），导致生成的题目脱离了标准的 KG 图谱节点名，进而使其变成了不会被后续效果看板及画像引擎统计到的孤立数据（它们依赖严谨的 `QuizQuestion.knowledge_point IN (KG node)` 匹配）。
+  - 修复：
+    1. Backend `personalized_resources.py` 的落库逻辑扭转信任：强制转为 `knowledge_point = req.knowledge_point or q.get(...)`，剥夺 LLM 对该字段的创造权，使新题死死挂载在触发它生成的原生图谱主节点上。
+    2. Frontend `PersonalizedResources.jsx` 补齐了调用链路：在“购物车”点击开始练习生成 `/quiz` 跳转时，强制附带被编码后的主卡片 `knowledge_point`，以保证答完题后的 `PracticeResult` 可以准确将其传给后端作为原生图谱依据。
+    3. 脏数据清理：直接对 MySQL 执行 `UPDATE` 砍掉 `knowledge_point` 中已存的 ` - ` 后缀，让遗留的游离题目重新归属于正确的图谱节点。
+
+- 增加个性化资源软删除功能：
+  - 后端：在 `api/v1/personalized_resources.py` 增加 `DELETE /{id}` 接口。同时完成主表 `UserPersonalizedResource` 以及下挂关联资源 `QuizQuestion` 和 `Resource` 的软删除。
+  - 前端：更新 `personalizedResources.js` API 层；在 `PersonalizedResources.jsx` 为 `QuizGroupCard` (题目单条)、`ResourceCard` (生成失败卡片、完成的阅读资源卡片) 添加了带二次确认拦截的删除按钮。
+
 ### 2026-06-15
 
 - Admin 注册码管理、忘记密码弹窗、Admin 重置密码：

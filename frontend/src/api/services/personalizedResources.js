@@ -8,4 +8,7 @@ export const personalizedResourcesService = {
     // Agent 生成可能耗时 30-60s，单独设置长超时
     return apiClient.post('/personalized-resources/generate', data, { timeout: 90000 });
   },
+  delete(id) {
+    return apiClient.delete(`/personalized-resources/${id}`);
+  },
 };

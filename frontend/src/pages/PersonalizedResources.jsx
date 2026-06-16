@@ -35,34 +35,120 @@ function groupQuestionsByKp(items) {
 }
 
 function QuizGroupCard({ kp, kpItems, courseId, navigate }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  
   const count = kpItems.length;
-  const sourceTypes = [...new Set(kpItems.map(i => i.source_type))];
+  // 仅筛选出有效的题目的 items
+  const validQuestionItems = kpItems.filter(i => i.question);
+  
+  const handleToggleSelectAll = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === validQuestionItems.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(validQuestionItems.map(i => i.question.id));
+    }
+  };
+
+  const handleToggleItem = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleStartPractice = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === 0) {
+      // 未勾选任何题目：维持原有逻辑
+      navigate(`/quiz?course_id=${courseId}&source=personalized&knowledge_point=${encodeURIComponent(kp)}`);
+    } else {
+      // 勾选了具体题目
+      navigate(`/quiz?course_id=${courseId}&question_ids=${selectedIds.join(',')}`);
+    }
+  };
+
   return (
-    <div className="bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
-      <div className="flex items-center justify-between gap-md">
-        <div className="flex items-center gap-md min-w-0">
+    <div className="bg-white border border-outline-variant rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
+      {/* Header */}
+      <div 
+        className="p-4 flex items-center justify-between gap-4 bg-slate-50 cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container flex-shrink-0">
             <span className="material-symbols-outlined">quiz</span>
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-sm flex-wrap mb-xs">
-              <span className="text-label-sm text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full font-medium">{kp}</span>
-              {sourceTypes.map(s => (
-                <span key={s} className="text-label-sm text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{SOURCE_LABEL[s] || s}</span>
-              ))}
-            </div>
-            <p className="text-body-md font-medium text-on-surface">{count} 道个性化练习题</p>
-            <p className="text-label-sm text-secondary mt-0.5 line-clamp-1">{kpItems[0]?.question?.content}</p>
+            <h3 className="text-body-md font-bold text-slate-800">{kp}</h3>
+            <p className="text-label-sm text-slate-500 mt-1">共 {count} 道个性化题目</p>
           </div>
         </div>
-        <button
-          onClick={() => navigate(`/quiz?course_id=${courseId}&source=personalized&knowledge_point=${encodeURIComponent(kp)}`)}
-          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 bg-primary-container text-white rounded-xl text-label-sm font-bold hover:brightness-110 active:scale-95 transition-all"
-        >
-          <span className="material-symbols-outlined text-[16px]">play_arrow</span>
-          开始练习
-        </button>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={handleStartPractice}
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary-container text-white rounded-xl text-label-sm font-bold hover:brightness-110 active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+            开始练习 {selectedIds.length > 0 ? `(已选 ${selectedIds.length})` : ''}
+          </button>
+          <span className="material-symbols-outlined text-slate-400">
+            {isExpanded ? 'expand_less' : 'expand_more'}
+          </span>
+        </div>
       </div>
+
+      {/* Expanded Content */}
+      {isExpanded && validQuestionItems.length > 0 && (
+        <div className="border-t border-slate-200">
+          {/* Toolbar */}
+          <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex justify-between items-center text-xs">
+            <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium hover:text-primary">
+              <input 
+                type="checkbox" 
+                className="rounded border-slate-300 text-primary focus:ring-primary cursor-pointer w-4 h-4"
+                checked={selectedIds.length === validQuestionItems.length && validQuestionItems.length > 0}
+                onChange={handleToggleSelectAll}
+              />
+              全选本知识点下的 {validQuestionItems.length} 题
+            </label>
+            <span className="text-slate-500">按最近生成时间排列</span>
+          </div>
+
+          {/* Scrollable List */}
+          <div className="max-h-[320px] overflow-y-auto">
+            {validQuestionItems.map((item) => {
+              const q = item.question;
+              const isSelected = selectedIds.includes(q.id);
+              // 截断内容作为摘要
+              const summary = q.content.length > 50 ? q.content.substring(0, 50) + '...' : q.content;
+              const diffLabel = { easy: '简单', medium: '中等', hard: '困难' }[q.difficulty] || q.difficulty;
+              const sourceLabel = SOURCE_LABEL[item.source_type] || item.source_type;
+
+              return (
+                <div 
+                  key={q.id} 
+                  className={`p-3 border-b border-slate-100 flex items-start gap-3 transition-colors ${isSelected ? 'bg-sky-50/50' : 'hover:bg-slate-50'}`}
+                >
+                  <input 
+                    type="checkbox" 
+                    className="mt-1 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer w-4 h-4"
+                    checked={isSelected}
+                    onChange={() => handleToggleItem(q.id)}
+                  />
+                  <div className="flex-1 min-w-0" onClick={() => handleToggleItem(q.id)} style={{ cursor: 'pointer' }}>
+                    <div className="flex gap-2 items-center mb-1">
+                      <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded">{sourceLabel}</span>
+                      <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">难度: {diffLabel}</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-800 break-words">{summary}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

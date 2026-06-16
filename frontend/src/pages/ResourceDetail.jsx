@@ -1,4 +1,3 @@
-
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
@@ -22,6 +21,14 @@ const normalizeMermaidSource = (content) => {
   const trimmed = (content || '').trim();
   const fenced = trimmed.match(/^```(?:mermaid)?\s*([\s\S]*?)```$/i);
   return fenced ? fenced[1].trim() : trimmed;
+};
+
+// 工具函数：美化标签 (清理诸如 kg_node:xx 之类的开发用语)
+const formatTag = (tag) => {
+  if (!tag) return '';
+  if (tag.startsWith('kg_node:')) return tag.replace('kg_node:', '知识节点: ');
+  if (tag.startsWith('support_band:')) return ''; // 直接忽略
+  return tag;
 };
 
 mermaid.initialize({
@@ -78,21 +85,21 @@ function MermaidDiagram({ content }) {
   }, [source]);
 
   return (
-    <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-4">
-      <div className="mb-3 flex items-center gap-2 text-primary">
-        <span className="material-symbols-outlined text-lg">schema</span>
-        <span className="text-sm font-semibold">思维导图</span>
+    <div className="rounded-2xl border border-cyan-100 bg-cyan-50/30 p-6 my-8">
+      <div className="mb-4 flex items-center gap-2 text-cyan-700">
+        <span className="material-symbols-outlined text-xl">schema</span>
+        <span className="text-base font-bold">思维导图解析</span>
       </div>
       {svg ? (
         <div
-          className="overflow-x-auto rounded-lg bg-white p-4 [&_svg]:mx-auto [&_svg]:max-w-full"
+          className="overflow-x-auto rounded-xl bg-white p-6 shadow-sm [&_svg]:mx-auto [&_svg]:max-w-full"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       ) : (
-        <p className="text-body-md whitespace-pre-wrap">{source}</p>
+        <p className="text-body-md whitespace-pre-wrap text-slate-700">{source}</p>
       )}
       {error && (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {error}
         </div>
       )}
@@ -155,125 +162,133 @@ export default function ResourceDetail() {
 
   if (loading) {
     return (
-      <div className="bg-background text-on-background font-body-md min-h-screen flex items-center justify-center">
+      <div className="bg-slate-50 min-h-screen flex items-center justify-center font-['Plus_Jakarta_Sans',sans-serif]">
         <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-outline">加载中...</p>
+          <div className="animate-spin w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-500 font-medium tracking-wide">加载资源详情中...</p>
         </div>
       </div>
     );
   }
 
+  if (!resource) {
+    return (
+      <div className="bg-slate-50 min-h-screen flex items-center justify-center font-['Plus_Jakarta_Sans',sans-serif]">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-slate-300 text-6xl mb-4">sentiment_dissatisfied</span>
+          <p className="text-slate-500 font-medium mb-6">未找到该资源或获取失败</p>
+          <button onClick={() => navigate(-1)} className="px-6 py-2 bg-cyan-600 text-white rounded-full font-semibold hover:bg-cyan-700 transition-colors">
+            返回上一页
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 清洗展示标签
+  const displayTags = (resource.tags || []).map(formatTag).filter(Boolean);
+
   return (
-    <div className="bg-background text-on-background font-body-md min-h-screen">
-      {/* Top Navigation Bar */}
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm font-['Public_Sans']">
-        <div className="flex items-center justify-between px-6 h-16 max-w-[1280px] mx-auto">
-          <div className="text-xl font-bold tracking-tight text-cyan-600">数据结构智能助手</div>
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/profile" className="text-gray-600 hover:text-cyan-500 transition-colors">个人信息</Link>
-            <Link to="/learning-path" className="text-gray-600 hover:text-cyan-500 transition-colors">路径规划</Link>
-            <Link to="/dashboard" className="text-cyan-600 font-semibold border-b-2 border-cyan-500 pb-1">资源库</Link>
-            <Link to="/ai-chat" className="text-gray-600 hover:text-cyan-500 transition-colors">AI答疑</Link>
-            <Link to="/learning-effects" className="text-gray-600 hover:text-cyan-500 transition-colors">学习效果</Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-gray-600">notifications</span>
-            </button>
-            <button className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 cursor-pointer">
-              <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBD7zzVzJP4sOCCImNhQnVh0f5VXBKYUUdqITWBaQkw7NykTFWpBCRb35x5OdjOfAeHA8pxnY1dbeHj7om4AmK_nGXsoIN-1mbwE3hCNq7xFNt4SuldmZvdW3PqPIvYRwW_EBGaXqZId-3waaJh8IQcMRBeypeQMRJI5hJFBhbeybYWhNhoWkUKSfTBuQqCIzu6dKwDMXS9LUFS_FZN0utek2XOAcc_3gZ3uXN6djZJ4T2_TfvwsvZ-1jgokz1Htpu6VTO_yqFDEOvS" alt="Profile" />
-            </button>
-          </div>
+    <div className="bg-slate-50 text-slate-800 font-['Plus_Jakarta_Sans',sans-serif] min-h-screen relative selection:bg-cyan-200 selection:text-cyan-900">
+      
+      {/* Top Floating Navigation */}
+      <nav className="sticky top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200/60 shadow-sm transition-all duration-300">
+        <div className="flex items-center justify-between px-4 lg:px-8 h-16 max-w-[1280px] mx-auto">
+          <button 
+            onClick={() => navigate(-1)}
+            className="group flex items-center gap-2 px-4 py-2 rounded-full hover:bg-slate-100 transition-all text-slate-600 hover:text-cyan-700"
+          >
+            <span className="material-symbols-outlined text-lg transition-transform group-hover:-translate-x-1">arrow_back</span>
+            <span className="font-bold text-sm">返回</span>
+          </button>
+          <div className="text-sm font-bold text-slate-400 uppercase tracking-widest hidden sm:block">EduAgent • Resource Viewer</div>
+          <div className="w-24"></div> {/* Balance spacer */}
         </div>
       </nav>
 
-      {/* Sidebar */}
-      <aside className="h-full w-64 fixed left-0 bg-white border-r border-gray-100 font-['Public_Sans'] text-sm hidden lg:block top-16 z-10 pt-6 pb-24 overflow-y-auto">
-        <div className="flex flex-col px-4 space-y-6">
-          {/* Back Button */}
-          <button 
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-surface-container-low transition-all"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
-            <span className="font-semibold">返回资源列表</span>
-          </button>
-          
-          <div className="space-y-2">
-            <div className="flex items-center p-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all cursor-pointer hover:pl-2">
-              <span className="material-symbols-outlined mr-3">account_tree</span>
-              学习节点
-            </div>
-            <div className="flex items-center p-3 rounded-lg bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500 transition-all cursor-pointer hover:pl-2">
-              <span className="material-symbols-outlined mr-3">library_books</span>
-              资源库
-            </div>
-          </div>
-
-          {/* Keywords */}
-          <div className="space-y-2">
-            <h4 className="text-label-sm text-outline uppercase font-bold px-2">核心关键词</h4>
-            <div className="flex flex-wrap gap-2 px-2">
-              {resource?.tags?.map((tag, idx) => (
-                <span key={idx} className="px-2 py-1 bg-surface-container-high text-on-surface-variant rounded text-xs border border-outline-variant">{tag}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </aside>
-
       {/* Main Content Canvas */}
-      <main className="ml-0 lg:ml-64 min-h-screen pt-16">
-        <div className="max-w-[960px] mx-auto px-6 py-10">
+      <main className="min-h-screen pt-12 pb-24">
+        <div className="max-w-[800px] mx-auto px-4 sm:px-6">
 
           {/* Document Display Section */}
-          <article className="bg-white p-10 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant hover:shadow-lg transition-shadow duration-300">
-              <header className="mb-8 border-b border-surface-container-highest pb-6">
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs font-bold">深度解析</span>
-                  {resource?.chapter && <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-xs">章节: {resource.chapter}</span>}
-                  {resource?.knowledge_point && <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-xs">知识点: {resource.knowledge_point}</span>}
+          <article className="bg-white px-6 py-10 sm:p-12 lg:p-16 rounded-[2rem] shadow-sm border border-slate-200/60 hover:shadow-md transition-shadow duration-300">
+              <header className="mb-10 pb-8 border-b border-slate-100">
+                <div className="flex items-center gap-2 mb-6 flex-wrap">
+                  <span className="px-3.5 py-1.5 bg-cyan-100 text-cyan-800 rounded-full text-xs font-bold tracking-wide flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                    {TYPE_LABELS[resource.type] || '学习资源'}
+                  </span>
+                  {resource.chapter && (
+                    <span className="px-3.5 py-1.5 bg-slate-100 text-slate-600 rounded-full text-xs font-bold tracking-wide">
+                      章节: {resource.chapter}
+                    </span>
+                  )}
+                  {resource.knowledge_point && (
+                    <span className="px-3.5 py-1.5 bg-slate-100 text-slate-600 rounded-full text-xs font-bold tracking-wide">
+                      知识点: {resource.knowledge_point}
+                    </span>
+                  )}
                 </div>
-                <h1 className="text-h1 font-h1 text-on-surface mb-4">{resource?.title || '加载中...'}</h1>
-                <p className="text-body-lg text-on-surface-variant leading-relaxed">
-                  {resource?.description || ''}
-                </p>
+                
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight mb-6 tracking-tight">
+                  {resource.title}
+                </h1>
+                
+                {resource.description && (
+                  <p className="text-lg text-slate-500 leading-relaxed font-medium">
+                    {resource.description}
+                  </p>
+                )}
               </header>
 
-              <section className="prose prose-slate max-w-none text-on-surface-variant">
+              <section className="prose prose-slate prose-lg max-w-none text-slate-700 marker:text-cyan-500 prose-headings:text-slate-800 prose-a:text-cyan-600 hover:prose-a:text-cyan-700">
                 {getDisplayContent(resource) ? (
-                  resource?.type === 'code' ? (
-                    <pre className="rounded-lg border border-outline-variant bg-slate-950 p-4 text-sm text-slate-100 overflow-x-auto">
-                      <code>{getDisplayContent(resource)}</code>
-                    </pre>
-                  ) : resource?.type === 'mindmap' ? (
+                  resource.type === 'code' ? (
+                    <div className="relative group">
+                      <pre className="rounded-2xl bg-slate-900 p-6 text-sm text-slate-50 overflow-x-auto shadow-inner border border-slate-800 font-mono">
+                        <code>{getDisplayContent(resource)}</code>
+                      </pre>
+                    </div>
+                  ) : resource.type === 'mindmap' ? (
                     <MermaidDiagram content={getDisplayContent(resource)} />
                   ) : (
-                    <p className="text-body-md whitespace-pre-wrap">
+                    <div className="whitespace-pre-wrap leading-relaxed">
                       {getDisplayContent(resource)}
-                    </p>
+                    </div>
                   )
                 ) : (
-                  <div className="rounded-lg border border-dashed border-outline-variant bg-surface-container-lowest p-6">
-                    <p className="text-body-md text-outline">
-                      暂无{TYPE_LABELS[resource?.type] || '资源'}内容
+                  <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                    <span className="material-symbols-outlined text-slate-300 text-5xl mb-4">do_not_disturb_off</span>
+                    <p className="text-slate-500 font-medium">
+                      暂无内容数据
                     </p>
                   </div>
                 )}
               </section>
 
-              <footer className="mt-12 pt-8 border-t border-surface-container-highest flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                  <button className="flex items-center gap-2 text-outline hover:text-primary transition-colors cursor-pointer">
-                    <span className="material-symbols-outlined">thumb_up</span>
-                    <span className="text-label-sm">有用</span>
-                  </button>
-                  <button className="flex items-center gap-2 text-outline hover:text-primary transition-colors cursor-pointer">
-                    <span className="material-symbols-outlined">share</span>
-                    <span className="text-label-sm">分享</span>
-                  </button>
+              {/* Tags Section */}
+              {displayTags.length > 0 && (
+                <div className="mt-12 pt-8 border-t border-slate-100">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">相关标签</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {displayTags.map((tag, idx) => (
+                      <span key={idx} className="px-3 py-1.5 bg-slate-50 text-slate-500 rounded-lg text-xs font-medium border border-slate-200/60 hover:bg-slate-100 transition-colors cursor-default">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
+              )}
+
+              <footer className="mt-8 pt-8 flex justify-center items-center gap-6">
+                <button className="group flex items-center justify-center gap-2 w-32 h-12 rounded-full border border-slate-200 text-slate-600 hover:bg-cyan-50 hover:text-cyan-600 hover:border-cyan-200 transition-all font-bold text-sm">
+                  <span className="material-symbols-outlined text-[20px] transition-transform group-hover:-translate-y-1">thumb_up</span>
+                  <span>有用</span>
+                </button>
+                <button className="group flex items-center justify-center gap-2 w-32 h-12 rounded-full border border-slate-200 text-slate-600 hover:bg-cyan-50 hover:text-cyan-600 hover:border-cyan-200 transition-all font-bold text-sm">
+                  <span className="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-12">share</span>
+                  <span>分享</span>
+                </button>
               </footer>
           </article>
 

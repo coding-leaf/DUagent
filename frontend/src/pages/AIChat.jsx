@@ -848,11 +848,11 @@ export default function AIChat() {
           fixed top-0 right-0 h-full w-72 shadow-2xl xl:shadow-none xl:static xl:h-full
           ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full xl:translate-x-0'}
           /* Desktop Collapse Style */
-          ${rightCollapsed ? 'xl:w-0 xl:opacity-0 xl:border-transparent' : 'xl:w-72 xl:opacity-100 xl:border-l xl:border-slate-200'}
+          ${rightCollapsed ? 'xl:w-16 xl:border-l xl:border-slate-200' : 'xl:w-72 xl:border-l xl:border-slate-200'}
         `}>
           {/* Wrapper to handle overflow clipping during width transitions without hiding absolute handle */}
-          <div className="w-full h-full overflow-hidden flex flex-col">
-            <div className="flex-1 flex flex-col min-w-[288px] h-full">
+          <div className="w-72 h-full overflow-hidden flex flex-col">
+            <div className="flex-1 flex flex-col w-72 h-full">
               <div className="p-5 border-b border-slate-100">
                 <div className="text-[11px] font-bold text-slate-400 mb-1">当前学习上下文</div>
                 <div className="text-slate-800 font-semibold text-sm truncate" title={activeCourseName}>

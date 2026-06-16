@@ -561,3 +561,31 @@ async def get_conversation(
             "updated_at": conv.update_time.isoformat() if conv.update_time else "",
         },
     }
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    c_result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+            Conversation.is_deleted == False,
+        )
+    )
+    conv = c_result.scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40400, "message": "对话不存在", "data": None},
+        )
+    await db.execute(
+        sql_update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(is_deleted=True)
+    )
+    await db.commit()
+    return {"code": 200, "message": "success", "data": None}

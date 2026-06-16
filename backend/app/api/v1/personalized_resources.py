@@ -145,3 +145,159 @@ async def list_personalized_resources(
             "processing_count": processing_count,
         },
     }
+
+
+@router.post("/generate")
+async def generate_personalized_resource(
+    req: PersonalizedResourceGenerateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    catalog_context = await resolve_generation_catalog(db, req.course_id)
+
+    if req.generate_type == "quiz":
+        # ------- Quiz 生成路径（同步，Agent 直接返回题目）-------
+        from app.schemas.operations import QuizGenerateRequest
+
+        quiz_req = QuizGenerateRequest(
+            course_id=req.course_id,
+            chapter=req.chapter,
+            knowledge_point=req.knowledge_point,
+            question_types=req.question_types,
+            count=req.count,
+            difficulty=req.difficulty,
+            personalized=True,
+        )
+        payload = await quiz_service.assemble_generate_payload(
+            current_user.id,
+            req.course_id,
+            catalog_context.catalog_id,
+            quiz_req,
+            db,
+        )
+
+        # 若有错题 ID，查询错题内容并写入 wrong_points（覆盖历史错题上下文）
+        if req.wrong_question_ids:
+            wrong_r = await db.execute(
+                select(QuizQuestion.id, QuizQuestion.content, QuizQuestion.knowledge_point)
+                .where(
+                    QuizQuestion.id.in_(req.wrong_question_ids),
+                    QuizQuestion.is_deleted == False,
+                )
+            )
+            wrong_points = [
+                {"name": row.knowledge_point or "", "content": (row.content or "")[:200]}
+                for row in wrong_r.all()
+            ]
+            if wrong_points:
+                ctx = payload.get("personalization_context") or {}
+                ctx["wrong_points"] = wrong_points
+                payload["personalization_context"] = ctx
+
+        try:
+            data = await agent_client.post_json("/agent/v1/assessment/generate-questions", payload)
+        except AgentServiceError as e:
+            return JSONResponse(
+                status_code=500,
+                content={"code": 500, "message": f"Agent 调用失败: {e.message}", "data": None},
+            )
+
+        questions = data.get("questions", [])
+        question_ids: list[str] = []
+        for q in questions:
+            new_q = QuizQuestion(
+                course_id=req.course_id,
+                catalog_id=catalog_context.catalog_id,
+                chapter=q.get("chapter", req.chapter or ""),
+                knowledge_point=q.get("knowledge_point", req.knowledge_point or ""),
+                type=q.get("type", "single_choice"),
+                source="personalized",
+                personalized=True,
+                owner_user_id=current_user.id,
+                difficulty=q.get("difficulty", req.difficulty or "medium"),
+                content=q.get("content", ""),
+                options=q.get("options", []),
+                correct_answer=str(q.get("answer", "")),
+                explanation=q.get("explanation", ""),
+            )
+            db.add(new_q)
+            await db.flush()
+            question_ids.append(new_q.id)
+
+        # 写入 user_personalized_resources（每道题一行）
+        for qid in question_ids:
+            upr = UserPersonalizedResource(
+                user_id=current_user.id,
+                course_id=req.course_id,
+                question_id=qid,
+                source_type=req.source_type,
+            )
+            db.add(upr)
+
+        await db.flush()
+        await db.commit()
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "code": 202,
+                "message": "accepted",
+                "data": {"generate_type": "quiz", "question_count": len(question_ids)},
+            },
+        )
+
+    else:
+        # ------- Resource 生成路径（异步 Webhook）-------
+        task = AsyncTask(
+            task_type="resource_generation",
+            status="processing",
+            user_id=current_user.id,
+            course_id=req.course_id,
+            result=catalog_context.model_dump(),
+        )
+        db.add(task)
+        await db.flush()
+        await db.refresh(task)
+
+        res_payload: dict = {
+            "task_id": task.id,
+            "user_id": current_user.id,
+            "course_id": catalog_context.catalog_id,
+            "webhook_url": _webhook_url(request),
+        }
+        if req.chapter:
+            res_payload["chapter"] = req.chapter
+        if req.knowledge_point:
+            res_payload["knowledge_point"] = req.knowledge_point
+        if req.resource_types:
+            res_payload["resource_types"] = req.resource_types
+
+        try:
+            await agent_client.post_json("/agent/v1/resources/generate", res_payload)
+        except AgentServiceError as e:
+            task.status = "failed"
+            task.error_code = str(e.agent_code or "agent_error")[:20]
+            task.error_message = e.message
+            task.completed_at = datetime.now(timezone.utc)
+            await db.flush()
+
+        # 写入 user_personalized_resources（task_id 关联，resource_id 等 Webhook 回调补全）
+        upr = UserPersonalizedResource(
+            user_id=current_user.id,
+            course_id=req.course_id,
+            source_type=req.source_type,
+            task_id=task.id,
+        )
+        db.add(upr)
+        await db.flush()
+        await db.commit()
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "code": 202,
+                "message": "accepted",
+                "data": {"task_id": task.id, "generate_type": "resource"},
+            },
+        )

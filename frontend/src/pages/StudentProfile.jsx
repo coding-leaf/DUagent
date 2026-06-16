@@ -7,6 +7,7 @@ import { taskService } from '../api/services/task';
 import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
+import Icon from '../components/Icon';
 
 const PROFILE_VALUE_LABELS = {
   exam_sprint: '备考冲刺',
@@ -175,7 +176,7 @@ export default function StudentProfile() {
         <Sidebar />
         <main className="ml-0 lg:ml-64 pt-16">
           <div className="max-w-[1280px] mx-auto px-6 py-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
-            <span className="material-symbols-outlined text-6xl text-slate-300 mb-6">person_search</span>
+            <Icon name="person_search" className="material-symbols-outlined text-6xl text-slate-300 mb-6"/>
             <h2 className="font-h1 text-2xl text-on-surface mb-3">还没有可查看的课程画像</h2>
             <p className="text-body-md text-secondary max-w-md mb-8">
               加入一门课程后，这里会展示你的模态偏好、引导粒度、知识坐标和学习状态。
@@ -195,7 +196,7 @@ export default function StudentProfile() {
   if (loading) {
     return (
       <div className="bg-background min-h-screen flex items-center justify-center">
-        <span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span>
+        <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-cyan-500"/>
       </div>
     );
   }
@@ -207,7 +208,7 @@ export default function StudentProfile() {
         <Sidebar />
         <main className="ml-0 lg:ml-64 pt-16">
           <div className="max-w-[1280px] mx-auto px-6 py-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
-            <span className="material-symbols-outlined text-6xl text-slate-300 mb-6">error_outline</span>
+            <Icon name="error_outline" className="material-symbols-outlined text-6xl text-slate-300 mb-6"/>
             <h2 className="font-h1 text-2xl text-on-surface mb-3">{profileError}</h2>
             <button
               onClick={fetchProfile}
@@ -458,7 +459,7 @@ export default function StudentProfile() {
           {/* 卡片 1：个人信息 */}
           <div className="relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 mb-8">
             <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-5">
-              <span className="material-symbols-outlined text-9xl">school</span>
+              <Icon name="school" className="material-symbols-outlined text-9xl"/>
             </div>
             <div className="relative">
               <div className="relative w-32 h-32 rounded-full border-4 border-slate-100 overflow-hidden bg-cyan-500/10">
@@ -495,7 +496,7 @@ export default function StudentProfile() {
               <div className="flex items-center justify-between gap-4 mb-5">
                 <div>
                   <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface">
-                    <span className="material-symbols-outlined text-cyan-500">badge</span> 学习档案
+                    <Icon name="badge" className="material-symbols-outlined text-cyan-500"/> 学习档案
                   </h3>
                   <p className="text-sm text-secondary mt-1">根据学习行为、评测结果和个人补充生成的课程学习档案。</p>
                 </div>
@@ -504,9 +505,7 @@ export default function StudentProfile() {
                   disabled={refreshing}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
                 >
-                  <span className={`material-symbols-outlined text-base ${refreshing ? 'animate-spin' : ''}`}>
-                    {refreshing ? 'progress_activity' : 'sync'}
-                  </span>
+                  <Icon name={refreshing ? 'progress_activity' : 'sync'} className={`material-symbols-outlined text-base ${refreshing ? 'animate-spin' : ''}`}/>
                   {refreshing ? '同步中...' : '同步画像'}
                 </button>
               </div>
@@ -546,7 +545,7 @@ export default function StudentProfile() {
               {/* 学习方向 */}
               <div>
                 <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
-                  <span className="material-symbols-outlined text-cyan-500">flag</span> 当前学习方向
+                  <Icon name="flag" className="material-symbols-outlined text-cyan-500"/> 当前学习方向
                 </h3>
                 <p className="text-sm text-secondary mb-4">选择你学这门课的主要目的，影响 AI 辅导策略。</p>
                 <div className="flex gap-3">
@@ -567,7 +566,7 @@ export default function StudentProfile() {
                             : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-cyan-300 hover:bg-cyan-50/50'
                         }`}
                       >
-                        <span className="material-symbols-outlined text-xl">{icon}</span>
+                        <Icon name={icon} className="material-symbols-outlined text-xl"/>
                         {label}
                       </button>
                     );
@@ -578,7 +577,7 @@ export default function StudentProfile() {
               {/* 个性化偏好 */}
               <div>
                 <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
-                  <span className="material-symbols-outlined text-cyan-500">tune</span> 个性化偏好
+                  <Icon name="tune" className="material-symbols-outlined text-cyan-500"/> 个性化偏好
                 </h3>
                 <p className="text-sm text-secondary mb-3">
                   告诉 AI 你希望它怎么跟你说话，每次对话都会遵循这个偏好。
@@ -616,7 +615,7 @@ export default function StudentProfile() {
           {/* 卡片 2：模态偏好 */}
           <div className="lg:col-span-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
             <h3 className="font-h3 text-xl mb-6 flex items-center gap-2 text-on-surface">
-              <span className="material-symbols-outlined text-cyan-500">pie_chart</span> 模态偏好
+              <Icon name="pie_chart" className="material-symbols-outlined text-cyan-500"/> 模态偏好
             </h3>
             <div className="flex flex-col gap-4">
               {[
@@ -647,7 +646,7 @@ export default function StudentProfile() {
           <div className="lg:col-span-8 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
             <div className="mb-8">
               <h3 className="font-h3 text-xl mb-4 flex items-center gap-2 text-on-surface">
-                <span className="material-symbols-outlined text-cyan-500">tune</span> 引导粒度
+                <Icon name="tune" className="material-symbols-outlined text-cyan-500"/> 引导粒度
               </h3>
               <p className="text-body-md text-secondary">根据当前任务难度与心流状态，动态调整智能体的介入深度。</p>
               <p className="text-sm text-cyan-600 font-bold mt-2">
@@ -720,7 +719,7 @@ export default function StudentProfile() {
           {/* 卡片 4：知识坐标 + 认知盲区 */}
           <div className="lg:col-span-7 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
             <h3 className="font-h3 text-xl mb-8 flex items-center gap-2 text-on-surface">
-              <span className="material-symbols-outlined text-cyan-500">grid_view</span> 知识坐标 &amp; 认知盲区
+              <Icon name="grid_view" className="material-symbols-outlined text-cyan-500"/> 知识坐标 &amp; 认知盲区
             </h3>
 
             {/* 上半：知识坐标 */}
@@ -766,9 +765,7 @@ export default function StudentProfile() {
                         key={i}
                         className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all hover:scale-105 ${stateConfig.color}`}
                       >
-                        <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: '"FILL" 1' }}>
-                          {stateConfig.icon}
-                        </span>
+                        <Icon name={stateConfig.icon} className="material-symbols-outlined text-base" style={{ fontVariationSettings: '"FILL" 1' }}/>
                         {node.name}
                         <span className="text-xs font-normal opacity-60">{stateConfig.label}</span>
                         {state === 'mastered' && node.mastered_at && (
@@ -825,7 +822,7 @@ export default function StudentProfile() {
           {/* 卡片 5：驱动力 + 学科勋章 */}
           <div className="lg:col-span-5 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
             <h3 className="font-h3 text-xl mb-6 flex items-center gap-2 text-on-surface">
-              <span className="material-symbols-outlined text-cyan-500">psychology</span> 学习状态
+              <Icon name="psychology" className="material-symbols-outlined text-cyan-500"/> 学习状态
             </h3>
 
             {/* 驱动力 */}
@@ -873,9 +870,7 @@ export default function StudentProfile() {
               {discipline_badge.level ? (
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center border-4 border-amber-200">
-                    <span className="material-symbols-outlined text-2xl text-amber-600" style={{ fontVariationSettings: '"FILL" 1' }}>
-                      verified
-                    </span>
+                    <Icon name="verified" className="material-symbols-outlined text-2xl text-amber-600" style={{ fontVariationSettings: '"FILL" 1' }}/>
                   </div>
                   <div>
                     <p className="font-bold text-on-surface">
@@ -899,18 +894,18 @@ export default function StudentProfile() {
       {/* BottomNavBar (Mobile Only) */}
       <footer className="lg:hidden fixed bottom-0 w-full bg-white/80 backdrop-blur-md border-t border-gray-100 flex items-center justify-around h-16 z-50 px-4">
         <button onClick={() => navigate('/learning-path')} className="flex flex-col items-center gap-1 text-slate-400 cursor-pointer">
-          <span className="material-symbols-outlined">account_tree</span>
+          <Icon name="account_tree" className="material-symbols-outlined"/>
           <span className="text-[10px] font-bold">学习</span>
         </button>
         <button onClick={() => navigate('/dashboard')} className="flex flex-col items-center gap-1 text-slate-400 cursor-pointer">
-          <span className="material-symbols-outlined">library_books</span>
+          <Icon name="library_books" className="material-symbols-outlined"/>
           <span className="text-[10px] font-bold">资源</span>
         </button>
         <div className="w-12 h-12 bg-cyan-600 rounded-full flex items-center justify-center text-white -mt-8 shadow-lg shadow-cyan-200">
-          <span className="material-symbols-outlined">add</span>
+          <Icon name="add" className="material-symbols-outlined"/>
         </div>
         <button onClick={() => navigate('/profile')} className="flex flex-col items-center gap-1 text-cyan-600 cursor-pointer">
-          <span className="material-symbols-outlined">account_circle</span>
+          <Icon name="account_circle" className="material-symbols-outlined"/>
           <span className="text-[10px] font-bold">我的</span>
         </button>
       </footer>

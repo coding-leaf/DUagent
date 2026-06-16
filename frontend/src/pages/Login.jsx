@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/error';
 import { authService } from '../api/services/auth';
 import { useAuth } from '../context/AuthContext';
+import Icon from '../components/Icon';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -94,14 +95,14 @@ export default function Login() {
           <div>
             {/* Brand */}
             <div className="flex items-center space-x-2 mb-16">
-              <span className="material-symbols-outlined text-cyan-300" style={{ fontSize: '32px' }}>school</span>
+              <Icon name="school" className="material-symbols-outlined text-cyan-300" style={{ fontSize: '32px' }}/>
               <h1 className="font-['Plus_Jakarta_Sans',sans-serif] text-2xl font-bold tracking-tight">智能学习助手</h1>
             </div>
             
             <div className="space-y-10 my-auto">
               <div className="space-y-4">
                 <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md">
-                  <span className="material-symbols-outlined text-cyan-300 text-sm mr-2">psychology</span>
+                  <Icon name="psychology" className="material-symbols-outlined text-cyan-300 text-sm mr-2"/>
                   <span className="text-xs font-bold uppercase tracking-widest text-cyan-50">EduAgent Platform</span>
                 </div>
                 <h2 className="font-['Plus_Jakarta_Sans',sans-serif] text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight">
@@ -117,7 +118,7 @@ export default function Login() {
               <div className="grid grid-cols-1 gap-4 text-left pt-6">
                 <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:bg-white/15 transition-colors group">
                   <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                    <span className="material-symbols-outlined text-cyan-300">route</span>
+                    <Icon name="route" className="material-symbols-outlined text-cyan-300"/>
                   </div>
                   <h4 className="text-base font-bold mb-1 text-white">个性化路径规划</h4>
                   <p className="text-sm text-cyan-50/70 leading-relaxed">动态评估您的掌握程度，实时生成最适合的专属学习节点与挑战。</p>
@@ -125,7 +126,7 @@ export default function Login() {
                 
                 <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:bg-white/15 transition-colors group">
                   <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                    <span className="material-symbols-outlined text-teal-300">forum</span>
+                    <Icon name="forum" className="material-symbols-outlined text-teal-300"/>
                   </div>
                   <h4 className="text-base font-bold mb-1 text-white">沉浸式互动引导</h4>
                   <p className="text-sm text-cyan-50/70 leading-relaxed">提供随时随地的 1V1 智能辅导，帮您深度剖析每一个代码细节。</p>
@@ -142,7 +143,7 @@ export default function Login() {
           {/* Mobile Branding (Hidden on Large Screens) */}
           <div className="lg:hidden flex flex-col items-center mb-8">
             <div className="flex items-center space-x-2 mb-2">
-              <span className="material-symbols-outlined text-cyan-600" style={{ fontSize: '28px' }}>school</span>
+              <Icon name="school" className="material-symbols-outlined text-cyan-600" style={{ fontSize: '28px' }}/>
               <h2 className="font-['Plus_Jakarta_Sans',sans-serif] text-2xl font-bold text-slate-800">智能学习助手</h2>
             </div>
             <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold">EduAgent Platform</p>
@@ -165,7 +166,7 @@ export default function Login() {
               {/* Login Form */}
               {error && (
                 <div className="flex items-center p-4 mb-4 text-error bg-error-container rounded-lg border border-error/20" role="alert">
-                  <span className="material-symbols-outlined mr-2">error</span>
+                  <Icon name="error" className="material-symbols-outlined mr-2"/>
                   <span className="text-label-sm font-bold">{error}</span>
                 </div>
               )}
@@ -173,7 +174,7 @@ export default function Login() {
                 <div className="space-y-xs">
                   <label className="text-label-sm text-secondary block font-medium text-xs">电子邮箱 (Email)</label>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">mail</span>
+                    <Icon name="mail" className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm"/>
                     <input
                       className={`w-full pl-10 pr-4 py-3 rounded-lg border bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all ${error ? 'border-error ring-1 ring-error/20' : 'border-outline-variant'}`}
                       placeholder="输入您的邮箱"
@@ -188,7 +189,7 @@ export default function Login() {
                 <div className="space-y-xs">
                   <label className="text-label-sm text-secondary block font-medium text-xs">密码 (Password)</label>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">lock</span>
+                    <Icon name="lock" className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm"/>
                     <input
                       className={`w-full pl-10 pr-4 py-3 rounded-lg border bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all ${error ? 'border-error ring-1 ring-error/20' : 'border-outline-variant'}`}
                       placeholder="输入您的密码"
@@ -204,7 +205,7 @@ export default function Login() {
                   <label className="text-label-sm text-secondary block font-medium text-xs">验证码 (Captcha)</label>
                   <div className="flex space-x-sm">
                     <div className="relative flex-grow">
-                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">verified_user</span>
+                      <Icon name="verified_user" className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm"/>
                       <input
                         className={`w-full pl-10 pr-4 py-3 rounded-lg border bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all ${error ? 'border-error ring-1 ring-error/20' : 'border-outline-variant'}`}
                         placeholder="输入计算结果"
@@ -244,8 +245,8 @@ export default function Login() {
                   disabled={loading}
                 >
                   <span>{loading ? '登入中...' : '登入系统'}</span>
-                  {!loading && <span className="material-symbols-outlined">login</span>}
-                  {loading && <span className="material-symbols-outlined animate-spin">refresh</span>}
+                  {!loading && <Icon name="login" className="material-symbols-outlined"/>}
+                  {loading && <Icon name="refresh" className="material-symbols-outlined animate-spin"/>}
                 </button>
               </form>
 
@@ -273,7 +274,7 @@ export default function Login() {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowForgotModal(false)}>
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 text-center" onClick={(e) => e.stopPropagation()}>
           <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-            <span className="material-symbols-outlined text-amber-500 text-2xl">lock</span>
+            <Icon name="lock" className="material-symbols-outlined text-amber-500 text-2xl"/>
           </div>
           <h2 className="text-lg font-bold text-slate-900 mb-2">忘记密码？</h2>
           <p className="text-sm text-slate-500 mb-6">请联系管理员重置您的账号密码。</p>

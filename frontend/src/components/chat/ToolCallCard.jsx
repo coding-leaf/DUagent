@@ -1,3 +1,4 @@
+import Icon from '../Icon';
 export default function ToolCallCard({ name, status }) {
   const isRunning = status === 'running';
 
@@ -6,7 +7,7 @@ export default function ToolCallCard({ name, status }) {
       {isRunning ? (
         <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-500 animate-spin"></span>
       ) : (
-        <span className="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span>
+        <Icon name="check_circle" className="material-symbols-outlined text-[16px] text-emerald-500"/>
       )}
       <span>{name || '正在检索知识库...'}</span>
     </div>

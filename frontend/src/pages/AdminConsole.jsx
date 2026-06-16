@@ -4,6 +4,7 @@ import { adminService } from '../api/services/admin';
 import CourseCatalogDrawer from '../components/admin/CourseCatalogDrawer';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../utils/apiError';
+import Icon from '../components/Icon';
 
 const formatDateTime = (value) => {
   if (!value) return '—';
@@ -272,7 +273,7 @@ export default function AdminConsole() {
       <nav className="fixed top-0 w-full z-40 bg-slate-900 text-white shadow-md">
         <div className="flex items-center justify-between px-6 h-16 max-w-[1440px] mx-auto">
           <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-cyan-400">admin_panel_settings</span>
+            <Icon name="admin_panel_settings" className="material-symbols-outlined text-cyan-400"/>
             <div className="text-xl font-bold tracking-tight">DS_MASTERY_AI <span className="font-light text-cyan-400">Admin</span></div>
           </div>
           <div className="flex items-center space-x-6">
@@ -300,7 +301,7 @@ export default function AdminConsole() {
               activeTab === 'users' ? 'bg-cyan-50 text-cyan-700 border-r-4 border-cyan-500' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-lg">group</span>
+            <Icon name="group" className="material-symbols-outlined text-lg"/>
             用户管控
           </button>
           <button
@@ -309,7 +310,7 @@ export default function AdminConsole() {
               activeTab === 'catalogs' ? 'bg-cyan-50 text-cyan-700 border-r-4 border-cyan-500' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-lg">library_books</span>
+            <Icon name="library_books" className="material-symbols-outlined text-lg"/>
             课程资源库
           </button>
           <button
@@ -318,7 +319,7 @@ export default function AdminConsole() {
               activeTab === 'logs' ? 'bg-cyan-50 text-cyan-700 border-r-4 border-cyan-500' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-lg">terminal</span>
+            <Icon name="terminal" className="material-symbols-outlined text-lg"/>
             系统日志
           </button>
           <button
@@ -327,7 +328,7 @@ export default function AdminConsole() {
               activeTab === 'regcodes' ? 'bg-cyan-50 text-cyan-700 border-r-4 border-cyan-500' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <span className="material-symbols-outlined text-lg">key</span>
+            <Icon name="key" className="material-symbols-outlined text-lg"/>
             注册码管理
           </button>
         </aside>
@@ -350,7 +351,7 @@ export default function AdminConsole() {
                     placeholder="搜索用户名或邮箱..."
                     className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 w-64 transition-all outline-none"
                   />
-                  <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">search</span>
+                  <Icon name="search" className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]"/>
                   <button type="submit" className="hidden">搜索</button>
                 </form>
               </div>
@@ -404,7 +405,7 @@ export default function AdminConsole() {
                                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
                                   title="重置密码"
                                 >
-                                  <span className="material-symbols-outlined text-[16px]">lock_reset</span>
+                                  <Icon name="lock_reset" className="material-symbols-outlined text-[16px]"/>
                                   重置密码
                                 </button>
                                 <button
@@ -424,7 +425,7 @@ export default function AdminConsole() {
                                         : '停用用户'
                                   }
                                 >
-                                  <span className="material-symbols-outlined text-[16px]">person_off</span>
+                                  <Icon name="person_off" className="material-symbols-outlined text-[16px]"/>
                                   {removingUserId === u.id ? '停用中' : isDisabled ? '已停用' : '停用'}
                                 </button>
                               </div>
@@ -447,7 +448,7 @@ export default function AdminConsole() {
                   <p className="text-sm text-slate-500">维护平台共享课程内容资产，教师开班只能绑定已就绪资源库。</p>
                 </div>
                 <button onClick={fetchCatalogs} className="flex items-center gap-1 text-cyan-600 hover:underline text-sm font-medium cursor-pointer">
-                  <span className="material-symbols-outlined text-[18px]">refresh</span> 刷新资源库
+                  <Icon name="refresh" className="material-symbols-outlined text-[18px]"/> 刷新资源库
                 </button>
               </div>
 
@@ -482,7 +483,7 @@ export default function AdminConsole() {
                         : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    <Icon name="add" className="material-symbols-outlined text-[18px]"/>
                     {creatingCatalog ? '创建中' : '创建'}
                   </button>
                 </div>
@@ -546,7 +547,7 @@ export default function AdminConsole() {
                               }}
                               className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-xs font-medium text-cyan-700 transition-colors hover:bg-cyan-50"
                             >
-                              <span className="material-symbols-outlined text-[16px]">folder_managed</span>
+                              <Icon name="folder_managed" className="material-symbols-outlined text-[16px]"/>
                               管理资料
                             </button>
                           </td>
@@ -567,7 +568,7 @@ export default function AdminConsole() {
                   <p className="text-sm text-slate-500">查看 Agent 运行记录与系统操作事件。</p>
                 </div>
                 <button onClick={fetchLogs} className="flex items-center gap-1 text-cyan-600 hover:underline text-sm font-medium cursor-pointer">
-                  <span className="material-symbols-outlined text-[18px]">refresh</span> 刷新日志
+                  <Icon name="refresh" className="material-symbols-outlined text-[18px]"/> 刷新日志
                 </button>
               </div>
 
@@ -662,7 +663,7 @@ export default function AdminConsole() {
                     disabled={generatingRole === 'teacher'}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    <Icon name="add" className="material-symbols-outlined text-[18px]"/>
                     {generatingRole === 'teacher' ? '生成中…' : '生成教师码'}
                   </button>
                   <button
@@ -671,11 +672,11 @@ export default function AdminConsole() {
                     disabled={generatingRole === 'student'}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    <Icon name="add" className="material-symbols-outlined text-[18px]"/>
                     {generatingRole === 'student' ? '生成中…' : '生成学生码'}
                   </button>
                   <button onClick={fetchRegCodes} className="flex items-center gap-1 text-cyan-600 hover:underline text-sm font-medium cursor-pointer">
-                    <span className="material-symbols-outlined text-[18px]">refresh</span>
+                    <Icon name="refresh" className="material-symbols-outlined text-[18px]"/>
                   </button>
                 </div>
               </div>
@@ -712,9 +713,7 @@ export default function AdminConsole() {
                                 onClick={() => handleCopyCode(c)}
                                 className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
                               >
-                                <span className="material-symbols-outlined text-[16px]">
-                                  {copiedCodeId === c.id ? 'check' : 'content_copy'}
-                                </span>
+                                <Icon name={copiedCodeId === c.id ? 'check' : 'content_copy'} className="material-symbols-outlined text-[16px]"/>
                                 {copiedCodeId === c.id ? '已复制' : '复制'}
                               </button>
                               <button
@@ -723,7 +722,7 @@ export default function AdminConsole() {
                                 disabled={revokingCodeId === c.id}
                                 className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
                               >
-                                <span className="material-symbols-outlined text-[16px]">block</span>
+                                <Icon name="block" className="material-symbols-outlined text-[16px]"/>
                                 {revokingCodeId === c.id ? '吊销中' : '吊销'}
                               </button>
                             </div>

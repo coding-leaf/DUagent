@@ -6,6 +6,7 @@ import { profileService } from '../api/services/profile';
 import { useCourse } from '../context/CourseContext';
 import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
+import Icon from '../components/Icon';
 
 export default function Quiz() {
   const navigate = useNavigate();
@@ -160,7 +161,7 @@ export default function Quiz() {
   if (loading) {
     return (
       <div className="bg-surface min-h-screen flex items-center justify-center">
-        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+        <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-primary"/>
       </div>
     );
   }
@@ -209,20 +210,20 @@ export default function Quiz() {
               className="p-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center justify-center -ml-2 text-slate-600 hover:text-slate-900"
               title="返回上一页"
             >
-              <span className="material-symbols-outlined">arrow_back</span>
+              <Icon name="arrow_back" className="material-symbols-outlined"/>
             </button>
             <span className="text-xl font-bold tracking-tighter text-slate-900">{courseName}</span>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">topic</span>
+            <Icon name="topic" className="material-symbols-outlined text-primary"/>
             <span className="font-body-md text-primary font-bold tracking-tight max-w-[240px] truncate">{currentKnowledgePoint}</span>
           </div>
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-slate-50 rounded-full transition-colors active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-slate-600">analytics</span>
+              <Icon name="analytics" className="material-symbols-outlined text-slate-600"/>
             </button>
             <button className="p-2 hover:bg-slate-50 rounded-full transition-colors active:scale-95 duration-200 cursor-pointer">
-              <span className="material-symbols-outlined text-slate-600">notifications</span>
+              <Icon name="notifications" className="material-symbols-outlined text-slate-600"/>
             </button>
             <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200">
               <img alt="用户头像" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBD7zzVzJP4sOCCImNhQnVh0f5VXBKYUUdqITWBaQkw7NykTFWpBCRb35x5OdjOfAeHA8pxnY1dbeHj7om4AmK_nGXsoIN-1mbwE3hCNq7xFNt4SuldmZvdW3PqPIvYRwW_EBGaXqZId-3waaJh8IQcMRBeypeQMRJI5hJFBhbeybYWhNhoWkUKSfTBuQqCIzu6dKwDMXS9LUFS_FZN0utek2XOAcc_3gZ3uXN6djZJ4T2_TfvwsvZ-1jgokz1Htpu6VTO_yqFDEOvS" />
@@ -236,7 +237,7 @@ export default function Quiz() {
         <div className="px-4 py-4 mb-4">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white">
-              <span className="material-symbols-outlined">smart_toy</span>
+              <Icon name="smart_toy" className="material-symbols-outlined"/>
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">{currentChapter}</h3>
@@ -254,7 +255,7 @@ export default function Quiz() {
                   : 'text-slate-500 bg-slate-50'
               }`}
             >
-              <span className="material-symbols-outlined text-sm">{item.icon}</span>
+              <Icon name={item.icon} className="material-symbols-outlined text-sm"/>
               <div className="min-w-0">
                 <span className="font-label-sm text-[11px] text-slate-400 block">{item.label}</span>
                 <span className="font-label-sm text-xs font-medium truncate block max-w-[150px]">{item.value}</span>
@@ -309,7 +310,7 @@ export default function Quiz() {
               </div>
               <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 p-5">
                 <div className="sm:col-span-3 flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-wide">
-                  <span className="material-symbols-outlined text-primary text-base">info</span>
+                  <Icon name="info" className="material-symbols-outlined text-primary text-base"/>
                   当前题目上下文
                 </div>
                 <div className="rounded-lg bg-white/80 border border-white px-4 py-3">
@@ -341,7 +342,7 @@ export default function Quiz() {
                 onClick={handlePrev}
                 className="flex items-center gap-2 px-6 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
               >
-                <span className="material-symbols-outlined">arrow_back</span>
+                <Icon name="arrow_back" className="material-symbols-outlined"/>
                 {currentQuestionIndex === 0 ? '退出练习' : '上一题'}
               </button>
               <div className="flex gap-4">
@@ -351,7 +352,7 @@ export default function Quiz() {
                   className="flex items-center gap-2 px-8 py-3 bg-primary text-white font-bold hover:opacity-90 rounded-xl transition-all shadow-lg shadow-primary/20 active:scale-95 cursor-pointer disabled:opacity-50"
                 >
                   {submitting ? '提交中...' : (currentQuestionIndex < totalQuestions - 1 ? '下一题' : '提交本题')}
-                  {!submitting && <span className="material-symbols-outlined">chevron_right</span>}
+                  {!submitting && <Icon name="chevron_right" className="material-symbols-outlined"/>}
                 </button>
               </div>
             </div>
@@ -361,7 +362,7 @@ export default function Quiz() {
 
       {/* Contextual FAB for Agent Help (Minimalist) */}
       <button className="fixed bottom-24 right-8 w-14 h-14 bg-white border border-slate-200 rounded-full shadow-xl flex items-center justify-center text-primary hover:scale-110 transition-transform active:scale-95 group z-50 cursor-pointer">
-        <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>support_agent</span>
+        <Icon name="support_agent" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}/>
         <div className="absolute right-16 bg-on-surface text-white text-[10px] py-1 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
           获取AI解题思路
         </div>

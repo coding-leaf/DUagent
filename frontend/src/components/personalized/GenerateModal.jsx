@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { learningService } from '../../api/services/learning';
 import { personalizedResourcesService } from '../../api/services/personalizedResources';
 import { useCourse } from '../../context/CourseContext';
+import Icon from '../Icon';
 
 const QUESTION_TYPE_OPTIONS = [
   { value: 'single_choice', label: '单选题', icon: 'radio_button_checked' },
@@ -113,7 +114,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
           <div className="flex items-center justify-between">
             <h2 className="font-h3 text-on-surface">生成个性化资源</h2>
             <button onClick={onClose} className="text-secondary hover:text-on-surface transition-colors">
-              <span className="material-symbols-outlined">close</span>
+              <Icon name="close" className="material-symbols-outlined"/>
             </button>
           </div>
           {/* Step indicator */}
@@ -125,7 +126,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
                   s === step ? 'bg-cyan-600 text-white' :
                   'bg-surface-container text-secondary'
                 }`}>
-                  {s < step ? <span className="material-symbols-outlined text-[14px]">check</span> : s}
+                  {s < step ? <Icon name="check" className="material-symbols-outlined text-[14px]"/> : s}
                 </div>
                 {s < 3 && <div className={`h-px w-8 ${s < step ? 'bg-primary-container' : 'bg-surface-container-high'}`} />}
               </div>
@@ -140,7 +141,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
         <div className="px-6 py-5 min-h-[200px]">
           {loadingPath ? (
             <div className="flex items-center justify-center py-10">
-              <span className="material-symbols-outlined animate-spin text-3xl text-primary">progress_activity</span>
+              <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-3xl text-primary"/>
             </div>
           ) : step === 1 ? (
             <div>
@@ -200,7 +201,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
                           : 'border-outline-variant hover:bg-surface-container'
                       }`}
                     >
-                      <span className="material-symbols-outlined text-[16px]">{opt.icon}</span>
+                      <Icon name={opt.icon} className="material-symbols-outlined text-[16px]"/>
                       {opt.label}
                     </button>
                   ))}
@@ -219,7 +220,7 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
                           : 'border-outline-variant hover:bg-surface-container'
                       }`}
                     >
-                      <span className="material-symbols-outlined text-[16px]">{opt.icon}</span>
+                      <Icon name={opt.icon} className="material-symbols-outlined text-[16px]"/>
                       {opt.label}
                     </button>
                   ))}
@@ -245,9 +246,9 @@ export default function GenerateModal({ courseId, onClose, onGenerated }) {
               className="flex items-center gap-2 px-5 py-2 bg-primary-container text-white rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {generating ? (
-                <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+                <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-[16px]"/>
               ) : (
-                <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                <Icon name="auto_awesome" className="material-symbols-outlined text-[16px]"/>
               )}
               {generating ? '生成中...' : '确认生成'}
             </button>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { courseService } from '../api/services/course';
+import Icon from './Icon';
 
 const getCourseDialogErrorMessage = (err, fallback) => (
   err.response?.data?.detail?.message
@@ -121,7 +122,7 @@ export default function CreateCourseDialog({ open, onClose, onCreated }) {
         {result ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 rounded-lg p-3 text-sm font-medium">
-              <span className="material-symbols-outlined text-lg">check_circle</span>
+              <Icon name="check_circle" className="material-symbols-outlined text-lg"/>
               教学班创建成功
             </div>
             <div className="bg-slate-50 rounded-lg p-4 text-center">

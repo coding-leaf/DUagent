@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminService } from '../../api/services/admin';
 import { taskService } from '../../api/services/task';
 import { getErrorMessage } from '../../utils/apiError';
+import Icon from '../Icon';
 
 const formatDateTime = (value) => {
   if (!value) return '—';
@@ -822,7 +823,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
               title="关闭"
             >
-              <span className="material-symbols-outlined text-[20px]">close</span>
+              <Icon name="close" className="material-symbols-outlined text-[20px]"/>
             </button>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -877,9 +878,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                     : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
                 }`}
               >
-                <span className={`material-symbols-outlined text-[18px] ${knowledgeGraphProcessing ? 'animate-spin' : ''}`}>
-                  {knowledgeGraphProcessing ? 'progress_activity' : 'account_tree'}
-                </span>
+                <Icon name={knowledgeGraphProcessing ? 'progress_activity' : 'account_tree'} className={`material-symbols-outlined text-[18px] ${knowledgeGraphProcessing ? 'animate-spin' : ''}`}/>
                 {knowledgeGraphProcessing || knowledgeGraphGenerating ? '刷新中' : '刷新图谱'}
               </button>
             </div>
@@ -964,7 +963,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                   ? 'cursor-not-allowed bg-slate-100 text-slate-400'
                   : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
               }`}>
-                <span className="material-symbols-outlined text-[18px]">upload_file</span>
+                <Icon name="upload_file" className="material-symbols-outlined text-[18px]"/>
                 {uploading ? '上传中' : '选择文件'}
                 <input
                   data-testid="catalog-upload-input"
@@ -1037,9 +1036,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                                 : 'text-red-500 hover:bg-red-50 hover:text-red-700'
                             }`}
                           >
-                            <span className="material-symbols-outlined text-[18px]">
-                              {deletingMaterialIds.has(material.id) ? 'progress_activity' : 'delete'}
-                            </span>
+                            <Icon name={deletingMaterialIds.has(material.id) ? 'progress_activity' : 'delete'} className="material-symbols-outlined text-[18px]"/>
                           </button>
                         </div>
                       </div>
@@ -1066,9 +1063,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                     : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
                 }`}
               >
-                <span className={`material-symbols-outlined text-[18px] ${generationProcessing ? 'animate-spin' : ''}`}>
-                  {generationProcessing ? 'progress_activity' : 'auto_awesome'}
-                </span>
+                <Icon name={generationProcessing ? 'progress_activity' : 'auto_awesome'} className={`material-symbols-outlined text-[18px] ${generationProcessing ? 'animate-spin' : ''}`}/>
                 {generationProcessing || generating ? '生成中' : '生成资源'}
               </button>
             </div>
@@ -1186,9 +1181,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                     : 'cursor-pointer bg-emerald-600 text-white hover:bg-emerald-700'
                 }`}
               >
-                <span className={`material-symbols-outlined text-[18px] ${quizGenerating ? 'animate-spin' : ''}`}>
-                  {quizGenerating ? 'progress_activity' : 'quiz'}
-                </span>
+                <Icon name={quizGenerating ? 'progress_activity' : 'quiz'} className={`material-symbols-outlined text-[18px] ${quizGenerating ? 'animate-spin' : ''}`}/>
                 {quizGenerating ? '生成中' : '生成题库'}
               </button>
             </div>
@@ -1263,9 +1256,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                               : 'text-red-500 hover:bg-red-50 hover:text-red-700'
                           }`}
                         >
-                          <span className="material-symbols-outlined text-[18px]">
-                            {deletingResourceIds.has(resource.id) ? 'progress_activity' : 'delete'}
-                          </span>
+                          <Icon name={deletingResourceIds.has(resource.id) ? 'progress_activity' : 'delete'} className="material-symbols-outlined text-[18px]"/>
                         </button>
                       </div>
                     </div>
@@ -1294,9 +1285,7 @@ export default function CourseCatalogDrawer({ catalog, open, onClose, onChanged 
                     : 'cursor-pointer bg-cyan-600 text-white hover:bg-cyan-700'
                 }`}
               >
-                <span className={`material-symbols-outlined text-[18px] ${taskProcessing ? 'animate-spin' : ''}`}>
-                  {taskProcessing ? 'progress_activity' : 'play_arrow'}
-                </span>
+                <Icon name={taskProcessing ? 'progress_activity' : 'play_arrow'} className={`material-symbols-outlined text-[18px] ${taskProcessing ? 'animate-spin' : ''}`}/>
                 {taskProcessing || ingesting ? '入库中' : '开始入库'}
               </button>
             </div>

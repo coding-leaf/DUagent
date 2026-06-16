@@ -4,6 +4,7 @@ import { teachingService } from '../api/services/teaching';
 import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import FeedbackStatus from '../components/FeedbackStatus';
+import Icon from '../components/Icon';
 
 export default function TeacherStudentReport() {
   const navigate = useNavigate();
@@ -92,7 +93,7 @@ export default function TeacherStudentReport() {
           </div>
           <div className="h-8 w-[1px] bg-outline-variant"></div>
           <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-error hover:bg-error-container/20 rounded-lg transition-colors cursor-pointer" onClick={() => navigate('/')}>
-            <span className="material-symbols-outlined text-sm">logout</span>
+            <Icon name="logout" className="material-symbols-outlined text-sm"/>
             退出登入
           </button>
         </div>
@@ -106,17 +107,17 @@ export default function TeacherStudentReport() {
           <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-slate-400 text-sm mb-1 cursor-pointer hover:text-primary transition-colors" onClick={() => navigate('/teacher')}>
-                <span className="material-symbols-outlined text-xs transform rotate-180">chevron_right</span>
+                <Icon name="chevron_right" className="material-symbols-outlined text-xs transform rotate-180"/>
                 <span>返回学生列表</span>
               </div>
               <h1 className="font-h1 text-h1 text-on-background">学情详尽报告 <span className="text-primary-container">· {report.student?.real_name || report.student?.student_id || '学生报告'}</span></h1>
             </div>
             <div className="flex gap-3">
               <button disabled className="flex items-center px-4 py-2 bg-slate-100 border border-outline-variant rounded-xl font-label-sm text-label-sm text-slate-400 cursor-not-allowed opacity-60">
-                <span className="material-symbols-outlined mr-2">print</span> 导出报告 (暂不可用)
+                <Icon name="print" className="material-symbols-outlined mr-2"/> 导出报告 (暂不可用)
               </button>
               <button disabled className="flex items-center px-4 py-2 bg-slate-200 text-slate-400 rounded-xl font-label-sm text-label-sm font-bold cursor-not-allowed opacity-60">
-                <span className="material-symbols-outlined mr-2">send</span> 发送反馈 (暂不可用)
+                <Icon name="send" className="material-symbols-outlined mr-2"/> 发送反馈 (暂不可用)
               </button>
             </div>
           </div>
@@ -149,7 +150,7 @@ export default function TeacherStudentReport() {
             {/* Quiz Stats */}
             <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
               <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
-                <span className="material-symbols-outlined text-primary text-xl">assessment</span>
+                <Icon name="assessment" className="material-symbols-outlined text-primary text-xl"/>
                 在线测试统计 (Quiz Stats)
               </h3>
               <div className="grid grid-cols-3 gap-2">
@@ -171,7 +172,7 @@ export default function TeacherStudentReport() {
             {/* Path Progress */}
             <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
               <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
-                <span className="material-symbols-outlined text-primary text-xl">account_tree</span>
+                <Icon name="account_tree" className="material-symbols-outlined text-primary text-xl"/>
                 学习路径进度 (Path Progress)
               </h3>
               <div className="flex items-center justify-between">
@@ -197,7 +198,7 @@ export default function TeacherStudentReport() {
             {/* Modality Preference */}
             <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
               <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
-                <span className="material-symbols-outlined text-primary text-xl">psychology</span>
+                <Icon name="psychology" className="material-symbols-outlined text-primary text-xl"/>
                 模态偏好 (Modal Preference)
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -222,7 +223,7 @@ export default function TeacherStudentReport() {
             {/* Knowledge Coordinates */}
             <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
               <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
-                <span className="material-symbols-outlined text-cyan-500">grid_view</span>
+                <Icon name="grid_view" className="material-symbols-outlined text-cyan-500"/>
                 知识坐标 (Knowledge Coordinates)
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -236,9 +237,7 @@ export default function TeacherStudentReport() {
                         isLearning ? 'bg-amber-50 text-amber-700 border-amber-100' :
                         'bg-slate-100 text-slate-400 border-slate-200'
                       }`}>
-                        <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>
-                          {isMastered ? 'check_circle' : isLearning ? 'sync' : 'help'}
-                        </span>
+                        <Icon name={isMastered ? 'check_circle' : isLearning ? 'sync' : 'help'} className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}/>
                         {kc.name}
                       </span>
                     );
@@ -252,7 +251,7 @@ export default function TeacherStudentReport() {
             {/* Mastery Breakdown */}
             <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
               <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
-                <span className="material-symbols-outlined text-primary text-xl">assessment</span>
+                <Icon name="assessment" className="material-symbols-outlined text-primary text-xl"/>
                 练习掌握度 (Mastery Breakdown)
               </h3>
               {report.quiz_stats?.mastery_breakdown?.length > 0 ? (
@@ -278,7 +277,7 @@ export default function TeacherStudentReport() {
             <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-6 flex flex-col justify-between">
               <div>
                 <h3 className="text-base font-bold text-on-surface mb-2 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-orange-500">local_fire_department</span>
+                  <Icon name="local_fire_department" className="material-symbols-outlined text-orange-500"/>
                   薄弱知识点 (Weak Points)
                 </h3>
                 <div className="flex flex-wrap gap-2 mt-3">
@@ -312,7 +311,7 @@ export default function TeacherStudentReport() {
             {/* Right Column: Recent Activity */}
             <div className="md:col-span-6 bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
               <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">
-                <span className="material-symbols-outlined text-primary text-xl">timeline</span>
+                <Icon name="timeline" className="material-symbols-outlined text-primary text-xl"/>
                 最近学习活动 (Recent Activity)
               </h3>
               <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2 scrollbar-thin">
@@ -320,7 +319,7 @@ export default function TeacherStudentReport() {
                   report.recent_activity.map((ra, i) => (
                     <div key={i} className="flex items-center gap-3 pb-3 border-b border-slate-50 last:border-0">
                       <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center flex-shrink-0">
-                        <span className="material-symbols-outlined text-cyan-600 text-sm">exercise</span>
+                        <Icon name="exercise" className="material-symbols-outlined text-cyan-600 text-sm"/>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-on-surface truncate">{ra.chapter || '练习'}</p>

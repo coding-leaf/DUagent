@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Icon from './Icon';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -8,7 +9,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface-container-lowest">
         <div className="flex flex-col items-center space-y-md">
-          <span className="material-symbols-outlined animate-spin text-primary text-3xl">refresh</span>
+          <Icon name="refresh" className="material-symbols-outlined animate-spin text-primary text-3xl"/>
           <span className="text-body-md text-secondary font-medium">安全验证中...</span>
         </div>
       </div>

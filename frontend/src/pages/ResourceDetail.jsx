@@ -1,8 +1,9 @@
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { learningService } from '../api/services/learning';
 import { learningActivityService } from '../api/services/learningActivity';
+import Icon from '../components/Icon';
 
 const TYPE_LABELS = {
   document: '文档',
@@ -87,7 +88,7 @@ function MermaidDiagram({ content }) {
   return (
     <div className="rounded-2xl border border-cyan-100 bg-cyan-50/30 p-6 my-8">
       <div className="mb-4 flex items-center gap-2 text-cyan-700">
-        <span className="material-symbols-outlined text-xl">schema</span>
+        <Icon name="schema" className="material-symbols-outlined text-xl"/>
         <span className="text-base font-bold">思维导图解析</span>
       </div>
       {svg ? (
@@ -175,7 +176,7 @@ export default function ResourceDetail() {
     return (
       <div className="bg-slate-50 min-h-screen flex items-center justify-center font-['Plus_Jakarta_Sans',sans-serif]">
         <div className="text-center">
-          <span className="material-symbols-outlined text-slate-300 text-6xl mb-4">sentiment_dissatisfied</span>
+          <Icon name="sentiment_dissatisfied" className="material-symbols-outlined text-slate-300 text-6xl mb-4"/>
           <p className="text-slate-500 font-medium mb-6">未找到该资源或获取失败</p>
           <button onClick={() => navigate(-1)} className="px-6 py-2 bg-cyan-600 text-white rounded-full font-semibold hover:bg-cyan-700 transition-colors">
             返回上一页
@@ -198,7 +199,7 @@ export default function ResourceDetail() {
             onClick={() => navigate(-1)}
             className="group flex items-center gap-2 px-4 py-2 rounded-full hover:bg-slate-100 transition-all text-slate-600 hover:text-cyan-700"
           >
-            <span className="material-symbols-outlined text-lg transition-transform group-hover:-translate-x-1">arrow_back</span>
+            <Icon name="arrow_back" className="material-symbols-outlined text-lg transition-transform group-hover:-translate-x-1"/>
             <span className="font-bold text-sm">返回</span>
           </button>
           <div className="text-sm font-bold text-slate-400 uppercase tracking-widest hidden sm:block">EduAgent • Resource Viewer</div>
@@ -215,7 +216,7 @@ export default function ResourceDetail() {
               <header className="mb-10 pb-8 border-b border-slate-100">
                 <div className="flex items-center gap-2 mb-6 flex-wrap">
                   <span className="px-3.5 py-1.5 bg-cyan-100 text-cyan-800 rounded-full text-xs font-bold tracking-wide flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                    <Icon name="auto_awesome" className="material-symbols-outlined text-[14px]"/>
                     {TYPE_LABELS[resource.type] || '学习资源'}
                   </span>
                   {resource.chapter && (
@@ -258,7 +259,7 @@ export default function ResourceDetail() {
                   )
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                    <span className="material-symbols-outlined text-slate-300 text-5xl mb-4">do_not_disturb_off</span>
+                    <Icon name="do_not_disturb_off" className="material-symbols-outlined text-slate-300 text-5xl mb-4"/>
                     <p className="text-slate-500 font-medium">
                       暂无内容数据
                     </p>
@@ -282,11 +283,11 @@ export default function ResourceDetail() {
 
               <footer className="mt-8 pt-8 flex justify-center items-center gap-6">
                 <button className="group flex items-center justify-center gap-2 w-32 h-12 rounded-full border border-slate-200 text-slate-600 hover:bg-cyan-50 hover:text-cyan-600 hover:border-cyan-200 transition-all font-bold text-sm">
-                  <span className="material-symbols-outlined text-[20px] transition-transform group-hover:-translate-y-1">thumb_up</span>
+                  <Icon name="thumb_up" className="material-symbols-outlined text-[20px] transition-transform group-hover:-translate-y-1"/>
                   <span>有用</span>
                 </button>
                 <button className="group flex items-center justify-center gap-2 w-32 h-12 rounded-full border border-slate-200 text-slate-600 hover:bg-cyan-50 hover:text-cyan-600 hover:border-cyan-200 transition-all font-bold text-sm">
-                  <span className="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-12">share</span>
+                  <Icon name="share" className="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-12"/>
                   <span>分享</span>
                 </button>
               </footer>

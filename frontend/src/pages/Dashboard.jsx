@@ -5,6 +5,7 @@ import { useCourse } from '../context/CourseContext';
 import FeedbackStatus from '../components/FeedbackStatus';
 import Navbar from '../components/Navbar';
 import JoinCourseDialog from '../components/JoinCourseDialog';
+import Icon from '../components/Icon';
 
 const RESOURCE_TYPES = [
   { value: '全部', label: '全部' },
@@ -115,7 +116,7 @@ export default function Dashboard() {
         <div className="px-6 mb-6">
           <div className="flex items-center space-x-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>smart_toy</span>
+              <Icon name="smart_toy" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}/>
             </div>
             <div>
               <h3 className="text-lg font-black text-cyan-600 leading-tight">数据结构掌控者</h3>
@@ -126,11 +127,11 @@ export default function Dashboard() {
         <nav className="flex-1 space-y-1">
           <div className="px-4">
             <Link to="/learning-path" className="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5">
-              <span className="material-symbols-outlined">account_tree</span>
+              <Icon name="account_tree" className="material-symbols-outlined"/>
               <span className="font-body-md">学习节点</span>
             </Link>
             <Link to="/dashboard" className="flex items-center space-x-3 px-4 py-3 rounded-lg bg-cyan-50 text-cyan-600 border-r-4 border-cyan-500 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>library_books</span>
+              <Icon name="library_books" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}/>
               <span className="font-body-md">资源库</span>
             </Link>
           </div>
@@ -166,7 +167,7 @@ export default function Dashboard() {
           {/* Filter Feedback */}
           {(selectedType !== '全部' || searchTerm) && (
             <div className="mb-8 flex items-center gap-3 bg-surface-container-low p-4 rounded-xl border border-primary-container/30">
-              <span className="material-symbols-outlined text-primary">filter_alt</span>
+              <Icon name="filter_alt" className="material-symbols-outlined text-primary"/>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-on-surface-variant">当前筛选：</span>
                 
@@ -174,7 +175,7 @@ export default function Dashboard() {
                   <span className="px-3 py-1 bg-primary text-white rounded-full text-xs font-medium flex items-center gap-1">
                     类型: {getResourceTypeInfo(selectedType).label}
                     <button onClick={() => setSelectedType('全部')} className="hover:text-primary-container flex items-center justify-center cursor-pointer">
-                      <span className="material-symbols-outlined text-[14px]">close</span>
+                      <Icon name="close" className="material-symbols-outlined text-[14px]"/>
                     </button>
                   </span>
                 )}
@@ -183,7 +184,7 @@ export default function Dashboard() {
                   <span className="px-3 py-1 bg-cyan-100 text-cyan-800 border border-cyan-200 rounded-full text-xs font-medium flex items-center gap-1">
                     关键词: "{searchTerm}"
                     <button onClick={() => setSearchTerm('')} className="hover:text-cyan-600 flex items-center justify-center cursor-pointer">
-                      <span className="material-symbols-outlined text-[14px]">close</span>
+                      <Icon name="close" className="material-symbols-outlined text-[14px]"/>
                     </button>
                   </span>
                 )}
@@ -192,7 +193,7 @@ export default function Dashboard() {
                   onClick={() => { setSelectedType('全部'); setSearchTerm(''); }}
                   className="text-primary hover:underline text-xs flex items-center ml-2 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-xs mr-1">delete</span> 清除全部
+                  <Icon name="delete" className="material-symbols-outlined text-xs mr-1"/> 清除全部
                 </button>
               </div>
             </div>
@@ -215,7 +216,7 @@ export default function Dashboard() {
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-4">
                           <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${typeInfo.colorClass}`}>
-                            <span className="material-symbols-outlined text-[12px]">{typeInfo.icon}</span>
+                            <Icon name={typeInfo.icon} className="material-symbols-outlined text-[12px]"/>
                             {typeInfo.label}
                           </span>
                           {resource.chapter && (
@@ -230,7 +231,7 @@ export default function Dashboard() {
 
                         {resource.knowledge_point && (
                           <div className="flex items-center gap-1.5 mb-4">
-                            <span className="material-symbols-outlined text-xs text-primary">bookmark</span>
+                            <Icon name="bookmark" className="material-symbols-outlined text-xs text-primary"/>
                             <span className="text-xs text-primary font-medium">{resource.knowledge_point}</span>
                           </div>
                         )}
@@ -273,7 +274,7 @@ export default function Dashboard() {
         onClick={() => navigate('/ai-chat')}
         className="fixed bottom-8 right-8 w-14 h-14 bg-cyan-500 text-white rounded-full shadow-2xl shadow-cyan-500/40 flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-40 cursor-pointer"
       >
-        <span className="material-symbols-outlined text-2xl">chat_bubble</span>
+        <Icon name="chat_bubble" className="material-symbols-outlined text-2xl"/>
       </button>
 
     </div>

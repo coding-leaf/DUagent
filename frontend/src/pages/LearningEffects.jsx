@@ -5,6 +5,7 @@ import { learningService } from '../api/services/learning';
 import { taskService } from '../api/services/task';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
+import Icon from '../components/Icon';
 
 const terminalTaskStates = new Set(['completed', 'failed', 'partial']);
 
@@ -209,7 +210,7 @@ export default function LearningEffects() {
         <div className="px-6 mb-6">
           <div className="flex items-center space-x-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white">
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>monitoring</span>
+              <Icon name="monitoring" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}/>
             </div>
             <div>
               <h3 className="text-lg font-black text-cyan-600 leading-tight">学习效果</h3>
@@ -220,11 +221,11 @@ export default function LearningEffects() {
         <nav className="flex-1 space-y-1">
           <div className="px-4">
             <Link to="/learning-path" className="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5">
-              <span className="material-symbols-outlined">account_tree</span>
+              <Icon name="account_tree" className="material-symbols-outlined"/>
               <span className="font-body-md">学习节点</span>
             </Link>
             <Link to="/dashboard" className="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5">
-              <span className="material-symbols-outlined">library_books</span>
+              <Icon name="library_books" className="material-symbols-outlined"/>
               <span className="font-body-md">资源库</span>
             </Link>
           </div>
@@ -243,7 +244,7 @@ export default function LearningEffects() {
               disabled={!activeCourseId || refreshInProgress}
               className="flex items-center px-4 py-2 bg-primary-container text-on-primary-container rounded-xl font-label-sm text-label-sm font-bold shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span className="material-symbols-outlined mr-2">refresh</span>
+              <Icon name="refresh" className="material-symbols-outlined mr-2"/>
               {refreshInProgress ? '评估中' : '重新评估'}
             </button>
           </div>
@@ -287,7 +288,7 @@ export default function LearningEffects() {
             <section className="grid grid-cols-12 gap-6">
               <div className="col-span-12 lg:col-span-8 bg-white/80 backdrop-blur-md rounded-xl p-6 shadow-sm border border-gray-100">
                 <h3 className="font-h3 text-xl font-bold mb-3 flex items-center">
-                  <span className="material-symbols-outlined mr-2 text-cyan-600">psychology</span>
+                  <Icon name="psychology" className="material-symbols-outlined mr-2 text-cyan-600"/>
                   学习效果总结
                 </h3>
                 {loading ? (
@@ -303,7 +304,7 @@ export default function LearningEffects() {
 
               <div className="col-span-12 lg:col-span-4 bg-white/80 backdrop-blur-md rounded-xl p-6 shadow-sm border border-gray-100">
                 <h3 className="font-h3 text-xl font-bold mb-4 flex items-center">
-                  <span className="material-symbols-outlined mr-2 text-cyan-600">donut_large</span>
+                  <Icon name="donut_large" className="material-symbols-outlined mr-2 text-cyan-600"/>
                   掌握度分布
                 </h3>
                 <div className="space-y-3">

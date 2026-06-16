@@ -5,6 +5,7 @@ import { learningService } from '../api/services/learning';
 import FeedbackStatus from '../components/FeedbackStatus';
 import CreateCourseDialog from '../components/CreateCourseDialog';
 import { useAuth } from '../context/AuthContext';
+import Icon from '../components/Icon';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 const resourceTypeLabels = {
@@ -216,12 +217,12 @@ export default function TeacherConsole() {
             onClick={() => setShowCreateDialog(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors"
           >
-            <span className="material-symbols-outlined text-sm">add</span>
+            <Icon name="add" className="material-symbols-outlined text-sm"/>
             创建教学班
           </button>
           <div className="h-8 w-[1px] bg-outline-variant"></div>
           <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-error hover:bg-error-container/20 rounded-lg transition-colors" onClick={() => navigate('/')}>
-            <span className="material-symbols-outlined text-sm">logout</span>
+            <Icon name="logout" className="material-symbols-outlined text-sm"/>
             退出登入
           </button>
         </div>
@@ -253,7 +254,7 @@ export default function TeacherConsole() {
                       {cls.name}
                     </span>
                     {activeClass === cls.id && (
-                      <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
+                      <Icon name="check_circle" className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: '"FILL" 1' }}/>
                     )}
                   </div>
                   <p className="font-h3 text-lg text-on-surface mb-1">{cls.topic}</p>
@@ -275,7 +276,7 @@ export default function TeacherConsole() {
               <div className="px-md py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary">library_books</span>
+                    <Icon name="library_books" className="material-symbols-outlined text-primary"/>
                     <h3 className="font-h3 text-xl text-on-surface">本班学习资源</h3>
                   </div>
                   {activeClassInfo?.course_code && (
@@ -329,9 +330,7 @@ export default function TeacherConsole() {
                                 {chapterResources.length} 篇
                               </span>
                             </div>
-                            <span className={`material-symbols-outlined text-outline transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
-                              expand_more
-                            </span>
+                            <Icon name="expand_more" className={`material-symbols-outlined text-outline transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}/>
                           </button>
                           
                           {isExpanded && (
@@ -352,7 +351,7 @@ export default function TeacherConsole() {
                                           {resourceTypeLabels[resource.type] || resource.type || '资源'}
                                         </p>
                                       </div>
-                                      <span className="material-symbols-outlined text-outline group-hover:text-primary text-lg transition-colors">open_in_new</span>
+                                      <Icon name="open_in_new" className="material-symbols-outlined text-outline group-hover:text-primary text-lg transition-colors"/>
                                     </div>
                                     {resource.description && (
                                       <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{resource.description}</p>
@@ -381,16 +380,16 @@ export default function TeacherConsole() {
             <div className="bg-white rounded-xl border border-outline-variant shadow-sm overflow-hidden">
               <div className="px-md py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">monitoring</span>
+                  <Icon name="monitoring" className="material-symbols-outlined text-primary"/>
                   <h3 className="font-h3 text-xl text-on-surface">{activeClassInfo?.name || activeClass} 学生实时监控</h3>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center bg-surface-container-low rounded-lg px-3 py-1.5 border border-outline-variant">
-                    <span className="material-symbols-outlined text-outline text-sm mr-2">search</span>
+                    <Icon name="search" className="material-symbols-outlined text-outline text-sm mr-2"/>
                     <input className="bg-transparent border-none focus:ring-0 text-sm w-32 outline-none" placeholder="搜索学生..." type="text" />
                   </div>
                   <button className="p-2 rounded-lg hover:bg-surface-container transition-colors">
-                    <span className="material-symbols-outlined text-outline">refresh</span>
+                    <Icon name="refresh" className="material-symbols-outlined text-outline"/>
                   </button>
                 </div>
               </div>
@@ -492,7 +491,7 @@ export default function TeacherConsole() {
                 {/* Avg Quiz Score */}
                 <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="material-symbols-outlined text-primary text-xl">quiz</span>
+                    <Icon name="quiz" className="material-symbols-outlined text-primary text-xl"/>
                     <span className="text-sm font-semibold text-outline">平均练习分</span>
                   </div>
                   <p className="text-3xl font-bold text-on-surface">
@@ -505,7 +504,7 @@ export default function TeacherConsole() {
                 {/* Total Quiz Attempts */}
                 <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="material-symbols-outlined text-primary text-xl">assignment</span>
+                    <Icon name="assignment" className="material-symbols-outlined text-primary text-xl"/>
                     <span className="text-sm font-semibold text-outline">练习次数</span>
                   </div>
                   <p className="text-3xl font-bold text-on-surface">
@@ -516,7 +515,7 @@ export default function TeacherConsole() {
                 {/* Weak Points Top */}
                 <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md md:col-span-2 lg:col-span-1">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="material-symbols-outlined text-error text-xl">warning</span>
+                    <Icon name="warning" className="material-symbols-outlined text-error text-xl"/>
                     <span className="text-sm font-semibold text-outline">薄弱知识点</span>
                   </div>
                   {insights.weak_points_top.length === 0 ? (
@@ -541,7 +540,7 @@ export default function TeacherConsole() {
                 {/* Path Node Progress */}
                 <div className="bg-white rounded-xl border border-outline-variant shadow-sm p-md">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="material-symbols-outlined text-primary text-xl">route</span>
+                    <Icon name="route" className="material-symbols-outlined text-primary text-xl"/>
                     <span className="text-sm font-semibold text-outline">路径节点分布</span>
                   </div>
                   {insights.path_node_progress.total_nodes === 0 ? (

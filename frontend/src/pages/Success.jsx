@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import Icon from '../components/Icon';
 
 export default function Success() {
   const navigate = useNavigate();
@@ -23,14 +24,14 @@ export default function Success() {
           <div>
             {/* Brand */}
             <div className="flex items-center space-x-xs mb-xl">
-              <span className="material-symbols-outlined text-primary-fixed" style={{ fontSize: '32px' }}>hub</span>
+              <Icon name="hub" className="material-symbols-outlined text-primary-fixed" style={{ fontSize: '32px' }}/>
               <h1 className="font-['Public_Sans'] text-2xl font-black tracking-tighter">数据结构智能助手</h1>
             </div>
 
             <div className="space-y-lg my-auto">
               <div className="space-y-sm">
                 <div className="inline-flex items-center px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm">
-                  <span className="material-symbols-outlined text-primary-fixed text-sm mr-2">neurology</span>
+                  <Icon name="neurology" className="material-symbols-outlined text-primary-fixed text-sm mr-2"/>
                   <span className="text-label-sm font-bold uppercase tracking-wider">多智能体学习系统</span>
                 </div>
                 <h2 className="font-h1 leading-tight text-3xl lg:text-4xl text-left">
@@ -45,12 +46,12 @@ export default function Success() {
               {/* Features Summary */}
               <div className="grid grid-cols-1 gap-md text-left pt-4">
                 <div className="bg-white/10 backdrop-blur-md p-md rounded-xl border border-white/20 shadow-sm border-l-4 border-primary-fixed">
-                  <span className="material-symbols-outlined text-primary-fixed mb-2">account_tree</span>
+                  <Icon name="account_tree" className="material-symbols-outlined text-primary-fixed mb-2"/>
                   <h4 className="font-h3 text-sm font-bold mb-1">结构化解析</h4>
                   <p className="text-label-sm text-white/70">利用多智能体协作，深度拆解复杂数据结构逻辑。</p>
                 </div>
                 <div className="bg-white/10 backdrop-blur-md p-md rounded-xl border border-white/20 shadow-sm border-l-4 border-white/40">
-                  <span className="material-symbols-outlined text-white/60 mb-2">auto_awesome</span>
+                  <Icon name="auto_awesome" className="material-symbols-outlined text-white/60 mb-2"/>
                   <h4 className="font-h3 text-sm font-bold mb-1">个性化生成</h4>
                   <p className="text-label-sm text-white/70">根据学习进度动态生成个性化习题与解析资源。</p>
                 </div>
@@ -75,7 +76,7 @@ export default function Success() {
           {/* Mobile Branding */}
           <div className="lg:hidden flex flex-col items-center mb-lg">
             <div className="flex items-center space-x-xs mb-2">
-              <span className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}>hub</span>
+              <Icon name="hub" className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}/>
               <h2 className="font-['Public_Sans'] text-xl font-black text-on-surface">数据结构智能助手</h2>
             </div>
             <p className="text-label-sm text-secondary uppercase tracking-widest text-xs">Multi-Agent Learning System</p>
@@ -85,9 +86,7 @@ export default function Success() {
             <div className="max-w-[448px] mx-auto">
               <div className="text-center py-lg">
                 <div className="mb-md flex justify-center">
-                  <span className="material-symbols-outlined text-[80px] text-green-500 bg-green-50 rounded-full p-4" style={{ fontVariationSettings: '"FILL" 1' }}>
-                    check_circle
-                  </span>
+                  <Icon name="check_circle" className="material-symbols-outlined text-[80px] text-green-500 bg-green-50 rounded-full p-4" style={{ fontVariationSettings: '"FILL" 1' }}/>
                 </div>
                 <h3 className="font-h2 text-2xl text-on-surface mb-sm font-bold">注册成功！</h3>
                 <p className="text-body-md text-secondary mb-xl text-sm">
@@ -98,7 +97,7 @@ export default function Success() {
                   className="w-full py-4 bg-primary text-on-primary font-h3 rounded-lg shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center justify-center space-x-2 text-lg font-bold"
                 >
                   <span>返回登录</span>
-                  <span className="material-symbols-outlined">login</span>
+                  <Icon name="login" className="material-symbols-outlined"/>
                 </button>
               </div>
             </div>

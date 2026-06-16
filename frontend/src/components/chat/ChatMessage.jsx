@@ -6,6 +6,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import mermaid from 'mermaid';
 import ToolCallCard from './ToolCallCard';
 import { extractModelText } from '../../utils/chatContent';
+import Icon from '../Icon';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -185,7 +186,7 @@ export default function ChatMessage({ message, onSendMessage }) {
     <div className={`flex gap-4 max-w-[100%] group ${isUser ? 'ml-auto flex-row-reverse' : ''} ${isReviewFlagged ? 'opacity-60' : ''}`}>
       <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${isUser ? 'bg-cyan-600 text-white shadow-sm' : 'bg-sky-100 text-cyan-600'}`}>
         {isUser ? (
-          <span className="material-symbols-outlined text-[18px]">person</span>
+          <Icon name="person" className="material-symbols-outlined text-[18px]"/>
         ) : (
           <span className="text-[12px] font-bold">AI</span>
         )}
@@ -200,7 +201,7 @@ export default function ChatMessage({ message, onSendMessage }) {
 
         {isReviewFlagged && (
           <div className="mb-2 flex w-fit items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
-            <span className="material-symbols-outlined text-[15px]">warning</span>
+            <Icon name="warning" className="material-symbols-outlined text-[15px]"/>
             该回答可能不准确
           </div>
         )}
@@ -219,7 +220,7 @@ export default function ChatMessage({ message, onSendMessage }) {
                     return (
                       <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 mt-4 mb-2 shadow-sm">
                         <div className="flex items-center gap-2 mb-2 text-xs text-slate-500 font-medium uppercase tracking-wide">
-                          <span className="material-symbols-outlined text-[16px] text-cyan-600">schema</span>
+                          <Icon name="schema" className="material-symbols-outlined text-[16px] text-cyan-600"/>
                           <span>图解模式 (Mermaid)</span>
                         </div>
                         <MermaidDiagram content={codeStr} />
@@ -236,7 +237,7 @@ export default function ChatMessage({ message, onSendMessage }) {
                           className="opacity-0 group-hover/code:opacity-100 focus:opacity-100 transition-opacity hover:text-slate-700 flex items-center gap-1 cursor-pointer"
                           title="Copy code"
                         >
-                          <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                          <Icon name="content_copy" className="material-symbols-outlined text-[14px]"/>
                           Copy
                         </button>
                       </div>
@@ -276,7 +277,7 @@ export default function ChatMessage({ message, onSendMessage }) {
         {/* Error message */}
         {message.isError && (
           <div className="mt-2 text-red-500 text-[13px] flex items-center gap-1 font-medium bg-red-50 p-2 rounded-lg w-fit">
-            <span className="material-symbols-outlined text-[16px]">error</span>
+            <Icon name="error" className="material-symbols-outlined text-[16px]"/>
             {message.content?.includes('发送失败') ? '' : '生成失败，请重试'}
           </div>
         )}
@@ -285,7 +286,7 @@ export default function ChatMessage({ message, onSendMessage }) {
         {!isUser && message.diagrams && message.diagrams.map((diag, index) => (
           <div key={`diagram-${index}`} className="bg-slate-50 rounded-xl p-4 border border-slate-200 mt-4 mb-2 shadow-sm">
             <div className="flex items-center gap-2 mb-2 text-xs text-slate-500 font-medium uppercase tracking-wide">
-              <span className="material-symbols-outlined text-[16px] text-cyan-600">schema</span>
+              <Icon name="schema" className="material-symbols-outlined text-[16px] text-cyan-600"/>
               <span>图解模式 (Mermaid)</span>
             </div>
             <MermaidDiagram content={extractModelText(diag)} />
@@ -301,7 +302,7 @@ export default function ChatMessage({ message, onSendMessage }) {
                 onClick={() => onSendMessage(sug)} 
                 className="px-3 py-1.5 bg-white text-slate-600 text-[13px] rounded-lg cursor-pointer hover:bg-slate-50 transition-all border border-slate-200 shadow-sm flex items-center gap-1.5 active:scale-95"
               >
-                <span className="material-symbols-outlined text-[14px] text-cyan-500">lightbulb</span>
+                <Icon name="lightbulb" className="material-symbols-outlined text-[14px] text-cyan-500"/>
                 {sug}
               </button>
             ))}

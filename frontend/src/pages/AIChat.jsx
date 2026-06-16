@@ -7,6 +7,7 @@ import Navbar from '../components/Navbar';
 import ChatMessage from '../components/chat/ChatMessage';
 import ChatEmptyState from '../components/chat/ChatEmptyState';
 import { extractModelText } from '../utils/chatContent';
+import Icon from '../components/Icon';
 
 const normalizeTextList = (value) => {
   const list = Array.isArray(value) ? value : [value];
@@ -357,7 +358,7 @@ export default function AIChat() {
                   className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
                   title="新对话"
                 >
-                  <span className="material-symbols-outlined text-[18px]">add</span>
+                  <Icon name="add" className="material-symbols-outlined text-[18px]"/>
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
@@ -395,9 +396,7 @@ export default function AIChat() {
             className="hidden lg:flex absolute right-[-12px] top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border border-slate-200 bg-white items-center justify-center shadow-md cursor-pointer hover:bg-slate-50 hover:text-cyan-600 transition-all z-40 active:scale-90"
             title={leftCollapsed ? "展开侧边栏" : "收起侧边栏"}
           >
-            <span className="material-symbols-outlined text-[16px] select-none">
-              {leftCollapsed ? 'chevron_right' : 'chevron_left'}
-            </span>
+            <Icon name={leftCollapsed ? 'chevron_right' : 'chevron_left'} className="material-symbols-outlined text-[16px] select-none"/>
           </button>
         </aside>
 
@@ -421,7 +420,7 @@ export default function AIChat() {
                 className="lg:hidden text-slate-500 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer mr-1 flex items-center justify-center"
                 title="打开历史记录"
               >
-                <span className="material-symbols-outlined text-[20px]">menu</span>
+                <Icon name="menu" className="material-symbols-outlined text-[20px]"/>
               </button>
               
               <div className="text-sm text-slate-700 font-medium truncate">
@@ -435,7 +434,7 @@ export default function AIChat() {
               className="xl:hidden text-slate-500 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
               title="查看推荐资源"
             >
-              <span className="material-symbols-outlined text-[20px]">menu_book</span>
+              <Icon name="menu_book" className="material-symbols-outlined text-[20px]"/>
             </button>
           </div>
 
@@ -479,10 +478,10 @@ export default function AIChat() {
                 <div className="flex justify-between items-center px-1">
                   <div className="flex gap-1 text-slate-400">
                     <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[18px]">attach_file</span>
+                      <Icon name="attach_file" className="material-symbols-outlined text-[18px]"/>
                     </button>
                     <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[18px]">mic</span>
+                      <Icon name="mic" className="material-symbols-outlined text-[18px]"/>
                     </button>
                   </div>
                   
@@ -491,7 +490,7 @@ export default function AIChat() {
                     disabled={isSending || !inputValue.trim() || !activeCourseId}
                     className="w-8 h-8 rounded-lg bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"
                   >
-                    <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
+                    <Icon name="arrow_upward" className="material-symbols-outlined text-[16px]"/>
                   </button>
                 </div>
               </div>
@@ -552,7 +551,7 @@ export default function AIChat() {
                           className="flex gap-3 p-3 rounded-xl border border-slate-100 hover:border-cyan-200 hover:bg-cyan-50/30 transition-all duration-200 group cursor-pointer block"
                         >
                           <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 font-medium`}>
-                            <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                            <Icon name={icon} className="material-symbols-outlined text-[20px]"/>
                           </div>
                           <div className="min-w-0 flex-1">
                             <h4 className="text-[13px] font-semibold text-slate-800 group-hover:text-cyan-700 transition-colors line-clamp-1 mb-0.5">
@@ -579,7 +578,7 @@ export default function AIChat() {
                   /* Empty State */
                   <div className="border border-slate-200 border-dashed rounded-xl p-4 bg-slate-50 flex flex-col items-center justify-center text-center mt-6">
                     <div className="w-12 h-12 bg-slate-100 rounded-full mb-3 flex items-center justify-center text-slate-400">
-                      <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                      <Icon name="inventory_2" className="material-symbols-outlined text-2xl"/>
                     </div>
                     <div className="text-[14px] font-semibold text-slate-700 mb-1">暂无推荐资源</div>
                     <div className="text-[12px] text-slate-500 leading-relaxed px-2 mt-2">
@@ -597,9 +596,7 @@ export default function AIChat() {
             className="hidden xl:flex absolute left-[-12px] top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border border-slate-200 bg-white items-center justify-center shadow-md cursor-pointer hover:bg-slate-50 hover:text-cyan-600 transition-all z-40 active:scale-90"
             title={rightCollapsed ? "展开侧边栏" : "收起侧边栏"}
           >
-            <span className="material-symbols-outlined text-[16px] select-none">
-              {rightCollapsed ? 'chevron_left' : 'chevron_right'}
-            </span>
+            <Icon name={rightCollapsed ? 'chevron_left' : 'chevron_right'} className="material-symbols-outlined text-[16px] select-none"/>
           </button>
         </aside>
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { courseService } from '../api/services/course';
+import Icon from './Icon';
 
 export default function JoinCourseDialog({ open, onClose, onJoined }) {
   const [courseCode, setCourseCode] = useState('');
@@ -46,7 +47,7 @@ export default function JoinCourseDialog({ open, onClose, onJoined }) {
 
         {success ? (
           <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 rounded-lg p-3 text-sm font-medium">
-            <span className="material-symbols-outlined text-lg">check_circle</span>
+            <Icon name="check_circle" className="material-symbols-outlined text-lg"/>
             加入成功
           </div>
         ) : (

@@ -5,6 +5,7 @@ import { useCourse } from '../context/CourseContext';
 import { personalizedResourcesService } from '../api/services/personalizedResources';
 import { learningService } from '../api/services/learning';
 import { profileService } from '../api/services/profile';
+import Icon from '../components/Icon';
 
 const LOADING_TEXTS = [
   "正在接收本次作答数据...",
@@ -112,7 +113,7 @@ export default function PracticeResult() {
             {/* Outer spinning progress ring */}
             <div className="absolute inset-0 border-4 border-primary-container/20 border-t-primary rounded-full animate-spin"></div>
             {/* Inner pulsing AI robot icon */}
-            <span className="material-symbols-outlined text-primary text-3xl animate-pulse">smart_toy</span>
+            <Icon name="smart_toy" className="material-symbols-outlined text-primary text-3xl animate-pulse"/>
           </div>
           <h3 className="font-h3 text-h3 text-on-surface mb-xs">智能教练评估中</h3>
           <p className="font-body-md text-secondary min-h-[24px]">
@@ -224,7 +225,7 @@ export default function PracticeResult() {
               <div className="col-span-8 grid grid-cols-2 gap-md">
                 <div className="bg-white border border-outline-variant p-md rounded-xl flex items-center gap-md">
                   <div className="h-12 w-12 bg-primary-container/10 rounded-full flex items-center justify-center text-primary-container">
-                    <span className="material-symbols-outlined">timer</span>
+                    <Icon name="timer" className="material-symbols-outlined"/>
                   </div>
                   <div>
                     <span className="block font-label-sm text-label-sm text-secondary">练习耗时</span>
@@ -234,11 +235,11 @@ export default function PracticeResult() {
                 {/* Comparison Chart Placeholder */}
                 <div className="col-span-2 bg-surface-container-lowest border-2 border-primary-container/20 p-md rounded-2xl relative overflow-hidden h-full flex items-center shadow-sm">
                   <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                    <span className="material-symbols-outlined text-[80px]">psychology</span>
+                    <Icon name="psychology" className="material-symbols-outlined text-[80px]"/>
                   </div>
                   <div className="flex gap-md w-full">
                     <div className="flex-shrink-0 h-12 w-12 rounded-xl bg-primary-container flex items-center justify-center text-white shadow-lg">
-                      <span className="material-symbols-outlined">smart_toy</span>
+                      <Icon name="smart_toy" className="material-symbols-outlined"/>
                     </div>
                     <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar pr-2">
                       <h4 className="font-body-lg font-bold text-on-surface mb-1">AI 智能教练建议</h4>
@@ -282,7 +283,7 @@ export default function PracticeResult() {
                     <h5 className="font-body-md font-medium text-on-surface truncate">题号：{q.question_id} 的解析回顾</h5>
                     <div className="flex gap-sm mt-1">
                       <span className="font-label-sm text-[11px] text-secondary flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px]">{q.is_correct ? 'bolt' : 'timer'}</span> 
+                        <Icon name={q.is_correct ? 'bolt' : 'timer'} className="material-symbols-outlined text-[14px]"/> 
                         正确答案是 {q.correct_answer}
                       </span>
                       <span className={`font-label-sm text-[11px] font-bold ${q.is_correct ? 'text-green-600' : 'text-error'}`}>
@@ -290,7 +291,7 @@ export default function PracticeResult() {
                       </span>
                     </div>
                   </div>
-                  <span className="material-symbols-outlined text-secondary opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+                  <Icon name="chevron_right" className="material-symbols-outlined text-secondary opacity-0 group-hover:opacity-100 transition-opacity"/>
                 </div>
               ))}
               {(!resultData?.per_question_results || resultData.per_question_results.length === 0) && (
@@ -304,7 +305,7 @@ export default function PracticeResult() {
             {accuracy < 60 && resultData && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 <div className="flex items-start gap-3 mb-3">
-                  <span className="material-symbols-outlined text-amber-500 flex-shrink-0 mt-0.5">warning</span>
+                  <Icon name="warning" className="material-symbols-outlined text-amber-500 flex-shrink-0 mt-0.5"/>
                   <div>
                     <p className="text-body-md font-medium text-amber-800">
                       本次正确率较低（{accuracy}%）{contextKp ? `· 「${contextKp}」` : ''}
@@ -318,7 +319,7 @@ export default function PracticeResult() {
                       onClick={handleRetry}
                       className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-amber-400 text-amber-700 rounded-xl text-label-sm font-bold hover:bg-amber-100 active:scale-95 transition-all"
                     >
-                      <span className="material-symbols-outlined text-[16px]">replay</span>
+                      <Icon name="replay" className="material-symbols-outlined text-[16px]"/>
                       再练一遍
                     </button>
                   )}
@@ -328,8 +329,8 @@ export default function PracticeResult() {
                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-xl text-label-sm font-bold hover:bg-amber-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {generating
-                      ? <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
-                      : <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                      ? <Icon name="progress_activity" className="material-symbols-outlined text-[14px] animate-spin"/>
+                      : <Icon name="auto_awesome" className="material-symbols-outlined text-[14px]"/>
                     }
                     {generating ? '生成中...' : '生成新一批'}
                   </button>
@@ -342,7 +343,7 @@ export default function PracticeResult() {
                 onClick={() => navigate('/dashboard')}
                 className="flex-1 max-w-[200px] h-12 rounded-xl border-2 border-primary-container text-primary font-bold hover:bg-primary-container/5 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span className="material-symbols-outlined">home</span>
+                <Icon name="home" className="material-symbols-outlined"/>
                 返回主页
               </button>
               <button
@@ -350,7 +351,7 @@ export default function PracticeResult() {
                 className="flex-1 max-w-[200px] h-12 rounded-xl bg-primary-container text-white font-bold shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 下一组练习
-                <span className="material-symbols-outlined">arrow_forward</span>
+                <Icon name="arrow_forward" className="material-symbols-outlined"/>
               </button>
             </div>
           </div>
@@ -361,7 +362,7 @@ export default function PracticeResult() {
       <div className="fixed top-20 right-10 z-10 w-48 h-48 pointer-events-none opacity-20">
         <div className="w-full h-full rounded-full border-2 border-primary-container animate-pulse flex items-center justify-center">
           <div className="w-4/5 h-4/5 rounded-full border border-dashed border-primary-container flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary-container text-4xl">account_tree</span>
+            <Icon name="account_tree" className="material-symbols-outlined text-primary-container text-4xl"/>
           </div>
         </div>
       </div>

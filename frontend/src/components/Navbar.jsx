@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCourse } from '../context/CourseContext';
 import JoinCourseDialog from './JoinCourseDialog';
+import Icon from './Icon';
 
 export default function Navbar({ searchTerm, onSearch }) {
   const navigate = useNavigate();
@@ -111,12 +112,12 @@ export default function Navbar({ searchTerm, onSearch }) {
                 value={searchTerm || ''}
                 onChange={(e) => onSearch(e.target.value)}
               />
-              <span className="material-symbols-outlined absolute left-2.5 top-2 text-gray-400 text-sm">search</span>
+              <Icon name="search" className="material-symbols-outlined absolute left-2.5 top-2 text-gray-400 text-sm"/>
             </div>
           )}
 
           <button className="p-2 hover:bg-gray-50 rounded-lg transition-all active:scale-95 duration-200">
-            <span className="material-symbols-outlined text-gray-600">notifications</span>
+            <Icon name="notifications" className="material-symbols-outlined text-gray-600"/>
           </button>
           
           {/* User Profile Dropdown */}
@@ -142,7 +143,7 @@ export default function Navbar({ searchTerm, onSearch }) {
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
                 >
-                  <span className="material-symbols-outlined text-sm">logout</span>
+                  <Icon name="logout" className="material-symbols-outlined text-sm"/>
                   退出登录
                 </button>
               </div>

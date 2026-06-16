@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
 import { personalizedResourcesService } from '../api/services/personalizedResources';
 import GenerateModal from '../components/personalized/GenerateModal';
+import Icon from '../components/Icon';
 
 const TYPE_ICON = {
   document: 'description',
@@ -77,7 +78,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container flex-shrink-0">
-            <span className="material-symbols-outlined">quiz</span>
+            <Icon name="quiz" className="material-symbols-outlined"/>
           </div>
           <div className="min-w-0">
             <h3 className="text-body-md font-bold text-slate-800">{kp}</h3>
@@ -89,12 +90,10 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
             onClick={handleStartPractice}
             className="flex items-center gap-1.5 px-4 py-2 bg-primary-container text-white rounded-xl text-label-sm font-bold hover:brightness-110 active:scale-95 transition-all"
           >
-            <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+            <Icon name="play_arrow" className="material-symbols-outlined text-[16px]"/>
             开始练习 {selectedIds.length > 0 ? `(已选 ${selectedIds.length})` : ''}
           </button>
-          <span className="material-symbols-outlined text-slate-400">
-            {isExpanded ? 'expand_less' : 'expand_more'}
-          </span>
+          <Icon name={isExpanded ? 'expand_less' : 'expand_more'} className="material-symbols-outlined text-slate-400"/>
         </div>
       </div>
 
@@ -148,7 +147,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
                     onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
                     title="删除"
                   >
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                    <Icon name="delete" className="material-symbols-outlined text-[18px]"/>
                   </button>
                 </div>
               );
@@ -165,7 +164,7 @@ function ResourceCard({ item, onDelete }) {
     return (
       <div className="bg-white border border-dashed border-cyan-300 rounded-xl p-md flex items-center gap-md animate-pulse">
         <div className="w-10 h-10 rounded-full bg-cyan-100 flex items-center justify-center">
-          <span className="material-symbols-outlined text-cyan-400 animate-spin">progress_activity</span>
+          <Icon name="progress_activity" className="material-symbols-outlined text-cyan-400 animate-spin"/>
         </div>
         <div>
           <p className="text-body-md font-medium text-secondary">正在生成中...</p>
@@ -180,7 +179,7 @@ function ResourceCard({ item, onDelete }) {
       <div className="bg-white border border-error/20 rounded-xl p-md flex justify-between items-center gap-md">
         <div className="flex items-center gap-md">
           <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
-            <span className="material-symbols-outlined">error</span>
+            <Icon name="error" className="material-symbols-outlined"/>
           </div>
           <div>
             <p className="text-body-md font-medium text-error">生成失败</p>
@@ -193,7 +192,7 @@ function ResourceCard({ item, onDelete }) {
             onClick={() => onDelete(item.id)}
             title="删除"
           >
-            <span className="material-symbols-outlined text-[20px]">delete</span>
+            <Icon name="delete" className="material-symbols-outlined text-[20px]"/>
           </button>
         )}
       </div>
@@ -207,7 +206,7 @@ function ResourceCard({ item, onDelete }) {
         <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
         <div className="flex items-start gap-md">
           <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-secondary flex-shrink-0">
-            <span className="material-symbols-outlined">{TYPE_ICON[r.type] || 'article'}</span>
+            <Icon name={TYPE_ICON[r.type] || 'article'} className="material-symbols-outlined"/>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-sm mb-xs flex-wrap">
@@ -225,7 +224,7 @@ function ResourceCard({ item, onDelete }) {
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); }}
           title="删除"
         >
-          <span className="material-symbols-outlined text-[20px]">delete</span>
+          <Icon name="delete" className="material-symbols-outlined text-[20px]"/>
         </button>
       )}
     </div>
@@ -319,7 +318,7 @@ export default function PersonalizedResources() {
               onClick={() => setShowGenerateModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary-container text-white rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm"
             >
-              <span className="material-symbols-outlined">add</span>
+              <Icon name="add" className="material-symbols-outlined"/>
               生成资源
             </button>
           </div>
@@ -327,7 +326,7 @@ export default function PersonalizedResources() {
           {/* 生成中提示横幅 */}
           {showNewTaskBanner && (
             <div className="mb-4 bg-cyan-50 border border-cyan-200 rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="material-symbols-outlined text-cyan-500 animate-spin">progress_activity</span>
+              <Icon name="progress_activity" className="material-symbols-outlined text-cyan-500 animate-spin"/>
               <p className="text-body-md text-cyan-700">正在为你生成个性化练习，请稍候...</p>
             </div>
           )}
@@ -356,11 +355,11 @@ export default function PersonalizedResources() {
           {/* 内容区 */}
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+              <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-primary"/>
             </div>
           ) : items.length === 0 ? (
             <div className="text-center py-20 text-secondary">
-              <span className="material-symbols-outlined text-6xl mb-4 block text-gray-300">psychology</span>
+              <Icon name="psychology" className="material-symbols-outlined text-6xl mb-4 block text-gray-300"/>
               <p className="text-body-lg">暂无个性化资源</p>
               <p className="text-body-md mt-2">完成练习后正确率低于 60% 会自动触发生成，或点击"生成资源"手动创建</p>
             </div>

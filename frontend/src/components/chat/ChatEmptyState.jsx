@@ -1,3 +1,4 @@
+import Icon from '../Icon';
 export default function ChatEmptyState({ onCardClick, courseName = '当前课程' }) {
   const suggestCards = [
     {
@@ -39,7 +40,7 @@ export default function ChatEmptyState({ onCardClick, courseName = '当前课程
   return (
     <div className="h-full flex flex-col items-center justify-center py-10 px-4">
       <div className="w-16 h-16 bg-gradient-to-tr from-cyan-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-200/50 mb-6 relative">
-        <span className="material-symbols-outlined text-[32px] text-white">smart_toy</span>
+        <Icon name="smart_toy" className="material-symbols-outlined text-[32px] text-white"/>
         <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full border-2 border-white"></div>
       </div>
       
@@ -56,7 +57,7 @@ export default function ChatEmptyState({ onCardClick, courseName = '当前课程
             className="group bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:border-cyan-300 hover:shadow-md transition-all duration-300 flex items-start gap-4"
           >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${getColorClasses(card.color)}`}>
-              <span className="material-symbols-outlined text-[20px]">{card.icon}</span>
+              <Icon name={card.icon} className="material-symbols-outlined text-[20px]"/>
             </div>
             <div>
               <h3 className="font-semibold text-slate-700 text-[15px] mb-1 group-hover:text-cyan-700 transition-colors">{card.title}</h3>

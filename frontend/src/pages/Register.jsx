@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/error';
 import { authService } from '../api/services/auth';
+import Icon from '../components/Icon';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -112,14 +113,14 @@ export default function Register() {
           <div>
             {/* Brand */}
             <div className="flex items-center space-x-2 mb-16">
-              <span className="material-symbols-outlined text-cyan-300" style={{ fontSize: '32px' }}>school</span>
+              <Icon name="school" className="material-symbols-outlined text-cyan-300" style={{ fontSize: '32px' }}/>
               <h1 className="font-['Plus_Jakarta_Sans',sans-serif] text-2xl font-bold tracking-tight">智能学习助手</h1>
             </div>
             
             <div className="space-y-10 my-auto">
               <div className="space-y-4">
                 <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md">
-                  <span className="material-symbols-outlined text-cyan-300 text-sm mr-2">psychology</span>
+                  <Icon name="psychology" className="material-symbols-outlined text-cyan-300 text-sm mr-2"/>
                   <span className="text-xs font-bold uppercase tracking-widest text-cyan-50">EduAgent Platform</span>
                 </div>
                 <h2 className="font-['Plus_Jakarta_Sans',sans-serif] text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight">
@@ -135,7 +136,7 @@ export default function Register() {
               <div className="grid grid-cols-1 gap-4 text-left pt-6">
                 <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:bg-white/15 transition-colors group">
                   <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                    <span className="material-symbols-outlined text-cyan-300">route</span>
+                    <Icon name="route" className="material-symbols-outlined text-cyan-300"/>
                   </div>
                   <h4 className="text-base font-bold mb-1 text-white">个性化路径规划</h4>
                   <p className="text-sm text-cyan-50/70 leading-relaxed">动态评估您的掌握程度，实时生成最适合的专属学习节点与挑战。</p>
@@ -143,7 +144,7 @@ export default function Register() {
                 
                 <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:bg-white/15 transition-colors group">
                   <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                    <span className="material-symbols-outlined text-teal-300">forum</span>
+                    <Icon name="forum" className="material-symbols-outlined text-teal-300"/>
                   </div>
                   <h4 className="text-base font-bold mb-1 text-white">沉浸式互动引导</h4>
                   <p className="text-sm text-cyan-50/70 leading-relaxed">提供随时随地的 1V1 智能辅导，帮您深度剖析每一个代码细节。</p>
@@ -160,7 +161,7 @@ export default function Register() {
           {/* Mobile Branding */}
           <div className="lg:hidden flex flex-col items-center mb-8">
             <div className="flex items-center space-x-2 mb-2">
-              <span className="material-symbols-outlined text-cyan-600" style={{ fontSize: '28px' }}>school</span>
+              <Icon name="school" className="material-symbols-outlined text-cyan-600" style={{ fontSize: '28px' }}/>
               <h2 className="font-['Plus_Jakarta_Sans',sans-serif] text-2xl font-bold text-slate-800">智能学习助手</h2>
             </div>
             <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold">EduAgent Platform</p>
@@ -182,7 +183,7 @@ export default function Register() {
 
               {error && (
                 <div className="flex items-center p-4 mb-4 text-error bg-error-container rounded-lg border border-error/20" role="alert">
-                  <span className="material-symbols-outlined mr-2">error</span>
+                  <Icon name="error" className="material-symbols-outlined mr-2"/>
                   <span className="text-label-sm font-bold">{error}</span>
                 </div>
               )}
@@ -287,7 +288,7 @@ export default function Register() {
                   <label className="text-label-sm text-secondary block font-medium text-xs">验证码 (Captcha)</label>
                   <div className="flex space-x-sm">
                     <div className="relative flex-grow">
-                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">verified_user</span>
+                      <Icon name="verified_user" className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm"/>
                       <input
                         className="w-full pl-10 pr-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest focus:ring-2 focus:ring-primary outline-none transition-all"
                         placeholder="输入计算结果"
@@ -354,8 +355,8 @@ export default function Register() {
                   disabled={loading}
                 >
                   <span>{loading ? '注册中...' : '完成注册'}</span>
-                  {!loading && <span className="material-symbols-outlined">how_to_reg</span>}
-                  {loading && <span className="material-symbols-outlined animate-spin">refresh</span>}
+                  {!loading && <Icon name="how_to_reg" className="material-symbols-outlined"/>}
+                  {loading && <Icon name="refresh" className="material-symbols-outlined animate-spin"/>}
                 </button>
               </form>
 

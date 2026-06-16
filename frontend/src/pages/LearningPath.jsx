@@ -5,6 +5,7 @@ import { learningActivityService } from '../api/services/learningActivity';
 import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
+import Icon from '../components/Icon';
 
 export default function LearningPath() {
   const { activeCourseId } = useCourse();
@@ -126,7 +127,7 @@ export default function LearningPath() {
           <section className="bg-surface-container-lowest border border-gray-100 rounded-xl p-md shadow-sm overflow-hidden">
             <div className="flex items-center justify-between mb-lg">
               <h3 className="font-h3 text-h3 flex items-center space-x-sm">
-                <span className="material-symbols-outlined text-cyan-600">insights</span>
+                <Icon name="insights" className="material-symbols-outlined text-cyan-600"/>
                 <span>闯关节点规划</span>
               </h3>
               <div className="flex space-x-base">
@@ -142,7 +143,7 @@ export default function LearningPath() {
             {/* Horizontal Scrolling Path */}
             <div className="relative flex items-center py-xl overflow-x-auto no-scrollbar scroll-smooth min-h-[300px]">
               {loading ? (
-                <div className="w-full flex justify-center"><span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span></div>
+                <div className="w-full flex justify-center"><Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-cyan-500"/></div>
               ) : (
                 <>
                   {/* Path Line */}
@@ -156,7 +157,7 @@ export default function LearningPath() {
                           onClick={() => setSelectedNodeId(node.id)}
                           className={`relative z-10 flex-shrink-0 px-sm flex flex-col items-center group w-80 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-12 h-12 rounded-full bg-cyan-500 flex items-center justify-center text-white mb-sm shadow-lg shadow-cyan-500/20 ring-4 ring-white">
-                            <span className="material-symbols-outlined">check</span>
+                            <Icon name="check" className="material-symbols-outlined"/>
                           </div>
                           <div className="bg-white p-sm rounded-xl border border-gray-100 shadow-sm w-full transition-all group-hover:border-cyan-200">
                             <span className="text-label-sm text-cyan-600 font-bold mb-xs block">阶段 {node.order}</span>
@@ -173,7 +174,7 @@ export default function LearningPath() {
                           onClick={() => setSelectedNodeId(node.id)}
                           className={`relative z-10 flex-shrink-0 w-80 px-sm flex flex-col items-center group cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-16 h-16 rounded-full bg-white border-4 border-cyan-500 flex items-center justify-center text-cyan-600 mb-sm shadow-xl ring-4 ring-white animate-pulse">
-                            <span className="material-symbols-outlined text-3xl">play_arrow</span>
+                            <Icon name="play_arrow" className="material-symbols-outlined text-3xl"/>
                           </div>
                           <div className="bg-white p-md rounded-xl border-2 border-cyan-500 shadow-md w-full relative">
                             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">进行中</div>
@@ -190,7 +191,7 @@ export default function LearningPath() {
                             <div className="mt-md space-y-sm">
 
                               <Link to="/dashboard" state={{ search: node.name }} className="w-full py-2 bg-primary text-white rounded-lg text-label-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors">
-                                <span className="material-symbols-outlined text-sm">auto_stories</span>前往资源库继续闯关
+                                <Icon name="auto_stories" className="material-symbols-outlined text-sm"/>前往资源库继续闯关
                               </Link>
                             </div>
                           </div>
@@ -202,7 +203,7 @@ export default function LearningPath() {
                           onClick={() => setSelectedNodeId(node.id)}
                           className={`relative z-10 flex-shrink-0 w-72 px-sm flex flex-col items-center group cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-12 h-12 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 mb-sm border-2 border-cyan-200">
-                            <span className="material-symbols-outlined">auto_awesome</span>
+                            <Icon name="auto_awesome" className="material-symbols-outlined"/>
                           </div>
                           <div className="bg-white p-sm rounded-xl border border-cyan-200 shadow-sm w-full">
                             <span className="text-label-sm text-cyan-600 font-bold mb-xs block">阶段 {node.order}</span>
@@ -220,7 +221,7 @@ export default function LearningPath() {
                           onClick={() => setSelectedNodeId(node.id)}
                           className={`relative z-10 flex-shrink-0 w-64 px-sm flex flex-col items-center ${index > 2 ? 'opacity-40' : 'opacity-60'} grayscale group hover:opacity-100 hover:grayscale-0 transition-all cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}>
                           <div className="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-gray-400 mb-sm border-2 border-white">
-                            <span className="material-symbols-outlined">lock</span>
+                            <Icon name="lock" className="material-symbols-outlined"/>
                           </div>
                           <div className="bg-white p-sm rounded-xl border border-gray-100 shadow-sm w-full">
                             <span className="text-label-sm text-gray-400 font-bold mb-xs block">阶段 {node.order}</span>
@@ -229,7 +230,7 @@ export default function LearningPath() {
                               <div className="h-full bg-gray-300 w-0"></div>
                             </div>
                             <div className="mt-sm text-[12px] text-gray-400 flex items-center">
-                              <span className="material-symbols-outlined text-sm mr-1">exercise</span>待开启节点
+                              <Icon name="exercise" className="material-symbols-outlined text-sm mr-1"/>待开启节点
                             </div>
                           </div>
                         </div>
@@ -245,7 +246,7 @@ export default function LearningPath() {
           {selectedNodeId && (
             <section className="mt-8 space-y-6">
               <h3 className="font-h3 text-h3 flex items-center gap-2">
-                <span className="material-symbols-outlined text-cyan-600">library_books</span>
+                <Icon name="library_books" className="material-symbols-outlined text-cyan-600"/>
                 当前节点资源
                 {nodeResources?.node_name && (
                   <span className="text-body-md text-secondary font-normal">— {nodeResources.node_name}</span>
@@ -254,7 +255,7 @@ export default function LearningPath() {
 
               {resourcesLoading ? (
                 <div className="flex justify-center py-12">
-                  <span className="material-symbols-outlined animate-spin text-4xl text-cyan-500">progress_activity</span>
+                  <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-cyan-500"/>
                 </div>
               ) : nodeResources ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -262,7 +263,7 @@ export default function LearningPath() {
                   <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                       <div className="p-2 bg-orange-50 rounded-lg text-orange-600">
-                        <span className="material-symbols-outlined">lightbulb</span>
+                        <Icon name="lightbulb" className="material-symbols-outlined"/>
                       </div>
                       <h4 className="font-bold text-on-surface">薄弱点讲解</h4>
                     </div>
@@ -274,7 +275,7 @@ export default function LearningPath() {
                             <p className="text-xs text-secondary line-clamp-2 mb-2">{item.content || ''}</p>
                             {item.id ? (
                               <Link to={`/resource/${item.id}`} state={{ node: { id: selectedNodeId, name: nodeResources.node_name } }} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1">
-                                查看资源 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                                查看资源 <Icon name="arrow_forward" className="material-symbols-outlined text-xs"/>
                               </Link>
                             ) : (
                               <span className="text-xs text-gray-400">暂无详情</span>
@@ -297,7 +298,7 @@ export default function LearningPath() {
                   <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                       <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                        <span className="material-symbols-outlined">quiz</span>
+                        <Icon name="quiz" className="material-symbols-outlined"/>
                       </div>
                       <h4 className="font-bold text-on-surface">节点练习</h4>
                     </div>
@@ -332,7 +333,7 @@ export default function LearningPath() {
                   <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                       <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                        <span className="material-symbols-outlined">menu_book</span>
+                        <Icon name="menu_book" className="material-symbols-outlined"/>
                       </div>
                       <h4 className="font-bold text-on-surface">章节资料</h4>
                     </div>
@@ -348,7 +349,7 @@ export default function LearningPath() {
                             </div>
                             {item.id ? (
                               <Link to={`/resource/${item.id}`} state={{ node: { id: selectedNodeId, name: nodeResources.node_name } }} className="text-xs text-cyan-600 hover:text-cyan-700 font-medium flex items-center gap-1 mt-1">
-                                查看资源 <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                                查看资源 <Icon name="arrow_forward" className="material-symbols-outlined text-xs"/>
                               </Link>
                             ) : (
                               <span className="text-xs text-gray-400">暂无详情</span>
@@ -382,16 +383,14 @@ export default function LearningPath() {
                   >
                     <div className="flex items-center gap-2">
                       <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
-                        <span className="material-symbols-outlined">list_alt</span>
+                        <Icon name="list_alt" className="material-symbols-outlined"/>
                       </div>
                       <h4 className="font-bold text-on-surface text-left">
                         全部练习集
                         <span className="text-xs text-secondary font-normal ml-2">共 {nodeResources.full_exercise_set.length} 题</span>
                       </h4>
                     </div>
-                    <span className={`material-symbols-outlined text-gray-400 transition-transform ${showFullExercises ? 'rotate-180' : ''}`}>
-                      expand_more
-                    </span>
+                    <Icon name="expand_more" className={`material-symbols-outlined text-gray-400 transition-transform ${showFullExercises ? 'rotate-180' : ''}`}/>
                   </button>
                   {showFullExercises && (
                     <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
@@ -419,7 +418,7 @@ export default function LearningPath() {
 
       {/* Contextual Floating Action Button */}
       <Link to="/ai-chat" className="fixed bottom-margin right-margin w-14 h-14 bg-cyan-500 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-50">
-        <span className="material-symbols-outlined text-2xl">auto_awesome</span>
+        <Icon name="auto_awesome" className="material-symbols-outlined text-2xl"/>
       </Link>
     </div>
   );

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import TrainingReportModal from '../components/TrainingReportModal';
 import { learningService } from '../api/services/learning';
 import { useCourse } from '../context/CourseContext';
 import FeedbackStatus from '../components/FeedbackStatus';
@@ -34,7 +33,6 @@ export default function Dashboard() {
   const { activeCourseId, loading: courseLoading, changeCourse, refreshCourses } = useCourse();
   const [searchTerm, setSearchTerm] = useState(location.state?.search ?? '');
   const [selectedType, setSelectedType] = useState(location.state?.type ?? '全部');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [allResources, setAllResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -283,8 +281,6 @@ export default function Dashboard() {
         <span className="material-symbols-outlined text-2xl">chat_bubble</span>
       </button>
 
-      {/* Study Report Modal */}
-      <TrainingReportModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>
   );
 }

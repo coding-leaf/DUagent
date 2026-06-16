@@ -132,19 +132,23 @@ function MermaidDiagram({ content }) {
       try {
         renderId = `chat-mermaid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const result = await mermaid.render(renderId, source);
+        if (result.svg.includes('error in text')) {
+          throw new Error('Mermaid syntax error');
+        }
         if (!cancelled) {
           setSvg(result.svg);
           setError('');
         }
       } catch (err) {
         console.warn('Mermaid render failed, showing source:', err?.message);
-        if (renderId) {
-          document.getElementById(renderId)?.remove();
-          document.getElementById(`d${renderId}`)?.remove();
-        }
         if (!cancelled) {
           setSvg('');
           setError('fallback');
+        }
+      } finally {
+        if (renderId) {
+          document.getElementById(renderId)?.remove();
+          document.getElementById(`d${renderId}`)?.remove();
         }
       }
     };
@@ -206,9 +210,7 @@ export default function ChatMessage({ message, onSendMessage }) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              code(codeProps) {
-                // eslint-disable-next-line no-unused-vars
-                const { inline, className, children, node, ...rest } = codeProps;
+              code({ inline, className, children, ...rest }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const codeStr = String(children).replace(/\n$/, '');
                 

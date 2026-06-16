@@ -1,471 +1,528 @@
 -- ============================================================
--- DUagent Database Schema (MySQL 8.0+)
--- Host: localhost:3306, User: root, Password: 123456
--- Database: duagent
+-- EduAgent 数据库结构定义
+-- 基于当前 MySQL 22 表实际结构自动生成 (2026-06-16)
+-- 使用前请先执行 schema.sql，再依次执行 migrations/ 下的迁移
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS duagent
-  DEFAULT CHARACTER SET utf8mb4
-  DEFAULT COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `users` (
+  `id` VARCHAR(32) NOT NULL,
+  `username` VARCHAR(50) NOT NULL,
+  `email` VARCHAR(120) NOT NULL,
+  `password_hash` VARCHAR(255) NOT NULL,
+  `real_name` VARCHAR(50) NOT NULL,
+  `student_id` VARCHAR(30) NOT NULL,
+  `role` VARCHAR(20) NOT NULL COMMENT '角色：student/teacher/admin',
+  `major` VARCHAR(100) NOT NULL DEFAULT '',
+  `grade` VARCHAR(20) NOT NULL DEFAULT '',
+  `guidance_level` VARCHAR(5) NOT NULL DEFAULT 'L2' COMMENT '引导粒度：L1/L2/L3',
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`),
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-USE duagent;
-
--- ============================================================
--- 1. users — 用户表
--- ============================================================
-CREATE TABLE users (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '用户ID',
-    username        VARCHAR(50)   NOT NULL COMMENT '用户名，3-20位',
-    email           VARCHAR(120)  NOT NULL COMMENT '邮箱地址',
-    password_hash   VARCHAR(255)  NOT NULL COMMENT '密码哈希',
-    real_name       VARCHAR(50)   NOT NULL DEFAULT '' COMMENT '真实姓名',
-    student_id      VARCHAR(30)   NOT NULL DEFAULT '' COMMENT '学号或工号',
-    role            VARCHAR(20)   NOT NULL DEFAULT 'student' COMMENT '角色：student/teacher/admin',
-    major           VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '专业',
-    grade           VARCHAR(20)   NOT NULL DEFAULT '' COMMENT '年级',
-    guidance_level  VARCHAR(5)    NOT NULL DEFAULT 'L2' COMMENT '引导粒度：L1/L2/L3',
-    is_active       TINYINT(1)    NOT NULL DEFAULT 1 COMMENT '是否启用：1启用 0禁用',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志：0正常 1已删除',
-    UNIQUE INDEX uk_username (username),
-    UNIQUE INDEX uk_email (email),
-    INDEX idx_role (role),
-    INDEX idx_is_active (is_active),
-    INDEX idx_is_deleted (is_deleted)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
-
-
--- ============================================================
--- 2. registration_codes — 注册码表
--- ============================================================
-CREATE TABLE registration_codes (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '主键ID',
-    code            VARCHAR(50)   NOT NULL COMMENT '注册码，v1硬编码为student/teacher',
-    role            VARCHAR(20)   NOT NULL COMMENT '对应角色',
-    is_used         TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '是否已使用',
-    used_by         VARCHAR(32)   DEFAULT NULL COMMENT '使用者用户ID',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    UNIQUE INDEX uk_code (code),
-    INDEX idx_is_used (is_used),
-    INDEX idx_is_deleted (is_deleted)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='注册码表';
-
-
--- ============================================================
--- 3. courses — 课程/班级表
--- ============================================================
-CREATE TABLE courses (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '课程ID',
-    name            VARCHAR(100)  NOT NULL COMMENT '课程名称',
-    description     TEXT          DEFAULT NULL COMMENT '课程描述',
-    course_code     VARCHAR(20)   NOT NULL COMMENT '唯一课程码',
-    teacher_id      VARCHAR(32)   NOT NULL COMMENT '授课教师用户ID',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    UNIQUE INDEX uk_course_code (course_code),
-    INDEX idx_teacher (teacher_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_courses_teacher FOREIGN KEY (teacher_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课程/班级表';
-
-
--- ============================================================
--- 4. course_enrollments — 选课/加入记录表
--- ============================================================
-CREATE TABLE course_enrollments (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '主键ID',
-    student_id      VARCHAR(32)   NOT NULL COMMENT '学生用户ID',
-    course_id       VARCHAR(32)   NOT NULL COMMENT '课程ID',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志（退出课程）',
-    UNIQUE INDEX uk_student_course (student_id, course_id),
-    INDEX idx_course (course_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_enroll_student FOREIGN KEY (student_id) REFERENCES users(id),
-    CONSTRAINT fk_enroll_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选课/加入记录表';
-
-
--- ============================================================
--- 5. quiz_questions — 题库表（通用题+个性化题）
--- ============================================================
-CREATE TABLE quiz_questions (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '题目ID',
-    course_id       VARCHAR(32)   NOT NULL COMMENT '所属课程ID',
-    chapter         VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '所属章节',
-    knowledge_point VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '关联知识点',
-    type            VARCHAR(20)   NOT NULL COMMENT '题型：single_choice/multi_choice/code/short_answer',
-    source          VARCHAR(20)   NOT NULL DEFAULT 'common' COMMENT '来源：common/personalized',
-    personalized    TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '是否个性化题',
-    owner_user_id   VARCHAR(32)   DEFAULT NULL COMMENT '个性化题归属用户ID，通用题为NULL',
-    difficulty      VARCHAR(10)   NOT NULL DEFAULT 'medium' COMMENT '难度：easy/medium/hard',
-    content         TEXT          NOT NULL COMMENT '题目内容',
-    options         JSON          DEFAULT NULL COMMENT '选项列表：[{key,text}]，非选择题为[]',
-    correct_answer  VARCHAR(500)  NOT NULL COMMENT '正确答案',
-    explanation     TEXT          DEFAULT NULL COMMENT '题目解析',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_course (course_id),
-    INDEX idx_chapter (chapter),
-    INDEX idx_knowledge_point (knowledge_point),
-    INDEX idx_type (type),
-    INDEX idx_source (source),
-    INDEX idx_owner (owner_user_id),
-    INDEX idx_difficulty (difficulty),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_qq_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='题库表';
-
-
--- ============================================================
--- 6. quiz_sessions — 练习会话表
--- ============================================================
-CREATE TABLE quiz_sessions (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '练习会话ID',
-    user_id         VARCHAR(32)   NOT NULL COMMENT '答题用户ID',
-    course_id       VARCHAR(32)   NOT NULL COMMENT '课程ID',
-    chapter         VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '章节',
-    score           DECIMAL(5,1)  NOT NULL DEFAULT 0.0 COMMENT '正确率 0-100',
-    correct_count   INT           NOT NULL DEFAULT 0 COMMENT '正确题数',
-    total_count     INT           NOT NULL DEFAULT 0 COMMENT '总题数',
-    time_spent      INT           NOT NULL DEFAULT 0 COMMENT '答题总耗时（秒）',
-    diagnosis_json  JSON          DEFAULT NULL COMMENT 'LLM诊断结果JSON',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '完成时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_user (user_id),
-    INDEX idx_course (course_id),
-    INDEX idx_user_course (user_id, course_id),
-    INDEX idx_create_time (create_time),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_qs_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT fk_qs_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='练习会话表';
-
-
--- ============================================================
--- 7. quiz_answers — 答题明细表
--- ============================================================
-CREATE TABLE quiz_answers (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '主键ID',
-    quiz_id         VARCHAR(32)   NOT NULL COMMENT '练习会话ID',
-    question_id     VARCHAR(32)   NOT NULL COMMENT '题目ID',
-    user_answer     VARCHAR(500)  NOT NULL DEFAULT '' COMMENT '用户答案',
-    is_correct      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '是否正确',
-    correct_answer  VARCHAR(500)  NOT NULL DEFAULT '' COMMENT '正确答案',
-    explanation     TEXT          DEFAULT NULL COMMENT '解析（LLM异步生成）',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_quiz (quiz_id),
-    INDEX idx_question (question_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_qa_quiz FOREIGN KEY (quiz_id) REFERENCES quiz_sessions(id),
-    CONSTRAINT fk_qa_question FOREIGN KEY (question_id) REFERENCES quiz_questions(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='答题明细表';
-
-
--- ============================================================
--- 8. conversations — 智能辅导对话表
--- ============================================================
-CREATE TABLE conversations (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '对话ID',
-    user_id         VARCHAR(32)   NOT NULL COMMENT '所属用户ID',
-    scope           VARCHAR(20)   NOT NULL DEFAULT 'course' COMMENT '对话范围：course/global',
-    course_id       VARCHAR(32)   DEFAULT NULL COMMENT '关联课程ID，全局对话为NULL',
-    title           VARCHAR(200)  NOT NULL COMMENT '对话标题',
-    summary         TEXT          DEFAULT NULL COMMENT '记忆压缩后的全局对话摘要，供 Agent /tutoring/chat 的 conversation_summary 使用',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_user (user_id),
-    INDEX idx_course (course_id),
-    INDEX idx_scope (scope),
-    INDEX idx_user_scope (user_id, scope),
-    INDEX idx_update_time (update_time),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_conv_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT fk_conv_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='智能辅导对话表';
-
-
--- ============================================================
--- 9. messages — 对话消息表
--- ============================================================
-CREATE TABLE messages (
-    id                VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '消息ID',
-    conversation_id   VARCHAR(32)   NOT NULL COMMENT '所属对话ID',
-    role              VARCHAR(10)   NOT NULL COMMENT '角色：user/assistant',
-    content           TEXT          DEFAULT NULL COMMENT '消息内容',
-    diagrams          JSON          DEFAULT NULL COMMENT '内嵌图解',
-    knowledge_points  JSON          DEFAULT NULL COMMENT '引用的知识点',
-    meta_json         JSON          DEFAULT NULL COMMENT '消息元信息：scope/course_id/model_name/token_count/safety_flags等',
-    create_time       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '消息时间',
-    create_by         VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by         VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted        TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_conversation (conversation_id),
-    INDEX idx_role (role),
-    INDEX idx_create_time (create_time),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_msg_conv FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话消息表';
-
-
--- ============================================================
--- 10. resources — 学习资源表
--- ============================================================
-CREATE TABLE resources (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '资源ID',
-    course_id       VARCHAR(32)   NOT NULL COMMENT '所属课程ID',
-    title           VARCHAR(200)  NOT NULL COMMENT '资源标题',
-    type            VARCHAR(30)   NOT NULL COMMENT '类型：document/mindmap/reading/code/video',
-    description     TEXT          DEFAULT NULL COMMENT '资源描述',
-    tags            JSON          DEFAULT NULL COMMENT '标签列表',
-    chapter         VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '所属章节',
-    knowledge_point VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '关联知识点',
-    content         MEDIUMTEXT    DEFAULT NULL COMMENT '资源正文内容（Markdown/JSON/Mermaid等）',
-    url             VARCHAR(500)  NOT NULL DEFAULT '' COMMENT '资源链接',
-    view_count      INT           NOT NULL DEFAULT 0 COMMENT '浏览次数',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_course (course_id),
-    INDEX idx_type (type),
-    INDEX idx_chapter (chapter),
-    INDEX idx_knowledge_point (knowledge_point),
-    INDEX idx_view_count (view_count),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_res_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习资源表';
-
-
--- ============================================================
--- 11. async_tasks — 异步任务表
--- ============================================================
-CREATE TABLE async_tasks (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '任务ID',
-    task_type       VARCHAR(30)   NOT NULL COMMENT '任务类型：evaluation_refresh/profile_refresh/learning_path_refresh/quiz_generation/resource_generation',
-    status          VARCHAR(20)   NOT NULL DEFAULT 'processing' COMMENT '状态：processing/completed/failed',
-    progress        INT           NOT NULL DEFAULT 0 COMMENT '进度百分比 0-100',
-    user_id         VARCHAR(32)   DEFAULT NULL COMMENT '发起用户ID',
-    course_id       VARCHAR(32)   DEFAULT NULL COMMENT '关联课程ID',
-    result          JSON          DEFAULT NULL COMMENT '任务结果摘要',
-    error_code      VARCHAR(20)   DEFAULT NULL COMMENT '错误码',
-    error_message   VARCHAR(500)  DEFAULT ''   COMMENT '错误信息',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    completed_at    DATETIME      DEFAULT NULL COMMENT '完成时间',
-    INDEX idx_task_type (task_type),
-    INDEX idx_status (status),
-    INDEX idx_user (user_id),
-    INDEX idx_course (course_id),
-    INDEX idx_create_time (create_time),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_task_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT fk_task_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='异步任务表。资源生成链路：Backend创建task后调用Agent /resources/generate，传入task_id/user_id/course_id/webhook_url；Agent回调webhook时携带task_id和result.resources，Backend校验task_type后幂等写入resources表';
-
-
--- ============================================================
--- 12. evaluations — 学习效果评估表
--- ============================================================
-CREATE TABLE evaluations (
-    id                  VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '评估记录ID',
-    user_id             VARCHAR(32)   NOT NULL COMMENT '用户ID',
-    course_id           VARCHAR(32)   NOT NULL COMMENT '课程ID',
-    progress_table      JSON          DEFAULT NULL COMMENT '学习进度表 {columns:[{key,title}],rows:[{}]}',
-    mastery_table       JSON          DEFAULT NULL COMMENT '知识点掌握程度表',
-    resource_usage_table JSON         DEFAULT NULL COMMENT '资源使用习惯记录表',
-    summary_text        TEXT          DEFAULT NULL COMMENT 'LLM文字总结',
-    create_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by           VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by           VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted          TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    generated_at        DATETIME      DEFAULT NULL COMMENT '评估生成时间',
-    INDEX idx_user_course (user_id, course_id),
-    INDEX idx_generated_at (generated_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_eval_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT fk_eval_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习效果评估表';
-
-
--- ============================================================
--- 13. user_profiles — 用户画像表
--- ============================================================
-CREATE TABLE user_profiles (
-    id                      VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '画像记录ID',
-    user_id                 VARCHAR(32)   NOT NULL COMMENT '用户ID',
-    course_id               VARCHAR(32)   NOT NULL COMMENT '课程ID',
-    modal_preference        JSON          DEFAULT NULL COMMENT '模态偏好五维数据',
-    guidance_level_current  VARCHAR(5)    NOT NULL DEFAULT 'L2' COMMENT '当前引导粒度',
-    guidance_level_updated_at DATETIME    DEFAULT NULL   COMMENT '引导粒度更新时间',
-    knowledge_mastered      INT           NOT NULL DEFAULT 0 COMMENT '已掌握知识点数量',
-    knowledge_weak          INT           NOT NULL DEFAULT 0 COMMENT '薄弱知识点数量',
-    knowledge_coordinates   JSON          DEFAULT NULL COMMENT '知识坐标',
-    cognitive_blindspots    JSON          DEFAULT NULL COMMENT '认知盲区',
-    drive_intent            JSON          DEFAULT NULL COMMENT '驱动意图',
-    discipline_badge        JSON          DEFAULT NULL COMMENT '学科徽章',
-    create_time             DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by               VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time             DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by               VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted              TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    generated_at            DATETIME      DEFAULT NULL COMMENT '画像生成时间',
-    UNIQUE INDEX uk_user_course (user_id, course_id),
-    INDEX idx_generated_at (generated_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_up_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT fk_up_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户画像表';
-
-
--- ============================================================
--- 14. learning_paths — 学习路径表
--- ============================================================
-CREATE TABLE learning_paths (
-    id                VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '路径记录ID',
-    user_id           VARCHAR(32)   NOT NULL COMMENT '用户ID',
-    course_id         VARCHAR(32)   NOT NULL COMMENT '课程ID',
-    nodes             JSON          DEFAULT NULL COMMENT '路径节点列表',
-    edges             JSON          DEFAULT NULL COMMENT '节点依赖边',
-    current_node_id   VARCHAR(32)   NOT NULL DEFAULT '' COMMENT '当前节点ID',
-    current_node_name VARCHAR(100)  NOT NULL DEFAULT '' COMMENT '当前节点名称',
-    create_time       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by         VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by         VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted        TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    generated_at      DATETIME      DEFAULT NULL COMMENT '路径生成时间',
-    INDEX idx_user_course (user_id, course_id),
-    INDEX idx_generated_at (generated_at),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_lp_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT fk_lp_course FOREIGN KEY (course_id) REFERENCES courses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习路径表';
-
-
--- ============================================================
--- 15. course_knowledge_graphs — 课程静态知识图谱表
--- ============================================================
--- Backend 调用 Agent /learning-path/generate 时传入 knowledge_graph.nodes/edges。
--- 来源：开发者预置 JSON 或从课程资源/向量库导出，每门课可有多个版本，active 标记当前使用版本。
-CREATE TABLE course_knowledge_graphs (
-    id              VARCHAR(32)   NOT NULL PRIMARY KEY COMMENT '图谱记录ID',
-    course_id       VARCHAR(32)   NOT NULL COMMENT '课程ID',
-    version         INT           NOT NULL DEFAULT 1 COMMENT '课程内图谱版本号',
-    is_active       TINYINT(1)    NOT NULL DEFAULT 1 COMMENT '是否为当前启用版本',
-    source_type     VARCHAR(40)   NOT NULL DEFAULT 'manual_import' COMMENT '图谱来源类型',
-    generation_strategy VARCHAR(60) NOT NULL DEFAULT 'legacy_outline' COMMENT '生成策略',
-    nodes           JSON          NOT NULL COMMENT '知识图谱节点 [{id, name, chapter}]',
-    edges           JSON          NOT NULL COMMENT '前置依赖边 [{from, to}]',
-    metrics         JSON          DEFAULT NULL COMMENT '图谱质量与生成指标',
-    parent_graph_id VARCHAR(32)   DEFAULT NULL COMMENT '父版本图谱ID',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    UNIQUE INDEX uk_course_version (course_id, version),
-    INDEX idx_course_active (course_id, is_active, is_deleted),
-    INDEX idx_parent_graph_id (parent_graph_id),
-    INDEX idx_is_deleted (is_deleted),
-    CONSTRAINT fk_ckg_course FOREIGN KEY (course_id) REFERENCES courses(id),
-    CONSTRAINT fk_ckg_parent_graph FOREIGN KEY (parent_graph_id) REFERENCES course_knowledge_graphs(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='课程静态知识图谱表';
-
-
--- ============================================================
--- 16. agent_logs — Agent运行日志表
--- ============================================================
-CREATE TABLE agent_logs (
-    id              BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
-    timestamp       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '时间戳',
-    agent_type      VARCHAR(20)   NOT NULL COMMENT 'Agent类型：tutoring/evaluation/profile/assessment/learning_path/resource/memory/health',
-    endpoint        VARCHAR(200)  NOT NULL DEFAULT '' COMMENT '调用的Agent接口路径',
-    latency_ms      INT           NOT NULL DEFAULT 0 COMMENT '响应延迟（毫秒）',
-    tokens_used     INT           NOT NULL DEFAULT 0 COMMENT 'Token消耗',
-    status          VARCHAR(10)   NOT NULL DEFAULT 'success' COMMENT '状态：success/error',
-    error_message   VARCHAR(500)  DEFAULT NULL COMMENT '错误信息',
-    security_blocked TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否触发安全拦截',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_timestamp (timestamp),
-    INDEX idx_agent_type (agent_type),
-    INDEX idx_status (status),
-    INDEX idx_is_deleted (is_deleted)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent运行日志表';
-
-
--- ============================================================
--- 17. operation_logs — 系统运行日志表
--- ============================================================
-CREATE TABLE operation_logs (
-    id              BIGINT        NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
-    timestamp       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '时间戳',
-    event_type      VARCHAR(30)   NOT NULL COMMENT '事件类型：login/logout/operation/system_error/security',
-    user_id         VARCHAR(32)   DEFAULT NULL COMMENT '关联用户ID',
-    description     VARCHAR(300)  NOT NULL DEFAULT '' COMMENT '事件描述',
-    ip_address      VARCHAR(45)   NOT NULL DEFAULT '' COMMENT 'IP地址',
-    detail          JSON          DEFAULT NULL COMMENT '事件详细数据',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    create_by       VARCHAR(32)   DEFAULT NULL COMMENT '创建人ID',
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    update_by       VARCHAR(32)   DEFAULT NULL COMMENT '修改人ID',
-    is_deleted      TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '假删标志',
-    INDEX idx_timestamp (timestamp),
-    INDEX idx_event_type (event_type),
-    INDEX idx_user_id (user_id),
-    INDEX idx_is_deleted (is_deleted)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统运行日志表';
-
-
--- ============================================================
 -- 预置管理员账号 (admin@admin.com / Admin123456)
--- ============================================================
-INSERT INTO users (id, username, email, password_hash, real_name, role, create_by)
+INSERT INTO users (id, username, email, password_hash, real_name, student_id, role, major, grade, guidance_level, is_active, is_deleted, create_by)
 VALUES ('admin000000000000000000000001', 'admin', 'admin@admin.com',
         '$2b$12$k4zj0wRQqBBbfYHl3YGhJOjYhdXZijOubyMDT1Lk2OmuDP1D5kOcm',
-        '系统管理员', 'admin', 'system');
--- Password: Admin123456 (bcrypt hash — replace with actual hash after first run)
-
+        '系统管理员', 'ADMIN001', 'admin', '', '', 'L2', 1, 0, 'system');
 
 -- ============================================================
--- 预置注册码
+-- 注册码
 -- ============================================================
-INSERT INTO registration_codes (id, code, role, create_by)
-VALUES ('rc00000000000000000000000001', 'student', 'student', 'system'),
-       ('rc00000000000000000000000002', 'teacher', 'teacher', 'system');
+CREATE TABLE IF NOT EXISTS `registration_codes` (
+  `id` VARCHAR(32) NOT NULL,
+  `code` VARCHAR(50) NOT NULL,
+  `role` VARCHAR(20) NOT NULL,
+  `is_used` TINYINT(1) NOT NULL DEFAULT 0,
+  `used_by` VARCHAR(32) DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 课程
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `courses` (
+  `id` VARCHAR(32) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `description` TEXT,
+  `course_code` VARCHAR(20) NOT NULL,
+  `teacher_id` VARCHAR(32) NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `course_code` (`course_code`),
+  KEY `teacher_id` (`teacher_id`),
+  CONSTRAINT `courses_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 课程选课
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `course_enrollments` (
+  `id` VARCHAR(32) NOT NULL,
+  `student_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `student_id` (`student_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `course_enrollments_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `course_enrollments_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 课程目录（课程素材管理）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `course_catalogs` (
+  `id` VARCHAR(32) NOT NULL,
+  `title` VARCHAR(100) NOT NULL,
+  `description` TEXT,
+  `status` VARCHAR(20) NOT NULL,
+  `knowledge_status` VARCHAR(20) NOT NULL,
+  `material_count` INT NOT NULL DEFAULT 0,
+  `last_ingestion_task_id` VARCHAR(32) DEFAULT NULL,
+  `last_ingestion_status` VARCHAR(20) DEFAULT NULL,
+  `chunk_count` INT NOT NULL DEFAULT 0,
+  `last_error` VARCHAR(500) DEFAULT NULL,
+  `kg_host_course_id` VARCHAR(32) DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `kg_host_course_id` (`kg_host_course_id`),
+  CONSTRAINT `course_catalogs_ibfk_1` FOREIGN KEY (`kg_host_course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 课程目录素材文件
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `course_catalog_materials` (
+  `id` VARCHAR(32) NOT NULL,
+  `catalog_id` VARCHAR(32) NOT NULL,
+  `filename` VARCHAR(255) NOT NULL,
+  `source_type` VARCHAR(30) NOT NULL,
+  `storage_uri` VARCHAR(500) DEFAULT NULL,
+  `file_size` BIGINT NOT NULL DEFAULT 0,
+  `chunk_count` INT NOT NULL DEFAULT 0,
+  `last_error` VARCHAR(500) DEFAULT NULL,
+  `ingested_at` DATETIME DEFAULT NULL,
+  `status` VARCHAR(20) NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `catalog_id` (`catalog_id`),
+  CONSTRAINT `course_catalog_materials_ibfk_1` FOREIGN KEY (`catalog_id`) REFERENCES `course_catalogs` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 课程开班
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `course_offerings` (
+  `id` VARCHAR(32) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `description` TEXT,
+  `catalog_id` VARCHAR(32) NOT NULL,
+  `teacher_id` VARCHAR(32) NOT NULL,
+  `class_code` VARCHAR(20) NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `class_code` (`class_code`),
+  KEY `catalog_id` (`catalog_id`),
+  KEY `teacher_id` (`teacher_id`),
+  CONSTRAINT `course_offerings_ibfk_1` FOREIGN KEY (`catalog_id`) REFERENCES `course_catalogs` (`id`),
+  CONSTRAINT `course_offerings_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 题目
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `quiz_questions` (
+  `id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `catalog_id` VARCHAR(32) DEFAULT NULL,
+  `chapter` VARCHAR(100) NOT NULL,
+  `knowledge_point` VARCHAR(100) NOT NULL,
+  `type` VARCHAR(20) NOT NULL COMMENT 'single_choice/multi_choice/judgment/fill_blank',
+  `source` VARCHAR(20) NOT NULL DEFAULT 'system',
+  `personalized` TINYINT(1) NOT NULL DEFAULT 0,
+  `owner_user_id` VARCHAR(32) DEFAULT NULL,
+  `difficulty` VARCHAR(10) NOT NULL,
+  `content` TEXT NOT NULL,
+  `options` JSON DEFAULT NULL,
+  `correct_answer` VARCHAR(500) NOT NULL,
+  `explanation` TEXT,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `quiz_questions_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 答题会话
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `quiz_sessions` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `chapter` VARCHAR(100) NOT NULL,
+  `score` FLOAT NOT NULL DEFAULT 0,
+  `correct_count` INT NOT NULL DEFAULT 0,
+  `total_count` INT NOT NULL DEFAULT 0,
+  `time_spent` INT NOT NULL DEFAULT 0,
+  `diagnosis_json` JSON DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `quiz_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `quiz_sessions_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 答题记录
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `quiz_answers` (
+  `id` VARCHAR(32) NOT NULL,
+  `quiz_id` VARCHAR(32) NOT NULL,
+  `question_id` VARCHAR(32) NOT NULL,
+  `user_answer` VARCHAR(500) NOT NULL,
+  `is_correct` TINYINT(1) NOT NULL DEFAULT 0,
+  `correct_answer` VARCHAR(500) NOT NULL,
+  `explanation` TEXT,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `quiz_id` (`quiz_id`),
+  KEY `question_id` (`question_id`),
+  CONSTRAINT `quiz_answers_ibfk_1` FOREIGN KEY (`quiz_id`) REFERENCES `quiz_sessions` (`id`),
+  CONSTRAINT `quiz_answers_ibfk_2` FOREIGN KEY (`question_id`) REFERENCES `quiz_questions` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- AI 对话会话
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `conversations` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `scope` VARCHAR(20) NOT NULL,
+  `course_id` VARCHAR(32) DEFAULT NULL,
+  `title` VARCHAR(200) NOT NULL,
+  `summary` TEXT,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `conversations_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `conversations_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- AI 对话消息
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `messages` (
+  `id` VARCHAR(32) NOT NULL,
+  `conversation_id` VARCHAR(32) NOT NULL,
+  `role` VARCHAR(10) NOT NULL,
+  `content` TEXT,
+  `diagrams` JSON DEFAULT NULL,
+  `knowledge_points` JSON DEFAULT NULL,
+  `meta_json` JSON DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `conversation_id` (`conversation_id`),
+  CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 学习资源
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `resources` (
+  `id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `catalog_id` VARCHAR(32) DEFAULT NULL,
+  `title` VARCHAR(200) NOT NULL,
+  `type` VARCHAR(30) NOT NULL,
+  `description` TEXT,
+  `tags` JSON DEFAULT NULL,
+  `chapter` VARCHAR(100) NOT NULL,
+  `knowledge_point` VARCHAR(100) NOT NULL,
+  `content` TEXT,
+  `url` VARCHAR(500) NOT NULL,
+  `view_count` INT NOT NULL DEFAULT 0,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `course_id` (`course_id`),
+  KEY `catalog_id` (`catalog_id`),
+  CONSTRAINT `resources_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
+  CONSTRAINT `resources_ibfk_2` FOREIGN KEY (`catalog_id`) REFERENCES `course_catalogs` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 异步任务
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `async_tasks` (
+  `id` VARCHAR(32) NOT NULL,
+  `task_type` VARCHAR(30) NOT NULL,
+  `status` VARCHAR(20) NOT NULL,
+  `progress` INT NOT NULL DEFAULT 0,
+  `user_id` VARCHAR(32) DEFAULT NULL,
+  `course_id` VARCHAR(32) DEFAULT NULL,
+  `result` JSON DEFAULT NULL,
+  `error_code` VARCHAR(20) DEFAULT NULL,
+  `error_message` VARCHAR(500) NOT NULL DEFAULT '',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  `completed_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `async_tasks_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `async_tasks_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 学习效果评估
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `evaluations` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `progress_table` JSON DEFAULT NULL,
+  `mastery_table` JSON DEFAULT NULL,
+  `resource_usage_table` JSON DEFAULT NULL,
+  `summary_text` TEXT,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  `generated_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `evaluations_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `evaluations_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 用户画像
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `user_profiles` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `modal_preference` JSON DEFAULT NULL,
+  `guidance_level_current` VARCHAR(5) NOT NULL DEFAULT 'L2',
+  `guidance_level_updated_at` DATETIME DEFAULT NULL,
+  `knowledge_mastered` INT NOT NULL DEFAULT 0,
+  `knowledge_weak` INT NOT NULL DEFAULT 0,
+  `knowledge_coordinates` JSON DEFAULT NULL,
+  `cognitive_blindspots` JSON DEFAULT NULL,
+  `drive_intent` JSON DEFAULT NULL,
+  `discipline_badge` JSON DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  `generated_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `user_profiles_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `user_profiles_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 学习路径
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `learning_paths` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `nodes` JSON DEFAULT NULL,
+  `edges` JSON DEFAULT NULL,
+  `current_node_id` VARCHAR(32) NOT NULL,
+  `current_node_name` VARCHAR(100) NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  `generated_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `course_id` (`course_id`),
+  CONSTRAINT `learning_paths_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `learning_paths_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 课程知识图谱
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `course_knowledge_graphs` (
+  `id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `version` INT NOT NULL DEFAULT 1,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `source_type` VARCHAR(40) NOT NULL,
+  `generation_strategy` VARCHAR(60) NOT NULL,
+  `nodes` JSON NOT NULL,
+  `edges` JSON NOT NULL,
+  `metrics` JSON DEFAULT NULL,
+  `parent_graph_id` VARCHAR(32) DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_course_version` (`course_id`, `version`),
+  KEY `idx_parent_graph_id` (`parent_graph_id`),
+  KEY `idx_is_deleted` (`is_deleted`),
+  KEY `idx_course_active` (`course_id`, `is_active`, `is_deleted`),
+  CONSTRAINT `course_knowledge_graphs_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
+  CONSTRAINT `fk_ckg_parent_graph` FOREIGN KEY (`parent_graph_id`) REFERENCES `course_knowledge_graphs` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 学习活动记录
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `learning_activities` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `node_id` VARCHAR(64) DEFAULT NULL,
+  `node_name` VARCHAR(100) DEFAULT NULL,
+  `resource_id` VARCHAR(32) DEFAULT NULL,
+  `activity_type` VARCHAR(40) NOT NULL,
+  `duration_seconds` INT DEFAULT NULL,
+  `occurred_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `metadata` JSON DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `course_id` (`course_id`),
+  KEY `idx_learning_activities_user_course_node` (`user_id`, `course_id`, `node_id`, `is_deleted`),
+  KEY `idx_learning_activities_type_time` (`user_id`, `course_id`, `activity_type`, `occurred_at`),
+  KEY `idx_learning_activities_resource` (`resource_id`, `is_deleted`),
+  CONSTRAINT `learning_activities_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `learning_activities_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
+  CONSTRAINT `learning_activities_ibfk_3` FOREIGN KEY (`resource_id`) REFERENCES `resources` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 个性化资源/题目（AI 生成分发）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `user_personalized_resources` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `resource_id` VARCHAR(32) DEFAULT NULL,
+  `question_id` VARCHAR(32) DEFAULT NULL,
+  `source_type` VARCHAR(30) NOT NULL,
+  `task_id` VARCHAR(32) DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `course_id` (`course_id`),
+  KEY `resource_id` (`resource_id`),
+  KEY `question_id` (`question_id`),
+  KEY `idx_upr_user_course` (`user_id`, `course_id`, `is_deleted`),
+  KEY `idx_upr_task` (`task_id`),
+  CONSTRAINT `user_personalized_resources_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `user_personalized_resources_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
+  CONSTRAINT `user_personalized_resources_ibfk_3` FOREIGN KEY (`resource_id`) REFERENCES `resources` (`id`),
+  CONSTRAINT `user_personalized_resources_ibfk_4` FOREIGN KEY (`question_id`) REFERENCES `quiz_questions` (`id`),
+  CONSTRAINT `user_personalized_resources_ibfk_5` FOREIGN KEY (`task_id`) REFERENCES `async_tasks` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- Agent 日志（从 agent_service 写回）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `agent_logs` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `agent_type` VARCHAR(20) NOT NULL,
+  `endpoint` VARCHAR(200) NOT NULL,
+  `latency_ms` INT NOT NULL DEFAULT 0,
+  `tokens_used` INT NOT NULL DEFAULT 0,
+  `status` VARCHAR(10) NOT NULL,
+  `error_message` VARCHAR(500) DEFAULT NULL,
+  `security_blocked` TINYINT(1) NOT NULL DEFAULT 0,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ============================================================
+-- 操作日志
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `operation_logs` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `event_type` VARCHAR(30) NOT NULL,
+  `user_id` VARCHAR(32) DEFAULT NULL,
+  `description` VARCHAR(300) NOT NULL,
+  `ip_address` VARCHAR(45) NOT NULL DEFAULT '',
+  `detail` JSON DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -5,7 +5,6 @@ import learningMock from './learningMock';
 import quizMock from './quizMock';
 import profileMock from './profileMock';
 import teachingMock from './teachingMock';
-import chatMock from './chatMock';
 import adminMock from './adminMock';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
@@ -23,7 +22,6 @@ if (useMock) {
   quizMock(mock);
   profileMock(mock);
   teachingMock(mock);
-  chatMock(mock);
   adminMock(mock);
 
   console.log('[Mock API] Interceptor enabled.');

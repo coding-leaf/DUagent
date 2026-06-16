@@ -168,7 +168,7 @@ async def generate_learning_path_with_llm(
         
         # Phase 1D: 优先尝试 AgentScope structured_model
         try:
-            raw = await chat_provider.complete(messages, structured_model=_LearningPathStructuredOutput)
+            raw = await chat_provider.complete(messages, structured_model=_LearningPathStructuredOutput, disable_thinking=True)
             if raw:
                 data = json.loads(raw)
                 if isinstance(data, dict):

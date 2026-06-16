@@ -44,7 +44,7 @@ async def compress_memory_with_llm(
     ]
     # Phase 1E: 优先尝试 AgentScope structured_model
     try:
-        raw = await chat_provider.complete(messages, structured_model=_MemoryCompressStructuredOutput)
+        raw = await chat_provider.complete(messages, structured_model=_MemoryCompressStructuredOutput, disable_thinking=True)
         if raw:
             data = json.loads(raw)
             if isinstance(data, dict):

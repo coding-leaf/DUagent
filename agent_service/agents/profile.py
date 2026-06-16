@@ -61,7 +61,7 @@ async def generate_profile_with_llm(
     ]
     # Phase 1C: 优先尝试 AgentScope structured_model
     try:
-        raw = await chat_provider.complete(messages, structured_model=_ProfileStructuredOutput)
+        raw = await chat_provider.complete(messages, structured_model=_ProfileStructuredOutput, disable_thinking=True)
         if raw:
             data = json.loads(raw)
             if isinstance(data, dict):

@@ -85,7 +85,7 @@ async def evaluate_assessment_with_llm(
     ]
     # Phase 1B: 优先尝试 AgentScope structured_model
     try:
-        raw = await chat_provider.complete(messages, structured_model=_EvalDiagnosisStructuredOutput)
+        raw = await chat_provider.complete(messages, structured_model=_EvalDiagnosisStructuredOutput, disable_thinking=True)
         if raw:
             data = json.loads(raw)
             if isinstance(data, dict):
@@ -456,7 +456,7 @@ async def generate_questions_with_llm(
     ]
     # Phase 0: 优先尝试 AgentScope structured_model
     try:
-        raw = await chat_provider.complete(messages, structured_model=_QuestionListStructuredOutput)
+        raw = await chat_provider.complete(messages, structured_model=_QuestionListStructuredOutput, disable_thinking=True)
         if raw:
             data = json.loads(raw)
             items = data.get("questions", [])

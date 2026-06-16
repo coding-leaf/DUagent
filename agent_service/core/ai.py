@@ -57,7 +57,7 @@ class AgentScopeChatProvider:
         self.json_mode = json_mode
         self.timeout = timeout
 
-    async def complete(self, messages: Sequence[ChatMessage], structured_model=None) -> str:
+    async def complete(self, messages: Sequence[ChatMessage], structured_model=None, disable_thinking: bool = False) -> str:
         from agentscope.message import Msg
 
         kwargs: dict = {}
@@ -65,6 +65,9 @@ class AgentScopeChatProvider:
             kwargs["structured_model"] = structured_model
         elif self.json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+
+        if disable_thinking:
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         response = await asyncio.wait_for(
             self.model(await self._format_messages(messages, Msg), **kwargs),
             timeout=self.timeout,

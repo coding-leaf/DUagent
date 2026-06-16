@@ -17,6 +17,7 @@ import ResourceDetail from './pages/ResourceDetail';
 import PersonalizedResources from './pages/PersonalizedResources';
 import { AuthProvider } from './context/AuthContext';
 import { CourseProvider } from './context/CourseContext';
+import { ChatProvider } from './context/ChatContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -24,30 +25,32 @@ function App() {
     <Router>
       <AuthProvider>
         <CourseProvider>
-          <Routes>
-            <Route path="/" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/success" element={<Success />} />
-            
-            {/* Student routes */}
-            <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
-            <Route path="/resource/:id" element={<ProtectedRoute allowedRoles={['student', 'teacher']}><ResourceDetail /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
-            <Route path="/learning-path" element={<ProtectedRoute allowedRoles={['student']}><LearningPath /></ProtectedRoute>} />
+          <ChatProvider>
+            <Routes>
+              <Route path="/" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/success" element={<Success />} />
+              
+              {/* Student routes */}
+              <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
+              <Route path="/resource/:id" element={<ProtectedRoute allowedRoles={['student', 'teacher']}><ResourceDetail /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute allowedRoles={['student']}><StudentProfile /></ProtectedRoute>} />
+              <Route path="/learning-path" element={<ProtectedRoute allowedRoles={['student']}><LearningPath /></ProtectedRoute>} />
 
-            <Route path="/quiz" element={<ProtectedRoute allowedRoles={['student']}><Quiz /></ProtectedRoute>} />
-            <Route path="/quiz/result" element={<ProtectedRoute allowedRoles={['student']}><PracticeResult /></ProtectedRoute>} />
-            <Route path="/ai-chat" element={<ProtectedRoute allowedRoles={['student']}><AIChat /></ProtectedRoute>} />
-            <Route path="/learning-effects" element={<ProtectedRoute allowedRoles={['student']}><LearningEffects /></ProtectedRoute>} />
-            <Route path="/personalized-resources" element={<ProtectedRoute allowedRoles={['student']}><PersonalizedResources /></ProtectedRoute>} />
-            
-            {/* Teacher / Admin routes */}
-            <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherConsole /></ProtectedRoute>} />
-            <Route path="/teacher/report" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherStudentReport /></ProtectedRoute>} />
-            
-            {/* Admin routes */}
-            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminConsole /></ProtectedRoute>} />
-          </Routes>
+              <Route path="/quiz" element={<ProtectedRoute allowedRoles={['student']}><Quiz /></ProtectedRoute>} />
+              <Route path="/quiz/result" element={<ProtectedRoute allowedRoles={['student']}><PracticeResult /></ProtectedRoute>} />
+              <Route path="/ai-chat" element={<ProtectedRoute allowedRoles={['student']}><AIChat /></ProtectedRoute>} />
+              <Route path="/learning-effects" element={<ProtectedRoute allowedRoles={['student']}><LearningEffects /></ProtectedRoute>} />
+              <Route path="/personalized-resources" element={<ProtectedRoute allowedRoles={['student']}><PersonalizedResources /></ProtectedRoute>} />
+              
+              {/* Teacher / Admin routes */}
+              <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherConsole /></ProtectedRoute>} />
+              <Route path="/teacher/report" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherStudentReport /></ProtectedRoute>} />
+              
+              {/* Admin routes */}
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminConsole /></ProtectedRoute>} />
+            </Routes>
+          </ChatProvider>
         </CourseProvider>
       </AuthProvider>
     </Router>

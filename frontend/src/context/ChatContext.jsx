@@ -1,5 +1,5 @@
 // src/context/ChatContext.jsx
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
 import { normalizeTextList, normalizeMessages } from '../utils/chatContent';
@@ -50,6 +50,7 @@ export const ChatProvider = ({ children }) => {
         }
       }).catch(console.error);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([]);
     }
   }, [activeSession]);
@@ -65,7 +66,6 @@ export const ChatProvider = ({ children }) => {
     // This cleanup runs only when ChatProvider unmounts (e.g. app exit/logout).
     // In React Strict Mode, this will execute on initial mount due to double-mount,
     // but the null check in cancelStream prevents issues.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     return () => cancelStream();
   }, []);
 
@@ -216,4 +216,5 @@ export const ChatProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useChat = () => useContext(ChatContext);

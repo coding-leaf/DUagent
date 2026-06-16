@@ -111,7 +111,7 @@ cd backend && python3 -m pytest tests/<相关测试文件> -v
 
 ## Git
 
-- 当前分支：`feat/backend-agent-integration`，不切换分支
+- 当前分支：`refactor/v2-architecture`，不切换分支
 - 不运行 `git reset --hard`、`git clean -fd`、`git push --force`
 - 不运行 `git push`，除非用户明确要求
 - 每完成一批文件修改后 commit

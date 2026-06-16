@@ -272,7 +272,9 @@ async def tutoring_chat(
         conversation_id = conv.id
 
         last_user, last_assistant = await _get_last_messages(db, conversation_id)
-        user_msg_id = last_user.id if last_user else None
+        if last_user is None:
+            raise HTTPException(status_code=400, detail="最后一条用户消息不存在")
+        user_msg_id = last_user.id
 
         if last_assistant:
             last_assistant.content = ""

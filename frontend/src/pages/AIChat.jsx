@@ -1,73 +1,24 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { chatService } from '../api/services/chat';
 import { learningService } from '../api/services/learning';
 import { useCourse } from '../context/CourseContext';
+import { useChat } from '../context/ChatContext';
 import Navbar from '../components/Navbar';
 import ChatMessage from '../components/chat/ChatMessage';
 import ChatEmptyState from '../components/chat/ChatEmptyState';
-import { extractModelText } from '../utils/chatContent';
 import Icon from '../components/Icon';
-
-const normalizeTextList = (value) => {
-  const list = Array.isArray(value) ? value : [value];
-  return list
-    .map(extractModelText)
-    .map(item => item.trim())
-    .filter(Boolean);
-};
-
-const normalizeMessage = (message, index = 0) => {
-  const normalizedId = message?.id
-    || message?.message_id
-    || `${message?.role || 'message'}-${message?.timestamp || index}`;
-
-  let contentObj = message?.content;
-  if (typeof contentObj === 'string' && contentObj.trim().startsWith('{')) {
-    try {
-      contentObj = JSON.parse(contentObj);
-    } catch {
-      // Ignored
-    }
-  }
-
-  let displayContent;
-  let diagrams = message?.diagrams || [];
-  let knowledge_points = message?.knowledge_points || [];
-  let suggestions = message?.suggestions || [];
-
-  if (typeof contentObj === 'object' && contentObj !== null) {
-    displayContent = contentObj.model_text || contentObj.content || JSON.stringify(contentObj);
-    if (contentObj.diagram && !diagrams.length) diagrams = [contentObj.diagram];
-    if (contentObj.diagrams && !diagrams.length) diagrams = contentObj.diagrams;
-    if (contentObj.knowledge_points && !knowledge_points.length) knowledge_points = contentObj.knowledge_points;
-    if (contentObj.suggestion && !suggestions.length) suggestions = [contentObj.suggestion];
-    if (contentObj.suggestions && !suggestions.length) suggestions = contentObj.suggestions;
-  } else {
-    displayContent = extractModelText(message?.content);
-  }
-
-  return {
-    ...message,
-    id: normalizedId,
-    content: displayContent,
-    diagrams: Array.isArray(diagrams) ? diagrams : (diagrams ? [diagrams] : []),
-    knowledge_points: normalizeTextList(knowledge_points),
-    suggestions: normalizeTextList(suggestions),
-  };
-};
-
-const normalizeMessages = (items) => (
-  Array.isArray(items) ? items.map(normalizeMessage) : []
-);
 
 export default function AIChat() {
   const { activeCourseId, courses } = useCourse();
-  const [sessions, setSessions] = useState([]);
-  const [activeSession, setActiveSession] = useState(null);
-  const [messages, setMessages] = useState([]);
+  
+  // Replace massive local state with context hook
+  const {
+    sessions, activeSession, setActiveSession,
+    messages, isSending,
+    sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession
+  } = useChat();
+
   const [inputValue, setInputValue] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [resources, setResources] = useState([]);
   
   // Collapse & Drawer States
@@ -77,475 +28,61 @@ export default function AIChat() {
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   
   const messagesEndRef = useRef(null);
-  const abortControllerRef = useRef(null);
-  const lastMessageIdRef = useRef(null);
-  const streamTargetIdRef = useRef('ai-placeholder');
-  const streamOnMessageRef = useRef(null);
-  const streamOnDoneRef = useRef(null);
-  const streamOnErrorRef = useRef(null);
   const [editingMsg, setEditingMsg] = useState(null);
 
   const activeCourse = courses?.find(c => c.id === activeCourseId);
   const activeCourseName = activeCourse?.name || activeCourse?.title || '未选择课程';
 
-  // Sync sessions list when course changes
-  useEffect(() => {
-    if (activeCourseId) {
-      chatService.getSessions(activeCourseId).then(res => {
-        if (res.code === 200 && res.data) {
-          const list = res.data.conversations || res.data;
-          setSessions(list);
-          if (list.length > 0) {
-            setActiveSession(list[0].id);
-          } else {
-            setActiveSession(null);
-            setTimeout(() => setMessages([]), 0);
-          }
-        }
-      }).catch(console.error);
-    }
-  }, [activeCourseId]);
-
-  // Fetch messages when active session changes
-  useEffect(() => {
-    if (activeSession) {
-      chatService.getHistory(activeSession).then(res => {
-        if (res.code === 200 && res.data) {
-          setMessages(normalizeMessages(res.data.messages));
-          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-        }
-      }).catch(console.error);
-    } else {
-      setTimeout(() => setMessages([]), 0);
-    }
-  }, [activeSession]);
-
-  // Cleanup abort controller on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current();
-      }
-    };
-  }, []);
-
-  // Fetch course resources when activeCourseId changes
   useEffect(() => {
     if (activeCourseId) {
       learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 100 })
         .then(res => {
           if (res.code === 200 && res.data) {
-            const list = res.data.resources || res.data;
-            setResources(Array.isArray(list) ? list : []);
+            setResources(Array.isArray(res.data.resources || res.data) ? (res.data.resources || res.data) : []);
           }
         })
         .catch(console.error);
     } else {
-      setTimeout(() => setResources([]), 0);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResources([]);
     }
   }, [activeCourseId]);
 
+  // Handle auto-scroll down for incoming chunked text.
+  // Handle auto-scroll down for incoming chunked text.
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [messages]);
+
+  // Simplify handlers
   const handleResetConversation = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current();
-      abortControllerRef.current = null;
-    }
-    setActiveSession(null);
-    lastMessageIdRef.current = null;
-    setMessages([]);
-    setIsSending(false);
-    setLeftDrawerOpen(false); // Close mobile drawer
+    resetConversation();
+    setLeftDrawerOpen(false);
   };
 
   const handleSendMessage = (overrideText = '') => {
     const textToSend = (overrideText || inputValue).trim();
     if (!textToSend || isSending || !activeCourseId) return;
-
-    if (!overrideText) {
-      setInputValue('');
-    }
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current();
-    }
-    lastMessageIdRef.current = null;
-    streamTargetIdRef.current = 'ai-placeholder';
-
-    // Optimistic UI updates
-    setMessages(prev => {
-      const userMsg = { id: `user-${prev.length}`, role: 'user', content: textToSend };
-      const aiPlaceholder = { id: 'ai-placeholder', role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [], toolCalls: [] };
-      return [...prev, userMsg, aiPlaceholder];
-    });
-    setIsSending(true);
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-
-    const targetId = streamTargetIdRef.current;
-
-    streamOnMessageRef.current = (msg) => {
-      if (msg.type === 'status') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          if (msg.stage === 'generation') {
-            const updatedToolCalls = (m.toolCalls || []).map(tc =>
-              tc.id === 'retrieval' ? { ...tc, status: 'completed' } : tc
-            );
-            return { ...m, toolCalls: updatedToolCalls };
-          } else if (msg.stage === 'retrieval') {
-            return { ...m, toolCalls: [{ id: 'retrieval', name: '检索课程知识库', status: 'running' }] };
-          }
-          const statusText = msg.message || msg.content || '正在处理...';
-          return { ...m, toolCalls: [{ id: 'generic', name: statusText, status: 'running' }] };
-        }));
-      } else if (msg.type === 'chunk') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const updatedToolCalls = (m.toolCalls || []).map(tc =>
-            tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-          );
-          return { ...m, content: m.content + (msg.content || ''), toolCalls: updatedToolCalls };
-        }));
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-      } else if (msg.type === 'diagram') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const currentDiags = m.diagrams || [];
-          const newDiag = msg.data || msg.content;
-          return { ...m, diagrams: [...currentDiags, newDiag] };
-        }));
-      } else if (msg.type === 'knowledge_points') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const rawPoints = msg.knowledge_points || msg.points || msg.data || [];
-          const parsedPoints = normalizeTextList(rawPoints);
-          return { ...m, knowledge_points: parsedPoints };
-        }));
-      } else if (msg.type === 'suggestion') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const currentSugs = m.suggestions || [];
-          const newSugs = msg.data || msg.content || [];
-          const combined = normalizeTextList(newSugs);
-          return { ...m, suggestions: [...currentSugs, ...combined] };
-        }));
-      } else if (msg.type === 'review') {
-        const reviewTargetId = lastMessageIdRef.current;
-        setMessages(prev => {
-          const fallbackId = [...prev].reverse().find(m => m.role === 'assistant')?.id;
-          const idToFlag = reviewTargetId || fallbackId;
-          if (!idToFlag) return prev;
-          return prev.map(m => (
-            m.id === idToFlag
-              ? { ...m, reviewFlagged: true, reviewReason: msg.reason || 'off_topic' }
-              : m
-          ));
-        });
-      }
-    };
-
-    streamOnDoneRef.current = (doneData) => {
-      const finalMessageId = doneData.message_id || `ai-${Date.now()}`;
-      lastMessageIdRef.current = finalMessageId;
-      setMessages(prev => prev.map(m => {
-        if (m.id !== targetId) return m;
-        const updatedToolCalls = (m.toolCalls || []).map(tc =>
-          tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-        );
-        return {
-          ...m,
-          id: targetId === 'ai-placeholder' ? finalMessageId : m.id,
-          loading: false,
-          toolCalls: updatedToolCalls
-        };
-      }));
-      setIsSending(false);
-      abortControllerRef.current = null;
-
-      if (!activeSession && doneData.conversation_id) {
-        setActiveSession(doneData.conversation_id);
-        chatService.getSessions(activeCourseId).then(res => {
-          if (res.code === 200 && res.data) {
-            setSessions(res.data.conversations || res.data);
-          }
-        }).catch(console.error);
-      }
-    };
-
-    streamOnErrorRef.current = (err) => {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== targetId) return m;
-        const updatedToolCalls = (m.toolCalls || []).map(tc =>
-          tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-        );
-        return {
-          ...m,
-          content: m.content + '\n\n[发送失败: ' + (err.message || '网络连接故障') + ']',
-          loading: false,
-          isError: true,
-          toolCalls: updatedToolCalls
-        };
-      }));
-      setIsSending(false);
-      abortControllerRef.current = null;
-    };
-
-    abortControllerRef.current = chatService.streamChat(
-      {
-        message: textToSend,
-        action: 'chat',
-        scope: 'course',
-        course_id: activeCourseId,
-        conversation_id: activeSession
-      },
-      (msg) => streamOnMessageRef.current?.(msg),
-      (data) => streamOnDoneRef.current?.(data),
-      (err) => streamOnErrorRef.current?.(err),
-    );
-  };
-
-  const handleRegenerate = () => {
-    if (isSending) return;
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-    if (!lastUserMsg) return;
-
-    const lastAiIdx = messages.map(m => m.role).lastIndexOf('assistant');
-    if (lastAiIdx < 0) return;
-
-    const lastAssistantId = messages[lastAiIdx].id;
-    streamTargetIdRef.current = lastAssistantId;
-
-    setMessages(prev => prev.map((m, i) =>
-      i === lastAiIdx
-        ? { ...m, content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [], toolCalls: [{ id: 'regenerating', name: '正在重新生成...', status: 'running' }] }
-        : m
-    ));
-    setIsSending(true);
-
-    if (abortControllerRef.current) abortControllerRef.current();
-
-    const targetId = streamTargetIdRef.current;
-
-    streamOnMessageRef.current = (msg) => {
-      if (msg.type === 'status') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          if (msg.stage === 'generation') {
-            const updatedToolCalls = (m.toolCalls || []).map(tc =>
-              tc.id === 'retrieval' ? { ...tc, status: 'completed' } : tc
-            );
-            return { ...m, toolCalls: updatedToolCalls };
-          } else if (msg.stage === 'retrieval') {
-            return { ...m, toolCalls: [{ id: 'retrieval', name: '检索课程知识库', status: 'running' }] };
-          }
-          const statusText = msg.message || msg.content || '正在处理...';
-          return { ...m, toolCalls: [{ id: 'generic', name: statusText, status: 'running' }] };
-        }));
-      } else if (msg.type === 'chunk') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const updatedToolCalls = (m.toolCalls || []).map(tc =>
-            tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-          );
-          return { ...m, content: m.content + (msg.content || ''), toolCalls: updatedToolCalls };
-        }));
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-      } else if (msg.type === 'diagram') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const currentDiags = m.diagrams || [];
-          const newDiag = msg.data || msg.content;
-          return { ...m, diagrams: [...currentDiags, newDiag] };
-        }));
-      } else if (msg.type === 'knowledge_points') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const rawPoints = msg.knowledge_points || msg.points || msg.data || [];
-          const parsedPoints = normalizeTextList(rawPoints);
-          return { ...m, knowledge_points: parsedPoints };
-        }));
-      } else if (msg.type === 'suggestion') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const currentSugs = m.suggestions || [];
-          const newSugs = msg.data || msg.content || [];
-          const combined = normalizeTextList(newSugs);
-          return { ...m, suggestions: [...currentSugs, ...combined] };
-        }));
-      }
-    };
-
-    streamOnDoneRef.current = (doneData) => {
-      const finalMessageId = doneData.message_id || `ai-${Date.now()}`;
-      setMessages(prev => prev.map(m => {
-        if (m.id !== targetId) return m;
-        const updatedToolCalls = (m.toolCalls || []).map(tc =>
-          tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-        );
-        return {
-          ...m,
-          id: targetId === 'ai-placeholder' ? finalMessageId : m.id,
-          loading: false,
-          toolCalls: updatedToolCalls
-        };
-      }));
-      setIsSending(false);
-      abortControllerRef.current = null;
-    };
-
-    streamOnErrorRef.current = (err) => {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== targetId) return m;
-        const updatedToolCalls = (m.toolCalls || []).map(tc =>
-          tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-        );
-        return {
-          ...m,
-          content: m.content + '\n\n[发送失败: ' + (err.message || '网络连接故障') + ']',
-          loading: false,
-          isError: true,
-          toolCalls: updatedToolCalls
-        };
-      }));
-      setIsSending(false);
-      abortControllerRef.current = null;
-    };
-
-    abortControllerRef.current = chatService.streamChat(
-      {
-        message: lastUserMsg.content,
-        action: 'regenerate',
-        scope: 'course',
-        course_id: activeCourseId,
-        conversation_id: activeSession,
-      },
-      (msg) => streamOnMessageRef.current?.(msg),
-      (data) => streamOnDoneRef.current?.(data),
-      (err) => streamOnErrorRef.current?.(err),
-    );
+    if (!overrideText) setInputValue('');
+    sendMessage(textToSend);
   };
 
   const handleEditSubmit = (newContent) => {
-    if (!newContent.trim() || isSending) return;
-
-    const lastUserIdx = messages.map(m => m.role).lastIndexOf('user');
-    const lastAiIdx = messages.map(m => m.role).lastIndexOf('assistant');
-    if (lastUserIdx < 0) return;
-
-    let targetId = 'ai-placeholder';
-    if (lastAiIdx >= 0) {
-      targetId = messages[lastAiIdx].id;
-    }
-    streamTargetIdRef.current = targetId;
-
-    setMessages(prev => prev.map((m, i) => {
-      if (i === lastUserIdx) return { ...m, content: newContent };
-      if (i === lastAiIdx) return { ...m, content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [], toolCalls: [{ id: 'regenerating', name: '正在重新生成...', status: 'running' }] };
-      return m;
-    }));
-    setIsSending(true);
-
-    if (abortControllerRef.current) abortControllerRef.current();
-
-    streamOnMessageRef.current = (msg) => {
-      if (msg.type === 'status') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          if (msg.stage === 'generation') {
-            const updatedToolCalls = (m.toolCalls || []).map(tc =>
-              tc.id === 'retrieval' ? { ...tc, status: 'completed' } : tc
-            );
-            return { ...m, toolCalls: updatedToolCalls };
-          } else if (msg.stage === 'retrieval') {
-            return { ...m, toolCalls: [{ id: 'retrieval', name: '检索课程知识库', status: 'running' }] };
-          }
-          const statusText = msg.message || msg.content || '正在处理...';
-          return { ...m, toolCalls: [{ id: 'generic', name: statusText, status: 'running' }] };
-        }));
-      } else if (msg.type === 'chunk') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const updatedToolCalls = (m.toolCalls || []).map(tc =>
-            tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-          );
-          return { ...m, content: m.content + (msg.content || ''), toolCalls: updatedToolCalls };
-        }));
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-      } else if (msg.type === 'diagram') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const currentDiags = m.diagrams || [];
-          const newDiag = msg.data || msg.content;
-          return { ...m, diagrams: [...currentDiags, newDiag] };
-        }));
-      } else if (msg.type === 'knowledge_points') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const rawPoints = msg.knowledge_points || msg.points || msg.data || [];
-          const parsedPoints = normalizeTextList(rawPoints);
-          return { ...m, knowledge_points: parsedPoints };
-        }));
-      } else if (msg.type === 'suggestion') {
-        setMessages(prev => prev.map(m => {
-          if (m.id !== targetId) return m;
-          const currentSugs = m.suggestions || [];
-          const newSugs = msg.data || msg.content || [];
-          const combined = normalizeTextList(newSugs);
-          return { ...m, suggestions: [...currentSugs, ...combined] };
-        }));
-      }
-    };
-
-    streamOnDoneRef.current = (doneData) => {
-      const finalMessageId = doneData.message_id || `ai-${Date.now()}`;
-      setMessages(prev => prev.map(m => {
-        if (m.id !== targetId) return m;
-        const updatedToolCalls = (m.toolCalls || []).map(tc =>
-          tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-        );
-        return {
-          ...m,
-          id: targetId === 'ai-placeholder' ? finalMessageId : m.id,
-          loading: false,
-          toolCalls: updatedToolCalls
-        };
-      }));
-      setIsSending(false);
-      abortControllerRef.current = null;
-    };
-
-    streamOnErrorRef.current = (err) => {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== targetId) return m;
-        const updatedToolCalls = (m.toolCalls || []).map(tc =>
-          tc.status === 'running' ? { ...tc, status: 'completed' } : tc
-        );
-        return {
-          ...m,
-          content: m.content + '\n\n[发送失败: ' + (err.message || '网络连接故障') + ']',
-          loading: false,
-          isError: true,
-          toolCalls: updatedToolCalls
-        };
-      }));
-      setIsSending(false);
-      abortControllerRef.current = null;
-    };
-
-    abortControllerRef.current = chatService.streamChat(
-      {
-        message: newContent,
-        action: 'edit',
-        scope: 'course',
-        course_id: activeCourseId,
-        conversation_id: activeSession,
-      },
-      (msg) => streamOnMessageRef.current?.(msg),
-      (data) => streamOnDoneRef.current?.(data),
-      (err) => streamOnErrorRef.current?.(err),
-    );
+    editMessage(newContent);
+    setEditingMsg(null);
   };
 
-  const getActiveKnowledgePoints = () => {
+  const handleTextareaChange = (e) => {
+    setInputValue(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+  };
+
+
+  const activeKPs = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role === 'assistant' && msg.knowledge_points && msg.knowledge_points.length > 0) {
@@ -553,16 +90,17 @@ export default function AIChat() {
       }
     }
     return [];
-  };
+  }, [messages]);
 
-  const activeKPs = getActiveKnowledgePoints();
-  const recommendedResources = resources.filter(res => {
-    if (activeKPs.length === 0) return true; // Show all if no knowledge points mentioned yet
-    return activeKPs.some(kp => 
-      res.knowledge_point?.toLowerCase().includes(kp.toLowerCase()) ||
-      res.title?.toLowerCase().includes(kp.toLowerCase())
-    );
-  });
+  const recommendedResources = useMemo(() => {
+    return resources.filter(res => {
+      if (activeKPs.length === 0) return true; // Show all if no knowledge points mentioned yet
+      return activeKPs.some(kp => 
+        res.knowledge_point?.toLowerCase().includes(kp.toLowerCase()) ||
+        res.title?.toLowerCase().includes(kp.toLowerCase())
+      );
+    });
+  }, [resources, activeKPs]);
 
   return (
     <div className="font-body-md text-slate-800 bg-slate-50 h-screen flex flex-col overflow-hidden">
@@ -601,10 +139,6 @@ export default function AIChat() {
                   <div key={session.id} className="group/session flex items-center">
                     <div
                       onClick={() => {
-                        if (abortControllerRef.current) {
-                          abortControllerRef.current();
-                          abortControllerRef.current = null;
-                        }
                         setActiveSession(session.id);
                         setLeftDrawerOpen(false);
                       }}
@@ -619,19 +153,10 @@ export default function AIChat() {
                       <span className="truncate">{session.title}</span>
                     </div>
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
                         if (!window.confirm('确定删除该对话？删除后不可恢复。')) return;
-                        try {
-                          await chatService.deleteSession(session.id);
-                          setSessions(prev => prev.filter(s => s.id !== session.id));
-                          if (activeSession === session.id) {
-                            setActiveSession(null);
-                            setMessages([]);
-                          }
-                        } catch (err) {
-                          console.error('删除对话失败:', err);
-                        }
+                        deleteSession(session.id);
                       }}
                       className="opacity-0 group-hover/session:opacity-100 px-2 py-1 text-slate-400 hover:text-red-500 cursor-pointer transition-all"
                       title="删除对话"
@@ -763,7 +288,7 @@ export default function AIChat() {
                         )}
                         {isLastAi && !msg.loading && !isSending && (
                           <button
-                            onClick={handleRegenerate}
+                            onClick={regenerate}
                             className="w-7 h-7 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 hover:border-slate-300 cursor-pointer transition-all text-[14px]"
                             title="重新生成"
                           >
@@ -788,11 +313,7 @@ export default function AIChat() {
                   placeholder="在这里输入你的问题..." 
                   rows={1}
                   value={inputValue}
-                  onChange={e => {
-                    setInputValue(e.target.value);
-                    e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
-                  }}
+                  onChange={handleTextareaChange}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -813,11 +334,7 @@ export default function AIChat() {
                   
                   {isSending ? (
                     <button
-                      onClick={() => {
-                        abortControllerRef.current?.();
-                        abortControllerRef.current = null;
-                        setIsSending(false);
-                      }}
+                      onClick={() => cancelStream()}
                       className="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center cursor-pointer hover:bg-red-600 active:scale-95 transition-all shadow-sm"
                       title="停止生成"
                     >

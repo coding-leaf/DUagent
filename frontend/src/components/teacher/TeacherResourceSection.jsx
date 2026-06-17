@@ -19,7 +19,7 @@ export default function TeacherResourceSection({
   setExpandedChapter,
   handleCopyCourseCode,
   copiedCourseCode,
-  navigate
+  onResourceClick
 }) {
   return (
     <section className="mb-margin" data-testid="teacher-resource-section">
@@ -92,7 +92,7 @@ export default function TeacherResourceSection({
                               key={resource.id}
                               type="button"
                               data-testid="teacher-resource-card"
-                              onClick={() => navigate(`/resource/${resource.id}`)}
+                              onClick={() => onResourceClick(resource.id)}
                               className="text-left rounded-xl border border-outline-variant bg-surface-container-lowest p-4 hover:border-primary/50 hover:shadow-sm transition-all group"
                             >
                               <div className="flex items-start justify-between gap-3 mb-3">

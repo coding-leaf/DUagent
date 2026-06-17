@@ -20,11 +20,12 @@ Refactor `AIChat.jsx` (465 lines) to eliminate the "Fat Component" anti-pattern.
 2. **`src/components/chat/SidebarResources.jsx`**
    - **Responsibility**: Render recommended learning resources based on chat context.
    - **Co-location (Option Y)**: Completely encapsulates the `learningService.getResources` API call. It also internally consumes `useChat()` to get `messages`, computes `activeKPs` via `useMemo`, and derives `recommendedResources`. The parent container knows **nothing** about this logic.
+   - **Data Access**: Also consumes `useCourse()` to get `activeCourseId` for the API call.
    - **Props**: `activeCourseName`, `rightCollapsed`, `rightDrawerOpen`, `onToggleCollapse`, `onCloseDrawer`.
 
 3. **`src/components/chat/ChatArea.jsx`**
    - **Responsibility**: Render the message stream, auto-scroll logic, and the input composer.
-   - **Data Access**: Internally consumes `useChat()` for `messages`, `isSending`, `sendMessage`, etc.
+   - **Data Access**: Internally consumes `useChat()` for `messages`, `isSending`, `sendMessage`, etc. Also consumes `useCourse()` to get `activeCourseId` for guards.
    - **Props**: `activeCourseName`, `onOpenLeftDrawer`, `onOpenRightDrawer` (for mobile triggers).
 
 4. **`src/pages/AIChat.jsx`** (Container)

@@ -43,15 +43,18 @@ export function usePracticeResult({ courseId, initialResultData, quizContext, na
           const res = await quizService.getResult(courseId);
           if (res.code === 200 && isMounted) {
             setDiagnosisData(res.data.diagnosis);
-            if (!resultData && res.data.latest_quiz) {
-              setResultData({
-                score: res.data.latest_quiz.score,
-                time_spent: res.data.latest_quiz.time_spent,
-                total_count: 10,
-                correct_count: Math.round((res.data.latest_quiz.score / 100) * 10),
-                per_question_results: []
-              });
-            }
+            setResultData(prev => {
+              if (!prev && res.data.latest_quiz) {
+                return {
+                  score: res.data.latest_quiz.score,
+                  time_spent: res.data.latest_quiz.time_spent,
+                  total_count: 10,
+                  correct_count: Math.round((res.data.latest_quiz.score / 100) * 10),
+                  per_question_results: []
+                };
+              }
+              return prev;
+            });
           }
         } catch (error) {
           console.error("Failed to fetch diagnosis result", error);
@@ -92,7 +95,6 @@ export function usePracticeResult({ courseId, initialResultData, quizContext, na
         clearTimeout(fetchTimer);
       };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
   const wrongQuestionIds = useMemo(() => {

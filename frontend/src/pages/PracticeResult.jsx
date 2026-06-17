@@ -3,6 +3,12 @@ import { useCourse } from '../context/CourseContext';
 import Icon from '../components/Icon';
 import { usePracticeResult, LOADING_TEXTS } from '../hooks/usePracticeResult';
 
+const formatTime = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
 export default function PracticeResult() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,11 +52,7 @@ export default function PracticeResult() {
     );
   }
 
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
+
 
 
 

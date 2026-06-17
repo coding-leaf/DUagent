@@ -1,5 +1,8 @@
 import Icon from '../Icon';
 
+/**
+ * @param {{ stats: { total_attempts?: number, avg_score?: number, avg_time_spent?: number } }} props
+ */
 export default function QuizStatsMetrics({ stats }) {
   return (
     <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
@@ -17,7 +20,7 @@ export default function QuizStatsMetrics({ stats }) {
           <span className="text-[10px] text-secondary">平均分</span>
         </div>
         <div className="bg-surface-container rounded p-3 text-center">
-          <span className="text-xl font-bold text-on-surface block">{(stats?.avg_time_spent || 0) < 60 ? '< 1m' : `${Math.round((stats.avg_time_spent) / 60)}m`}</span>
+          <span className="text-xl font-bold text-on-surface block">{!stats?.total_attempts ? '-' : (stats?.avg_time_spent < 60 ? '< 1m' : `${Math.round((stats.avg_time_spent) / 60)}m`)}</span>
           <span className="text-[10px] text-secondary">均时</span>
         </div>
       </div>

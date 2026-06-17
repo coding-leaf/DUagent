@@ -1,5 +1,8 @@
 import Icon from '../Icon';
 
+/**
+ * @param {{ progress: { current_node?: string, completed_nodes?: number, total_nodes?: number } }} props
+ */
 export default function PathProgressCard({ progress }) {
   return (
     <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">

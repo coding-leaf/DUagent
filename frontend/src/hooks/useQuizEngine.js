@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { quizService } from '../api/services/quiz';
 import { learningActivityService } from '../api/services/learningActivity';
 import { profileService } from '../api/services/profile';
 import { useCourse } from '../context/CourseContext';
+import { toast } from 'sonner';
 
 const answerUpdaters = {
   multi_choice: (prev, qId, nextAnswer) => {
@@ -30,18 +30,18 @@ const answerUpdaters = {
   default: (prev, qId, nextAnswer) => ({ ...prev, [qId]: nextAnswer }),
 };
 
-export function useQuizEngine() {
-  const navigate = useNavigate();
+export function useQuizEngine({
+  nodeId,
+  sourceParam,
+  knowledgePointParam,
+  questionIdsParam,
+  onNavigate
+}) {
   const { activeCourseId, courses } = useCourse();
-  const [searchParams] = useSearchParams();
-  
-  const nodeId = searchParams.get('node_id');
-  const sourceParam = searchParams.get('source');
-  const knowledgePointParam = searchParams.get('knowledge_point');
-  const questionIdsParam = searchParams.get('question_ids');
   
   const [quizData, setQuizData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -54,6 +54,7 @@ export function useQuizEngine() {
       if (!activeCourseId) return;
       try {
         setLoading(true);
+        setError(null);
         setCurrentQuestionIndex(0);
         setAnswers({});
         const extraParams = {};
@@ -65,9 +66,13 @@ export function useQuizEngine() {
         if (res.code === 200) {
           setQuizData(res.data);
           quizStartRef.current = Date.now();
+        } else {
+          throw new Error(res.message || "Failed to load questions");
         }
-      } catch (error) {
-        console.error("Failed to load questions", error);
+      } catch (err) {
+        console.error("Failed to load questions", err);
+        setError(err.message || "Failed to load questions");
+        toast.error("加载题目失败，请稍后重试");
       } finally {
         setLoading(false);
       }
@@ -89,10 +94,9 @@ export function useQuizEngine() {
       quiz_id: quizData.quiz_id,
       metadata: { source: 'quiz' }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCourseId, nodeId, quizData]);
+  }, [activeCourseId, nodeId, quizData, knowledgePointParam]);
 
-  const handleAnswerChange = (nextAnswer) => {
+  const handleAnswerChange = useCallback((nextAnswer) => {
     if (!quizData) return;
     const currentQ = quizData.questions[currentQuestionIndex];
     const normalizedType = String(currentQ?.type || '').toLowerCase();
@@ -101,9 +105,9 @@ export function useQuizEngine() {
       const updater = answerUpdaters[normalizedType] || answerUpdaters.default;
       return updater(prev, currentQ.id, nextAnswer);
     });
-  };
+  }, [quizData, currentQuestionIndex]);
 
-  const handleNextOrSubmit = async () => {
+  const handleNextOrSubmit = useCallback(async () => {
     if (!quizData) return;
     
     if (currentQuestionIndex < quizData.questions.length - 1) {
@@ -130,7 +134,7 @@ export function useQuizEngine() {
         if (activeCourseId) {
           profileService.refreshProfile(activeCourseId).catch(() => {});
         }
-        navigate('/quiz/result', {
+        onNavigate('/quiz/result', {
           state: {
             result: res.data,
             quizContext: {
@@ -140,9 +144,12 @@ export function useQuizEngine() {
             },
           },
         });
+      } else {
+        throw new Error(res.message || "Failed to submit quiz");
       }
-    } catch (error) {
-      console.error("Failed to submit quiz", error);
+    } catch (err) {
+      console.error("Failed to submit quiz", err);
+      toast.error("提交失败，请重试");
     } finally {
       const trackKp = knowledgePointParam || quizData.questions?.[0]?.knowledge_point || null;
       if (activeCourseId && (nodeId || trackKp)) {
@@ -158,26 +165,26 @@ export function useQuizEngine() {
       }
       setSubmitting(false);
     }
-  };
+  }, [quizData, currentQuestionIndex, answers, activeCourseId, nodeId, knowledgePointParam, sourceParam, onNavigate]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
     } else {
-      navigate(-1);
+      onNavigate(-1);
     }
-  };
+  }, [currentQuestionIndex, onNavigate]);
 
   return {
     quizData,
     loading,
+    error,
     currentQuestionIndex,
     answers,
     submitting,
     handleAnswerChange,
     handleNextOrSubmit,
     handlePrev,
-    navigate,
     activeCourseId,
     courses,
     nodeId,

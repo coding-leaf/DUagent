@@ -1,9 +1,18 @@
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuizEngine } from '../hooks/useQuizEngine';
 import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
 import Icon from '../components/Icon';
 
 export default function Quiz() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  const nodeId = searchParams.get('node_id');
+  const sourceParam = searchParams.get('source');
+  const knowledgePointParam = searchParams.get('knowledge_point');
+  const questionIdsParam = searchParams.get('question_ids');
+
   const {
     quizData,
     loading,
@@ -13,10 +22,15 @@ export default function Quiz() {
     handleAnswerChange,
     handleNextOrSubmit,
     handlePrev,
-    navigate,
     activeCourseId,
     courses
-  } = useQuizEngine();
+  } = useQuizEngine({
+    nodeId,
+    sourceParam,
+    knowledgePointParam,
+    questionIdsParam,
+    onNavigate: navigate
+  });
 
   if (loading) {
     return (

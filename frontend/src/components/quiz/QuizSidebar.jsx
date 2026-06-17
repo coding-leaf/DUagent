@@ -2,22 +2,14 @@
 import Icon from '../Icon';
 
 export default function QuizSidebar({ 
-  chapter, 
-  sourceLabel, 
-  difficultyLabel, 
   difficulty,
   knowledgePoint, 
-  questionTypeLabel,
-  totalQuestions, 
-  submitting, 
-  onNextOrSubmit 
+  questionTypeLabel
 }) {
   const metadataItems = [
     { icon: 'topic', label: '知识点', value: knowledgePoint },
-    { icon: 'inventory_2', label: '题目来源', value: sourceLabel },
-    { icon: 'speed', label: '难度', value: difficultyLabel || difficulty },
-    { icon: 'format_list_numbered', label: '题量', value: `${totalQuestions} 题` },
-    ...(questionTypeLabel ? [{ icon: 'quiz', label: '题型', value: questionTypeLabel }] : [])
+    { icon: 'speed', label: '难度', value: difficulty },
+    { icon: 'quiz', label: '题型', value: questionTypeLabel }
   ];
 
   return (
@@ -28,8 +20,7 @@ export default function QuizSidebar({
             <Icon name="smart_toy" className="material-symbols-outlined"/>
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">{chapter}</h3>
-            <p className="text-xs text-slate-500 mt-1">{sourceLabel}</p>
+            <h3 className="text-sm font-bold text-slate-900">练习详情</h3>
           </div>
         </div>
       </div>
@@ -51,15 +42,6 @@ export default function QuizSidebar({
           </div>
         ))}
       </nav>
-      <div className="mt-auto px-4">
-        <button 
-          onClick={onNextOrSubmit}
-          disabled={submitting}
-          className="w-full py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all shadow-lg shadow-primary/20 cursor-pointer disabled:opacity-50"
-        >
-          {submitting ? '提交中...' : '提交本次练习'}
-        </button>
-      </div>
     </aside>
   );
 }

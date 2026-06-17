@@ -5,11 +5,9 @@ export default function QuizHeader({
   currentQuestionIndex, 
   totalQuestions, 
   courseName, 
-  knowledgePoint, 
-  onExit, 
-  progressPercent 
+  onExit 
 }) {
-  const percent = progressPercent ?? Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
+  const percent = Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
   
   return (
     <>
@@ -27,7 +25,7 @@ export default function QuizHeader({
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
             <Icon name="topic" className="material-symbols-outlined text-primary"/>
-            <span className="font-body-md text-primary font-bold tracking-tight max-w-[240px] truncate">{knowledgePoint}</span>
+            <span className="font-body-md text-primary font-bold tracking-tight max-w-[240px] truncate">练习</span>
           </div>
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-slate-50 rounded-full transition-colors active:scale-95 duration-200 cursor-pointer">

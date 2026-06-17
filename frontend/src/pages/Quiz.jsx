@@ -54,7 +54,7 @@ export default function Quiz() {
 
   const currentQuestion = quizData.questions[currentQuestionIndex];
   const totalQuestions = quizData.questions.length;
-  const progressPercent = Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
+
   const activeCourse = courses.find((course) => course.id === activeCourseId);
   const courseName = activeCourse?.name || '课程练习';
   const currentChapter = currentQuestion.chapter || quizData.chapter || '当前章节';
@@ -73,32 +73,24 @@ export default function Quiz() {
 
   return (
     <div className="bg-surface text-on-surface font-body-md min-h-screen">
-      <QuizHeader 
-        currentQuestionIndex={currentQuestionIndex}
-        totalQuestions={totalQuestions}
-        courseName={courseName}
-        knowledgePoint={currentKnowledgePoint}
-        onExit={() => navigate(-1)}
-        progressPercent={progressPercent}
-      />
-
       <QuizSidebar 
-        chapter={currentChapter}
-        sourceLabel={sourceLabel}
-        difficultyLabel={difficultyLabel}
         difficulty={currentQuestion.difficulty}
         knowledgePoint={currentKnowledgePoint}
         questionTypeLabel={getQuestionTypeLabel(currentQuestion.type)}
-        totalQuestions={totalQuestions}
-        submitting={submitting}
-        onNextOrSubmit={handleNextOrSubmit}
       />
 
       {/* Main Content Canvas */}
       <main className="xl:ml-64 pt-20 min-h-screen px-6 pb-24">
         <div className="max-w-[800px] mx-auto mt-8">
+          <QuizHeader 
+            currentQuestionIndex={currentQuestionIndex}
+            totalQuestions={totalQuestions}
+            courseName={courseName}
+            onExit={() => navigate(-1)}
+          />
+
           {/* Question Area */}
-          <section data-testid="quiz-question" className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] mt-24">
+          <section data-testid="quiz-question" className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
             <div className="flex items-start gap-4 mb-6">
               <span className="bg-primary-container text-on-primary-container px-3 py-1 rounded-lg font-bold text-sm shrink-0">
                 {getQuestionTypeLabel(currentQuestion.type)}
@@ -145,7 +137,6 @@ export default function Quiz() {
             onPrevious={handlePrev}
             onNextOrSubmit={handleNextOrSubmit}
             submitting={submitting}
-            hasAnsweredCurrent={!!answers[currentQuestion.id]}
           />
         </div>
       </main>

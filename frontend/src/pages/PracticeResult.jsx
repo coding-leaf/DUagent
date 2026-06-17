@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCourse } from '../context/CourseContext';
 import Icon from '../components/Icon';
-import { usePracticeResult } from '../hooks/usePracticeResult';
+import { usePracticeResult, LOADING_TEXTS } from '../hooks/usePracticeResult';
 import ResultLoadingState from '../components/quiz/ResultLoadingState';
 import ResultScoreBoard from '../components/quiz/ResultScoreBoard';
 import QuestionReviewList from '../components/quiz/QuestionReviewList';
@@ -14,7 +14,6 @@ export default function PracticeResult() {
   const {
     resultData,
     diagnosisData,
-    loading,
     generating,
     generateError,
     currentTextIndex,
@@ -30,8 +29,8 @@ export default function PracticeResult() {
     navigate
   });
 
-  if (loading) {
-    return <ResultLoadingState currentTextIndex={currentTextIndex} />;
+  if (!resultData) {
+    return <ResultLoadingState currentTextIndex={currentTextIndex} LOADING_TEXTS={LOADING_TEXTS} />;
   }
 
 
@@ -80,7 +79,7 @@ export default function PracticeResult() {
           {/* Modal Content Scroll Area */}
           <div className="flex-1 overflow-y-auto px-xl py-md custom-scrollbar">
             <ResultScoreBoard accuracy={accuracy} resultData={resultData} diagnosisData={diagnosisData} />
-            <QuestionReviewList perQuestionResults={resultData?.per_question_results} />
+            <QuestionReviewList perQuestionResults={resultData?.per_question_results} diagnosisData={diagnosisData} />
           </div>
 
           {/* Modal Footer (Actions) */}

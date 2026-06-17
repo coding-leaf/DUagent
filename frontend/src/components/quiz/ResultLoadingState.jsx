@@ -1,7 +1,6 @@
 import Icon from '../Icon';
-import { LOADING_TEXTS } from '../../hooks/usePracticeResult';
 
-export default function ResultLoadingState({ currentTextIndex }) {
+export default function ResultLoadingState({ currentTextIndex, LOADING_TEXTS }) {
   return (
     <div className="bg-slate-50 min-h-screen flex items-center justify-center p-4">
       <div className="max-w-[448px] w-full bg-white border border-gray-100 rounded-3xl shadow-xl p-8 flex flex-col items-center text-center">

@@ -7,6 +7,8 @@ import { fetcherWrapper } from '../utils/fetcher';
 
 const terminalTaskStates = new Set(['completed', 'failed', 'partial']);
 
+let globalRefreshCounter = 0;
+
 function normalizeRows(data) {
   if (Array.isArray(data?.node_progress)) return data.node_progress;
   if (Array.isArray(data?.progress_table?.rows)) {
@@ -23,6 +25,13 @@ function hasPracticeEvidence(row) {
 export function useLearningEffects(activeCourseId) {
   const [refreshTask, setRefreshTask] = useState(null);
 
+  // Reset refreshTask when activeCourseId changes
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setRefreshTask(null);
+  }, [activeCourseId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // Fetch learning effects data
   const { data: effectsRes, error: effectsError, mutate: mutateEffects, isLoading: effectsLoading } = useSWR(
     activeCourseId ? ['learningEffects', activeCourseId] : null,
@@ -32,11 +41,16 @@ export function useLearningEffects(activeCourseId) {
   const effectsData = effectsRes?.data || null;
 
   // Derived states: node progress rows, overview metrics, and mastery breakdown
-  const nodeRows = useMemo(() => normalizeRows(effectsData), [effectsData]);
+  const nodeRows = useMemo(() => {
+    return normalizeRows(effectsData).map(row => ({
+      ...row,
+      hasPracticeEvidence: hasPracticeEvidence(row)
+    }));
+  }, [effectsData]);
 
   const overview = useMemo(() => ({
     total: nodeRows.length,
-    practiced: nodeRows.filter(hasPracticeEvidence).length,
+    practiced: nodeRows.filter(row => row.hasPracticeEvidence).length,
     pending: nodeRows.filter(row => row.assessment_state === 'pending_practice').length,
     defaultPass: nodeRows.filter(row => (
       row.assessment_state === 'unassessed_default_pass'
@@ -77,10 +91,12 @@ export function useLearningEffects(activeCourseId) {
     return groups;
   }, [nodeRows]);
 
+  const [refreshCounter, setRefreshCounter] = useState(0);
+
   // Task status polling with SWR
   const isPolling = refreshTask?.status === 'processing';
   const { data: taskRes, error: taskError } = useSWR(
-    isPolling && refreshTask?.task_id ? ['learningEffectsTask', refreshTask.task_id] : null,
+    isPolling && refreshTask?.task_id ? ['learningEffectsTask', refreshTask.task_id, refreshCounter] : null,
     () => fetcherWrapper(taskService.getTaskStatus(refreshTask.task_id)),
     {
       refreshInterval: (data) => {
@@ -90,13 +106,18 @@ export function useLearningEffects(activeCourseId) {
     }
   );
 
+  // Sync task error during render to ensure synchronous updates in testing environments
+  if (taskError && refreshTask?.status !== 'failed') {
+    setRefreshTask({ status: 'failed', error_message: taskError.message });
+  }
+
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (taskRes?.data) {
       const status = taskRes.data.status || 'processing';
       const progress = taskRes.data.progress ?? 0;
       setRefreshTask(prev => {
-        if (prev?.status === status && !taskRes.data.error_message && prev?.progress === progress) return prev;
+        if (prev?.status === status && prev?.progress === progress && prev?.error_message === taskRes.data.error_message) return prev;
         return { 
           ...prev, 
           status, 
@@ -120,6 +141,8 @@ export function useLearningEffects(activeCourseId) {
   const handleRefresh = async () => {
     if (!activeCourseId || isPolling) return;
     try {
+      globalRefreshCounter++;
+      setRefreshCounter(globalRefreshCounter);
       setRefreshTask({ status: 'processing', progress: 0 });
       const res = await learningService.refreshEvaluation(activeCourseId);
       if (res.code === 202 && res.data?.task_id) {
@@ -128,7 +151,7 @@ export function useLearningEffects(activeCourseId) {
         setRefreshTask({ status: 'failed', error_message: res.message || '重新评估启动失败' });
       }
     } catch (err) {
-      const errorMsg = err.response?.data?.detail?.message || '重新评估启动失败，请稍后重试';
+      const errorMsg = err.response?.data?.detail?.message || err.message || '重新评估启动失败，请稍后重试';
       setRefreshTask({ status: 'failed', error_message: errorMsg });
     }
   };

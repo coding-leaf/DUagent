@@ -108,4 +108,37 @@ describe('useLearningEffects', () => {
       expect(profileService.getLearningEffects).toHaveBeenCalled();
     });
   });
+
+  it('handles refresh evaluation API errors gracefully', async () => {
+    learningService.refreshEvaluation.mockRejectedValue(new Error('Network Error'));
+    const { result } = renderHook(() => useLearningEffects('c123'));
+    
+    await act(async () => {
+      await result.current.handleRefresh();
+    });
+
+    expect(result.current.refreshTask?.status).toBe('failed');
+    expect(result.current.refreshTask?.error_message).toBe('Network Error');
+    expect(result.current.refreshFailed).toBe(true);
+  });
+
+  it('handles task status polling errors gracefully', async () => {
+    learningService.refreshEvaluation.mockResolvedValue({ code: 202, data: { task_id: 'task999' } });
+    taskService.getTaskStatus.mockRejectedValue(new Error('Polling Failed'));
+
+    const { result } = renderHook(() => useLearningEffects('c123'));
+    
+    await act(async () => {
+      await result.current.handleRefresh();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(result.current.refreshTask?.status).toBe('failed');
+    expect(result.current.refreshTask?.error_message).toBe('Polling Failed');
+    expect(result.current.refreshFailed).toBe(true);
+  });
 });

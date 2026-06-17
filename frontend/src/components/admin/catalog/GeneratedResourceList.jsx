@@ -1,5 +1,5 @@
 import Icon from '../../Icon';
-import { getBadgeClass, formatResourceType, formatDateTime } from './formatters';
+import { formatResourceType, formatDateTime } from './formatters';
 
 export default function GeneratedResourceList({ resources, loading, resourceDeleteDisabled, deletingResourceIds, onDeleteResource }) {
   return (

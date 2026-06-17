@@ -7,8 +7,15 @@ export default function StudentMonitoringSection({
   studentsLoading,
   studentsError,
   students,
-  navigate,
-  isMockMode
+  isMockMode,
+  totalStudents,
+  currentPage,
+  totalPages,
+  onPageChange,
+  searchQuery,
+  onSearchChange,
+  onRefresh,
+  onStudentClick
 }) {
   return (
     <section className="mb-margin">
@@ -21,9 +28,15 @@ export default function StudentMonitoringSection({
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-surface-container-low rounded-lg px-3 py-1.5 border border-outline-variant">
               <Icon name="search" className="material-symbols-outlined text-outline text-sm mr-2"/>
-              <input className="bg-transparent border-none focus:ring-0 text-sm w-32 outline-none" placeholder="搜索学生..." type="text" />
+              <input 
+                className="bg-transparent border-none focus:ring-0 text-sm w-32 outline-none" 
+                placeholder="搜索学生..." 
+                type="text" 
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+              />
             </div>
-            <button className="p-2 rounded-lg hover:bg-surface-container transition-colors">
+            <button onClick={onRefresh} className="p-2 rounded-lg hover:bg-surface-container transition-colors">
               <Icon name="refresh" className="material-symbols-outlined text-outline"/>
             </button>
           </div>
@@ -48,7 +61,7 @@ export default function StudentMonitoringSection({
                 <div
                   key={student.user_id}
                   data-testid="student-card"
-                  onClick={() => navigate(`/teacher/report?course_id=${activeClass}&student_id=${student.user_id}`)}
+                  onClick={() => onStudentClick(student.user_id)}
                   className="flex items-center gap-6 p-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 w-48">
@@ -96,12 +109,24 @@ export default function StudentMonitoringSection({
 
         {/* Pagination */}
         <div className="px-md py-4 bg-surface-container-low border-t border-outline-variant flex justify-between items-center">
-          <span className="text-xs font-medium text-outline">当前显示 {activeClassInfo?.name || activeClass} (42名学生中展示 14名)</span>
+          <span className="text-xs font-medium text-outline">
+            当前显示 {activeClassInfo?.name || activeClass} (共 {totalStudents} 名学生，当前第 {currentPage}/{totalPages} 页)
+          </span>
           <div className="flex gap-1">
-            <button className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors">上一页</button>
-            <button className="px-3 py-1 bg-primary text-white border border-primary rounded-lg text-xs font-bold">1</button>
-            <button className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors">2</button>
-            <button className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors">下一页</button>
+            <button 
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              上一页
+            </button>
+            <button 
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              下一页
+            </button>
           </div>
         </div>
       </div>

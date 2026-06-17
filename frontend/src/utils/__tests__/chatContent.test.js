@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractModelText, normalizeTextList, normalizeMessage } from '../chatContent'
+import { extractModelText, normalizeTextList } from '../chatContent'
 
 describe('chatContent utils', () => {
   describe('extractModelText', () => {

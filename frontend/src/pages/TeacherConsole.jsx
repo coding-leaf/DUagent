@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { teachingService } from '../api/services/teaching';
-import { learningService } from '../api/services/learning';
 import FeedbackStatus from '../components/FeedbackStatus';
 import CreateCourseDialog from '../components/CreateCourseDialog';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/Icon';
+import { useTeacherConsoleData } from '../hooks/useTeacherConsoleData';
 
 const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 const resourceTypeLabels = {
@@ -21,21 +20,17 @@ export default function TeacherConsole() {
   const { user } = useAuth();
   const roleLabelMap = { teacher: '教师', admin: '管理员' };
   const [activeClass, setActiveClass] = useState(null);
-  const [classes, setClasses] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [insights, setInsights] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [classesLoading, setClassesLoading] = useState(true);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentsError, setStudentsError] = useState(null);
-  const [insightsLoading, setInsightsLoading] = useState(false);
-  const [insightsError, setInsightsError] = useState(null);
-  const [resources, setResources] = useState([]);
-  const [resourcesLoading, setResourcesLoading] = useState(false);
-  const [resourcesError, setResourcesError] = useState(null);
   const [pendingCreatedClassId, setPendingCreatedClassId] = useState(null);
   const [copiedCourseCode, setCopiedCourseCode] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState(null);
+
+  const {
+    classes, classesLoading, refreshClasses,
+    students, studentsLoading, studentsError,
+    insights, insightsLoading, insightsError,
+    resources, resourcesLoading, resourcesError
+  } = useTeacherConsoleData(activeClass, { resourcePage: 1, resourcePageSize: 50 });
 
   const groupedResources = useMemo(() => {
     return resources.reduce((acc, resource) => {
@@ -54,93 +49,19 @@ export default function TeacherConsole() {
     }
   }, [groupedResources, expandedChapter]);
 
-  // 获取教学班列表
-  const refreshClasses = useCallback(async (silent = false) => {
-    if (!silent) setClassesLoading(true);
-    try {
-      const res = await teachingService.getClasses();
-      if (res.code === 200) {
-        const newClasses = res.data || [];
-        setClasses(newClasses);
-        setActiveClass(prev => {
-          if (pendingCreatedClassId && newClasses.some(c => c.id === pendingCreatedClassId)) {
-            return pendingCreatedClassId;
-          }
-          if (newClasses.length > 0 && !newClasses.find(c => c.id === prev)) {
-            return newClasses[0].id;
-          }
-          return prev;
-        });
+  useEffect(() => {
+    if (classes.length > 0 && !activeClass) {
+      if (pendingCreatedClassId && classes.some(c => c.id === pendingCreatedClassId)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setActiveClass(pendingCreatedClassId);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPendingCreatedClassId(null);
+      } else {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setActiveClass(classes[0].id);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      if (pendingCreatedClassId) setPendingCreatedClassId(null);
-      if (!silent) setClassesLoading(false);
     }
-  }, [pendingCreatedClassId]);
-
-  useEffect(() => {
-    refreshClasses(); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [refreshClasses]);
-
-  // 当选择的教学班改变时，获取学生列表、AI洞察和学习资源
-  useEffect(() => {
-    if (!activeClass) return;
-
-    let cancelled = false;
-    setStudentsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
-    setStudentsError(null);
-    teachingService.getClassStudents(activeClass)
-      .then((res) => {
-        if (!cancelled && res.code === 200) setStudents(res.data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('students fetch error', err);
-        setStudentsError('学生列表加载失败');
-      })
-      .finally(() => {
-        if (!cancelled) setStudentsLoading(false);
-      });
-
-    setInsightsLoading(true);
-    setInsightsError(null);
-    teachingService.getConsoleInsights(activeClass)
-      .then((res) => {
-        if (!cancelled && res.code === 200) setInsights(res.data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('insights fetch error', err);
-        setInsightsError('班级统计加载失败，请稍后重试。');
-      })
-      .finally(() => {
-        if (!cancelled) setInsightsLoading(false);
-      });
-
-    setResourcesLoading(true);
-    setResourcesError(null);
-    learningService.getResources({ course_id: activeClass, page: 1, page_size: 50 })
-      .then((res) => {
-        if (!cancelled && res.code === 200) {
-          setResources(res.data?.resources || []);
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('resources fetch error', err);
-        setResourcesError('学习资源加载失败，请稍后重试。');
-        setResources([]);
-      })
-      .finally(() => {
-        if (!cancelled) setResourcesLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeClass]);
+  }, [classes, activeClass, pendingCreatedClassId]);
 
   const handleCopyCourseCode = async () => {
     if (!activeClassInfo?.course_code) return;

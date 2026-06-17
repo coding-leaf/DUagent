@@ -74,6 +74,8 @@ export default function Quiz() {
   return (
     <div className="bg-surface text-on-surface font-body-md min-h-screen">
       <QuizSidebar 
+        currentChapter={currentChapter}
+        sourceLabel={sourceLabel}
         difficulty={difficultyLabel}
         knowledgePoint={currentKnowledgePoint}
         questionTypeLabel={getQuestionTypeLabel(currentQuestion.type)}
@@ -86,6 +88,7 @@ export default function Quiz() {
             currentQuestionIndex={currentQuestionIndex}
             totalQuestions={totalQuestions}
             courseName={courseName}
+            currentKnowledgePoint={currentKnowledgePoint}
             onExit={() => navigate(-1)}
           />
 
@@ -137,6 +140,7 @@ export default function Quiz() {
             onPrevious={handlePrev}
             onNextOrSubmit={handleNextOrSubmit}
             submitting={submitting}
+            hasAnsweredCurrent={!!answers[currentQuestion.id]}
           />
         </div>
       </main>

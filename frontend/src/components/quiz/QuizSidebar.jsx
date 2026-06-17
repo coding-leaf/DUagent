@@ -2,6 +2,8 @@
 import Icon from '../Icon';
 
 export default function QuizSidebar({ 
+  currentChapter,
+  sourceLabel,
   difficulty,
   knowledgePoint, 
   questionTypeLabel
@@ -20,7 +22,8 @@ export default function QuizSidebar({
             <Icon name="smart_toy" className="material-symbols-outlined"/>
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">练习详情</h3>
+            <h3 className="text-sm font-bold text-slate-900">{currentChapter}</h3>
+            <p className="text-xs text-slate-500 mt-1">{sourceLabel}</p>
           </div>
         </div>
       </div>

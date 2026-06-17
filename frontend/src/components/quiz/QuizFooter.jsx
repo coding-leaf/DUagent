@@ -5,7 +5,8 @@ export default function QuizFooter({
   isLast, 
   onPrevious, 
   onNextOrSubmit, 
-  submitting
+  submitting,
+  hasAnsweredCurrent
 }) {
   return (
     <div className="fixed bottom-0 left-0 xl:left-64 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-100 p-4 z-40">
@@ -20,7 +21,7 @@ export default function QuizFooter({
         <div className="flex gap-4">
           <button 
             onClick={onNextOrSubmit}
-            disabled={submitting}
+            disabled={submitting || (!isLast && !hasAnsweredCurrent)}
             className="flex items-center gap-2 px-8 py-3 bg-primary text-white font-bold hover:opacity-90 rounded-xl transition-all shadow-lg shadow-primary/20 active:scale-95 cursor-pointer disabled:opacity-50"
           >
             {submitting ? '提交中...' : (isLast ? '提交本题' : '下一题')}

@@ -16,12 +16,14 @@ describe('QuizHeader', () => {
         currentQuestionIndex={2} 
         totalQuestions={10} 
         courseName="Test Course" 
+        currentKnowledgePoint="Test Knowledge"
         onExit={onExit} 
       />
     );
     expect(screen.getByText('Test Course')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument(); // currentQuestionIndex + 1
     expect(screen.getByText('/ 10 题')).toBeInTheDocument();
+    expect(screen.getByText('Test Knowledge')).toBeInTheDocument();
     
     // Simulate exit click
     fireEvent.click(screen.getByTitle(/返回上一页/i));
@@ -33,11 +35,15 @@ describe('QuizSidebar', () => {
   it('renders metadata', () => {
     render(
       <QuizSidebar 
+        currentChapter="Test Chapter"
+        sourceLabel="Test Source"
         difficulty="hard"
         knowledgePoint="Test Knowledge"
         questionTypeLabel="Single Choice"
       />
     );
+    expect(screen.getByText('Test Chapter')).toBeInTheDocument();
+    expect(screen.getByText('Test Source')).toBeInTheDocument();
     expect(screen.getByText('Test Knowledge')).toBeInTheDocument();
   });
 });
@@ -53,6 +59,7 @@ describe('QuizFooter', () => {
         onPrevious={onPrev}
         onNextOrSubmit={onNextOrSubmit}
         submitting={false}
+        hasAnsweredCurrent={true}
       />
     );
     

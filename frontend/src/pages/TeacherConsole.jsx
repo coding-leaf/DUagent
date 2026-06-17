@@ -71,8 +71,9 @@ export default function TeacherConsole() {
     if (!studentSearchQuery) return validStudents;
     const lowerQuery = studentSearchQuery.toLowerCase();
     return validStudents.filter(s => 
-      s?.student?.username?.toLowerCase()?.includes(lowerQuery) ||
-      s?.student?.real_name?.toLowerCase()?.includes(lowerQuery)
+      (s.username ?? '').toLowerCase().includes(lowerQuery) ||
+      (s.english_name ?? '').toLowerCase().includes(lowerQuery) ||
+      (s.student_id ?? '').toLowerCase().includes(lowerQuery)
     );
   }, [students, studentSearchQuery]);
 
@@ -97,11 +98,11 @@ export default function TeacherConsole() {
 
   // --- Handlers ---
   const handleStudentClick = (studentId) => {
-    navigate(`/teacher/student/${studentId}`);
+    navigate(`/teacher/report?course_id=${activeClass}&student_id=${studentId}`);
   };
 
   const handleResourceClick = (resourceId) => {
-    navigate(`/teacher/resource/${resourceId}`);
+    navigate(`/resource/${resourceId}`);
   };
 
   const handleCopyCourseCode = async () => {

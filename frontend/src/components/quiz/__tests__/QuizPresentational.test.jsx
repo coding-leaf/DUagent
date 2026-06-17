@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import QuizHeader from '../QuizHeader';
+import QuizProgressCard from '../QuizProgressCard';
 import QuizSidebar from '../QuizSidebar';
 import QuizFooter from '../QuizFooter';
 
@@ -13,16 +14,12 @@ describe('QuizHeader', () => {
     const onExit = vi.fn();
     render(
       <QuizHeader 
-        currentQuestionIndex={2} 
-        totalQuestions={10} 
         courseName="Test Course" 
         currentKnowledgePoint="Test Knowledge"
         onExit={onExit} 
       />
     );
     expect(screen.getByText('Test Course')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument(); // currentQuestionIndex + 1
-    expect(screen.getByText('/ 10 题')).toBeInTheDocument();
     expect(screen.getByText('Test Knowledge')).toBeInTheDocument();
     
     // Simulate exit click
@@ -70,5 +67,19 @@ describe('QuizFooter', () => {
     const nextBtn = screen.getByText('下一题');
     fireEvent.click(nextBtn);
     expect(onNextOrSubmit).toHaveBeenCalled();
+  });
+});
+
+describe('QuizProgressCard', () => {
+  it('renders progress text and bar correctly', () => {
+    render(
+      <QuizProgressCard 
+        currentQuestionIndex={2} 
+        totalQuestions={10} 
+      />
+    );
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('/ 10 题')).toBeInTheDocument();
+    expect(screen.getByText('完成进度 30%')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 export default function QuizProgressCard({ currentQuestionIndex, totalQuestions }) {
-  const percent = Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100);
+  const percent = Math.round(((currentQuestionIndex + 1) / (totalQuestions || 1)) * 100);
   
   return (
     <div className="bg-white rounded-2xl p-6 mb-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">

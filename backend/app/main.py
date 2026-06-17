@@ -11,6 +11,8 @@ from app.api.v1 import (
 )
 from app.core.config import settings
 from app.db.session import init_db
+from app.exceptions.base import DomainException
+from app.exceptions.handlers import domain_exception_handler
 
 
 async def _recover_orphaned_background_tasks() -> None:
@@ -79,6 +81,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+app.add_exception_handler(DomainException, domain_exception_handler)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

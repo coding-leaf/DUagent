@@ -80,7 +80,7 @@ describe('catalogService', () => {
   });
 
   describe('uploadCourseCatalogMaterial', () => {
-    it('posts FormData with 60s timeout and no explicit Content-Type header', async () => {
+    it('posts FormData with 60s timeout and Content-Type header set to undefined', async () => {
       apiClient.post.mockResolvedValue({ data: {} });
       const file = new File(['content'], 'test.pdf', { type: 'application/pdf' });
 
@@ -93,7 +93,7 @@ describe('catalogService', () => {
       expect(body).toBeInstanceOf(FormData);
       expect(body.get('file')).toBe(file);
       expect(config.timeout).toBe(60000);
-      expect(config.headers).toBeUndefined();
+      expect(config.headers).toEqual({ 'Content-Type': undefined });
     });
   });
 

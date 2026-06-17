@@ -24,6 +24,9 @@ export const catalogService = {
     formData.append('file', file);
     return apiClient.post(`/admin/course-catalogs/${catalogId}/materials/upload`, formData, {
       timeout: 60000,
+      headers: {
+        'Content-Type': undefined,
+      },
     });
   },
 

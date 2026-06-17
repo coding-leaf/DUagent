@@ -76,14 +76,15 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRig
           {messages.length === 0 ? (
             <ChatEmptyState onCardClick={handleSendMessage} courseName={activeCourseName} />
           ) : (
-            messages.map((msg, idx) => {
+            (() => {
               const lastUserIndex = messages.map(m => m.role).lastIndexOf('user');
               const lastAiIndex = messages.map(m => m.role).lastIndexOf('assistant');
-              const isLastUser = idx === lastUserIndex;
-              const isLastAi = idx === lastAiIndex;
-              return (
-                <div key={msg.id} className="group/message relative pb-3">
-                  <ChatMessage message={msg} onSendMessage={handleSendMessage} />
+              return messages.map((msg, idx) => {
+                const isLastUser = idx === lastUserIndex;
+                const isLastAi = idx === lastAiIndex;
+                return (
+                  <div key={msg.id} className="group/message relative pb-3">
+                    <ChatMessage message={msg} onSendMessage={handleSendMessage} />
 
                   {isLastUser && editingMsg && editingMsg.msgId === msg.id ? (
                     <div className="mt-2 bg-white border border-cyan-300 rounded-2xl p-3 shadow-sm">
@@ -145,7 +146,8 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRig
                   </div>
                 </div>
               );
-            })
+              });
+            })()
           )}
           <div ref={messagesEndRef} />
         </div>

@@ -24,7 +24,7 @@ export function useLearningPath(activeCourseId, selectedNodeId, setSelectedNodeI
 
   // Default selected node (after learningPath loads)
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
+     
     if (!learningPath?.nodes?.length) return;
     if (selectedNodeId) return; // Only auto-select if nothing is selected
 
@@ -39,7 +39,7 @@ export function useLearningPath(activeCourseId, selectedNodeId, setSelectedNodeI
     
     const first = learningPath.nodes.find(n => n.status !== 'pending');
     if (first) { setSelectedNodeId(first.id); return; }
-    /* eslint-enable react-hooks/set-state-in-effect */
+     
   }, [learningPath, selectedNodeId, setSelectedNodeId]);
 
   // 2. Fetch Node Resources

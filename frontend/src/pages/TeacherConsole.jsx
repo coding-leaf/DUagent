@@ -58,9 +58,9 @@ export default function TeacherConsole() {
         setPendingCreatedClassId(null);
         /* eslint-enable react-hooks/set-state-in-effect */
       } else {
-        /* eslint-disable react-hooks/set-state-in-effect */
+         
         setActiveClass(classes[0].id);
-        /* eslint-enable react-hooks/set-state-in-effect */
+         
       }
     }
   }, [classes, activeClass, pendingCreatedClassId]);

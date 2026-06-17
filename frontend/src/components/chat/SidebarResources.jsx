@@ -11,17 +11,19 @@ export default function SidebarResources({ activeCourseName, rightCollapsed, rig
   const { messages } = useChat();
 
   useEffect(() => {
+    let active = true;
     if (activeCourseId) {
       learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 100 })
         .then(res => {
-          if (res.code === 200 && res.data) {
+          if (active && res.code === 200 && res.data) {
             setResources(Array.isArray(res.data.resources || res.data) ? (res.data.resources || res.data) : []);
           }
         })
         .catch(console.error);
     } else {
-      setResources([]);
+      setTimeout(() => { if (active) setResources([]); }, 0);
     }
+    return () => { active = false; };
   }, [activeCourseId]);
 
   const activeKPs = useMemo(() => {

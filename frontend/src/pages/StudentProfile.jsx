@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useStudentProfile } from '../hooks/useStudentProfile';
 import { useNavigate } from 'react-router-dom';
 import { profileService } from '../api/services/profile';
 import { authService } from '../api/services/auth';
-import { taskService } from '../api/services/task';
 import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
@@ -49,30 +49,40 @@ export default function StudentProfile() {
   const navigate = useNavigate();
   const { activeCourseId, courses } = useCourse();
   const { user, refreshUser } = useAuth();
-  const [profileData, setProfileData] = useState(null);
   const [guidanceSubmitting, setGuidanceSubmitting] = useState(false);
   const [customInstruction, setCustomInstruction] = useState('');
   const [instructionSubmitting, setInstructionSubmitting] = useState(false);
   const [instructionError, setInstructionError] = useState('');
   const [instructionSuccess, setInstructionSuccess] = useState(false);
   const [goalSubmitting, setGoalSubmitting] = useState(false);
-  const [profileError, setProfileError] = useState(null);
-  const [refreshTask, setRefreshTask] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshMessage, setRefreshMessage] = useState('');
-  const [refreshError, setRefreshError] = useState('');
   const [localGuidanceLevel, setLocalGuidanceLevel] = useState(
     user?.guidance_level || 'L2'
   );
-  const [loading, setLoading] = useState(true);
+
+  const {
+    profileData,
+    profileLoading: loading,
+    profileError,
+    mutateProfile,
+    refreshTask,
+    isPolling: refreshing,
+    handleProfileRefresh
+  } = useStudentProfile(activeCourseId);
+
+  // Sync instruction when profile loads
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const ci = profileData?.drive_intent?.custom_instruction;
+    if (typeof ci === 'string') setCustomInstruction(ci);
+  }, [profileData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Map refresh statuses
+  const refreshMessage = refreshTask?.status === 'completed' ? '画像已同步' : (refreshing ? '正在同步画像...' : '');
+  const refreshError = refreshTask?.status === 'failed' ? (refreshTask?.error_message || '同步失败') : '';
+
   // eslint-disable-next-line react-hooks/purity -- relative time display needs current timestamp
   const [now, setNow] = useState(Date.now());
-
-  // 追踪当前活跃的 courseId，用于竞态防护
-  const activeCourseRef = useRef(activeCourseId);
-  useEffect(() => {
-    activeCourseRef.current = activeCourseId;
-  }, [activeCourseId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -87,86 +97,6 @@ export default function StudentProfile() {
     }
   }, [user?.guidance_level]);
   /* eslint-enable react-hooks/set-state-in-effect */
-
-  const fetchProfile = useCallback(async () => {
-    if (!activeCourseId) {
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
-      setProfileData(null);
-      setProfileError(null);
-      const res = await profileService.getStudentProfile(activeCourseId);
-      // 竞态防护：请求返回时 courseId 已变化，丢弃过期响应
-      if (activeCourseRef.current !== activeCourseId) return;
-      if (res.code === 200) {
-        setProfileData(res.data);
-        const ci = res.data?.drive_intent?.custom_instruction;
-        if (typeof ci === 'string') setCustomInstruction(ci);
-      } else {
-        setProfileError(res.message || '加载失败，请重试');
-      }
-    } catch (error) {
-      // 竞态防护：请求返回时 courseId 已变化，丢弃过期响应
-      if (activeCourseRef.current !== activeCourseId) return;
-      console.error("Failed to fetch profile data:", error);
-      setProfileError('加载失败，请重试');
-    } finally {
-      if (activeCourseRef.current === activeCourseId) setLoading(false);
-    }
-  }, [activeCourseId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: fetch on mount / course change
-    fetchProfile();
-  }, [fetchProfile]);
-
-  useEffect(() => {
-    if (!refreshTask?.task_id || refreshTask.status !== 'processing') return;
-
-    let cancelled = false;
-    let timeoutId;
-
-    const pollTask = async () => {
-      try {
-        const res = await taskService.getTaskStatus(refreshTask.task_id);
-        if (cancelled) return;
-
-        const task = res.data || {};
-        const status = task.status || 'processing';
-        setRefreshTask({
-          ...task,
-          task_id: task.task_id || refreshTask.task_id,
-          status,
-        });
-
-        if (status === 'completed') {
-          setRefreshing(false);
-          setRefreshError('');
-          setRefreshMessage('画像已同步');
-          await fetchProfile();
-        } else if (status === 'failed' || status === 'partial') {
-          setRefreshing(false);
-          setRefreshMessage('');
-          setRefreshError(task.error_message || '画像同步失败，请稍后重试');
-        } else if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error('画像同步任务查询失败:', err);
-        setRefreshError('画像同步状态查询失败，正在重试');
-        timeoutId = setTimeout(pollTask, 2000);
-      }
-    };
-
-    timeoutId = setTimeout(pollTask, 2000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [fetchProfile, refreshTask?.status, refreshTask?.task_id]);
 
   if (!activeCourseId) {
     return (
@@ -208,7 +138,7 @@ export default function StudentProfile() {
             <Icon name="error_outline" className="material-symbols-outlined text-6xl text-slate-300 mb-6"/>
             <h2 className="font-h1 text-2xl text-on-surface mb-3">{profileError}</h2>
             <button
-              onClick={fetchProfile}
+              onClick={mutateProfile}
               className="px-6 py-2.5 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 transition-colors cursor-pointer"
             >
               重试
@@ -373,49 +303,14 @@ export default function StudentProfile() {
     kg_quiz_activity: '图谱+行为',
   }[source] || source || '未知来源');
 
-  const handleProfileRefresh = async () => {
-    if (!activeCourseId || refreshing) return;
-
-    setRefreshing(true);
-    setRefreshError('');
-    setRefreshMessage('正在同步画像...');
-    try {
-      const res = await profileService.refreshProfile(activeCourseId);
-      const taskId = res.data?.task_id;
-      if (res.code === 202 && taskId) {
-        setRefreshTask({ task_id: taskId, status: 'processing', progress: 10 });
-      } else {
-        setRefreshing(false);
-        setRefreshMessage('');
-        setRefreshError(res.message || '画像同步启动失败，请稍后重试');
-      }
-    } catch (err) {
-      console.error('画像同步启动失败:', err);
-      setRefreshing(false);
-      setRefreshMessage('');
-      setRefreshError(err.response?.data?.detail?.message || '画像同步启动失败，请稍后重试');
-    }
-  };
-
   const handleGoalChange = async (goalType) => {
     if (goalSubmitting) return;
     setGoalSubmitting(true);
-    // 乐观更新：立即反映到 UI
-    setProfileData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        drive_intent: { ...(prev.drive_intent || {}), type: goalType },
-        profile_dimensions: (prev.profile_dimensions || []).map((d) =>
-          d.key === 'learning_goal' ? { ...d, value: goalType } : d
-        ),
-      };
-    });
     try {
       await profileService.updateLearningGoal(activeCourseId, goalType);
+      mutateProfile();
     } catch (err) {
       console.error('更新学习方向失败:', err);
-      await fetchProfile();
     } finally {
       setGoalSubmitting(false);
     }

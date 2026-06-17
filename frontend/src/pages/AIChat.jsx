@@ -8,7 +8,7 @@ import ChatArea from '../components/chat/ChatArea';
 
 export default function AIChat() {
   const { activeCourseId, courses } = useCourse();
-  const { resetConversation } = useChat();
+  const { resetConversation, activeSession } = useChat();
   
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -20,6 +20,16 @@ export default function AIChat() {
 
   const handleNewChat = () => {
     resetConversation();
+    setLeftDrawerOpen(false);
+  };
+
+  const handleOpenLeftDrawer = () => {
+    setLeftDrawerOpen(true);
+    setRightDrawerOpen(false);
+  };
+
+  const handleOpenRightDrawer = () => {
+    setRightDrawerOpen(true);
     setLeftDrawerOpen(false);
   };
 
@@ -37,9 +47,10 @@ export default function AIChat() {
         />
 
         <ChatArea 
+          key={activeSession || 'empty'}
           activeCourseName={activeCourseName}
-          onOpenLeftDrawer={() => setLeftDrawerOpen(true)}
-          onOpenRightDrawer={() => setRightDrawerOpen(true)}
+          onOpenLeftDrawer={handleOpenLeftDrawer}
+          onOpenRightDrawer={handleOpenRightDrawer}
         />
 
         <SidebarResources 

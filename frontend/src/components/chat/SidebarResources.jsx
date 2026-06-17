@@ -7,19 +7,27 @@ import Icon from '../Icon';
 
 export default function SidebarResources({ activeCourseName, rightCollapsed, rightDrawerOpen, onToggleCollapse, onCloseDrawer }) {
   const [resources, setResources] = useState([]);
+  const [error, setError] = useState(false);
   const { activeCourseId } = useCourse();
   const { messages } = useChat();
 
   useEffect(() => {
     let active = true;
     if (activeCourseId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setError(false);
       learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 100 })
         .then(res => {
           if (active && res.code === 200 && res.data) {
             setResources(Array.isArray(res.data.resources || res.data) ? (res.data.resources || res.data) : []);
+          } else if (active) {
+            setError(true);
           }
         })
-        .catch(console.error);
+        .catch(err => {
+          console.error(err);
+          if (active) setError(true);
+        });
     } else {
       setTimeout(() => { if (active) setResources([]); }, 0);
     }
@@ -77,7 +85,17 @@ export default function SidebarResources({ activeCourseName, rightCollapsed, rig
                 <span className="text-[12px] text-cyan-600 cursor-pointer hover:underline">全部</span>
               </div>
               
-              {recommendedResources.length > 0 ? (
+              {error ? (
+                <div className="border border-red-200 border-dashed rounded-xl p-4 bg-red-50 flex flex-col items-center justify-center text-center mt-6">
+                  <div className="w-12 h-12 bg-red-100 rounded-full mb-3 flex items-center justify-center text-red-500">
+                    <Icon name="error_outline" className="material-symbols-outlined text-2xl"/>
+                  </div>
+                  <div className="text-[14px] font-semibold text-red-700 mb-1">加载失败</div>
+                  <div className="text-[12px] text-red-600 leading-relaxed px-2 mt-2">
+                    无法获取推荐资源，请稍后重试。
+                  </div>
+                </div>
+              ) : recommendedResources.length > 0 ? (
                 <div className="space-y-3">
                   {recommendedResources.map(res => {
                     let icon = 'description';

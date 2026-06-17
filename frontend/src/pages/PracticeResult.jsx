@@ -14,6 +14,7 @@ export default function PracticeResult() {
   const {
     resultData,
     diagnosisData,
+    loading,
     generating,
     generateError,
     currentTextIndex,
@@ -29,8 +30,17 @@ export default function PracticeResult() {
     navigate
   });
 
-  if (!resultData) {
+  if (loading) {
     return <ResultLoadingState currentTextIndex={currentTextIndex} LOADING_TEXTS={LOADING_TEXTS} />;
+  }
+
+  if (!resultData) {
+    return (
+      <div className="bg-surface min-h-screen flex items-center justify-center flex-col gap-4">
+        <p className="text-error">无法加载训练结果，请稍后再试。</p>
+        <button onClick={() => navigate(-1)} className="text-primary hover:underline">返回上一页</button>
+      </div>
+    );
   }
 
 

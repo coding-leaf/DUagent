@@ -4,6 +4,7 @@ import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
 import Icon from '../components/Icon';
 import QuizHeader from '../components/quiz/QuizHeader';
+import QuizProgressCard from '../components/quiz/QuizProgressCard';
 import QuizSidebar from '../components/quiz/QuizSidebar';
 import QuizFooter from '../components/quiz/QuizFooter';
 
@@ -81,15 +82,18 @@ export default function Quiz() {
         questionTypeLabel={getQuestionTypeLabel(currentQuestion.type)}
       />
 
+      <QuizHeader 
+        courseName={courseName}
+        currentKnowledgePoint={currentKnowledgePoint}
+        onExit={() => navigate(-1)}
+      />
+
       {/* Main Content Canvas */}
       <main className="xl:ml-64 pt-20 min-h-screen px-6 pb-24">
         <div className="max-w-[800px] mx-auto mt-8">
-          <QuizHeader 
+          <QuizProgressCard 
             currentQuestionIndex={currentQuestionIndex}
             totalQuestions={totalQuestions}
-            courseName={courseName}
-            currentKnowledgePoint={currentKnowledgePoint}
-            onExit={() => navigate(-1)}
           />
 
           {/* Question Area */}

@@ -2,7 +2,6 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useQuizEngine } from '../useQuizEngine';
 import { quizService } from '../../api/services/quiz';
-import { learningActivityService } from '../../api/services/learningActivity';
 import { useCourse } from '../../context/CourseContext';
 
 vi.mock('../../api/services/quiz', () => ({

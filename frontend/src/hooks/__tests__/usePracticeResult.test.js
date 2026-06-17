@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { usePracticeResult, LOADING_TEXTS } from '../usePracticeResult';
+import { usePracticeResult } from '../usePracticeResult';
 import { quizService } from '../../api/services/quiz';
 
 vi.mock('../../api/services/quiz', () => ({

@@ -23,6 +23,21 @@
 
 ## 最近验证
 
+### 2026-06-17
+
+- Quiz & PracticeResult 页面容器与展现分离重构完成：
+  - 核心改动：
+    1. 将 `Quiz.jsx` 的厚重状态机、题型派发（`answerUpdaters`）、提交与埋点追踪逻辑剥离至 ViewModel Hook `useQuizEngine.js`，UI 部分肢解为 `<QuizHeader />`、`<QuizSidebar />`、`<QuizFooter />` 三个无状态哑组件，`Quiz.jsx` 退化为薄容器。
+    2. 将 `PracticeResult.jsx` 的 5 秒防抖轮询、诊断数据拉取、画像刷新以及错题生成逻辑剥离至 `usePracticeResult.js`（并修复了原有的 `eslint` 依赖隐患，改用函数式更新），UI 部分肢解为 `<ResultLoadingState />`、`<ResultScoreBoard />`、`<QuestionReviewList />` 三个无状态哑组件。
+    3. 全面规范化：所有导出的事件函数均已使用 `useCallback` 记忆化，阻断了父组件重渲导致的级联渲染。
+  - 后续 Bug 修复与测试增强：
+    1. 修复了 `PracticeResult.jsx` 中由 API 错误引发的无限 Loading 动画死循环问题，增加了错误处理兜底卡片。
+    2. 修正了 `QuizHeader` 中把 fixed 吸顶导航栏和内容区进度条混在一起并错误塞入 `<main>` 的 HTML 语义问题，已切分为 `<QuizHeader>` 与 `<QuizProgressCard>`。
+    3. 补充了 ViewModel 层 Hook（`useQuizEngine` 与 `usePracticeResult`）的专门单元测试，使用 Vitest 和 React Testing Library 验证其内部状态流转与网络 Mock 请求。
+  - 改了什么文件：`src/pages/Quiz.jsx`, `src/pages/PracticeResult.jsx`，新增 `src/hooks/useQuizEngine.js`, `src/hooks/usePracticeResult.js`，以及 `src/components/quiz/` 下的 7 个组件，新增 `src/hooks/__tests__/` 单元测试。
+  - 测试结果：Frontend `npm run lint` 与 `npm run build` 零报错通过。执行全程经由 AI Spec Reviewer 与 Code Quality Reviewer 双重卡点校验。Hook 层 6 个单元测试全绿通过。
+  - 接口漂移：纯前端架构重构，无接口漂移。
+
 ### 2026-06-16
 
 - 个性化错题购物车 (Personalized Quiz Cart) 接入完成：

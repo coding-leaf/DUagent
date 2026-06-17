@@ -49,6 +49,7 @@ export default function TeacherConsole() {
   useEffect(() => {
     const chapters = Object.keys(groupedResources).sort();
     if (chapters.length > 0 && (!expandedChapter || !chapters.includes(expandedChapter))) {
+      // eslint-disable-next-line
       setExpandedChapter(chapters[0]);
     }
   }, [groupedResources, expandedChapter]);

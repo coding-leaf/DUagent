@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
 import { profileService } from '../api/services/profile';
 import { authService } from '../api/services/auth';
 import { taskService } from '../api/services/task';
@@ -173,8 +172,7 @@ export default function StudentProfile() {
     return (
       <div className="bg-background text-on-background font-body-md antialiased min-h-screen">
         <Navbar />
-        <Sidebar />
-        <main className="ml-0 lg:ml-64 pt-16">
+        <main className="pt-16">
           <div className="max-w-[1280px] mx-auto px-6 py-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
             <Icon name="person_search" className="material-symbols-outlined text-6xl text-slate-300 mb-6"/>
             <h2 className="font-h1 text-2xl text-on-surface mb-3">还没有可查看的课程画像</h2>
@@ -205,8 +203,7 @@ export default function StudentProfile() {
     return (
       <div className="bg-background text-on-background font-body-md antialiased min-h-screen">
         <Navbar />
-        <Sidebar />
-        <main className="ml-0 lg:ml-64 pt-16">
+        <main className="pt-16">
           <div className="max-w-[1280px] mx-auto px-6 py-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
             <Icon name="error_outline" className="material-symbols-outlined text-6xl text-slate-300 mb-6"/>
             <h2 className="font-h1 text-2xl text-on-surface mb-3">{profileError}</h2>
@@ -450,11 +447,8 @@ export default function StudentProfile() {
       {/* TopNavBar */}
       <Navbar />
 
-      {/* SideNavBar Component */}
-      <Sidebar />
-
       {/* Main Content */}
-      <main className="ml-0 lg:ml-64 pt-16">
+      <main className="pt-16">
         <div className="max-w-[1280px] mx-auto px-6 py-8">
           {/* 卡片 1：个人信息 */}
           <div className="relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 mb-8">

@@ -1,0 +1,26 @@
+<h2>前端架构重构方向评估</h2>
+<p class="subtitle">请结合刚才智能体的“体检报告”，选择一个最适合我们当前业务复杂度的长期演进方向。</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>传统职责分层架构 (Layered Architecture)</h3>
+      <p>按技术角色划分为 <code>pages/</code>, <code>components/</code>, <code>hooks/</code>, <code>services/</code>。引入全局 Axios 拦截器处理网络错误。结构经典直白，改造路线清晰平滑。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>特性切片设计 (Feature-Sliced Design, FSD)</h3>
+      <p>按业务域（如 <code>features/admin</code>, <code>features/profile</code>）组织 UI、API 和状态。内聚度极高，适合复杂项目，能有效防止“跨业务模块巨石组件”再生。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>渐进式 Hook 分离 (Container-Hook-Presenter)</h3>
+      <p>不搞大范围目录变动，专注为“胖页面”定制独立 Hook 剥离其业务逻辑。成本极低、见效最快，解决当前痛点但不对系统结构动刀。</p>
+    </div>
+  </div>
+</div>

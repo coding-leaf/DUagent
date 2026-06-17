@@ -2,7 +2,7 @@
 
 ## Scope
 
-This file applies to `frontend/`. Subdirectory AGENTS.md takes precedence if present.
+This file applies to the full EDUagent project (frontend / backend / agent_service), scoped from `frontend/`. Subdirectory AGENTS.md takes precedence if present.
 
 ---
 
@@ -33,8 +33,11 @@ This file applies to `frontend/`. Subdirectory AGENTS.md takes precedence if pre
 3. **`WORKFLOW.md`**：按日期的施工记录，回溯某次改了什么、跑了什么。
 4. **`docs/feature-ledger.md`**：功能级看板，但已与实际实现存在较大偏差，**只作参考，不作约束**。用它了解历史意图，不用它判断现状。
 5. **`../docs/10-client-api/` OpenAPI 和前端接口规范**：历史契约，**已过时**，仅在核对某个字段来源时参考，不作为实现约束。
-6. `/home/yezisama/workspace/workflow/EDUagent/frontend/docs/requirements-coverage.md`为接口实现功能记录,可参考
+6. **`docs/requirements-coverage.md`**：接口实现功能记录，可参考。
+
 **不要用文档推翻实际运行代码的行为。如果文档和代码冲突，以代码为准，顺带在 WORKFLOW.md 记一笔。**
+
+> 注意：权威来源第1条（当前运行代码）判断的是实现逻辑和格式，而"以 UI 行为为真相"判断的是功能完成度。二者适用场景不同，不冲突。
 
 ---
 
@@ -56,18 +59,24 @@ This file applies to `frontend/`. Subdirectory AGENTS.md takes precedence if pre
 
 ### 架构重构指南 (Refactoring Directives)
 
-在进行新的 Spec 规划和代码修改时，必须主动对照以下核心痛点并予以解决：
-1. **理清后端与 Agent 边界**：明确核心业务 CRUD（后端）与大模型计算/逻辑编排（Agent）的职能界限，拒绝面条代码。
-2. **按业务模块重组目录**：前端需提取复用 Context/Hooks/Components，后端和 Agent 需采用合理的模块分层（Router/Service/Repository 等），拒绝大杂烩文件。
-3. **全局环境变量管理**：清理项目中到处乱飞的重复环境变量，收口到统一的配置读取模块。
-4. **虚拟环境与依赖收敛**：规范化 Python 和 Node 依赖，清理无用配置和冗余的虚拟环境残留。
-5. **引入现代最佳实践**：主动建议并落实 DRY、SOLID 原则，添加全局错误处理、统一日志、DTO 数据清洗等，不断提升代码可读性与健壮性。
+在进行新的 Spec 规划和代码修改时，AI 应将以下 5 项视为“大体重构方向”，自主发现在项目中违反这些方向的代码文件，针对性地输出单点设计文档后再执行重构：
+
+1. **整理目录**：审视前端、后端、Agent 的目录结构，消除臃肿的大文件（胖路由/胖组件），推行如 `Router -> Service -> DB` 等清晰的分层架构。
+2. **提取公共组件**：识别前端中散落的重复 UI 组件、重复的 Context/状态管理、冗余的 Axios API 请求逻辑，将其提取到统一的全局位置。
+3. **加测试**：任何核心逻辑的抽取和重构，必须补全或调整对应的单元测试（如后端 Pytest，前端 Playwright/Jest），保证重构后的稳定性。
+4. **清环境变量**：审查并清理前端、后端、Agent 中重复定义或过时的 `.env` 变量、配置飞线，以及冗余的虚拟环境与过期的依赖锁文件。
+5. **规范后端和 Agent 边界**：当前 Agent Service 不直接连接数据库，边界是清晰的。本方向的任务是**将现有边界契约文档化**（输出 Backend ↔ Agent 通信方式说明），并作为防范性约束：禁止未来在 Agent 侧引入直接数据库操作，所有持久化数据流必须经过后端标准接口。
+
+> **AI 行动指南**：`docs/superpowers/specs/2026-06-17-phase2-architecture-refactoring-master-plan.md` 提供了整体指导方针。AI 应以此方向为指引，**自行找出需要重构的目标文件**，写出具体的单步修复 Spec，**经用户确认后再执行**，而非直接动手。
+>
+> **架构选型判断（必做）**：在产出任何 Spec 之前，AI 必须主动判断当前痛点是否适合引入特定的系统架构或设计模式——例如：是否需要增加过滤器/中间件链来统一处理横切逻辑、是否应引入仓储层来隔离数据访问、是否适合用策略模式替换硬编码的条件分支、是否需要在分层架构中补齐缺失的 Service 层等。可参考的完整架构与模式清单见 master plan 附录，Spec 中须注明"选用 / 不选用"及原因。
 
 ### 数据真实性
 
 - 不允许 mock 数据、假数据、前端硬编码假字段
 - 数据库只用 MySQL
-- 不允许修改 `.env`、密钥文件、volume 数据
+- 不允许修改密钥文件、volume 数据
+- `.env` 相关的重构需经过 Spec 计划明确后方可操作整理，其余情况不允许修改
 
 ### 接口漂移处理
 
@@ -86,6 +95,8 @@ OpenAPI 已过时，不以它为强约束。但改动接口时：
 | 小修 | 1-2 个文件，局部字段/逻辑 | 直接修改，commit，记录 |
 | 中等 | 3-5 个文件，跨前后端联调 | 说明范围和影响，确认后修改 |
 | 大改 | 涉及数据结构/Agent/核心 service/多页面 | 先写 spec（`docs/superpowers/specs/`），走设计流程 |
+
+> **优先级规则**：凡涉及跨模块提取、前后端分离、环境清理等重构操作，无论文件数量多少，一律按"大改"流程处理，先写 Spec 再动手。
 
 ---
 
@@ -124,10 +135,10 @@ cd backend && python3 -m pytest tests/<相关测试文件> -v
 完成一个功能点后，在 `WORKFLOW.md` 末尾追加：日期、改了什么文件、核心改动、测试结果、是否有接口漂移。
 
 `docs/feature-ledger.md` 不要频繁更新，它已经偏移，更新它的收益低于维护成本。
-` /home/yezisama/workspace/workflow/EDUagent/frontend/docs/requirements-coverage.md`内部需要更新功能/接口实现记录
+`docs/requirements-coverage.md` 需要更新功能/接口实现记录。
+
 ---
 
 ## 禁止修改
 
 密钥文件 / 凭据文件 / MySQL volume 数据 / 用户上传文件 / 构建产物 / `node_modules` / 缓存目录
-*(注：环境变量 `.env` 相关的重构需经过 Spec 计划明确后方可操作整理)*

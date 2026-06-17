@@ -3,12 +3,7 @@ import { adminService } from '../../api/services/admin';
 import { getErrorMessage } from '../../utils/apiError';
 import Icon from '../Icon';
 
-const formatDateTime = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-};
+import { formatDateTime } from '../../utils/date';
 
 export default function RegistrationCodesPanel() {
   const [regCodes, setRegCodes] = useState([]);

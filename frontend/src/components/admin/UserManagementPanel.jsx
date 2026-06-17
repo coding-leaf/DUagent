@@ -4,12 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getErrorMessage } from '../../utils/apiError';
 import Icon from '../Icon';
 
-const formatDateTime = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-};
+import { formatDateTime } from '../../utils/date';
 
 export default function UserManagementPanel() {
   const { user } = useAuth();
@@ -34,7 +29,6 @@ export default function UserManagementPanel() {
         setUsers(res.data.users || []);
       }
     } catch (e) {
-      console.error(e);
       setUserActionError(getErrorMessage(e, '用户列表加载失败'));
     } finally {
       setLoadingUsers(false);
@@ -44,7 +38,7 @@ export default function UserManagementPanel() {
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchUsers();
-    }, 0);
+    }, 500); // 500ms 防抖
     return () => clearTimeout(timer);
   }, [fetchUsers]);
 
@@ -69,7 +63,6 @@ export default function UserManagementPanel() {
         setUserActionError(res.message || '停用用户失败');
       }
     } catch (e) {
-      console.error(e);
       setUserActionError(getErrorMessage(e, '停用用户失败'));
     } finally {
       setRemovingUserId(null);
@@ -101,7 +94,7 @@ export default function UserManagementPanel() {
 
   return (
     <>
-      <div className="animate-in fade-in duration-500">
+      <div className="animate-in fade-in duration-500 h-full flex flex-col">
         <div className="flex justify-between items-end mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 mb-1">用户管控</h1>

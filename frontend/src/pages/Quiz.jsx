@@ -63,6 +63,7 @@ export default function Quiz() {
       quiz_id: quizData.quiz_id,
       metadata: { source: 'quiz' }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCourseId, nodeId, quizData]);
 
   const handleAnswerChange = (nextAnswer) => {

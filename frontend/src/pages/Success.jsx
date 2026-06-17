@@ -25,7 +25,7 @@ export default function Success() {
             {/* Brand */}
             <div className="flex items-center space-x-xs mb-xl">
               <Icon name="hub" className="material-symbols-outlined text-primary-fixed" style={{ fontSize: '32px' }}/>
-              <h1 className="font-['Public_Sans'] text-2xl font-black tracking-tighter">数据结构智能助手</h1>
+              <h1 className="font-['Public_Sans'] text-2xl font-black tracking-tighter">智能学习助手</h1>
             </div>
 
             <div className="space-y-lg my-auto">
@@ -35,11 +35,11 @@ export default function Success() {
                   <span className="text-label-sm font-bold uppercase tracking-wider">多智能体学习系统</span>
                 </div>
                 <h2 className="font-h1 leading-tight text-3xl lg:text-4xl text-left">
-                  数据结构智能助手 <br />
+                  智能学习助手 <br />
                   <span className="text-primary-fixed">核心调度器</span>
                 </h2>
                 <p className="font-body-lg text-white/80 max-w-[448px] text-left text-sm lg:text-base">
-                  基于大模型的个性化资源生成与学习多智能体系统。探索数据结构的奥秘，由智能体引导的沉浸式学习体验。
+                  基于大模型的个性化资源生成与学习多智能体系统。探索知识的奥秘，由智能体引导的沉浸式学习体验。
                 </p>
               </div>
 
@@ -48,7 +48,7 @@ export default function Success() {
                 <div className="bg-white/10 backdrop-blur-md p-md rounded-xl border border-white/20 shadow-sm border-l-4 border-primary-fixed">
                   <Icon name="account_tree" className="material-symbols-outlined text-primary-fixed mb-2"/>
                   <h4 className="font-h3 text-sm font-bold mb-1">结构化解析</h4>
-                  <p className="text-label-sm text-white/70">利用多智能体协作，深度拆解复杂数据结构逻辑。</p>
+                  <p className="text-label-sm text-white/70">利用多智能体协作，深度拆解复杂知识逻辑。</p>
                 </div>
                 <div className="bg-white/10 backdrop-blur-md p-md rounded-xl border border-white/20 shadow-sm border-l-4 border-white/40">
                   <Icon name="auto_awesome" className="material-symbols-outlined text-white/60 mb-2"/>
@@ -77,7 +77,7 @@ export default function Success() {
           <div className="lg:hidden flex flex-col items-center mb-lg">
             <div className="flex items-center space-x-xs mb-2">
               <Icon name="hub" className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}/>
-              <h2 className="font-['Public_Sans'] text-xl font-black text-on-surface">数据结构智能助手</h2>
+              <h2 className="font-['Public_Sans'] text-xl font-black text-on-surface">智能学习助手</h2>
             </div>
             <p className="text-label-sm text-secondary uppercase tracking-widest text-xs">Multi-Agent Learning System</p>
           </div>
@@ -105,7 +105,7 @@ export default function Success() {
 
           {/* Footer Info */}
           <footer className="mt-xl text-center">
-            <p className="text-label-sm text-outline mb-xs text-xs">© 2024 数据结构智能助手 核心调度器. All rights reserved.</p>
+            <p className="text-label-sm text-outline mb-xs text-xs">© 2024 智能学习助手 核心调度器. All rights reserved.</p>
             <div className="flex justify-center space-x-md text-label-sm text-secondary font-medium text-xs">
               <a className="hover:text-primary transition-colors" href="#">隐私政策</a>
               <a className="hover:text-primary transition-colors" href="#">服务条款</a>

@@ -2,12 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminService } from '../../api/services/admin';
 import Icon from '../Icon';
 
-const formatDateTime = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-};
+import { getErrorMessage } from '../../utils/apiError';
+import { formatDateTime } from '../../utils/date';
 
 const getLogRows = (data) => data?.logs || data || [];
 
@@ -16,9 +12,11 @@ export default function SystemLogsPanel() {
   const [operationLogs, setOperationLogs] = useState([]);
   const [activeLogType, setActiveLogType] = useState('agent');
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsError, setLogsError] = useState('');
 
   const fetchLogs = useCallback(async () => {
     setLoadingLogs(true);
+    setLogsError('');
     try {
       const [agentRes, systemRes] = await Promise.all([
         adminService.getAgentLogs(),
@@ -31,7 +29,7 @@ export default function SystemLogsPanel() {
         setOperationLogs(getLogRows(systemRes.data));
       }
     } catch (e) {
-      console.error(e);
+      setLogsError(getErrorMessage(e, '加载日志失败'));
     } finally {
       setLoadingLogs(false);
     }
@@ -79,6 +77,12 @@ export default function SystemLogsPanel() {
         </button>
       </div>
 
+      {logsError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {logsError}
+        </div>
+      )}
+
       <div className="flex-1 bg-[#0f172a] rounded-xl border border-slate-800 shadow-xl overflow-hidden flex flex-col font-mono text-sm">
         <div className="flex items-center gap-2 px-4 py-3 bg-[#1e293b] border-b border-slate-800">
           <div className="w-3 h-3 rounded-full bg-red-500"></div>
@@ -94,7 +98,7 @@ export default function SystemLogsPanel() {
               {activeLogType === 'agent' ? '暂无 Agent 日志' : '暂无系统日志'}
             </div>
           ) : activeLogType === 'agent' ? (
-            agentLogs.map((log) => (
+            visibleLogs.map((log) => (
               <div key={`${log.timestamp}-${log.endpoint}-${log.agent_type}`} className="flex gap-4 hover:bg-white/5 p-1 rounded transition-colors group">
                 <span className="text-slate-500 flex-shrink-0 w-52">[{formatDateTime(log.timestamp)}]</span>
                 <span className={`font-bold flex-shrink-0 w-28 ${
@@ -112,7 +116,7 @@ export default function SystemLogsPanel() {
               </div>
             ))
           ) : (
-            operationLogs.map((log) => (
+            visibleLogs.map((log) => (
               <div key={`${log.timestamp}-${log.event_type}-${log.user_id || 'system'}`} className="flex gap-4 hover:bg-white/5 p-1 rounded transition-colors group">
                 <span className="text-slate-500 flex-shrink-0 w-52">[{formatDateTime(log.timestamp)}]</span>
                 <span className={`font-bold flex-shrink-0 w-32 ${

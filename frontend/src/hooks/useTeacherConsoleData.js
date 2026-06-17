@@ -60,5 +60,7 @@ export function useTeacherConsoleData(activeClass, { resourcePage = 1, resourceP
     resourcesLoading,
     resourcesError: resourcesError ? resourcesError.message || '学习资源加载失败' : null,
     refreshResources,
+    resourcesTotal: resourcesRes?.data?.total || 0,
+    resourcesTotalPages: resourcesRes?.data?.total_pages || 0,
   };
 }

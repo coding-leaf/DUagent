@@ -133,7 +133,7 @@ export function useLearningEffects(activeCourseId) {
     }
   };
 
-  const refreshFailed = refreshTask && terminalTaskStates.has(refreshTask.status) && refreshTask.status !== 'completed';
+  const refreshFailed = !!(refreshTask && terminalTaskStates.has(refreshTask.status) && refreshTask.status !== 'completed');
   const refreshFailureMessage = refreshTask?.error_message
     || (refreshTask?.error_code ? `错误码：${refreshTask.error_code}` : '')
     || '重新评估未完整完成，当前页面保留最近一次可用评估。';

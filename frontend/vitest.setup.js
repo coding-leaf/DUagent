@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { vi, expect } from 'vitest'
+import { vi } from 'vitest'
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -23,36 +23,38 @@ globalThis.ResizeObserver = class ResizeObserver {
   disconnect() {}
 }
 
-// Intercept vi.useFakeTimers to only apply fake timers for tests that need it (polling tests),
-// preventing SWR/waitFor from hanging on standard asynchronous fetch tests.
+// Track fake timers state globally
+let isFakeTimersActive = false;
 const originalUseFakeTimers = vi.useFakeTimers;
+const originalUseRealTimers = vi.useRealTimers;
+
 vi.useFakeTimers = function (options) {
-  const state = expect.getState();
-  const testName = state?.currentTestName || '';
-  if (testName.includes('triggers refresh')) {
-    const result = originalUseFakeTimers.call(this, options);
-    globalThis.requestAnimationFrame = (cb) => {
-      cb();
-      return 0;
-    };
-    return result;
-  }
-  // For other tests, bypass useFakeTimers
+  isFakeTimersActive = true;
+  const result = originalUseFakeTimers.call(this, options);
+  globalThis.requestAnimationFrame = (cb) => {
+    cb();
+    return 0;
+  };
+  return result;
 };
 
+vi.useRealTimers = function () {
+  isFakeTimersActive = false;
+  return originalUseRealTimers.call(this);
+};
+
+// Intercept @testing-library/react's waitFor to cleanly handle Vitest fake timers
 vi.mock('@testing-library/react', async (importOriginal) => {
   const original = await importOriginal();
   return {
     ...original,
     waitFor: async (callback, options) => {
-      const state = expect.getState();
-      const testName = state?.currentTestName || '';
-      if (testName.includes('triggers refresh')) {
-        vi.useRealTimers();
+      if (isFakeTimersActive) {
+        originalUseRealTimers();
         try {
           return await original.waitFor(callback, options);
         } finally {
-          vi.useFakeTimers();
+          originalUseFakeTimers();
         }
       }
       return original.waitFor(callback, options);

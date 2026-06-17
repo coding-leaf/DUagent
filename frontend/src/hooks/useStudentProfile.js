@@ -1,15 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { profileService } from '../api/services/profile';
 import { taskService } from '../api/services/task';
-
-const fetcherWrapper = async (promise) => {
-  const res = await promise;
-  if (res.code !== 200 && res.code !== 202) {
-    throw new Error(res.message || '请求失败');
-  }
-  return res;
-};
+import { fetcherWrapper } from '../utils/fetcher';
 
 export function useStudentProfile(activeCourseId) {
   const [refreshTask, setRefreshTask] = useState(null);
@@ -24,26 +17,37 @@ export function useStudentProfile(activeCourseId) {
 
   // Task Polling with SWR (Only polls when refreshTask is active and processing)
   const isPolling = refreshTask?.status === 'processing';
-  useSWR(
+  const { data: taskRes, error: taskError } = useSWR(
     isPolling && refreshTask?.task_id ? ['profileTask', refreshTask.task_id] : null,
     () => fetcherWrapper(taskService.getTaskStatus(refreshTask.task_id)),
     {
       refreshInterval: (data) => {
         const status = data?.data?.status;
         return (status === 'completed' || status === 'failed' || status === 'partial') ? 0 : 2000;
-      },
-      onSuccess: (res) => {
-        const status = res.data?.status || 'processing';
-        setRefreshTask(prev => ({ ...prev, status, error_message: res.data?.error_message }));
-        if (status === 'completed') {
-          mutateProfile(); // Refresh profile when task completes
-        }
-      },
-      onError: (err) => {
-        setRefreshTask({ status: 'failed', error_message: err.message });
       }
     }
   );
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (taskRes?.data) {
+      const status = taskRes.data.status || 'processing';
+      setRefreshTask(prev => {
+        // Prevent unnecessary state updates if status hasn't changed to completion/failure
+        if (prev?.status === status && !taskRes.data.error_message) return prev;
+        return { ...prev, status, error_message: taskRes.data.error_message };
+      });
+      if (status === 'completed') {
+        mutateProfile(); // Refresh profile when task completes
+      }
+    } else if (taskError) {
+      setRefreshTask(prev => {
+        if (prev?.status === 'failed') return prev;
+        return { status: 'failed', error_message: taskError.message };
+      });
+    }
+  }, [taskRes, taskError, mutateProfile]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleProfileRefresh = async () => {
     if (!activeCourseId || isPolling) return;

@@ -1,19 +1,12 @@
 import useSWR from 'swr';
 import { teachingService } from '../api/services/teaching';
 import { learningService } from '../api/services/learning';
-
-const fetcherWrapper = async (promise) => {
-  const res = await promise;
-  if (res.code !== 200) {
-    throw new Error(res.message || '请求失败');
-  }
-  return res;
-};
+import { fetcherWrapper } from '../utils/fetcher';
 
 export function useTeacherConsoleData(activeClass, { resourcePage = 1, resourcePageSize = 50 } = {}) {
   // Fetch classes
   const { data: classesRes, error: classesError, mutate: refreshClasses, isLoading: classesLoading } = useSWR(
-    ['teachingClasses'],
+    ['api', 'teaching', 'classes'],
     () => fetcherWrapper(teachingService.getClasses())
   );
   

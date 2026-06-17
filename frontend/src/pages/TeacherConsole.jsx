@@ -15,6 +15,7 @@ export default function TeacherConsole() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const roleLabelMap = { teacher: '教师', admin: '管理员' };
+  const isMockMode = import.meta.env.VITE_USE_MOCK === 'true';
   const [activeClass, setActiveClass] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [pendingCreatedClassId, setPendingCreatedClassId] = useState(null);
@@ -48,13 +49,14 @@ export default function TeacherConsole() {
   useEffect(() => {
     if (classes.length > 0 && !activeClass) {
       if (pendingCreatedClassId && classes.some(c => c.id === pendingCreatedClassId)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        /* eslint-disable react-hooks/set-state-in-effect */
         setActiveClass(pendingCreatedClassId);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPendingCreatedClassId(null);
+        /* eslint-enable react-hooks/set-state-in-effect */
       } else {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        /* eslint-disable react-hooks/set-state-in-effect */
         setActiveClass(classes[0].id);
+        /* eslint-enable react-hooks/set-state-in-effect */
       }
     }
   }, [classes, activeClass, pendingCreatedClassId]);
@@ -180,6 +182,7 @@ export default function TeacherConsole() {
             studentsError={studentsError}
             students={students}
             navigate={navigate}
+            isMockMode={isMockMode}
           />
 
           {/* Class Statistics Section */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStudentProfile } from '../hooks/useStudentProfile';
 import { useNavigate } from 'react-router-dom';
 import { profileService } from '../api/services/profile';
@@ -14,33 +14,33 @@ import ModalityPreferenceCard from '../components/profile/ModalityPreferenceCard
 import GuidanceLevelCard from '../components/profile/GuidanceLevelCard';
 import KnowledgeRadarCard from '../components/profile/KnowledgeRadarCard';
 import LearningStateCard from '../components/profile/LearningStateCard';
+import { PROFILE_VALUE_LABELS, PROFILE_EMPTY_TEXT } from '../constants/profile';
 
-const PROFILE_VALUE_LABELS = {
-  exam_sprint: '备考冲刺',
-  daily_homework: '课后巩固',
-  casual: '兴趣拓展',
-  video_animation: '视频动画',
-  chart_logic: '图表逻辑',
-  text_analysis: '文本解析',
-  code_practice: '代码实操',
-  formula_derivation: '公式推导',
-  L1: '启发点拨',
-  L2: '分步伴学',
-  L3: '详细讲解',
-  starter: '入门起步',
-  steady: '稳步提升',
-  advanced: '进阶掌握',
-  excellent: '表现优秀',
-  active: '稳定学习',
-  focused: '高频投入',
+const isOpaqueId = (value) => (
+  typeof value === 'string' && /^[a-f0-9]{16,32}$/i.test(value)
+);
+
+const labelValue = (value) => PROFILE_VALUE_LABELS[value] || value;
+
+const formatProfileTextValue = (value) => {
+  if (typeof value !== 'string') return labelValue(value);
+  const parts = value
+    .split(/[、,/]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return labelValue(value);
+  return parts.map(labelValue).join('、');
 };
 
-const PROFILE_EMPTY_TEXT = {
-  weak_points: '暂无错题或评测记录',
-  knowledge_progress: '暂无评测记录',
-  discipline: '暂无连续学习记录',
-  learning_habits: '暂无学习记录',
-};
+const sourceLabel = (source) => ({
+  profile_dialogue: '个人补充',
+  system_profile: '系统分析',
+  resource_usage: '学习行为',
+  evaluation: '评测结果',
+  activity: '学习记录',
+  system_pending: '数据不足',
+  kg_quiz_activity: '图谱+行为',
+}[source] || source || '未知来源');
 
 export default function StudentProfile() {
   const navigate = useNavigate();
@@ -94,6 +94,70 @@ export default function StudentProfile() {
     }
   }, [user?.guidance_level]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const courseNameById = useCallback((courseId) => courses.find(c => c.id === courseId)?.name || '', [courses]);
+  const currentCourseName = courses.find(c => c.id === activeCourseId)?.name || '未选择';
+
+  const daysAgoText = useCallback((iso, suffix) => {
+    if (!iso) return null;
+    const diff = now - new Date(iso).getTime();
+    const days = Math.floor(diff / 86400000);
+    return days === 0 ? `今天${suffix}` : `${days} 天前${suffix}`;
+  }, [now]);
+
+  const displayCourseSubject = useCallback((subject) => {
+    if (!subject) return '';
+    if (subject === activeCourseId) return currentCourseName;
+    const matchedCourseName = courseNameById(subject);
+    if (matchedCourseName) return matchedCourseName;
+    return isOpaqueId(subject) ? '' : subject;
+  }, [activeCourseId, currentCourseName, courseNameById]);
+
+  const formatDisciplineDimension = useCallback((value) => {
+    if (!value || typeof value !== 'object') return PROFILE_EMPTY_TEXT.discipline;
+
+    const parts = [];
+    const subject = displayCourseSubject(value.subject);
+    const level = labelValue(value.level);
+    const streakDays = Number(value.streak_days || 0);
+
+    if (level) parts.push(`状态：${level}`);
+    if (subject) parts.push(`课程：${subject}`);
+    if (streakDays > 0) parts.push(`连续学习 ${streakDays} 天`);
+
+    return parts.join(' · ') || PROFILE_EMPTY_TEXT.discipline;
+  }, [displayCourseSubject]);
+
+  const formatDimensionValue = useCallback((value, key) => {
+    if (key === 'discipline') return formatDisciplineDimension(value);
+    
+    if (key === 'knowledge_progress' && value && typeof value === 'object') {
+      return `已掌握 ${value.mastered_nodes || 0}/${value.total_nodes || 0}，薄弱 ${value.weak_nodes || 0} 个，待练习 ${value.pending_nodes || 0} 个`;
+    }
+    
+    if (key === 'learning_habits') {
+      if (!value || typeof value !== 'object' || Object.keys(value).length === 0) {
+        return PROFILE_EMPTY_TEXT.learning_habits;
+      }
+      const labelMap = { new: '新生', inactive: '不活跃', sprint: '突击', stable: '稳定', casual: '随性' };
+      const label = labelMap[value.label] || value.label || '暂无学习记录';
+      return `状态：${label} · 习惯分：${value.score || 0}`;
+    }
+
+    if (key === 'knowledge_progress' && !value) return PROFILE_EMPTY_TEXT.knowledge_progress;
+
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).map(labelValue).join('、') || PROFILE_EMPTY_TEXT[key] || '待补充';
+    }
+    if (value && typeof value === 'object') {
+      const meaningful = Object.entries(value)
+        .filter(([, itemValue]) => itemValue !== '' && itemValue !== null && itemValue !== undefined)
+        .map(([itemKey, itemValue]) => `${itemKey}: ${labelValue(itemValue)}`);
+      return meaningful.join(' / ') || PROFILE_EMPTY_TEXT[key] || '待补充';
+    }
+    if (value === 0) return '0';
+    return formatProfileTextValue(value) || PROFILE_EMPTY_TEXT[key] || '待补充';
+  }, [formatDisciplineDimension]);
 
   if (!activeCourseId) {
     return (
@@ -171,8 +235,7 @@ export default function StudentProfile() {
   const displayInitial = (user?.real_name || user?.username || '学').charAt(0);
 
   // 当前课程名：从 CourseContext 按 activeCourseId 查找
-  const currentCourseName = courses.find(c => c.id === activeCourseId)?.name || '未选择';
-  const courseNameById = (courseId) => courses.find(c => c.id === courseId)?.name || '';
+
   const profileFields = [
     { label: '学号 / 工号', value: user?.student_id || '未填写' },
     { label: '专业', value: user?.major || '未填写' },
@@ -180,41 +243,13 @@ export default function StudentProfile() {
     { label: '引导粒度', value: user?.guidance_level || localGuidanceLevel || 'L2' },
   ];
 
-  // 相对时间格式化
-  const daysAgoText = (iso, suffix) => {
-    if (!iso) return null;
-    const diff = now - new Date(iso).getTime();
-    const days = Math.floor(diff / 86400000);
-    return days === 0 ? `今天${suffix}` : `${days} 天前${suffix}`;
-  };
+
 
   const guidanceUpdatedText = guidance_level.updated_at
     ? daysAgoText(guidance_level.updated_at, '')
     : null;
 
-  const isOpaqueId = (value) => (
-    typeof value === 'string' && /^[a-f0-9]{16,32}$/i.test(value)
-  );
 
-  const labelValue = (value) => PROFILE_VALUE_LABELS[value] || value;
-
-  const formatProfileTextValue = (value) => {
-    if (typeof value !== 'string') return labelValue(value);
-    const parts = value
-      .split(/[、,/]/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (parts.length <= 1) return labelValue(value);
-    return parts.map(labelValue).join('、');
-  };
-
-  const displayCourseSubject = (subject) => {
-    if (!subject) return '';
-    if (subject === activeCourseId) return currentCourseName;
-    const matchedCourseName = courseNameById(subject);
-    if (matchedCourseName) return matchedCourseName;
-    return isOpaqueId(subject) ? '' : subject;
-  };
 
   const disciplineBadgeView = {
     subject: displayCourseSubject(discipline_badge.subject),
@@ -244,61 +279,11 @@ export default function StudentProfile() {
     }
   };
 
-  const formatDisciplineDimension = (value) => {
-    if (!value || typeof value !== 'object') return PROFILE_EMPTY_TEXT.discipline;
 
-    const parts = [];
-    const subject = displayCourseSubject(value.subject);
-    const level = labelValue(value.level);
-    const streakDays = Number(value.streak_days || 0);
 
-    if (level) parts.push(`状态：${level}`);
-    if (subject) parts.push(`课程：${subject}`);
-    if (streakDays > 0) parts.push(`连续学习 ${streakDays} 天`);
 
-    return parts.join(' · ') || PROFILE_EMPTY_TEXT.discipline;
-  };
 
-  const formatDimensionValue = (value, key) => {
-    if (key === 'discipline') return formatDisciplineDimension(value);
-    
-    if (key === 'knowledge_progress' && value && typeof value === 'object') {
-      return `已掌握 ${value.mastered_nodes || 0}/${value.total_nodes || 0}，薄弱 ${value.weak_nodes || 0} 个，待练习 ${value.pending_nodes || 0} 个`;
-    }
-    
-    if (key === 'learning_habits') {
-      if (!value || typeof value !== 'object' || Object.keys(value).length === 0) {
-        return PROFILE_EMPTY_TEXT.learning_habits;
-      }
-      const labelMap = { new: '新生', inactive: '不活跃', sprint: '突击', stable: '稳定', casual: '随性' };
-      const label = labelMap[value.label] || value.label || '暂无学习记录';
-      return `状态：${label} · 习惯分：${value.score || 0}`;
-    }
 
-    if (key === 'knowledge_progress' && !value) return PROFILE_EMPTY_TEXT.knowledge_progress;
-
-    if (Array.isArray(value)) {
-      return value.filter(Boolean).map(labelValue).join('、') || PROFILE_EMPTY_TEXT[key] || '待补充';
-    }
-    if (value && typeof value === 'object') {
-      const meaningful = Object.entries(value)
-        .filter(([, itemValue]) => itemValue !== '' && itemValue !== null && itemValue !== undefined)
-        .map(([itemKey, itemValue]) => `${itemKey}: ${labelValue(itemValue)}`);
-      return meaningful.join(' / ') || PROFILE_EMPTY_TEXT[key] || '待补充';
-    }
-    if (value === 0) return '0';
-    return formatProfileTextValue(value) || PROFILE_EMPTY_TEXT[key] || '待补充';
-  };
-
-  const sourceLabel = (source) => ({
-    profile_dialogue: '个人补充',
-    system_profile: '系统分析',
-    resource_usage: '学习行为',
-    evaluation: '评测结果',
-    activity: '学习记录',
-    system_pending: '数据不足',
-    kg_quiz_activity: '图谱+行为',
-  }[source] || source || '未知来源');
 
   const handleGoalChange = async (goalType) => {
     if (goalSubmitting) return;

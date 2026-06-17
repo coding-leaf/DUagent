@@ -1,15 +1,14 @@
 import Icon from '../Icon';
 import FeedbackStatus from '../FeedbackStatus';
 
-const useMock = import.meta.env.VITE_USE_MOCK === 'true';
-
 export default function StudentMonitoringSection({
   activeClassInfo,
   activeClass,
   studentsLoading,
   studentsError,
   students,
-  navigate
+  navigate,
+  isMockMode
 }) {
   return (
     <section className="mb-margin">
@@ -61,7 +60,7 @@ export default function StudentMonitoringSection({
                       <p className="text-[10px] text-outline">ID: {student.student_id}</p>
                     </div>
                   </div>
-                  {useMock ? (
+                  {isMockMode ? (
                     <>
                       <div className="w-32">
                         <span className="px-2.5 py-1 bg-surface-container text-on-surface-variant text-[11px] font-medium rounded border border-outline-variant/30">

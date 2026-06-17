@@ -14,9 +14,10 @@ Our `package.json` already includes `swr` (v2.4.1). Therefore, we will strictly 
 
 ### 3.1 Data Fetching Layer (SWR)
 We will extract the fetching logic into a custom hook `useStudentReport.js`:
-- Use `useSWR` to fetch `teachingService.getStudentReport(classId, studentId)`.
-- SWR key: `['studentReport', classId, studentId]`.
-- Return `{ reportData, isLoading, error }` directly to the container.
+- Define a conditional SWR key to avoid unintentional localStorage fallback in the backend service:
+  `const key = classId && studentId ? ['studentReport', classId, studentId] : null;`
+- Use `useSWR(key, ([, cid, sid]) => teachingService.getStudentReport(cid, sid))`.
+- Return `{ reportData: data?.data, isLoading, error }` directly to the container.
 
 ### 3.2 Avatar Placeholder Resolution
 Remove the hardcoded `<img>` tag pointing to `lh3.googleusercontent.com`.
@@ -34,7 +35,10 @@ Create the following pure UI components inside `src/components/report/`:
 3. `QuizStatsMetrics.jsx`: The "Online Quiz Stats" card.
 4. `PathProgressCard.jsx`: The "Path Progress" card.
 5. `ModalityPreferenceCard.jsx`: The "Modal Preference" card.
-6. `KnowledgeGrid.jsx`: The details section containing "Knowledge Coordinates", "Mastery Breakdown", "Weak Points", and "Recent Activity".
+6. `KnowledgeCoordinatesCard.jsx`: Displays the "Knowledge Coordinates" data grid.
+7. `MasteryBreakdownCard.jsx`: Displays the "Mastery Breakdown" progress bars.
+8. `WeakPointsCard.jsx`: Displays the "Weak Points" tag cloud.
+9. `RecentActivityCard.jsx`: Displays the "Recent Activity" list.
 
 ### 3.4 Thin Container Refactoring
 `TeacherStudentReport.jsx` will be stripped of all logic and inline JSX. It will:

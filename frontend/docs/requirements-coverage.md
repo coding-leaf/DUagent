@@ -75,7 +75,7 @@
 | 编号 | 功能 | 状态 | 前端入口 | 说明 |
 |------|------|------|----------|------|
 | ai0401 | 多类型资源库页生成 | ✅ 已实现 | `Dashboard.jsx` + `ResourceDetail.jsx` + `AdminConsole.jsx` | 资源库支持 5 种类型：文档/思维导图/阅读/代码/视频；Dashboard 可按类型筛选和搜索；ResourceDetail 按类型渲染（Mermaid 图表、代码高亮、视频内嵌）；Admin 侧有触发生成和管理入口 |
-| ai0402 | 个性化资源生成 | ❌ 未实现（设计已完成） | 无（待实现：`PersonalizedResources.jsx`） | 设计文档：`docs/superpowers/specs/2026-06-16-personalized-resources-design.md`。两条路径：①答题正确率<60%自动提示→错题触发quiz生成；②个性化资源页手动引导式表单生成（quiz/resource任选）。新建表 `user_personalized_resources(user_id, course_id, resource_id/question_id, source_type)`，新接口 `GET/POST /api/v1/personalized-resources`，独立页面+Sidebar入口。Agent侧无需改动，复用现有生成接口。 |
+| ai0402 | 个性化资源生成 | ✅ 已实现 | `PersonalizedResources.jsx` | 答题正确率<60%自动提示或错题触发生成；支持手动引导式表单生成（支持 Quiz/Resource）。通过独立页面与全局侧边栏入口进行展示。 |
 
 ### 智能辅导 ai05
 
@@ -90,11 +90,11 @@
 
 | 状态 | 数量 | 功能编号 |
 |------|------|---------|
-| ✅ 已实现 | 13 | jc0101、jc0102、jc0104、jc0201、jc0202、jc0203、ai0101、ai0102、ai0104、ai0201、ai0301、ai0302、ai0401、ai0501、ai0502 |
+| ✅ 已实现 | 14 | jc0101、jc0102、jc0104、jc0201、jc0202、jc0203、ai0101、ai0102、ai0104、ai0201、ai0301、ai0302、ai0401、ai0402、ai0501、ai0502 |
 | ⚠️ 部分实现 | 4 | jc0103、jc0301、jc0302、ai0103 |
-| ❌ 未实现（设计已完成） | 1 | ai0402（个性化资源）|
+| ❌ 未实现（设计已完成） | 0 | 无 |
 
-> 注：ai0501 和 ai0502 合计 2 项，总共 18 个功能点（含新增 ai0402），无完全未定义项。
+> 注：ai0501 和 ai0502 合计 2 项，总共 18 个功能点，无完全未定义项。
 
 ---
 

@@ -25,7 +25,7 @@ export function useStudentProfile(activeCourseId) {
   // Task Polling with SWR (Only polls when refreshTask is active and processing)
   const isPolling = refreshTask?.status === 'processing';
   useSWR(
-    isPolling ? ['profileTask', refreshTask.task_id] : null,
+    isPolling && refreshTask?.task_id ? ['profileTask', refreshTask.task_id] : null,
     () => fetcherWrapper(taskService.getTaskStatus(refreshTask.task_id)),
     {
       refreshInterval: (data) => {
@@ -38,6 +38,9 @@ export function useStudentProfile(activeCourseId) {
         if (status === 'completed') {
           mutateProfile(); // Refresh profile when task completes
         }
+      },
+      onError: (err) => {
+        setRefreshTask({ status: 'failed', error_message: err.message });
       }
     }
   );

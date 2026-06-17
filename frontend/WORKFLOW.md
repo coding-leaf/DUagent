@@ -961,3 +961,10 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - **核心改动**: 根据 Phase 2 重构方针，以 `catalogs.py` 为试点推进三层架构。搭建了基于 FastAPI 生命周期拦截的 `DomainException` 异常处理框架；创建了 `CatalogService` 承载数据库底层查询（分离 Controller 与 Service）；彻底移除了长达数千行的路由文件中混杂的辅助函数 `_get_admin_catalog_or_404`，完成全量替换。
 - **测试结果**: TDD 测试用例编写及语法通过，Code Review 审查代码一致性通过，无潜在故障点。
 - **是否有接口漂移**: 无（只做架构解耦，不影响外部调用的接口协议）。
+
+### 2026-06-18 (前端 LearningEffects 页面展示与容器分离重构完成)
+- **改了什么文件**: `src/pages/LearningEffects.jsx`, `src/hooks/useLearningEffects.js`, `src/hooks/__tests__/useLearningEffects.test.js`, `src/components/effects/EffectsOverviewCards.jsx`, `src/components/effects/EffectsSummaryCard.jsx`, `src/components/effects/MasteryDistributionCard.jsx`, `src/components/effects/KnowledgeProgressTable.jsx`
+- **核心改动**: 根据 Phase 2 重构方针，将 `LearningEffects.jsx` 中的逻辑状态、评估任务双 SWR 轮询与派生状态计算逻辑完整抽取为 `useLearningEffects` 自定义 Hook；将展现 UI 拆分为 `EffectsOverviewCards`、`EffectsSummaryCard`、`MasteryDistributionCard` 与 `KnowledgeProgressTable` 4 个展示性组件，`LearningEffects.jsx` 仅作为容器组装。
+- **测试结果**: Hook 单元测试通过，Vite 生产构建成功，Vite / ESLint 零报错。
+- **是否有接口漂移**: 无。
+

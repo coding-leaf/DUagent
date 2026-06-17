@@ -74,7 +74,7 @@ export default function Quiz() {
   return (
     <div className="bg-surface text-on-surface font-body-md min-h-screen">
       <QuizSidebar 
-        difficulty={currentQuestion.difficulty}
+        difficulty={difficultyLabel}
         knowledgePoint={currentKnowledgePoint}
         questionTypeLabel={getQuestionTypeLabel(currentQuestion.type)}
       />

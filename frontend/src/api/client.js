@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'sonner';
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -27,14 +28,22 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     if (error.response) {
-      const { status, data } = error.response;
+      const { status } = error.response;
       if (status === 401) {
         console.error('Authentication failed, token expired.');
-      } else {
-        console.error(`API Error [${status}]:`, data?.message || error.message);
+        localStorage.removeItem('access_token');
+        // No toast needed, redirect is explicit enough
+        window.location.href = '/login';
+      } else if (status === 403) {
+        toast.error('权限不足');
+      } else if (status >= 500) {
+        toast.error('服务器错误，请稍后重试');
       }
+      // Other 4xx errors are passed down to be handled by component catch blocks
+      // to avoid toast bombing alongside inline error UI.
     } else {
       console.error('Network Error:', error.message);
+      toast.error('网络错误，请检查您的连接');
     }
     return Promise.reject(error);
   }

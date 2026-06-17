@@ -11,6 +11,7 @@ TUTOR_REACT_SYSTEM_PROMPT = (
     "完成时，把面向学生的讲解放入 model_text，本轮知识点放入 knowledge_points，"
     "下一步学习建议放入 suggestion；涉及数据结构操作或复杂逻辑流程时，"
     "diagram 给出 Mermaid 语法代码，否则留空。"
+    "【重要限制】Mermaid 如果用到 subgraph，必须使用标准格式 `subgraph ID [\"标题文本\"]`，严禁在 subgraph 标题声明处直接写空格或特殊符号。"
 )
 
 

@@ -10,7 +10,7 @@ const fetcherWrapper = async (promise) => {
   return res;
 };
 
-export function useTeacherConsoleData(activeClass) {
+export function useTeacherConsoleData(activeClass, { resourcePage = 1, resourcePageSize = 50 } = {}) {
   // Fetch classes
   const { data: classesRes, error: classesError, mutate: refreshClasses, isLoading: classesLoading } = useSWR(
     ['teachingClasses'],
@@ -20,7 +20,7 @@ export function useTeacherConsoleData(activeClass) {
   const classes = classesRes?.data || [];
 
   // Fetch students for active class
-  const { data: studentsRes, error: studentsError, isLoading: studentsLoading } = useSWR(
+  const { data: studentsRes, error: studentsError, mutate: refreshStudents, isLoading: studentsLoading } = useSWR(
     activeClass ? ['classStudents', activeClass] : null,
     () => fetcherWrapper(teachingService.getClassStudents(activeClass))
   );
@@ -28,7 +28,7 @@ export function useTeacherConsoleData(activeClass) {
   const students = studentsRes?.data || [];
 
   // Fetch insights
-  const { data: insightsRes, error: insightsError, isLoading: insightsLoading } = useSWR(
+  const { data: insightsRes, error: insightsError, mutate: refreshInsights, isLoading: insightsLoading } = useSWR(
     activeClass ? ['classInsights', activeClass] : null,
     () => fetcherWrapper(teachingService.getConsoleInsights(activeClass))
   );
@@ -36,9 +36,9 @@ export function useTeacherConsoleData(activeClass) {
   const insights = insightsRes?.data || null;
 
   // Fetch resources
-  const { data: resourcesRes, error: resourcesError, isLoading: resourcesLoading } = useSWR(
-    activeClass ? ['classResources', activeClass] : null,
-    () => fetcherWrapper(learningService.getResources({ course_id: activeClass, page: 1, page_size: 50 }))
+  const { data: resourcesRes, error: resourcesError, mutate: refreshResources, isLoading: resourcesLoading } = useSWR(
+    activeClass ? ['classResources', activeClass, resourcePage, resourcePageSize] : null,
+    () => fetcherWrapper(learningService.getResources({ course_id: activeClass, page: resourcePage, page_size: resourcePageSize }))
   );
 
   const resources = resourcesRes?.data?.resources || [];
@@ -46,16 +46,19 @@ export function useTeacherConsoleData(activeClass) {
   return {
     classes,
     classesLoading,
-    classesError: classesError ? '教学班加载失败' : null,
+    classesError: classesError ? classesError.message || '教学班加载失败' : null,
     refreshClasses,
     students,
     studentsLoading,
-    studentsError: studentsError ? '学生列表加载失败' : null,
+    studentsError: studentsError ? studentsError.message || '学生列表加载失败' : null,
+    refreshStudents,
     insights,
     insightsLoading,
-    insightsError: insightsError ? '班级统计加载失败' : null,
+    insightsError: insightsError ? insightsError.message || '班级统计加载失败' : null,
+    refreshInsights,
     resources,
     resourcesLoading,
-    resourcesError: resourcesError ? '学习资源加载失败' : null,
+    resourcesError: resourcesError ? resourcesError.message || '学习资源加载失败' : null,
+    refreshResources,
   };
 }

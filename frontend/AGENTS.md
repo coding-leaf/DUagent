@@ -51,6 +51,19 @@ This file applies to the full EDUagent project (frontend / backend / agent_servi
 - Agent 能力存在但数据没有流到页面 → 不算完成
 - 字段在 OpenAPI 里定义了但前端显示是空或错的 → 没意义
 
+### 优先复用，避免重造 (Reuse-First Principle)
+
+在实现任何非业务专属逻辑前，**必须先评估是否已有成熟方案**：
+
+- **状态管理与数据获取**：轮询、缓存、乐观更新、请求去重——优先考虑 SWR / React Query，而非手写 `useEffect`
+- **工具函数**：日期、深拷贝、防抖节流——优先用 `dayjs` / `lodash-es`，而非手写
+- **UI 交互模式**：拖拽、虚拟滚动、复杂表单——先查 Headless UI / Radix 是否覆盖
+
+**评估标准**：引入一个库的收益（正确性、可维护性）是否超过其成本（bundle 体积、学习曲线、依赖风险）。
+
+> 反例：手写 `setInterval` 轮询时忘记 cleanup 导致内存泄漏；手写深拷贝遗漏 `Date`/`Map` 类型。
+> 正例：用 React Query 的 `refetchInterval: (data) => data?.done ? false : 2000` 替代 30 行脆弱的 `pollTask`。
+
 ### 计划驱动的重构原则 (Plan-Driven Refactoring)
 
 **已废除绝对的“最小修改原则”**。由于进入重构阶段，Agent 在发现代码坏味道、反模式或耦合过深时，**必须主动提出重构**。
@@ -71,6 +84,7 @@ This file applies to the full EDUagent project (frontend / backend / agent_servi
 >
 > **架构选型判断（必做）**：在产出任何 Spec 之前，AI 必须主动判断当前痛点是否适合引入特定的系统架构或设计模式——例如：是否需要增加过滤器/中间件链来统一处理横切逻辑、是否应引入仓储层来隔离数据访问、是否适合用策略模式替换硬编码的条件分支、是否需要在分层架构中补齐缺失的 Service 层等。可参考的完整架构与模式清单见 master plan 附录，Spec 中须注明"选用 / 不选用"及原因。
 
+> 
 ### 数据真实性
 
 - 不允许 mock 数据、假数据、前端硬编码假字段

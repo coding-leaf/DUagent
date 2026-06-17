@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_role
 from app.core.security import hash_password
 from app.models.others import AgentLog, OperationLog
-from app.models.user import User
-from app.schemas.admin import AdminUpdateUserRequest
+from app.models.user import RegistrationCode, User
+from app.schemas.admin import AdminUpdateUserRequest, CreateRegistrationCodeRequest
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -232,3 +234,78 @@ async def operation_logs(
             "page_size": page_size,
         },
     }
+
+
+@router.get("/registration-codes")
+async def list_registration_codes(
+    role: str = Query(None),
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(RegistrationCode).where(RegistrationCode.is_deleted == False)
+    if role:
+        query = query.where(RegistrationCode.role == role)
+    query = query.order_by(RegistrationCode.create_time.desc())
+    result = await db.execute(query)
+    codes = result.scalars().all()
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "codes": [
+                {
+                    "id": c.id,
+                    "code": c.code,
+                    "role": c.role,
+                    "create_time": c.create_time.isoformat() if c.create_time else "",
+                }
+                for c in codes
+            ]
+        },
+    }
+
+
+@router.post("/registration-codes", status_code=201)
+async def create_registration_code(
+    req: CreateRegistrationCodeRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    code = secrets.token_urlsafe(8)
+    rc = RegistrationCode(code=code, role=req.role, create_by=current_user.id)
+    db.add(rc)
+    await db.flush()
+    await db.refresh(rc)
+    return {
+        "code": 201,
+        "message": "created",
+        "data": {
+            "id": rc.id,
+            "code": rc.code,
+            "role": rc.role,
+            "create_time": rc.create_time.isoformat() if rc.create_time else "",
+        },
+    }
+
+
+@router.delete("/registration-codes/{code_id}")
+async def revoke_registration_code(
+    code_id: str,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(RegistrationCode).where(
+            RegistrationCode.id == code_id,
+            RegistrationCode.is_deleted == False,
+        )
+    )
+    rc = result.scalar_one_or_none()
+    if rc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "注册码不存在", "data": None},
+        )
+    rc.is_deleted = True
+    await db.flush()
+    return {"code": 200, "message": "success", "data": {}}

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path, PurePosixPath
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
+from agent_service.core.config import settings
 from agent_service.schemas.knowledge import (
     KnowledgeIngestionAcceptedResponse,
     KnowledgeIngestionMaterialResult,
@@ -17,7 +17,6 @@ from agent_service.tools.ingest_knowledge import ingest_course_knowledge
 
 router = APIRouter(prefix="/knowledge")
 _SUPPORTED_SUFFIXES = {".txt", ".md", ".pdf"}
-_DEFAULT_STORAGE_ROOT = "storage/course_catalogs"
 
 
 @router.post(
@@ -88,7 +87,7 @@ async def create_knowledge_ingestion(
 
 
 def _storage_root() -> Path:
-    return Path(os.environ.get("COURSE_CATALOG_STORAGE_ROOT", _DEFAULT_STORAGE_ROOT)).resolve()
+    return Path(settings.COURSE_CATALOG_STORAGE_ROOT).resolve()
 
 
 def _resolve_material_path(storage_uri: str, storage_root: Path) -> Path:

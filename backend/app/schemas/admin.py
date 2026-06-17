@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -11,3 +11,7 @@ class AdminUpdateUserRequest(BaseModel):
     major: Optional[str] = None
     grade: Optional[str] = None
     new_password: Optional[str] = None
+
+
+class CreateRegistrationCodeRequest(BaseModel):
+    role: Literal["student", "teacher"]

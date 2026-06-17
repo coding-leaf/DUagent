@@ -22,29 +22,39 @@ This design is strictly scoped to:
   - The child components will invoke these callbacks with the appropriate IDs.
 
 ### 3.2 Resolving HIGH-3: Frontend Pagination & Searching
-- **Problem**: `StudentMonitoringSection` has hardcoded UI for search and pagination (e.g., "42名学生中展示 14名") which does nothing.
+- **Problem**: `StudentMonitoringSection` has hardcoded UI for search and pagination (e.g., "42名学生中展示 14名") which does nothing. It also has a non-functional refresh button.
 - **Solution**: 
-  - Since the backend API (`getClassStudents`) returns the full list of students without pagination parameters, we will perform data manipulation in the frontend container.
+  - **Constants**: Define `STUDENT_PAGE_SIZE = 14` outside the component lifecycle (at the top of the file or in `src/constants/`).
   - **State in `TeacherConsole`**:
     - `studentSearchQuery` (string, default `""`)
     - `studentCurrentPage` (number, default `1`)
-  - **Derived Data**:
-    - `filteredStudents`: Filter the raw `students` array by matching `studentSearchQuery` against `username`, `english_name`, and `student_id` (case-insensitive).
-    - `totalPages`: `Math.ceil(filteredStudents.length / PAGE_SIZE)` (PAGE_SIZE = 14).
-    - `paginatedStudents`: `filteredStudents.slice((studentCurrentPage - 1) * PAGE_SIZE, studentCurrentPage * PAGE_SIZE)`.
+  - **Derived Data (with Null-Safety)**:
+    - `filteredStudents`: Filter the raw `students` array using safe fallback to prevent NPEs.
+      ```javascript
+      const q = studentSearchQuery.toLowerCase();
+      const filteredStudents = students.filter(s =>
+        (s.username ?? '').toLowerCase().includes(q) ||
+        (s.english_name ?? '').toLowerCase().includes(q) ||
+        (s.student_id ?? '').toLowerCase().includes(q)
+      );
+      ```
+    - `totalPages`: `Math.ceil(filteredStudents.length / STUDENT_PAGE_SIZE)`.
+    - `paginatedStudents`: `filteredStudents.slice((studentCurrentPage - 1) * STUDENT_PAGE_SIZE, studentCurrentPage * STUDENT_PAGE_SIZE)`.
   - **Effects**:
-    - Reset `studentCurrentPage` to 1 whenever `studentSearchQuery` changes or `activeClass` changes.
+    - Use a `useEffect` dependent *only* on `activeClass` to reset `studentCurrentPage` to 1. This cleanly isolates class-switching logic.
+    - Use a separate `useEffect` dependent on `studentSearchQuery` to reset `studentCurrentPage` to 1.
   - **Component Interface (`StudentMonitoringSection`)**:
     - Replace `students` prop with `paginatedStudents`.
-    - Add props: `totalStudents` (length of `filteredStudents`), `currentPage`, `totalPages`, `onPageChange`, `searchQuery`, `onSearchChange`.
+    - Add props: `totalStudents` (length of `filteredStudents`), `currentPage`, `totalPages`, `onPageChange`, `searchQuery`, `onSearchChange`, and `onRefresh` (bound to `refreshStudents` from `useTeacherConsoleData`).
     - Replace hardcoded text with dynamic text: `共 {totalStudents} 名学生，当前第 {currentPage}/{totalPages} 页`.
+    - Simplify the pagination UI: Render only "上一页" (Prev) and "下一页" (Next) buttons along with the text indicator, avoiding hardcoded page numbers.
     - Bind search `<input>` to `searchQuery` and `onChange={(e) => onSearchChange(e.target.value)}`.
-    - Bind pagination buttons to `onPageChange`.
+    - Bind the refresh `<button>` to `onRefresh`.
 
 ## 4. Error Handling
-- Invalid page transitions (e.g., clicking "Prev" on page 1) will be prevented by disabling the buttons when `currentPage <= 1` or `currentPage >= totalPages`.
-- If no students match the search, the UI should gracefully display the existing `<FeedbackStatus status="empty" title="该班级暂无学生" />` (update the text to "没有找到匹配的学生" if `searchQuery` is not empty).
+- Invalid page transitions will be prevented by disabling the Prev/Next buttons when `currentPage <= 1` or `currentPage >= totalPages`.
+- If no students match the search, the UI will display `<FeedbackStatus status="empty" title="没有找到匹配的学生" />`.
 
 ## 5. Testing Strategy
 - Ensure `npm run lint` and `npm run build` pass after modifications.
-- Verify search logic does not crash if fields like `english_name` are undefined.
+- Verify `studentCurrentPage` resets correctly when changing classes or typing in the search box.

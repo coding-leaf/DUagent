@@ -7,8 +7,6 @@ import { fetcherWrapper } from '../utils/fetcher';
 
 const terminalTaskStates = new Set(['completed', 'failed', 'partial']);
 
-let globalRefreshCounter = 0;
-
 function normalizeRows(data) {
   if (Array.isArray(data?.node_progress)) return data.node_progress;
   if (Array.isArray(data?.progress_table?.rows)) {
@@ -102,14 +100,10 @@ export function useLearningEffects(activeCourseId) {
       refreshInterval: (data) => {
         const status = data?.data?.status;
         return (status && terminalTaskStates.has(status)) ? 0 : 1500;
-      }
+      },
+      shouldRetryOnError: false
     }
   );
-
-  // Sync task error during render to ensure synchronous updates in testing environments
-  if (taskError && refreshTask?.status !== 'failed') {
-    setRefreshTask({ status: 'failed', error_message: taskError.message });
-  }
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -141,8 +135,7 @@ export function useLearningEffects(activeCourseId) {
   const handleRefresh = async () => {
     if (!activeCourseId || isPolling) return;
     try {
-      globalRefreshCounter++;
-      setRefreshCounter(globalRefreshCounter);
+      setRefreshCounter(prev => prev + 1);
       setRefreshTask({ status: 'processing', progress: 0 });
       const res = await learningService.refreshEvaluation(activeCourseId);
       if (res.code === 202 && res.data?.task_id) {

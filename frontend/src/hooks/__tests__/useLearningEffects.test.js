@@ -29,6 +29,7 @@ describe('useLearningEffects', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mutate(() => true, undefined, { revalidate: false });
+    profileService.getLearningEffects.mockResolvedValue({ code: 200, data: { node_progress: [] } });
   });
 
   afterEach(() => {
@@ -123,7 +124,7 @@ describe('useLearningEffects', () => {
   });
 
   it('handles task status polling errors gracefully', async () => {
-    learningService.refreshEvaluation.mockResolvedValue({ code: 202, data: { task_id: 'task999' } });
+    learningService.refreshEvaluation.mockResolvedValue({ code: 202, data: { task_id: 'task888' } });
     taskService.getTaskStatus.mockRejectedValue(new Error('Polling Failed'));
 
     const { result } = renderHook(() => useLearningEffects('c123'));
@@ -137,8 +138,16 @@ describe('useLearningEffects', () => {
       await Promise.resolve();
     });
 
-    expect(result.current.refreshTask?.status).toBe('failed');
-    expect(result.current.refreshTask?.error_message).toBe('Polling Failed');
-    expect(result.current.refreshFailed).toBe(true);
+    // Flush SWR state update timers scheduled after promise rejection
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.refreshTask?.status).toBe('failed');
+      expect(result.current.refreshTask?.error_message).toBe('Polling Failed');
+      expect(result.current.refreshFailed).toBe(true);
+    });
   });
 });

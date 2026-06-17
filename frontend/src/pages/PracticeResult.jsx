@@ -79,7 +79,7 @@ export default function PracticeResult() {
           {/* Modal Content Scroll Area */}
           <div className="flex-1 overflow-y-auto px-xl py-md custom-scrollbar">
             <ResultScoreBoard accuracy={accuracy} resultData={resultData} diagnosisData={diagnosisData} />
-            <QuestionReviewList perQuestionResults={resultData?.per_question_results} diagnosisData={diagnosisData} />
+            <QuestionReviewList perQuestionResults={resultData?.per_question_results} />
           </div>
 
           {/* Modal Footer (Actions) */}

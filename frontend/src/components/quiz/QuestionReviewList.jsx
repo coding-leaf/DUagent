@@ -1,7 +1,6 @@
 import Icon from '../Icon';
 
-// eslint-disable-next-line no-unused-vars
-export default function QuestionReviewList({ perQuestionResults, diagnosisData }) {
+export default function QuestionReviewList({ perQuestionResults }) {
   return (
     <div className="space-y-sm">
       <h4 className="font-label-sm text-label-sm text-secondary uppercase mb-base">详细解析回顾</h4>

@@ -20,7 +20,7 @@ export default function KnowledgeCoordinatesCard({ coordinates }) {
         知识坐标 (Knowledge Coordinates)
       </h3>
       <div className="flex flex-wrap gap-2">
-        {coordinates?.length > 0 ? (
+        {Array.isArray(coordinates) && coordinates.length > 0 ? (
           coordinates.map((kc) => {
             const isMastered = kc.status === 'mastered';
             const isLearning = kc.status === 'learning';

@@ -19,7 +19,7 @@ export default function MasteryBreakdownCard({ breakdown }) {
         <Icon name="assessment" className="material-symbols-outlined text-primary text-xl"/>
         练习掌握度 (Mastery Breakdown)
       </h3>
-      {breakdown?.length > 0 ? (
+      {Array.isArray(breakdown) && breakdown.length > 0 ? (
         <div className="space-y-3">
           {breakdown.map((item) => (
             <div key={item.knowledge_point} className="space-y-1">
@@ -28,7 +28,7 @@ export default function MasteryBreakdownCard({ breakdown }) {
                 <span className="font-bold text-primary">{item.accuracy}%</span>
               </div>
               <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${item.accuracy}%` }}></div>
+                <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${item.accuracy || 0}%` }}></div>
               </div>
             </div>
           ))}

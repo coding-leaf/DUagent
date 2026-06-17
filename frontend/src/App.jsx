@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Success from './pages/Success';
@@ -23,11 +24,14 @@ import ProtectedRoute from './components/ProtectedRoute';
 function App() {
   return (
     <Router>
+      <Toaster position="top-center" richColors />
       <AuthProvider>
         <CourseProvider>
           <ChatProvider>
             <Routes>
+              {/* Alias /login to the Login page for clearer redirects */}
               <Route path="/" element={<Login />} />
+              <Route path="/login" element={<Navigate to="/" replace />} />
               <Route path="/register" element={<Register />} />
               <Route path="/success" element={<Success />} />
               

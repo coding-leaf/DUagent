@@ -3,6 +3,9 @@ import { useQuizEngine } from '../hooks/useQuizEngine';
 import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
 import Icon from '../components/Icon';
+import QuizHeader from '../components/quiz/QuizHeader';
+import QuizSidebar from '../components/quiz/QuizSidebar';
+import QuizFooter from '../components/quiz/QuizFooter';
 
 export default function Quiz() {
   const navigate = useNavigate();
@@ -66,109 +69,36 @@ export default function Quiz() {
     medium: '中等',
     hard: '困难'
   }[currentQuestion.difficulty] || currentQuestion.difficulty || '未标注';
-  const metadataItems = [
-    { icon: 'topic', label: '知识点', value: currentKnowledgePoint },
-    { icon: 'inventory_2', label: '题目来源', value: sourceLabel },
-    { icon: 'speed', label: '难度', value: difficultyLabel },
-    { icon: 'format_list_numbered', label: '题量', value: `${totalQuestions} 题` }
-  ];
+
 
   return (
     <div className="bg-surface text-on-surface font-body-md min-h-screen">
-      {/* Top Navigation Bar */}
-      <header className="fixed top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-        <div className="relative flex justify-between items-center h-16 px-6 max-w-[1280px] mx-auto">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => navigate(-1)} 
-              className="p-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center justify-center -ml-2 text-slate-600 hover:text-slate-900"
-              title="返回上一页"
-            >
-              <Icon name="arrow_back" className="material-symbols-outlined"/>
-            </button>
-            <span className="text-xl font-bold tracking-tighter text-slate-900">{courseName}</span>
-          </div>
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            <Icon name="topic" className="material-symbols-outlined text-primary"/>
-            <span className="font-body-md text-primary font-bold tracking-tight max-w-[240px] truncate">{currentKnowledgePoint}</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-slate-50 rounded-full transition-colors active:scale-95 duration-200 cursor-pointer">
-              <Icon name="analytics" className="material-symbols-outlined text-slate-600"/>
-            </button>
-            <button className="p-2 hover:bg-slate-50 rounded-full transition-colors active:scale-95 duration-200 cursor-pointer">
-              <Icon name="notifications" className="material-symbols-outlined text-slate-600"/>
-            </button>
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200">
-              <img alt="用户头像" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBD7zzVzJP4sOCCImNhQnVh0f5VXBKYUUdqITWBaQkw7NykTFWpBCRb35x5OdjOfAeHA8pxnY1dbeHj7om4AmK_nGXsoIN-1mbwE3hCNq7xFNt4SuldmZvdW3PqPIvYRwW_EBGaXqZId-3waaJh8IQcMRBeypeQMRJI5hJFBhbeybYWhNhoWkUKSfTBuQqCIzu6dKwDMXS9LUFS_FZN0utek2XOAcc_3gZ3uXN6djZJ4T2_TfvwsvZ-1jgokz1Htpu6VTO_yqFDEOvS" />
-            </div>
-          </div>
-        </div>
-      </header>
+      <QuizHeader 
+        currentQuestionIndex={currentQuestionIndex}
+        totalQuestions={totalQuestions}
+        courseName={courseName}
+        knowledgePoint={currentKnowledgePoint}
+        onExit={() => navigate(-1)}
+        progressPercent={progressPercent}
+      />
 
-      {/* Side Navigation Bar */}
-      <aside className="h-screen w-64 border-r fixed left-0 top-0 bg-slate-50 border-slate-200 z-40 hidden xl:flex flex-col pt-20 pb-6 px-4 gap-2">
-        <div className="px-4 py-4 mb-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white">
-              <Icon name="smart_toy" className="material-symbols-outlined"/>
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">{currentChapter}</h3>
-              <p className="text-xs text-slate-500 mt-1">{sourceLabel}</p>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 space-y-1">
-          {metadataItems.map((item, index) => (
-            <div
-              key={item.label}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg ${
-                index === 0
-                  ? 'bg-white text-primary shadow-sm border-l-4 border-primary font-bold'
-                  : 'text-slate-500 bg-slate-50'
-              }`}
-            >
-              <Icon name={item.icon} className="material-symbols-outlined text-sm"/>
-              <div className="min-w-0">
-                <span className="font-label-sm text-[11px] text-slate-400 block">{item.label}</span>
-                <span className="font-label-sm text-xs font-medium truncate block max-w-[150px]">{item.value}</span>
-              </div>
-            </div>
-          ))}
-        </nav>
-        <div className="mt-auto px-4">
-          <button 
-            onClick={handleNextOrSubmit}
-            disabled={submitting}
-            className="w-full py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all shadow-lg shadow-primary/20 cursor-pointer disabled:opacity-50"
-          >
-            {submitting ? '提交中...' : '提交本次练习'}
-          </button>
-        </div>
-      </aside>
+      <QuizSidebar 
+        chapter={currentChapter}
+        sourceLabel={sourceLabel}
+        difficultyLabel={difficultyLabel}
+        difficulty={currentQuestion.difficulty}
+        knowledgePoint={currentKnowledgePoint}
+        questionTypeLabel={getQuestionTypeLabel(currentQuestion.type)}
+        totalQuestions={totalQuestions}
+        submitting={submitting}
+        onNextOrSubmit={handleNextOrSubmit}
+      />
 
       {/* Main Content Canvas */}
       <main className="xl:ml-64 pt-20 min-h-screen px-6 pb-24">
         <div className="max-w-[800px] mx-auto mt-8">
-          {/* Progress Header */}
-          <div className="bg-white rounded-2xl p-6 mb-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-            <div className="flex justify-between items-end mb-4">
-              <div>
-                <span className="text-primary font-bold text-h3 font-h3">{currentQuestionIndex + 1}</span>
-                <span className="text-slate-400 font-body-md"> / {totalQuestions} 题</span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-500 font-label-sm text-[11px] block mb-1">完成进度 {progressPercent}%</span>
-              </div>
-            </div>
-            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${progressPercent}%` }}></div>
-            </div>
-          </div>
-
           {/* Question Area */}
-          <section data-testid="quiz-question" className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+          <section data-testid="quiz-question" className="bg-white rounded-2xl p-8 border border-slate-200 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] mt-24">
             <div className="flex items-start gap-4 mb-6">
               <span className="bg-primary-container text-on-primary-container px-3 py-1 rounded-lg font-bold text-sm shrink-0">
                 {getQuestionTypeLabel(currentQuestion.type)}
@@ -209,28 +139,14 @@ export default function Quiz() {
             />
           </section>
 
-          {/* Bottom Action Controls */}
-          <div className="fixed bottom-0 left-0 xl:left-64 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-100 p-4 z-40">
-            <div className="max-w-[800px] mx-auto flex justify-between items-center gap-4">
-              <button 
-                onClick={handlePrev}
-                className="flex items-center gap-2 px-6 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-              >
-                <Icon name="arrow_back" className="material-symbols-outlined"/>
-                {currentQuestionIndex === 0 ? '退出练习' : '上一题'}
-              </button>
-              <div className="flex gap-4">
-                <button 
-                  onClick={handleNextOrSubmit}
-                  disabled={submitting}
-                  className="flex items-center gap-2 px-8 py-3 bg-primary text-white font-bold hover:opacity-90 rounded-xl transition-all shadow-lg shadow-primary/20 active:scale-95 cursor-pointer disabled:opacity-50"
-                >
-                  {submitting ? '提交中...' : (currentQuestionIndex < totalQuestions - 1 ? '下一题' : '提交本题')}
-                  {!submitting && <Icon name="chevron_right" className="material-symbols-outlined"/>}
-                </button>
-              </div>
-            </div>
-          </div>
+          <QuizFooter 
+            isFirst={currentQuestionIndex === 0}
+            isLast={currentQuestionIndex >= totalQuestions - 1}
+            onPrevious={handlePrev}
+            onNextOrSubmit={handleNextOrSubmit}
+            submitting={submitting}
+            hasAnsweredCurrent={!!answers[currentQuestion.id]}
+          />
         </div>
       </main>
 

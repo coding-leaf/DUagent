@@ -24,4 +24,15 @@ describe('useStudentReport', () => {
       expect(result.current.reportData).toEqual({ name: 'Test Student' });
     });
   });
+
+  it('returns an error when the API request fails', async () => {
+    teachingService.getStudentReport.mockResolvedValue({ code: 500, message: 'Server Error' });
+    const { result } = renderHook(() => useStudentReport('c2', 's2'));
+    
+    await waitFor(() => {
+      expect(result.current.error).toBeDefined();
+      expect(result.current.error.message).toBe('Server Error');
+      expect(result.current.error.code).toBe(500);
+    });
+  });
 });

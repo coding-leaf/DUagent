@@ -32,15 +32,16 @@
 
 - [ ] **Step 1: Write the failing unit test**
 
-Create `src/hooks/__tests__/useLearningEffects.test.js` with testing logic for hook initialization, derived states calculation, refresh triggers, and error messages:
+Create `src/hooks/__tests__/useLearningEffects.test.js`. It imports `mutate` from `swr` to clear SWR cache in `beforeEach`, mocks the services, and uses `vi.useFakeTimers()` to test SWR polling and revalidation behaviors:
 
 ```javascript
-import { renderHook, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { renderHook, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useLearningEffects } from '../useLearningEffects';
 import { profileService } from '../../api/services/profile';
 import { learningService } from '../../api/services/learning';
 import { taskService } from '../../api/services/task';
+import { mutate } from 'swr';
 
 vi.mock('../../api/services/profile', () => ({
   profileService: {
@@ -61,6 +62,17 @@ vi.mock('../../api/services/task', () => ({
 }));
 
 describe('useLearningEffects', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    // Clear SWR cache to avoid test pollution
+    mutate(() => true, undefined, { revalidate: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('does not fetch when activeCourseId is missing', () => {
     const { result } = renderHook(() => useLearningEffects(null));
     expect(profileService.getLearningEffects).not.toHaveBeenCalled();
@@ -87,20 +99,57 @@ describe('useLearningEffects', () => {
     });
   });
 
-  it('triggers refresh and processes polling task status', async () => {
+  it('triggers refresh and processes SWR polling and revalidation on completion', async () => {
     const mockData = { node_progress: [] };
     profileService.getLearningEffects.mockResolvedValue({ code: 200, data: mockData });
     learningService.refreshEvaluation.mockResolvedValue({ code: 202, data: { task_id: 'task999' } });
-    taskService.getTaskStatus.mockResolvedValue({ code: 200, data: { status: 'completed', progress: 100 } });
+    
+    // Simulate task status transition: first processing, then completed
+    let taskCallCount = 0;
+    taskService.getTaskStatus.mockImplementation(async () => {
+      taskCallCount++;
+      if (taskCallCount === 1) {
+        return { code: 200, data: { status: 'processing', progress: 50 } };
+      }
+      return { code: 200, data: { status: 'completed', progress: 100 } };
+    });
 
     const { result } = renderHook(() => useLearningEffects('c123'));
     
-    // Trigger manual refresh
-    await result.current.handleRefresh();
+    // Trigger refresh
+    await act(async () => {
+      await result.current.handleRefresh();
+    });
+
+    expect(learningService.refreshEvaluation).toHaveBeenCalledWith('c123');
+    expect(result.current.refreshTask?.task_id).toBe('task999');
+    expect(result.current.isPolling).toBe(true);
+
+    // Advance timer to trigger first SWR poll (returns processing)
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+
+    expect(taskService.getTaskStatus).toHaveBeenCalledTimes(1);
+    expect(result.current.refreshTask?.status).toBe('processing');
+    expect(result.current.isPolling).toBe(true);
+
+    // Reset profileService mock call history to check for mutator refetch
+    profileService.getLearningEffects.mockClear();
+
+    // Advance timer to trigger second SWR poll (returns completed)
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
 
     await waitFor(() => {
-      expect(learningService.refreshEvaluation).toHaveBeenCalledWith('c123');
-      expect(result.current.refreshTask?.task_id).toBe('task999');
+      expect(taskService.getTaskStatus).toHaveBeenCalledTimes(2);
+      expect(result.current.refreshTask?.status).toBe('completed');
+      expect(result.current.isPolling).toBe(false);
+      // Verify main mutator was triggered to refetch effects data
+      expect(profileService.getLearningEffects).toHaveBeenCalled();
     });
   });
 });
@@ -108,12 +157,12 @@ describe('useLearningEffects', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npm run test:unit src/hooks/__tests__/useLearningEffects.test.js`
+Run: `npx vitest run src/hooks/__tests__/useLearningEffects.test.js`
 Expected: Test fails due to missing Hook file `useLearningEffects.js`.
 
 - [ ] **Step 3: Write Hook implementation**
 
-Create `src/hooks/useLearningEffects.js` with the SWR queries, task status polling logic, and state derivation algorithms:
+Create `src/hooks/useLearningEffects.js`:
 
 ```javascript
 import { useState, useEffect, useMemo } from 'react';
@@ -275,7 +324,7 @@ export function useLearningEffects(activeCourseId) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npm run test:unit src/hooks/__tests__/useLearningEffects.test.js`
+Run: `npx vitest run src/hooks/__tests__/useLearningEffects.test.js`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -297,11 +346,9 @@ git commit -m "feat(effects): create useLearningEffects custom hook with SWR pol
 
 - [ ] **Step 1: Implement EffectsOverviewCards**
 
-Create `src/components/effects/EffectsOverviewCards.jsx`:
+Create `src/components/effects/EffectsOverviewCards.jsx` (removed unused `Icon` import to pass lint rules):
 
 ```jsx
-import Icon from '../Icon';
-
 export default function EffectsOverviewCards({ overview, generatedAt }) {
   const formatDate = (value) => {
     if (!value) return '尚未生成';
@@ -402,10 +449,10 @@ export default function MasteryDistributionCard({ masteryDistribution, totalNode
 
 - [ ] **Step 4: Implement KnowledgeProgressTable**
 
-Create `src/components/effects/KnowledgeProgressTable.jsx`:
+Create `src/components/effects/KnowledgeProgressTable.jsx` (removed `navigate` prop, using direct `useNavigate` for routing within component):
 
 ```jsx
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const assessmentLabels = {
   scored: '已评估',
@@ -449,7 +496,9 @@ function getMasteryDisplay(row) {
   return row.mastery_label || assessmentLabels[row.assessment_state] || '暂无数据';
 }
 
-export default function KnowledgeProgressTable({ nodeRows, activeCourseId, navigate }) {
+export default function KnowledgeProgressTable({ nodeRows, activeCourseId }) {
+  const navigate = useNavigate();
+
   return (
     <section className="bg-white/80 backdrop-blur-md rounded-xl p-6 shadow-sm border border-gray-100">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
@@ -527,7 +576,7 @@ Expected: Success with no errors.
 
 ```bash
 git add src/components/effects/EffectsOverviewCards.jsx src/components/effects/EffectsSummaryCard.jsx src/components/effects/MasteryDistributionCard.jsx src/components/effects/KnowledgeProgressTable.jsx
-git commit -m "feat(effects): extract display components for overview cards, summary, distribution bar and data table"
+git commit -m "feat(effects): extract display components and clean navigate prop and icon import"
 ```
 
 ---
@@ -539,11 +588,10 @@ git commit -m "feat(effects): extract display components for overview cards, sum
 
 - [ ] **Step 1: Simplify LearningEffects container**
 
-Replace all existing content in `src/pages/LearningEffects.jsx` to consume `useLearningEffects` custom hook and output the modular subcomponents:
+Replace all existing content in `src/pages/LearningEffects.jsx` to consume `useLearningEffects` custom hook and output the modular subcomponents (no `navigate` prop passed to `<KnowledgeProgressTable>`):
 
 ```jsx
 import { useCourse } from '../context/CourseContext';
-import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Icon from '../components/Icon';
 import { useLearningEffects } from '../hooks/useLearningEffects';
@@ -553,7 +601,6 @@ import MasteryDistributionCard from '../components/effects/MasteryDistributionCa
 import KnowledgeProgressTable from '../components/effects/KnowledgeProgressTable';
 
 export default function LearningEffects() {
-  const navigate = useNavigate();
   const { activeCourseId } = useCourse();
 
   const {
@@ -636,7 +683,6 @@ export default function LearningEffects() {
             <KnowledgeProgressTable
               nodeRows={nodeRows}
               activeCourseId={activeCourseId}
-              navigate={navigate}
             />
           </div>
         )}

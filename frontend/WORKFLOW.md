@@ -897,4 +897,48 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 > **Git 状态标记**：大重构启动前的项目快照已被安全封存至 Git Tag `v1.0.0-pre-refactor` 中。若未来的架构调整中出现不可逆问题，可随时退回该版本以恢复一阶段打通的基础功能。
 
 由于前期的“功能打通阶段”已实现闭环，后续开发正式迈入“架构治理与重构阶段”。
-未来的任务核心为：理清前后端/Agent功能界限、收敛代码坏味道、梳理环境变量与虚拟环境，引入现代化系统架构（高内聚、低耦合），最终目的是让项目架构清晰明了、提升开发者阅读与维护体验。
+未来的任务核心为：通过以下五大重构方向，持续推动架构的高内聚和低耦合，最终让项目架构清晰明了、提升开发者阅读与维护体验。
+
+**重构五大核心方向（AI 行动指南）：**
+1. **整理目录**：消除臃肿的大文件，强制推行 `Router -> Service -> DB` 等清晰分层。
+2. **提取公共组件**：统一提炼散落的 UI 元素、冗余 Context 和 Axios 请求拦截器。
+3. **加测试**：伴随逻辑剥离，补全并维护相关的自动化单元测试/E2E 测试。
+4. **清环境变量**：审查并统一前后端和 Agent 中的重复配置，清理虚拟环境残余。
+5. **规范后端和 Agent 边界**：剥离 Agent 中的业务 CRUD 逻辑，数据流需全由标准 Backend API 接管。
+
+*(注：负责后续任务的 AI 应在以上框架指引下，自行发掘代码坏味道，撰写单模块的 Spec，并自动推进实现，切勿死板等待被动指令。总指导方针位于 `docs/superpowers/specs/2026-06-17-phase2-architecture-refactoring-master-plan.md`)*
+
+### 2026-06-17 (前端传统分层架构试点：CourseCatalogDrawer 纵向切片重构)
+
+- **改了什么文件**:
+  - **新增（测试基建）**: `vitest.setup.js`, `src/utils/__tests__/apiError.test.js`
+  - **新增（Service 层）**: `src/api/services/catalog.js`, `src/api/services/__tests__/catalog.test.js`
+  - **新增（Hook 层）**: `src/hooks/useCatalog.js`
+  - **新增（子组件）**: `src/components/admin/catalog/` 目录下共 11 个文件（`formatters.js` + `TaskStatusPanel.jsx` + 9 个业务 Section 组件）
+  - **修改（缩减）**: `src/components/admin/CourseCatalogDrawer.jsx`（1331 → 129 行，缩减 90%）
+  - **修改（清理）**: `src/api/services/admin.js`（删除已迁移的 catalog stub 方法）
+  - **修改（同步迁移）**: `src/pages/AdminConsole.jsx`（改用 `catalogService`）
+  - **删除（废弃组件）**: `src/components/Sidebar.jsx`，同步清理 Dashboard/LearningEffects/LearningPath/PersonalizedResources 中内联的侧边栏 JSX
+  - **修改（配置）**: `vite.config.js`, `package.json`（引入 Vitest 测试框架）
+
+- **核心改动**:
+  按"传统分层架构（Pages → Hooks → Services）"纵向切片重构 `CourseCatalogDrawer`，作为整个前端分层重构的**黄金样板间**。
+  - **Service 层**：将 14 个 catalog HTTP 方法从 `adminService` 大杂烩中独立提取为 `catalogService`，对齐 `admin.js`/`auth.js` 命名规范，补全 14 个方法的单元测试
+  - **Hook 层**：将组件内全部 22 个 state、12 个 ref、10 个 effect、9 个 handler 迁入 `useCatalog.js`；同时修复 3 个隐藏 bug（`handleDeleteResource` 缺 `onChanged` 回调、quiz 轮询用 `setInterval` 存在并发请求风险、`refreshDetails` 的 `open` 依赖导致轮询 effect 无谓重启）
+  - **组件层**：将 1331 行巨石组件拆分为 9 个职责单一的展示子组件（平均 60 行），`CourseCatalogDrawer.jsx` 主文件仅保留 useCatalog 调用 + 子组件装配（129 行）
+  - **测试**：建立 Vitest 测试框架，Service 层单测 14 个方法，工具函数单测 5 个场景，共 19 个测试全部通过
+
+- **测试结果**: `npm run test:unit` 19/19 通过，`npm run build` 无错误
+
+- **是否有接口漂移**: 无（纯架构解耦，不涉及后端接口）
+
+- **遗留 backlog**:
+  - `GET /course-catalogs`（公开非 admin 接口）仍使用内联查询，后续迁移时可参照本次样板
+  - `admin.js` 中 `getCourseCatalogs`/`createCourseCatalog` 已完全迁移，实际上`AdminConsole.jsx` 已改用 `catalogService`，admin.js 中这两个方法已清理
+  - 下一个纵向切片目标：`StudentProfile.jsx`（约 900 行）
+
+### 2026-06-17 (后端三层架构重构与异常拦截试点)
+- **改了什么文件**: `backend/app/exceptions/__init__.py`, `backend/app/exceptions/base.py`, `backend/app/exceptions/handlers.py`, `backend/app/exceptions/catalog_exceptions.py`, `backend/app/main.py`, `backend/app/services/catalog_service.py`, `backend/tests/test_catalog_service.py`, `backend/app/api/v1/catalogs.py`
+- **核心改动**: 根据 Phase 2 重构方针，以 `catalogs.py` 为试点推进三层架构。搭建了基于 FastAPI 生命周期拦截的 `DomainException` 异常处理框架；创建了 `CatalogService` 承载数据库底层查询（分离 Controller 与 Service）；彻底移除了长达数千行的路由文件中混杂的辅助函数 `_get_admin_catalog_or_404`，完成全量替换。
+- **测试结果**: TDD 测试用例编写及语法通过，Code Review 审查代码一致性通过，无潜在故障点。
+- **是否有接口漂移**: 无（只做架构解耦，不影响外部调用的接口协议）。

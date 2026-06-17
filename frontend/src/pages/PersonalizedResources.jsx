@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
 import { personalizedResourcesService } from '../api/services/personalizedResources';
 import GenerateModal from '../components/personalized/GenerateModal';
@@ -305,8 +304,7 @@ export default function PersonalizedResources() {
   return (
     <div className="bg-surface min-h-screen">
       <Navbar />
-      <Sidebar />
-      <main className="ml-0 lg:ml-64 pt-16 min-h-screen">
+      <main className="pt-16 min-h-screen">
         <div className="max-w-[896px] mx-auto px-6 py-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">

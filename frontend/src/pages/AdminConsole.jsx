@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminService } from '../api/services/admin';
+import { catalogService } from '../api/services/catalog';
 import CourseCatalogDrawer from '../components/admin/CourseCatalogDrawer';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../utils/apiError';
@@ -94,7 +95,7 @@ export default function AdminConsole() {
     setLoadingCatalogs(true);
     setCatalogError('');
     try {
-      const res = await adminService.getCourseCatalogs();
+      const res = await catalogService.getCourseCatalogs();
       if (res.code === 200) {
         const nextCatalogs = res.data?.catalogs || [];
         setCatalogs(nextCatalogs);
@@ -241,7 +242,7 @@ export default function AdminConsole() {
     setCreatingCatalog(true);
     setCatalogError('');
     try {
-      const res = await adminService.createCourseCatalog({ title, description });
+      const res = await catalogService.createCourseCatalog({ title, description });
       if (res.code === 201 || res.code === 200) {
         setNewCatalogTitle('');
         setNewCatalogDescription('');
@@ -274,7 +275,7 @@ export default function AdminConsole() {
         <div className="flex items-center justify-between px-6 h-16 max-w-[1440px] mx-auto">
           <div className="flex items-center gap-3">
             <Icon name="admin_panel_settings" className="material-symbols-outlined text-cyan-400"/>
-            <div className="text-xl font-bold tracking-tight">DS_MASTERY_AI <span className="font-light text-cyan-400">Admin</span></div>
+            <div className="text-xl font-bold tracking-tight">智能学习助手 <span className="font-light text-cyan-400">Admin</span></div>
           </div>
           <div className="flex items-center space-x-6">
             <button onClick={() => navigate('/admin')} className="text-sm text-slate-300 hover:text-white transition-colors cursor-pointer">

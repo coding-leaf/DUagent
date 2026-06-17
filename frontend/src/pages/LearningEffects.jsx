@@ -206,33 +206,7 @@ export default function LearningEffects() {
     <div className="bg-background text-on-surface font-body-md min-h-screen">
       <Navbar />
 
-      <aside className="h-full w-64 fixed left-0 top-16 bg-white border-r border-gray-100 flex flex-col py-6 space-y-2 font-['Public_Sans'] text-sm hidden lg:flex">
-        <div className="px-6 mb-6">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white">
-              <Icon name="monitoring" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}/>
-            </div>
-            <div>
-              <h3 className="text-lg font-black text-cyan-600 leading-tight">学习效果</h3>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest">KG NODE PROGRESS</p>
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 space-y-1">
-          <div className="px-4">
-            <Link to="/learning-path" className="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5">
-              <Icon name="account_tree" className="material-symbols-outlined"/>
-              <span className="font-body-md">学习节点</span>
-            </Link>
-            <Link to="/dashboard" className="flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-500 hover:bg-gray-50 transition-all duration-200 ease-in-out cursor-pointer hover:pl-5">
-              <Icon name="library_books" className="material-symbols-outlined"/>
-              <span className="font-body-md">资源库</span>
-            </Link>
-          </div>
-        </nav>
-      </aside>
-
-      <main className="lg:pl-64 pt-24 pb-12 px-6 max-w-[1280px] mx-auto min-h-screen">
+      <main className="pt-24 pb-12 px-6 max-w-[1280px] mx-auto min-h-screen">
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="font-h1 text-h1 text-on-surface text-4xl font-bold mb-2">学习效果展示</h1>

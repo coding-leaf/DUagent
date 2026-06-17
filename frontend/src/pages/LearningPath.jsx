@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { learningService } from '../api/services/learning';
 import { learningActivityService } from '../api/services/learningActivity';
-import Sidebar from '../components/Sidebar';
 import { useCourse } from '../context/CourseContext';
 import Navbar from '../components/Navbar';
 import Icon from '../components/Icon';
@@ -125,11 +124,8 @@ export default function LearningPath() {
       {/* TopNavBar Implementation */}
       <Navbar />
 
-      {/* SideNavBar Component */}
-      <Sidebar />
-
       {/* Main Content Canvas */}
-      <main className="ml-0 lg:ml-64 pt-16 min-h-screen">
+      <main className="pt-16 min-h-screen">
         <div className="max-w-[1280px] mx-auto p-gutter space-y-md">
           {/* Header Section */}
           <header className="flex flex-col md:flex-row md:items-end justify-between gap-md mb-sm">
@@ -165,7 +161,7 @@ export default function LearningPath() {
                   {/* Path Line - Clean Minimal Line */}
                   <div className="absolute top-1/2 left-0 w-full h-[2px] bg-slate-200 -translate-y-1/2 z-0"></div>
 
-                  {learningPath?.nodes.map((node, index) => {
+                  {learningPath?.nodes.map((node) => {
                     if (node.status === 'completed') {
                       return (
                         <div key={node.id}

@@ -1,109 +1,31 @@
-import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { quizService } from '../api/services/quiz';
 import { useCourse } from '../context/CourseContext';
-import { personalizedResourcesService } from '../api/services/personalizedResources';
-import { learningService } from '../api/services/learning';
-import { profileService } from '../api/services/profile';
 import Icon from '../components/Icon';
-
-const LOADING_TEXTS = [
-  "正在接收本次作答数据...",
-  "正在分析知识点掌握情况...",
-  "正在评估薄弱环节与能力表现...",
-  "正在生成个性化学习建议..."
-];
+import { usePracticeResult, LOADING_TEXTS } from '../hooks/usePracticeResult';
 
 export default function PracticeResult() {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeCourseId } = useCourse();
-  const [resultData, setResultData] = useState(location.state?.result || null);
-  const [diagnosisData, setDiagnosisData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState(null);
-  const [currentTextIndex, setCurrentTextIndex] = useState(0);
-
-  const quizContext = location.state?.quizContext || null;
-  const contextKp = quizContext?.knowledge_point || null;
-  const contextSource = quizContext?.source || null;
-  const contextNodeId = quizContext?.node_id || null;
-
-  const accuracy = resultData ? Math.round((resultData.correct_count / (resultData.total_count || 1)) * 100) : 0;
-
-  // 答题完成后后台刷新评估和画像（≥60%说明有明显进步；<60%仍需继续练）
-  useEffect(() => {
-    if (accuracy >= 60 && activeCourseId && resultData) {
-      learningService.refreshEvaluation(activeCourseId).catch(() => {});
-      profileService.refreshProfile(activeCourseId).catch(() => {});
-    }
-  }, [accuracy, activeCourseId, resultData]);
-
-  useEffect(() => {
-    let isMounted = true;
-    let intervalTimer = null;
-    let fetchTimer = null;
-
-    if (activeCourseId) {
-      const fetchDiagnosis = async () => {
-        try {
-          const res = await quizService.getResult(activeCourseId);
-          if (res.code === 200 && isMounted) {
-            setDiagnosisData(res.data.diagnosis);
-            if (!resultData && res.data.latest_quiz) {
-              setResultData({
-                score: res.data.latest_quiz.score,
-                time_spent: res.data.latest_quiz.time_spent,
-                total_count: 10,
-                correct_count: Math.round((res.data.latest_quiz.score / 100) * 10),
-                per_question_results: []
-              });
-            }
-          }
-        } catch (error) {
-          console.error("Failed to fetch diagnosis result", error);
-        } finally {
-          if (isMounted) {
-            setLoading(false);
-            if (intervalTimer) clearInterval(intervalTimer);
-          }
-        }
-      };
-
-      // Progressively update text index every 1250ms
-      intervalTimer = setInterval(() => {
-        if (isMounted) {
-          setCurrentTextIndex((prev) => {
-            if (prev < LOADING_TEXTS.length - 1) {
-              return prev + 1;
-            }
-            return prev;
-          });
-        }
-      }, 1250);
-      
-      // Delay fetching slightly to allow backend AI task to complete
-      fetchTimer = setTimeout(() => {
-        fetchDiagnosis();
-      }, 5000);
-
-      return () => {
-        isMounted = false;
-        if (intervalTimer) clearInterval(intervalTimer);
-        clearTimeout(fetchTimer);
-      };
-    } else {
-      fetchTimer = setTimeout(() => {
-        if (isMounted) setLoading(false);
-      }, 0);
-      return () => {
-        isMounted = false;
-        clearTimeout(fetchTimer);
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCourseId]); // 仅依赖 activeCourseId，挂载后获取一次
+  
+  const {
+    resultData,
+    diagnosisData,
+    loading,
+    generating,
+    generateError,
+    currentTextIndex,
+    accuracy,
+    contextKp,
+    contextNodeId,
+    handleGenerateWrongAnswerQuiz,
+    handleRetry
+  } = usePracticeResult({
+    courseId: activeCourseId,
+    initialResultData: location.state?.result,
+    quizContext: location.state?.quizContext,
+    navigate
+  });
 
   if (loading) {
     return (
@@ -131,42 +53,7 @@ export default function PracticeResult() {
   };
 
 
-  const wrongQuestionIds = resultData?.per_question_results
-    ?.filter(q => !q.is_correct)
-    .map(q => q.question_id)
-    .filter(Boolean) || [];
 
-  const handleGenerateWrongAnswerQuiz = async () => {
-    if (!activeCourseId) return;
-    setGenerating(true);
-    setGenerateError(null);
-    try {
-      const payload = {
-        course_id: activeCourseId,
-        generate_type: 'quiz',
-        source_type: 'quiz_wrong_answer',
-        count: 5,
-      };
-      if (wrongQuestionIds.length > 0) payload.wrong_question_ids = wrongQuestionIds;
-      if (contextKp) payload.knowledge_point = contextKp;
-      await personalizedResourcesService.generate(payload);
-      navigate('/personalized-resources', { state: { newTaskId: 'triggered' } });
-    } catch {
-      setGenerateError('生成失败，请稍后重试');
-      setGenerating(false);
-    }
-  };
-
-  const handleRetry = () => {
-    const params = new URLSearchParams({ course_id: activeCourseId });
-    if (contextSource === 'personalized' && contextKp) {
-      params.set('source', 'personalized');
-      params.set('knowledge_point', contextKp);
-    } else if (contextNodeId) {
-      params.set('node_id', contextNodeId);
-    }
-    navigate(`/quiz?${params.toString()}`);
-  };
 
   return (
     <div className="bg-surface text-on-surface min-h-screen">

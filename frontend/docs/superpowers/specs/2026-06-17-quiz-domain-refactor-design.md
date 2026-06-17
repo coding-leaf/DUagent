@@ -6,7 +6,9 @@
 - **薄容器化**：`Quiz.jsx` 和 `PracticeResult.jsx` 剥离业务逻辑，退化为纯粹的排版容器，仅负责组装各个提取后的展示子组件。
 - **ViewModel 提取**：
   - `useQuizEngine.js`：接管 `Quiz.jsx` 的所有 API 调用（获取题目）、埋点追踪 (`node_practice_start`)、以及答题状态（`answers` 字典与 `currentQuestionIndex` 流转）。
+  - ▎ 接管提交流程：计时、submitQuiz、提交后埋点与画像刷新、跳转导航。
   - `usePracticeResult.js`：接管 `PracticeResult.jsx` 中关于结果拉取、后台刷新（`refreshEvaluation`/`refreshProfile`）的逻辑。明确该 Hook 的核心职责为：**一次性延迟拉取**（5s 后触发），而非无限长轮询。
+  - ▎ 封装"生成错题强化练习"动作（`handleGenerateWrongAnswerQuiz`）与"重试"路由逻辑（`handleRetry`）。
 
 ### 1.2 加载状态UI组件提取
 - 将 `PracticeResult.jsx` 中利用 `setInterval` 切换文字与 loading UI 的代码提取为单独的纯 UI 组件 `<ResultLoadingState />`，保持主容器整洁。
@@ -21,11 +23,11 @@
 
 | 领域 | 产物 | 职责说明 |
 |------|------|----------|
-| **Quiz** | `useQuizEngine.js` | 核心 Hook：题库获取 + 埋点记录 + 答题状态流转 (`answerUpdaters`) |
+| **Quiz** | `useQuizEngine.js` | 核心 Hook：题库获取 + 埋点记录 + 答题状态流转 (`answerUpdaters`) + 提交流程与跳转 |
 | **Quiz** | `QuizHeader.jsx` | 纯 UI：顶部进度条与当前答题状态显示 |
 | **Quiz** | `QuizSidebar.jsx` | 纯 UI：左侧题目元数据面板（补入） |
 | **Quiz** | `QuizFooter.jsx` | 纯 UI：上一题 / 下一题 / 提交 的按钮控制区 |
-| **PracticeResult** | `usePracticeResult.js` | 核心 Hook：5s 延迟拉取诊断结果，并判断是否刷新后端学情与画像 |
+| **PracticeResult** | `usePracticeResult.js` | 核心 Hook：5s 延迟拉取诊断结果、判断学情刷新、错题生成与重试跳转逻辑 |
 | **PracticeResult** | `ResultLoadingState.jsx` | 纯 UI：带有文字轮播动画的加载视图 |
 | **PracticeResult** | `ResultScoreBoard.jsx` | 纯 UI：得分展示圆环与顶部的整体数据统计 |
 | **PracticeResult** | `QuestionReviewList.jsx` | 纯 UI：原代码最冗长的题目解析与回顾列表渲染逻辑 |

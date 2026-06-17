@@ -25,6 +25,7 @@ from app.schemas.catalog import (
 )
 from app.schemas.operations import CatalogResourceGenerateRequest
 from app.services.agent_client import AgentClient, AgentServiceError, agent_client
+from app.services.catalog_service import CatalogService
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.kg_generation import KGGenerationInputError, generate_knowledge_graph_version
 from app.services.kg_resource_targets import select_core_resource_targets
@@ -495,22 +496,6 @@ async def _run_catalog_ingestion_background(task_id: str) -> None:
                 await recovery_db.commit()
 
 
-async def _get_admin_catalog_or_404(db: AsyncSession, catalog_id: str) -> CourseCatalog:
-    result = await db.execute(
-        select(CourseCatalog).where(
-            CourseCatalog.id == catalog_id,
-            CourseCatalog.is_deleted == False,
-        )
-    )
-    catalog = result.scalar_one_or_none()
-    if catalog is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 40400, "message": "课程资源库不存在", "data": None},
-        )
-    return catalog
-
-
 @router.get("/admin/course-catalogs")
 async def admin_list_course_catalogs(
     status_filter: str | None = Query(None, alias="status"),
@@ -519,17 +504,8 @@ async def admin_list_course_catalogs(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(CourseCatalog).where(CourseCatalog.is_deleted == False)
-    if status_filter:
-        query = query.where(CourseCatalog.status == status_filter)
-
-    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
-    result = await db.execute(
-        query.order_by(CourseCatalog.create_time.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    catalogs = result.scalars().all()
+    service = CatalogService(db)
+    catalogs, total = await service.list_catalogs(status_filter, page, page_size)
     return {
         "code": 200,
         "message": "success",
@@ -548,16 +524,8 @@ async def admin_create_course_catalog(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = CourseCatalog(
-        title=req.title.strip(),
-        description=(req.description or "").strip(),
-        status="draft",
-        knowledge_status="draft",
-        material_count=0,
-    )
-    db.add(catalog)
-    await db.flush()
-    await db.refresh(catalog)
+    service = CatalogService(db)
+    catalog = await service.create_catalog(req.title, req.description)
     return {"code": 201, "message": "created", "data": _catalog_item(catalog)}
 
 
@@ -567,7 +535,8 @@ async def admin_get_course_catalog(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    service = CatalogService(db)
+    catalog = await service.get_catalog(catalog_id)
     return {"code": 200, "message": "success", "data": _catalog_item(catalog)}
 
 
@@ -578,7 +547,7 @@ async def admin_upload_catalog_material(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     if catalog.status == "ingesting" or catalog.knowledge_status == "ingesting":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -680,7 +649,7 @@ async def admin_create_catalog_material(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     update_result = await db.execute(
         update(CourseCatalog)
         .where(
@@ -721,7 +690,7 @@ async def admin_list_catalog_materials(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    await _get_admin_catalog_or_404(db, catalog_id)
+    await CatalogService(db).get_catalog(catalog_id)
     result = await db.execute(
         select(CourseCatalogMaterial)
         .where(
@@ -747,7 +716,7 @@ async def admin_delete_catalog_material(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     if catalog.status == "ingesting" or catalog.knowledge_status == "ingesting":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -805,7 +774,7 @@ async def admin_get_catalog_knowledge_status(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     pending_count = (
         await db.execute(
             select(func.count())
@@ -852,7 +821,7 @@ async def admin_get_catalog_knowledge_graph_status(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     host_course = await _get_or_create_catalog_kg_host_course(
         db,
         catalog,
@@ -974,7 +943,7 @@ async def admin_generate_catalog_knowledge_graph(
     db: AsyncSession = Depends(get_db),
 ):
     req = req or CatalogKnowledgeGraphGenerationRequest()
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
 
     if req.source_type == "catalog_chunks":
         if catalog.knowledge_status not in {"ready", "partial"}:
@@ -1051,7 +1020,7 @@ async def admin_list_catalog_resources(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    await _get_admin_catalog_or_404(db, catalog_id)
+    await CatalogService(db).get_catalog(catalog_id)
     offering_result = await db.execute(
         select(CourseOffering.id).where(
             CourseOffering.catalog_id == catalog_id,
@@ -1131,7 +1100,7 @@ async def admin_generate_catalog_resources(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     if catalog.status != "ready":
         raise _course_material_missing()
     if catalog.knowledge_status not in {"ready", "partial"}:
@@ -1665,7 +1634,7 @@ async def admin_generate_catalog_quiz(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin 批量生成保底题库：遍历 active KG 全部节点，异步调 Agent 出题落库。"""
-    catalog = await _get_admin_catalog_or_404(db, catalog_id)
+    catalog = await CatalogService(db).get_catalog(catalog_id)
     if catalog.status != "ready":
         raise _course_material_missing()
     if catalog.knowledge_status not in {"ready", "partial"}:

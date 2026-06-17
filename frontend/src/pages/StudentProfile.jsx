@@ -7,6 +7,9 @@ import { useCourse } from '../context/CourseContext';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import Icon from '../components/Icon';
+import ProfileHeaderCard from '../components/profile/ProfileHeaderCard';
+import LearningArchiveCard from '../components/profile/LearningArchiveCard';
+import LearningDirectionCard from '../components/profile/LearningDirectionCard';
 
 const PROFILE_VALUE_LABELS = {
   exam_sprint: '备考冲刺',
@@ -26,16 +29,6 @@ const PROFILE_VALUE_LABELS = {
   excellent: '表现优秀',
   active: '稳定学习',
   focused: '高频投入',
-};
-
-const PROFILE_DIMENSION_LABELS = {
-  learning_goal: '当前学习方向',
-  weak_points: '待提升内容',
-  resource_preference: '学习资料偏好',
-  guidance_level: '辅导方式',
-  knowledge_progress: '掌握进度',
-  discipline: '学习习惯',
-  learning_habits: '学习习惯',
 };
 
 const PROFILE_EMPTY_TEXT = {
@@ -345,158 +338,41 @@ export default function StudentProfile() {
       {/* Main Content */}
       <main className="pt-16">
         <div className="max-w-[1280px] mx-auto px-6 py-8">
-          {/* 卡片 1：个人信息 */}
-          <div className="relative overflow-hidden bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-8 mb-8">
-            <div className="absolute top-0 right-0 w-64 h-64 -mr-20 -mt-20 opacity-5">
-              <Icon name="school" className="material-symbols-outlined text-9xl"/>
-            </div>
-            <div className="relative">
-              <div className="relative w-32 h-32 rounded-full border-4 border-slate-100 overflow-hidden bg-cyan-500/10">
-                <div className="w-full h-full rounded-full bg-cyan-500/20 text-cyan-600 flex items-center justify-center font-bold text-xl">
-                  {displayInitial}
-                </div>
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-4 mb-2">
-                <h1 className="font-h1 text-3xl text-on-surface">{displayName}</h1>
-                {discipline_badge.level ? (
-                  <span className="bg-amber-50 text-amber-700 text-xs px-4 py-1 rounded-full font-bold uppercase tracking-wider border border-amber-200">
-                    学科勋章：{disciplineBadgeView.subject ? `${disciplineBadgeView.subject} · ` : ''}{disciplineBadgeView.level}
-                  </span>
-                ) : (
-                  <span className="bg-slate-100 text-slate-400 text-xs px-4 py-1 rounded-full">学科勋章：—</span>
-                )}
-              </div>
-              <p className="text-body-md text-secondary">当前进修课程：<span className="text-primary font-bold">{currentCourseName}</span></p>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
-                {profileFields.map((field) => (
-                  <div key={field.label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">{field.label}</p>
-                    <p className="text-sm text-on-surface font-semibold truncate">{field.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ProfileHeaderCard
+            displayInitial={displayInitial}
+            displayName={displayName}
+            discipline_badge={discipline_badge}
+            disciplineBadgeView={disciplineBadgeView}
+            currentCourseName={currentCourseName}
+            profileFields={profileFields}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-            <section className="lg:col-span-7 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between gap-4 mb-5">
-                <div>
-                  <h3 className="font-h3 text-xl flex items-center gap-2 text-on-surface">
-                    <Icon name="badge" className="material-symbols-outlined text-cyan-500"/> 学习档案
-                  </h3>
-                  <p className="text-sm text-secondary mt-1">根据学习行为、评测结果和个人补充生成的课程学习档案。</p>
-                </div>
-                <button
-                  onClick={handleProfileRefresh}
-                  disabled={refreshing}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
-                >
-                  <Icon name={refreshing ? 'progress_activity' : 'sync'} className={`material-symbols-outlined text-base ${refreshing ? 'animate-spin' : ''}`}/>
-                  {refreshing ? '同步中...' : '同步画像'}
-                </button>
-              </div>
-              {(refreshMessage || refreshError) && (
-                <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
-                  refreshError
-                    ? 'border-red-100 bg-red-50 text-red-600'
-                    : 'border-cyan-100 bg-cyan-50 text-cyan-700'
-                }`}>
-                  {refreshError || refreshMessage}
-                </div>
-              )}
-              {profile_dimensions.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {profile_dimensions.map((dimension) => (
-                    <div key={dimension.key} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                      <div className="flex items-center justify-between gap-3 mb-2">
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          {PROFILE_DIMENSION_LABELS[dimension.key] || dimension.label}
-                        </p>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-cyan-700 border border-cyan-100">
-                          {sourceLabel(dimension.source)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-on-surface font-semibold leading-6">
-                        {formatDimensionValue(dimension.value, dimension.key)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400 py-6 text-center">暂无画像维度数据</p>
-              )}
-            </section>
+            <LearningArchiveCard
+              handleProfileRefresh={handleProfileRefresh}
+              refreshing={refreshing}
+              refreshMessage={refreshMessage}
+              refreshError={refreshError}
+              profile_dimensions={profile_dimensions}
+              formatDimensionValue={formatDimensionValue}
+              sourceLabel={sourceLabel}
+            />
 
-            <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-6">
-              {/* 学习方向 */}
-              <div>
-                <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
-                  <Icon name="flag" className="material-symbols-outlined text-cyan-500"/> 当前学习方向
-                </h3>
-                <p className="text-sm text-secondary mb-4">选择你学这门课的主要目的，影响 AI 辅导策略。</p>
-                <div className="flex gap-3">
-                  {[
-                    { key: 'exam_sprint', label: '备考冲刺', icon: 'school' },
-                    { key: 'daily_homework', label: '课后巩固', icon: 'menu_book' },
-                    { key: 'casual', label: '兴趣拓展', icon: 'lightbulb' },
-                  ].map(({ key, label, icon }) => {
-                    const active = drive_intent.type === key;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => handleGoalChange(key)}
-                        disabled={goalSubmitting}
-                        className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          active
-                            ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                            : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-cyan-300 hover:bg-cyan-50/50'
-                        }`}
-                      >
-                        <Icon name={icon} className="material-symbols-outlined text-xl"/>
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 个性化偏好 */}
-              <div>
-                <h3 className="font-h3 text-xl mb-2 flex items-center gap-2 text-on-surface">
-                  <Icon name="tune" className="material-symbols-outlined text-cyan-500"/> 个性化偏好
-                </h3>
-                <p className="text-sm text-secondary mb-3">
-                  告诉 AI 你希望它怎么跟你说话，每次对话都会遵循这个偏好。
-                </p>
-                <textarea
-                  value={customInstruction}
-                  onChange={(e) => {
-                    setCustomInstruction(e.target.value);
-                    if (instructionError) setInstructionError('');
-                    if (instructionSuccess) setInstructionSuccess(false);
-                  }}
-                  maxLength={500}
-                  rows={4}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-on-surface outline-none focus:border-cyan-400 focus:bg-white transition-colors resize-none"
-                  placeholder="例如：回答要简洁，多用代码举例，不要长篇大论。遇到我不懂的概念先打比方再讲原理。"
-                />
-                <div className="flex items-center justify-between mt-2">
-                  <span className={`text-xs ${instructionError ? 'text-red-500' : instructionSuccess ? 'text-green-600' : 'text-slate-400'}`}>
-                    {instructionError || (instructionSuccess ? '已保存' : `${customInstruction.length}/500`)}
-                  </span>
-                  <button
-                    onClick={handleInstructionSubmit}
-                    disabled={instructionSubmitting}
-                    className="px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-700 transition-colors"
-                  >
-                    {instructionSubmitting ? '保存中...' : '保存'}
-                  </button>
-                </div>
-              </div>
-            </section>
+            <LearningDirectionCard
+              drive_intent={drive_intent}
+              handleGoalChange={handleGoalChange}
+              goalSubmitting={goalSubmitting}
+              customInstruction={customInstruction}
+              setCustomInstruction={(val) => {
+                setCustomInstruction(val);
+                if (instructionError) setInstructionError('');
+                if (instructionSuccess) setInstructionSuccess(false);
+              }}
+              handleInstructionSubmit={handleInstructionSubmit}
+              instructionSubmitting={instructionSubmitting}
+              instructionError={instructionError}
+              instructionSuccess={instructionSuccess}
+            />
           </div>
 
         {/* Bento Grid Main Content */}

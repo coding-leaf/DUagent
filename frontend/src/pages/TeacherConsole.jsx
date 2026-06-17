@@ -11,6 +11,8 @@ import TeacherResourceSection from '../components/teacher/TeacherResourceSection
 import StudentMonitoringSection from '../components/teacher/StudentMonitoringSection';
 import ClassInsightsSection from '../components/teacher/ClassInsightsSection';
 
+const STUDENT_PAGE_SIZE = 14;
+
 export default function TeacherConsole() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -21,10 +23,12 @@ export default function TeacherConsole() {
   const [pendingCreatedClassId, setPendingCreatedClassId] = useState(null);
   const [copiedCourseCode, setCopiedCourseCode] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState(null);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentCurrentPage, setStudentCurrentPage] = useState(1);
 
   const {
     classes, classesLoading, refreshClasses,
-    students, studentsLoading, studentsError,
+    students, studentsLoading, studentsError, refreshStudents,
     insights, insightsLoading, insightsError,
     resources, resourcesLoading, resourcesError
   } = useTeacherConsoleData(activeClass, { resourcePage: 1, resourcePageSize: 50 });
@@ -60,6 +64,45 @@ export default function TeacherConsole() {
       }
     }
   }, [classes, activeClass, pendingCreatedClassId]);
+
+  // --- Derived State for Students ---
+  const filteredStudents = useMemo(() => {
+    const validStudents = students || [];
+    if (!studentSearchQuery) return validStudents;
+    const lowerQuery = studentSearchQuery.toLowerCase();
+    return validStudents.filter(s => 
+      s?.student?.username?.toLowerCase()?.includes(lowerQuery) ||
+      s?.student?.real_name?.toLowerCase()?.includes(lowerQuery)
+    );
+  }, [students, studentSearchQuery]);
+
+  const studentTotalPages = Math.max(1, Math.ceil(filteredStudents.length / STUDENT_PAGE_SIZE));
+  const paginatedStudents = useMemo(() => {
+    const startIndex = (studentCurrentPage - 1) * STUDENT_PAGE_SIZE;
+    return filteredStudents.slice(startIndex, startIndex + STUDENT_PAGE_SIZE);
+  }, [filteredStudents, studentCurrentPage]);
+
+  // --- Effects ---
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setStudentCurrentPage(1);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [activeClass]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setStudentCurrentPage(1);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [studentSearchQuery]);
+
+  // --- Handlers ---
+  const handleStudentClick = (studentId) => {
+    navigate(`/teacher/student/${studentId}`);
+  };
+
+  const handleResourceClick = (resourceId) => {
+    navigate(`/teacher/resource/${resourceId}`);
+  };
 
   const handleCopyCourseCode = async () => {
     if (!activeClassInfo?.course_code) return;
@@ -172,6 +215,7 @@ export default function TeacherConsole() {
             handleCopyCourseCode={handleCopyCourseCode}
             copiedCourseCode={copiedCourseCode}
             navigate={navigate}
+            onResourceClick={handleResourceClick}
           />
 
           {/* Student Monitoring Table */}
@@ -180,7 +224,15 @@ export default function TeacherConsole() {
             activeClass={activeClass}
             studentsLoading={studentsLoading}
             studentsError={studentsError}
-            students={students}
+            students={paginatedStudents}
+            searchQuery={studentSearchQuery}
+            onSearchChange={setStudentSearchQuery}
+            onRefresh={() => refreshStudents?.()}
+            onStudentClick={handleStudentClick}
+            totalStudents={filteredStudents.length}
+            currentPage={studentCurrentPage}
+            totalPages={studentTotalPages}
+            onPageChange={setStudentCurrentPage}
             navigate={navigate}
             isMockMode={isMockMode}
           />

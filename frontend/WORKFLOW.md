@@ -969,4 +969,9 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - **是否有接口漂移**: 无。
 - **修复与优化**: 解决 Code Review 问题，包括删除 `useLearningEffects.js` 渲染阶段同步调用 `setRefreshTask` 的 React 警告隐患，并移除了全局 `globalRefreshCounter` 变量，改用 Hook 实例内局部 `useState(0)` 进行 SWR Key 重新挂载，并补齐了 `getLearningEffects` 的单元测试 mock 配置以及 `waitFor` 测试异步等待逻辑，单元测试与打包均通过。
 
+### 2026-06-18 (前端网络层拦截器测试补齐)
+- **改了什么文件**: `src/api/__tests__/client.test.js`, `WORKFLOW.md`
+- **核心改动**: 为 `src/api/client.js` 补齐 Axios 实例行为测试，覆盖请求自动注入 Bearer token、成功响应 `data` 解包、401 清理 token 并跳转登录、403/5xx/网络错误触发全局 toast，以及其他 4xx 不触发全局 toast 的约定。
+- **测试结果**: `npm run test:unit -- src/api/__tests__/client.test.js` 通过，7/7 passed。
+- **是否有接口漂移**: 无。纯前端网络层测试补齐。
 

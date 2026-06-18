@@ -8,6 +8,15 @@ Phase 2 已进入架构治理与重构阶段，后端 `backend/app/api/v1/` 中�
 
 本 Spec 以当前运行代码为事实来源，不以历史 OpenAPI 文档推翻现有行为。
 
+## 外部经验与工程参考
+
+本次不引入新的组件库或运行时依赖。可借鉴的是后端工程组织经验，而不是 UI 组件库：
+
+- **FastAPI 多文件应用组织**：FastAPI 官方文档建议大型应用用 `APIRouter` 和 Python package 拆分不同路由模块。本项目已有 `api/v1/*` 路由分组，本次继续保留 `teaching.py` 作为 HTTP 入口，只把业务查询迁到 service。
+- **Service Layer**：Service Layer 适合定义应用边界、集中应用操作并协调业务响应。本次 `TeachingService` 承接教师端查询操作，避免 route 直接编码复杂聚合。
+- **SQLAlchemy eager loading / N+1 经验**：SQLAlchemy 提供 `selectinload()`、`joinedload()` 等手段处理关系加载和 N+1。当前 `list_students` 确实存在逐个 enrollment 查询 user 的 N+1，但本次目标是行为等价迁移，不顺手优化查询形态。
+- **Repository 模式判断**：Repository 适合复杂领域模型、大量重复查询、需要隔离 domain 与 data mapper 的场景。当前 teaching 查询是报表式聚合，先放在 service 内更直接；后续如果出现重复 query helper，再单独评估 Repository。
+
 ## 当前问题
 
 `teaching.py` 当前混合了以下职责：
@@ -117,12 +126,10 @@ class TeachingService:
 - `_student_list_item(user, enrollment) -> dict`
 - `_student_info_item(user) -> dict`
 - `_empty_class_insights() -> dict`
-- `_knowledge_progress_from_profile(profile) -> dict | None`
-- `_path_progress_from_learning_path(path) -> dict | None`
 - `_weak_point_item(row) -> dict`
 - `_recent_activity_item(session) -> dict`
 
-暂不新增 `teaching_presenters.py`。当前格式化函数数量可控，先放 service 内私有函数，避免过早拆文件。若实现后 service 超过约 350 行或 DTO 函数明显复用，再单独拆 presenter。
+`profile_summary` 和 `path_progress` 当前在 route 内是短小内联计算，实现时可以继续在 `get_student_learning` 内保持就近逻辑，不强行抽 helper。暂不新增 `teaching_presenters.py`。当前格式化函数数量可控，先放 service 内私有函数，避免过早拆文件。若实现后 service 超过约 350 行或 DTO 函数明显复用，再单独拆 presenter。
 
 ### 修改 `backend/app/api/v1/teaching.py`
 
@@ -178,6 +185,7 @@ async def get_class_insights(
     - `path_node_progress` 四类状态和 `total_nodes` 均为 0。
 14. 班级 path progress 只统计 `completed`、`in_progress`、`recommended`、`pending`，忽略未知状态。
 15. soft-deleted enrollment、quiz session、quiz answer、quiz question、learning path、evaluation、profile 按现有代码过滤逻辑保持。
+16. admin 角色通过 `require_role("teacher", "admin")` 鉴权后，若 `current_user.id` 不是该课程的 `teacher_id`，`verify_teacher` 仍返回 HTTP 403。
 
 ## 测试策略
 
@@ -189,12 +197,20 @@ async def get_class_insights(
    - 课程不存在抛 404。
    - 非任课教师抛 403。
    - 任课教师返回 course。
-2. `get_student_learning`：
+   - admin 但非该课程 `teacher_id` 时仍抛 403。
+2. `list_students`：
+   - 分页 offset/limit 正确。
+   - `total`、`page`、`page_size` 字段保持。
+   - 不包含 soft-deleted enrollment。
+3. `get_student_info`：
+   - 学生不存在抛 404。
+   - 学生存在时返回现有字段。
+4. `get_student_learning`：
    - 未入班学生抛 404。
    - weak points 过滤空知识点并只保留错题知识点。
    - mastery breakdown accuracy 计算保持当前语义。
    - recent activity 最多 5 条且倒序。
-3. `get_class_insights`：
+5. `get_class_insights`：
    - 空班级返回全零结构。
    - quiz 平均分与尝试次数聚合正确。
    - weak points top 过滤空知识点、最多 5 条、排序正确。
@@ -232,6 +248,7 @@ TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/api_teaching_refactor_test.db ../.ven
 
 - **聚合查询迁移时字段漂移**：用现有 `test_teacher_student_learning.py` 和 `test_teacher_class_insights.py` 做 API 回归，同时新增 service 测试锁定核心数据结构。
 - **错误 detail 漂移**：service 内继续抛 `HTTPException`，保留现有 detail dict，不引入新异常类型。
+- **`list_students` N+1 查询**：当前 route 对每个 enrollment 单独查询 `User`，这是明确的性能坏味道。本次按“等价迁移”原样保留查询语义，不在同一重构里顺手改 join/selectinload。后续若要优化，单独写 Spec 并增加查询结果等价测试。
 - **SQLite/MySQL 聚合差异**：不改变现有 `case`、`func.sum`、`group_by`、`having` 写法，测试继续覆盖 SQLite；若 MySQL 专属失败，单独记录并修复。
 - **Service 文件再次变胖**：本次 service 目标是承接教学查询聚合，若实现后接近或超过 350 行，再拆 `teaching_presenters.py` 或 `teaching_query_helpers.py`，不在第一版预拆。
 - **权限语义混淆**：`require_role("teacher", "admin")` 保持在 route；`verify_teacher` 继续按当前行为要求 course.teacher_id 等于 current_user.id。因此 admin 角色虽然能通过 role 依赖，但若不是任课教师仍按现有逻辑返回 403。本次不改变该语义。

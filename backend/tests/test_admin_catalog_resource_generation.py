@@ -224,7 +224,7 @@ async def test_admin_catalog_quiz_generation_does_not_delete_existing_baseline_b
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs._run_quiz_generation_background", new_callable=AsyncMock):
+    with patch("app.services.catalog_quiz_generation_service.run_quiz_generation_background", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/quiz/generations",
@@ -236,6 +236,85 @@ async def test_admin_catalog_quiz_generation_does_not_delete_existing_baseline_b
         question = await db.get(QuizQuestion, "old-baseline-question")
         assert question is not None
         assert question.is_deleted is False
+
+
+@pytest.mark.asyncio
+async def test_quiz_generation_background_marks_parent_partial_when_one_child_raises():
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    parent_id = "quiz-parent-partial"
+    completed_child_id = "quiz-child-completed"
+    failed_child_id = "quiz-child-raised"
+    async with async_session_factory() as db:
+        db.add(
+            AsyncTask(
+                id=parent_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                course_id=None,
+                result={
+                    "catalog_id": "catalog-admin-gen",
+                    "total_node_count": 2,
+                    "completed_node_count": 0,
+                    "failed_node_count": 0,
+                    "total_question_count": 0,
+                },
+            )
+        )
+        db.add_all(
+            [
+                AsyncTask(
+                    id=completed_child_id,
+                    task_type="quiz_generation",
+                    status="processing",
+                    progress=10,
+                    user_id="admin-admin-gen",
+                    result={"parent_task_id": parent_id},
+                ),
+                AsyncTask(
+                    id=failed_child_id,
+                    task_type="quiz_generation",
+                    status="processing",
+                    progress=10,
+                    user_id="admin-admin-gen",
+                    result={"parent_task_id": parent_id},
+                ),
+            ]
+        )
+        await db.commit()
+
+    async def _child_result(db, child_id, fanout_course_ids):
+        if child_id == completed_child_id:
+            return {
+                "status": "completed",
+                "question_count": 2,
+                "inserted_question_ids": ["q1", "q2"],
+            }
+        raise RuntimeError("child failed")
+
+    with patch(
+        "app.services.catalog_quiz_generation_service.generate_quiz_for_child",
+        new_callable=AsyncMock,
+    ) as mock_child:
+        mock_child.side_effect = _child_result
+        from app.services.catalog_quiz_generation_service import run_quiz_generation_background
+
+        await run_quiz_generation_background(
+            parent_id,
+            [completed_child_id, failed_child_id],
+            ["class-admin-gen-a"],
+        )
+
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, parent_id)
+        assert parent.status == "partial"
+        assert parent.progress == 100
+        assert parent.result["completed_node_count"] == 1
+        assert parent.result["failed_node_count"] == 1
+        assert parent.result["total_question_count"] == 2
+        assert parent.result["inserted_question_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -266,7 +345,7 @@ async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_quiz_generation_service.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {
             "questions": [
                 {
@@ -278,10 +357,10 @@ async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_
                 }
             ]
         }
-        from app.api.v1.catalogs import _generate_quiz_for_child
+        from app.services.catalog_quiz_generation_service import generate_quiz_for_child
 
         async with async_session_factory() as db:
-            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            result = await generate_quiz_for_child(db, child_id, [class_id])
             await db.commit()
 
     assert result["status"] == "completed"
@@ -374,12 +453,12 @@ async def test_admin_catalog_quiz_child_splits_large_mixed_request_when_batch_re
         ]
     }
 
-    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_quiz_generation_service.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.side_effect = [skeleton_batch, single_batch, multi_batch]
-        from app.api.v1.catalogs import _generate_quiz_for_child
+        from app.services.catalog_quiz_generation_service import generate_quiz_for_child
 
         async with async_session_factory() as db:
-            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            result = await generate_quiz_for_child(db, child_id, [class_id])
             await db.commit()
 
     assert result["status"] == "completed"
@@ -436,7 +515,7 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_questions():
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_quiz_generation_service.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {
             "questions": [
                 {
@@ -453,10 +532,10 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_questions():
                 }
             ]
         }
-        from app.api.v1.catalogs import _generate_quiz_for_child
+        from app.services.catalog_quiz_generation_service import generate_quiz_for_child
 
         async with async_session_factory() as db:
-            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            result = await generate_quiz_for_child(db, child_id, [class_id])
             await db.commit()
 
     assert result["status"] == "failed"
@@ -491,7 +570,7 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_string_options
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_quiz_generation_service.quiz_agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {
             "questions": [
                 {
@@ -503,10 +582,10 @@ async def test_admin_catalog_quiz_child_rejects_skeleton_fallback_string_options
                 }
             ]
         }
-        from app.api.v1.catalogs import _generate_quiz_for_child
+        from app.services.catalog_quiz_generation_service import generate_quiz_for_child
 
         async with async_session_factory() as db:
-            result = await _generate_quiz_for_child(db, child_id, [class_id])
+            result = await generate_quiz_for_child(db, child_id, [class_id])
             await db.commit()
 
             questions = (

@@ -1,6 +1,4 @@
 import asyncio
-import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,10 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
-from app.db.session import async_session_factory
-from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
-from app.models.others import AsyncTask, Resource
-from app.models.quiz import QuizQuestion
+from app.models.catalog import CourseCatalog, CourseCatalogMaterial
+from app.models.others import AsyncTask
 from app.models.user import User
 from app.schemas.catalog import (
     CatalogKnowledgeGraphGenerationRequest,
@@ -21,7 +17,6 @@ from app.schemas.catalog import (
     CourseCatalogMaterialCreateRequest,
 )
 from app.schemas.operations import CatalogResourceGenerateRequest
-from app.services.agent_client import AgentClient, AgentServiceError
 from app.services.catalog_presenters import (
     catalog_item,
     knowledge_graph_summary,
@@ -43,22 +38,16 @@ from app.services.catalog_kg_service import (
     run_catalog_kg_generation_background,
 )
 from app.services.catalog_resource_generation_service import CatalogResourceGenerationService
+from app.services.catalog_quiz_generation_service import (
+    CatalogQuizGenerationService,
+    run_quiz_generation_background,
+)
 from app.services.catalog_service import CatalogService
-from app.services.course_knowledge_graphs import get_active_knowledge_graph
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
-logger = logging.getLogger(__name__)
-quiz_agent_client = AgentClient(timeout=300.0)
 
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-QUIZ_GENERATION_CONCURRENCY = 2
-QUIZ_BASELINE_SINGLE_COUNT = 3
-QUIZ_BASELINE_MULTI_COUNT = 4
-
-
-def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _webhook_url(request: Request) -> str:
@@ -68,27 +57,6 @@ def _webhook_url(request: Request) -> str:
 
 def _async_task_catalog_id_expr():
     return func.json_unquote(func.json_extract(AsyncTask.result, "$.catalog_id"))
-
-
-def _course_material_missing() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={"code": 40913, "message": "课程资料尚未完成入库", "data": None},
-    )
-
-
-def _knowledge_base_empty() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={"code": 40914, "message": "课程知识库为空", "data": None},
-    )
-
-
-def _course_offering_missing() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={"code": 40915, "message": "课程资源库尚未绑定教学班", "data": None},
-    )
 
 
 @router.get("/admin/course-catalogs")
@@ -463,398 +431,26 @@ async def admin_generate_catalog_resources(
     }
 
 
-async def _run_quiz_generation_background(
-    parent_id: str,
-    child_task_ids: list[str],
-    fanout_course_ids: list[str],
-) -> None:
-    """后台异步：遍历子任务调 Agent 出题落库，完成后汇总父任务。"""
-    semaphore = asyncio.Semaphore(QUIZ_GENERATION_CONCURRENCY)
-
-    async def _run_child(child_id: str) -> dict:
-        async with semaphore:
-            async with async_session_factory() as child_db:
-                result = await _generate_quiz_for_child(child_db, child_id, fanout_course_ids)
-                await child_db.commit()
-                return result
-
-    results = await asyncio.gather(
-        *[_run_child(child_id) for child_id in child_task_ids],
-        return_exceptions=True,
-    )
-
-    async with async_session_factory() as db:
-        # 汇总父任务
-        parent_result = await db.execute(
-            select(AsyncTask).where(AsyncTask.id == parent_id, AsyncTask.is_deleted == False)
-        )
-        parent = parent_result.scalar_one_or_none()
-        if parent is None:
-            logger.error("Quiz generation parent task missing: %s", parent_id)
-            return
-
-        completed = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "completed")
-        failed = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "failed")
-        total_qs = sum(
-            (r.get("question_count") or 0)
-            for r in results if isinstance(r, dict) and r.get("status") == "completed"
-        )
-        inserted_question_ids = [
-            question_id
-            for r in results if isinstance(r, dict)
-            for question_id in (r.get("inserted_question_ids") or [])
-        ]
-        if inserted_question_ids:
-            fanout_catalog_id = None
-            for r in results:
-                if isinstance(r, dict) and r.get("fanout_catalog_id"):
-                    fanout_catalog_id = r["fanout_catalog_id"]
-                    break
-            if fanout_catalog_id:
-                await db.execute(
-                    update(QuizQuestion)
-                    .where(
-                        QuizQuestion.catalog_id == fanout_catalog_id,
-                        QuizQuestion.source == "baseline",
-                        QuizQuestion.is_deleted == False,
-                        ~QuizQuestion.id.in_(inserted_question_ids),
-                    )
-                    .values(is_deleted=True)
-                )
-            else:
-                for cid in fanout_course_ids:
-                    await db.execute(
-                        update(QuizQuestion)
-                        .where(
-                            QuizQuestion.course_id == cid,
-                            QuizQuestion.source == "baseline",
-                            QuizQuestion.is_deleted == False,
-                            ~QuizQuestion.id.in_(inserted_question_ids),
-                        )
-                        .values(is_deleted=True)
-                    )
-        parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
-        parent.progress = 100
-        parent.completed_at = _now_utc()
-        parent.result = {
-            **parent.result,
-            "completed_node_count": completed,
-            "failed_node_count": failed,
-            "total_question_count": total_qs,
-            "inserted_question_count": len(inserted_question_ids),
-        }
-        await db.commit()
-
-
-async def _generate_quiz_for_child(
-    db: AsyncSession,
-    child_id: str,
-    fanout_course_ids: list[str],
-) -> dict:
-    """处理单个 quiz 子任务：调 Agent 出题落库，更新子 task。"""
-    child_result = await db.execute(
-        select(AsyncTask).where(AsyncTask.id == child_id, AsyncTask.is_deleted == False)
-    )
-    child = child_result.scalar_one_or_none()
-    if child is None:
-        return {"status": "failed", "error": "child task not found"}
-
-    child_data = child.result or {}
-    node_name = child_data.get("node_name", "")
-    chapter = child_data.get("chapter") or ""
-    course_ids = child_data.get("course_ids") or fanout_course_ids
-    fanout_catalog_id = child_data.get("fanout_catalog_id")
-    agent_course_id = child_data.get("agent_course_id") or child_data.get("catalog_id") or child.course_id or ""
-
-    try:
-        questions = await _generate_baseline_quiz_questions(
-            child=child,
-            agent_course_id=agent_course_id,
-            course_ids=course_ids,
-            chapter=chapter,
-            node_name=node_name,
-        )
-        new_questions: list[QuizQuestion] = []
-        inserted_question_ids: list[str] = []
-        for cid in course_ids:
-            for q in (questions if isinstance(questions, list) else []):
-                if _is_skeleton_quiz_question(q):
-                    continue
-                question_id = uuid4().hex[:16]
-                inserted_question_ids.append(question_id)
-                new_questions.append(QuizQuestion(
-                    id=question_id,
-                    course_id=cid,
-                    catalog_id=fanout_catalog_id,
-                    chapter=chapter,
-                    knowledge_point=node_name,
-                    type=q.get("type", "single_choice"),
-                    source="baseline",
-                    personalized=False,
-                    difficulty="medium",
-                    content=q.get("content", ""),
-                    options=q.get("options", []),
-                    correct_answer=_format_quiz_answer(q.get("answer", "")),
-                    explanation=q.get("explanation", ""),
-                ))
-        if not new_questions:
-            child.status = "failed"
-            child.progress = 100
-            child.error_code = "skeleton_rejected"
-            child.error_message = "Agent returned only skeleton fallback questions"
-            child.completed_at = _now_utc()
-            child.result = {**child_data, "question_count": 0, "rejected_reason": "skeleton"}
-            return {"status": "failed", "error": "skeleton_rejected"}
-        for q in new_questions:
-            db.add(q)
-
-        child.status = "completed"
-        child.progress = 100
-        child.completed_at = _now_utc()
-        child.result = {
-            **child_data,
-            "agent_course_id": agent_course_id,
-            "question_count": len(new_questions),
-            "inserted_question_ids": inserted_question_ids,
-        }
-        return {
-            "status": "completed",
-            "question_count": len(new_questions),
-            "inserted_question_ids": inserted_question_ids,
-            "fanout_catalog_id": fanout_catalog_id,
-        }
-    except AgentServiceError as e:
-        child.status = "failed"
-        child.progress = 100
-        child.error_code = str(e.agent_code or "agent_error")
-        child.error_message = e.message
-        child.completed_at = _now_utc()
-        return {"status": "failed", "error": e.message, "fanout_catalog_id": fanout_catalog_id}
-    except Exception as e:
-        child.status = "failed"
-        child.progress = 100
-        child.error_code = "unexpected_error"
-        child.error_message = str(e)[:500]
-        child.completed_at = _now_utc()
-        return {"status": "failed", "error": str(e)[:500], "fanout_catalog_id": fanout_catalog_id}
-
-
-def _build_baseline_quiz_payload(
-    *,
-    child: AsyncTask,
-    agent_course_id: str,
-    course_ids: list[str],
-    chapter: str,
-    node_name: str,
-    question_types: list[str],
-    count: int,
-) -> dict:
-    return {
-        "task_id": child.id,
-        "user_id": child.user_id or "",
-        "course_id": agent_course_id,
-        "class_course_ids": course_ids,
-        "chapter": chapter,
-        "knowledge_point": node_name,
-        "question_types": question_types,
-        "count": count,
-        "difficulty": "medium",
-        "source": "baseline",
-    }
-
-
-async def _request_baseline_quiz_questions(payload: dict) -> list[dict]:
-    data = await quiz_agent_client.post_json(
-        "/agent/v1/assessment/generate-questions",
-        payload,
-    )
-    questions = data.get("questions") if isinstance(data, dict) else []
-    if not isinstance(questions, list):
-        return []
-    return [question for question in questions if isinstance(question, dict)]
-
-
-async def _generate_baseline_quiz_questions(
-    *,
-    child: AsyncTask,
-    agent_course_id: str,
-    course_ids: list[str],
-    chapter: str,
-    node_name: str,
-) -> list[dict]:
-    bulk_payload = _build_baseline_quiz_payload(
-        child=child,
-        agent_course_id=agent_course_id,
-        course_ids=course_ids,
-        chapter=chapter,
-        node_name=node_name,
-        question_types=(["single_choice"] * QUIZ_BASELINE_SINGLE_COUNT)
-        + (["multi_choice"] * QUIZ_BASELINE_MULTI_COUNT),
-        count=QUIZ_BASELINE_SINGLE_COUNT + QUIZ_BASELINE_MULTI_COUNT,
-    )
-    questions = await _request_baseline_quiz_questions(bulk_payload)
-    if _non_skeleton_quiz_questions(questions):
-        return questions
-
-    split_questions: list[dict] = []
-    for question_type, count in (
-        ("single_choice", QUIZ_BASELINE_SINGLE_COUNT),
-        ("multi_choice", QUIZ_BASELINE_MULTI_COUNT),
-    ):
-        payload = _build_baseline_quiz_payload(
-            child=child,
-            agent_course_id=agent_course_id,
-            course_ids=course_ids,
-            chapter=chapter,
-            node_name=node_name,
-            question_types=[question_type],
-            count=count,
-        )
-        batch_questions = await _request_baseline_quiz_questions(payload)
-        split_questions.extend(_non_skeleton_quiz_questions(batch_questions))
-    return split_questions
-
-
-def _non_skeleton_quiz_questions(questions: list[dict]) -> list[dict]:
-    return [
-        question
-        for question in questions
-        if isinstance(question, dict) and not _is_skeleton_quiz_question(question)
-    ]
-
-
-def _format_quiz_answer(answer) -> str:
-    if isinstance(answer, list):
-        return ",".join(str(item).strip() for item in answer if str(item).strip())
-    return str(answer or "").strip()
-
-
-def _quiz_option_text(option) -> str:
-    if isinstance(option, dict):
-        return str(option.get("text") or option.get("label") or option.get("content") or "").strip()
-    return str(option or "").strip()
-
-
-def _is_skeleton_quiz_question(question: dict) -> bool:
-    if not isinstance(question, dict):
-        return False
-    content = str(question.get("content") or "")
-    if "请围绕" not in content or "完成一道" not in content:
-        return False
-    options = question.get("options")
-    if not isinstance(options, list):
-        return False
-    option_texts = [_quiz_option_text(option) for option in options]
-    option_texts = [text for text in option_texts if text]
-    return option_texts == ["正确表述", "易混淆表述", "相关补充表述", "无关表述"]
-
-
 @router.post("/admin/course-catalogs/{catalog_id}/quiz/generations", status_code=202)
 async def admin_generate_catalog_quiz(
     catalog_id: str,
-    request: Request,
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """Admin 批量生成保底题库：遍历 active KG 全部节点，异步调 Agent 出题落库。"""
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    if catalog.status != "ready":
-        raise _course_material_missing()
-    if catalog.knowledge_status not in {"ready", "partial"}:
-        raise _course_material_missing()
-    if (catalog.chunk_count or 0) <= 0:
-        raise _knowledge_base_empty()
-
-    offerings_result = await db.execute(
-        select(CourseOffering)
-        .where(
-            CourseOffering.catalog_id == catalog.id,
-            CourseOffering.is_deleted == False,
-        )
-        .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
-    )
-    offerings = offerings_result.scalars().all()
-    fanout_course_ids = [offering.id for offering in offerings]
-    if not fanout_course_ids and catalog.kg_host_course_id:
-        fanout_course_ids = [catalog.kg_host_course_id]
-    if not fanout_course_ids:
-        raise _course_offering_missing()
-
-    kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id or "")
-    if kg is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": 40917,
-                "message": "课程知识图谱未就绪",
-                "data": {"error_code": "kg_not_ready"},
-            },
-        )
-
-    kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
-    if not kg_nodes:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": 40918,
-                "message": "课程知识图谱节点为空",
-                "data": {"error_code": "kg_nodes_empty"},
-            },
-        )
-
-    parent = AsyncTask(
-        task_type="quiz_generation",
-        status="processing",
-        progress=10,
-        user_id=current_user.id,
-        course_id=None,
-        result={
-            "catalog_id": catalog.id,
-            "catalog_title": catalog.title,
-            "agent_course_id": catalog.id,
-            "fanout_course_ids": fanout_course_ids,
-            "total_node_count": len(kg_nodes),
-            "completed_node_count": 0,
-            "failed_node_count": 0,
-            "total_question_count": 0,
-        },
-    )
-    db.add(parent)
-    await db.flush()
-    await db.refresh(parent)
-
-    child_task_ids: list[str] = []
-    for kg_node in kg_nodes:
-        node_name = kg_node.get("name", "")
-        chapter = kg_node.get("chapter", "")
-        child = AsyncTask(
-            task_type="quiz_generation",
-            status="processing",
-            progress=10,
-            user_id=current_user.id,
-            course_id=fanout_course_ids[0],
-            result={
-                "catalog_id": catalog.id,
-                "parent_task_id": parent.id,
-                "agent_course_id": catalog.id,
-                "node_name": node_name,
-                "chapter": chapter,
-                "course_ids": fanout_course_ids,
-                "fanout_catalog_id": catalog.id,
-            },
-        )
-        db.add(child)
-        await db.flush()
-        child_task_ids.append(child.id)
-
-    await db.commit()
+    parent, child_task_ids, fanout_course_ids = await CatalogQuizGenerationService(
+        db
+    ).start_quiz_generation(catalog, actor_user_id=current_user.id)
 
     # 后台异步执行 Agent 调用 + 写库
-    asyncio.create_task(_run_quiz_generation_background(
-        parent_id=parent.id,
-        child_task_ids=child_task_ids,
-        fanout_course_ids=fanout_course_ids,
-    ))
+    asyncio.create_task(
+        run_quiz_generation_background(
+            parent_id=parent.id,
+            child_task_ids=child_task_ids,
+            fanout_course_ids=fanout_course_ids,
+        )
+    )
 
     return {
         "code": 202,

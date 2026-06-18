@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
@@ -21,7 +21,7 @@ from app.schemas.catalog import (
     CourseCatalogMaterialCreateRequest,
 )
 from app.schemas.operations import CatalogResourceGenerateRequest
-from app.services.agent_client import AgentClient, AgentServiceError, agent_client
+from app.services.agent_client import AgentClient, AgentServiceError
 from app.services.catalog_presenters import (
     catalog_item,
     knowledge_graph_summary,
@@ -42,10 +42,9 @@ from app.services.catalog_kg_service import (
     CatalogKGService,
     run_catalog_kg_generation_background,
 )
+from app.services.catalog_resource_generation_service import CatalogResourceGenerationService
 from app.services.catalog_service import CatalogService
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.kg_resource_targets import select_core_resource_targets
-from app.services.resource_scope import resource_scope_clause
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 logger = logging.getLogger(__name__)
@@ -53,8 +52,6 @@ quiz_agent_client = AgentClient(timeout=300.0)
 
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
-KG_RESOURCE_TARGET_LIMIT = 10
 QUIZ_GENERATION_CONCURRENCY = 2
 QUIZ_BASELINE_SINGLE_COUNT = 3
 QUIZ_BASELINE_MULTI_COUNT = 4
@@ -71,11 +68,6 @@ def _webhook_url(request: Request) -> str:
 
 def _async_task_catalog_id_expr():
     return func.json_unquote(func.json_extract(AsyncTask.result, "$.catalog_id"))
-
-
-def _is_explicit_resource_target(req: CatalogResourceGenerateRequest) -> bool:
-    return bool((req.chapter or "").strip() or (req.knowledge_point or "").strip())
-
 
 
 def _course_material_missing() -> HTTPException:
@@ -423,52 +415,16 @@ async def admin_list_catalog_resources(
     db: AsyncSession = Depends(get_db),
 ):
     await CatalogService(db).get_catalog(catalog_id)
-    offering_result = await db.execute(
-        select(CourseOffering.id).where(
-            CourseOffering.catalog_id == catalog_id,
-            CourseOffering.is_deleted == False,
-        )
+    data = await CatalogResourceGenerationService(db).list_catalog_resources(
+        catalog_id,
+        resource_type=type,
+        page=page,
+        page_size=page_size,
     )
-    course_ids = list(offering_result.scalars().all())
-
-    query = select(Resource).where(Resource.is_deleted == False)
-    if course_ids:
-        query = query.where(or_(*(resource_scope_clause(course_id, catalog_id) for course_id in course_ids)))
-    else:
-        query = query.where(Resource.catalog_id == catalog_id)
-    if type:
-        query = query.where(Resource.type == type)
-
-    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
-    result = await db.execute(
-        query.order_by(Resource.create_time.desc(), Resource.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    resources = result.scalars().all()
     return {
         "code": 200,
         "message": "success",
-        "data": {
-            "resources": [
-                {
-                    "id": r.id,
-                    "course_id": r.course_id,
-                    "title": r.title,
-                    "type": r.type,
-                    "description": r.description or "",
-                    "tags": r.tags or [],
-                    "chapter": r.chapter,
-                    "knowledge_point": r.knowledge_point,
-                    "view_count": r.view_count,
-                    "created_at": r.create_time.isoformat() if r.create_time else "",
-                }
-                for r in resources
-            ],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
+        "data": data,
     }
 
 
@@ -478,19 +434,10 @@ async def admin_delete_resource(
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Resource).where(Resource.id == resource_id, Resource.is_deleted == False)
+    resource = await CatalogResourceGenerationService(db).delete_resource(
+        resource_id,
+        actor_user_id=current_user.id,
     )
-    resource = result.scalar_one_or_none()
-    if resource is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 40412, "message": "资源不存在", "data": None},
-        )
-
-    resource.is_deleted = True
-    resource.update_by = current_user.id
-    await db.commit()
     return {"code": 200, "message": "deleted", "data": {"id": resource.id, "deleted": True}}
 
 
@@ -503,238 +450,12 @@ async def admin_generate_catalog_resources(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    if catalog.status != "ready":
-        raise _course_material_missing()
-    if catalog.knowledge_status not in {"ready", "partial"}:
-        raise _course_material_missing()
-    if (catalog.chunk_count or 0) <= 0:
-        raise _knowledge_base_empty()
-
-    if not req.resource_types:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": 42210, "message": "至少选择一种资源类型", "data": None},
-        )
-    invalid_types = [item for item in req.resource_types if item not in RESOURCE_TYPES]
-    if invalid_types:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": 42210, "message": "资源类型不合法", "data": {"invalid_types": invalid_types}},
-        )
-
-    offerings_result = await db.execute(
-        select(CourseOffering)
-        .where(
-            CourseOffering.catalog_id == catalog.id,
-            CourseOffering.is_deleted == False,
-        )
-        .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
+    task = await CatalogResourceGenerationService(db).start_resource_generation(
+        catalog,
+        req,
+        actor_user_id=current_user.id,
+        webhook_url=_webhook_url(request),
     )
-    offerings = offerings_result.scalars().all()
-    fanout_course_ids = [offering.id for offering in offerings]
-    if not fanout_course_ids and catalog.kg_host_course_id:
-        fanout_course_ids = [catalog.kg_host_course_id]
-    if not fanout_course_ids:
-        raise _course_offering_missing()
-
-    resource_types = req.resource_types
-
-    if not _is_explicit_resource_target(req):
-        kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id or "")
-        if kg is None:
-            task = AsyncTask(
-                task_type="resource_generation",
-                status="failed",
-                progress=100,
-                user_id=current_user.id,
-                course_id=None,
-                result={
-                    "catalog_id": catalog.id,
-                    "catalog_title": catalog.title,
-                    "fanout_course_ids": fanout_course_ids,
-                    "mode": "kg_node_targets",
-                    "resource_types": resource_types,
-                },
-                error_code="kg_not_ready",
-                error_message="课程知识图谱未就绪",
-                completed_at=_now_utc(),
-            )
-            db.add(task)
-            await db.commit()
-            return {
-                "code": 202,
-                "message": "accepted",
-                "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
-            }
-
-        selection = select_core_resource_targets(
-            kg.nodes if isinstance(kg.nodes, list) else [],
-            max_targets=KG_RESOURCE_TARGET_LIMIT,
-        )
-        target_nodes = selection["targets"]
-        if not target_nodes:
-            task = AsyncTask(
-                task_type="resource_generation",
-                status="failed",
-                progress=100,
-                user_id=current_user.id,
-                course_id=None,
-                result={
-                    "catalog_id": catalog.id,
-                    "catalog_title": catalog.title,
-                    "fanout_course_ids": fanout_course_ids,
-                    "mode": "kg_node_targets",
-                    "resource_types": resource_types,
-                    "target_node_count": 0,
-                    "total_child_count": 0,
-                    "selection_degraded": selection["selection_degraded"],
-                    "selection_degraded_reason": selection["degraded_reason"],
-                },
-                error_code="kg_target_empty",
-                error_message="没有可用于资源挂载的 KG 节点",
-                completed_at=_now_utc(),
-            )
-            db.add(task)
-            await db.commit()
-            return {
-                "code": 202,
-                "message": "accepted",
-                "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
-            }
-
-        parent = AsyncTask(
-            task_type="resource_generation",
-            status="processing",
-            progress=10,
-            user_id=current_user.id,
-            course_id=None,
-            result={
-                "catalog_id": catalog.id,
-                "catalog_title": catalog.title,
-                "fanout_course_ids": fanout_course_ids,
-                "mode": "kg_node_targets",
-                "knowledge_status": catalog.knowledge_status,
-                "degraded": catalog.knowledge_status == "partial",
-                "chunk_count": catalog.chunk_count or 0,
-                "resource_types": resource_types,
-                "target_node_count": len(target_nodes),
-                "total_child_count": len(target_nodes),
-                "target_nodes": target_nodes,
-                "selection_degraded": selection["selection_degraded"],
-                "selection_degraded_reason": selection["degraded_reason"],
-                "completed_child_count": 0,
-                "failed_child_count": 0,
-                "successful_node_count": 0,
-                "failed_node_count": 0,
-            },
-        )
-        db.add(parent)
-        await db.flush()
-        await db.refresh(parent)
-
-        children: list[AsyncTask] = []
-        for target_node in target_nodes:
-            child = AsyncTask(
-                task_type="resource_generation",
-                status="processing",
-                progress=10,
-                user_id=current_user.id,
-                course_id=None,
-                result={
-                    "catalog_id": catalog.id,
-                    "catalog_title": catalog.title,
-                    "parent_task_id": parent.id,
-                    "fanout_course_ids": fanout_course_ids,
-                    "mode": "kg_node_target",
-                    "target_node": target_node,
-                    "resource_types": resource_types,
-                },
-            )
-            db.add(child)
-            children.append(child)
-        await db.flush()
-
-        for child in children:
-            target_node = child.result["target_node"]
-            payload = {
-                "task_id": child.id,
-                "user_id": current_user.id,
-                "course_id": catalog.id,
-                "chapter": target_node["chapter"],
-                "knowledge_point": target_node["node_name"],
-                "resource_types": resource_types,
-                "webhook_url": _webhook_url(request),
-            }
-            try:
-                await agent_client.post_json("/agent/v1/resources/generate", payload)
-            except AgentServiceError as e:
-                child.status = "failed"
-                child.error_code = str(e.agent_code or "agent_error")
-                child.error_message = e.message
-                child.progress = 100
-                child.completed_at = _now_utc()
-
-        await db.commit()
-        return {
-            "code": 202,
-            "message": "accepted",
-            "data": {"task_id": parent.id, "catalog_id": catalog.id, "status": "processing"},
-        }
-
-    task_result = {
-        "catalog_id": catalog.id,
-        "catalog_title": catalog.title,
-        "fanout_course_ids": fanout_course_ids,
-        "knowledge_status": catalog.knowledge_status,
-        "degraded": catalog.knowledge_status == "partial",
-        "chunk_count": catalog.chunk_count or 0,
-        "resource_types": resource_types,
-    }
-    if req.chapter:
-        task_result["chapter"] = req.chapter
-    if req.knowledge_point:
-        task_result["knowledge_point"] = req.knowledge_point
-
-    task = AsyncTask(
-        task_type="resource_generation",
-        status="processing",
-        progress=10,
-        user_id=current_user.id,
-        course_id=None,
-        result=task_result,
-    )
-    db.add(task)
-    await db.flush()
-    await db.refresh(task)
-
-    payload = {
-        "task_id": task.id,
-        "user_id": current_user.id,
-        "course_id": catalog.id,
-        "resource_types": resource_types,
-        "webhook_url": _webhook_url(request),
-    }
-    if req.chapter:
-        payload["chapter"] = req.chapter
-    if req.knowledge_point:
-        payload["knowledge_point"] = req.knowledge_point
-
-    try:
-        await agent_client.post_json("/agent/v1/resources/generate", payload)
-    except AgentServiceError as e:
-        task.status = "failed"
-        task.error_code = str(e.agent_code or "agent_error")
-        task.error_message = e.message
-        task.progress = 100
-        task.completed_at = _now_utc()
-        await db.commit()
-        return {
-            "code": 202,
-            "message": "accepted",
-            "data": {"task_id": task.id, "catalog_id": catalog.id, "status": "processing"},
-        }
-
-    await db.commit()
     return {
         "code": 202,
         "message": "accepted",

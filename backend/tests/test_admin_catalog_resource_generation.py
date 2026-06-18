@@ -538,7 +538,7 @@ async def test_admin_catalog_generation_creates_task_and_sends_catalog_id_to_age
     class_a = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
     class_b = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-b")
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_resource_generation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {"task_id": "ignored"}
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
@@ -603,7 +603,7 @@ async def test_admin_catalog_generation_without_metadata_creates_parent_and_chil
         ],
     )
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_resource_generation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         mock_agent.return_value = {"task_id": "accepted"}
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
@@ -660,7 +660,7 @@ async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_ac
     catalog_id = await _seed_ready_catalog()
     await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_resource_generation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
@@ -698,7 +698,7 @@ async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_us
         ],
     )
 
-    with patch("app.api.v1.catalogs.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+    with patch("app.services.catalog_resource_generation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",

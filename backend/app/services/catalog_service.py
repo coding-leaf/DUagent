@@ -32,6 +32,13 @@ class CatalogService:
         )
         return list(result.scalars().all()), total
 
+    async def list_ready_catalogs(self, status_filter: str | None = "ready") -> list[CourseCatalog]:
+        query = select(CourseCatalog).where(CourseCatalog.is_deleted == False)
+        if status_filter:
+            query = query.where(CourseCatalog.status == status_filter)
+        result = await self.db.execute(query.order_by(CourseCatalog.title.asc()))
+        return list(result.scalars().all())
+
     async def create_catalog(self, title: str, description: str) -> CourseCatalog:
         catalog = CourseCatalog(
             title=title.strip(),

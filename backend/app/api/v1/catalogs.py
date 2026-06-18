@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -31,6 +30,11 @@ from app.services.catalog_presenters import (
     knowledge_graph_task_summary,
     material_item,
 )
+from app.services.catalog_material_service import (
+    remove_material_dir,
+    safe_filename,
+    state_after_material_added,
+)
 from app.services.catalog_service import CatalogService
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.kg_generation import KGGenerationInputError, generate_knowledge_graph_version
@@ -53,31 +57,6 @@ HOST_COURSE_NAME_PREFIX = "[KG HOST] "
 COURSE_NAME_MAX_LENGTH = 100
 
 
-def _safe_filename(filename: str) -> str:
-    raw_name = (filename or "").strip()
-    name = Path(raw_name).name.strip()
-    if (
-        not raw_name
-        or not name
-        or name in {".", ".."}
-        or raw_name != name
-        or "/" in raw_name
-        or "\\" in raw_name
-        or ".." in Path(raw_name).parts
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": 40020, "message": "文件名不合法", "data": None},
-        )
-    return name
-
-
-def _state_after_material_added(catalog: CourseCatalog) -> tuple[str, str]:
-    if catalog.status == "ready":
-        return "ready", "dirty"
-    return "draft", "draft"
-
-
 def _is_initial_ingestion(catalog: CourseCatalog) -> bool:
     return catalog.status != "ready"
 
@@ -88,10 +67,6 @@ def _now_utc() -> datetime:
 
 def _first_error(errors: list[str]) -> str:
     return (errors[0] if errors else "资料入库失败")[:500]
-
-
-def _remove_material_dir(target_path: Path) -> None:
-    shutil.rmtree(target_path.parent, ignore_errors=True)
 
 
 def _webhook_url(request: Request) -> str:
@@ -500,7 +475,7 @@ async def admin_upload_catalog_material(
             detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
         )
 
-    filename = _safe_filename(file.filename or "")
+    filename = safe_filename(file.filename or "")
     suffix = Path(filename).suffix.lower()
     if suffix not in SUPPORTED_MATERIAL_SUFFIXES:
         raise HTTPException(
@@ -520,7 +495,7 @@ async def admin_upload_catalog_material(
             while chunk := await file.read(UPLOAD_CHUNK_SIZE):
                 file_size += len(chunk)
                 if file_size > settings.COURSE_CATALOG_MAX_UPLOAD_BYTES:
-                    _remove_material_dir(target_path)
+                    remove_material_dir(target_path)
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail={"code": 41320, "message": "资料文件过大", "data": None},
@@ -529,17 +504,17 @@ async def admin_upload_catalog_material(
     except HTTPException:
         raise
     except Exception:
-        _remove_material_dir(target_path)
+        remove_material_dir(target_path)
         raise
 
     if file_size == 0:
-        _remove_material_dir(target_path)
+        remove_material_dir(target_path)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": 40022, "message": "资料文件不能为空", "data": None},
         )
 
-    next_status, next_knowledge_status = _state_after_material_added(catalog)
+    next_status, next_knowledge_status = state_after_material_added(catalog)
     material = CourseCatalogMaterial(
         id=material_id,
         catalog_id=catalog.id,
@@ -567,7 +542,7 @@ async def admin_upload_catalog_material(
             )
         )
         if update_result.rowcount == 0:
-            _remove_material_dir(target_path)
+            remove_material_dir(target_path)
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -581,7 +556,7 @@ async def admin_upload_catalog_material(
     except HTTPException:
         raise
     except Exception:
-        _remove_material_dir(target_path)
+        remove_material_dir(target_path)
         await db.rollback()
         raise
 
@@ -1692,11 +1667,7 @@ async def list_ready_course_catalogs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(CourseCatalog).where(CourseCatalog.is_deleted == False)
-    if status_filter:
-        query = query.where(CourseCatalog.status == status_filter)
-    result = await db.execute(query.order_by(CourseCatalog.title.asc()))
-    catalogs = result.scalars().all()
+    catalogs = await CatalogService(db).list_ready_catalogs(status_filter)
     return {
         "code": 200,
         "message": "success",

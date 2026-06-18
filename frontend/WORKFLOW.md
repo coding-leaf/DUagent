@@ -1023,3 +1023,10 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - **测试结果**: RED: `tests/test_admin_catalog_resource_generation.py::test_quiz_generation_background_marks_parent_partial_when_one_child_raises` 因缺少 `app.services.catalog_quiz_generation_service` 失败；GREEN: 同测试 1/1 passed；回归: `tests/test_admin_catalog_resource_generation.py` 29/29 passed；语法检查: `PYTHONPYCACHEPREFIX=/tmp/eduagent_pycache ../.venv/bin/python -m py_compile app/api/v1/catalogs.py app/services/catalog_quiz_generation_service.py` 通过。测试过程中有 aiomysql event loop close 资源警告，断言全部通过。
 - **是否有接口漂移**: 无。保留 `task_type="quiz_generation"`、Agent 路径 `/agent/v1/assessment/generate-questions`、父/子任务 result 字段、错误码和响应格式。
 - **代码审查结果**: `asyncio.gather(..., return_exceptions=True)` 与 semaphore 并发上限 2 保留；新增异常隔离测试确保单个 child 抛异常时父任务聚合为 `partial`；multi-choice 答案仍格式化为 `A,C`；旧 baseline 题仅在新题成功后删除。
+
+### 2026-06-18 (后端 catalogs.py 模块化重构最终检查)
+- **改了什么文件**: `WORKFLOW.md`。
+- **核心改动**: 按 catalogs 模块化重构计划 Task 8 做最终路由清理检查和回归记录。`backend/app/api/v1/catalogs.py` 当前约 473 行，保留路由、鉴权、响应包装和少量上传 glue；主要业务逻辑已下沉到 `catalog_service.py`、`catalog_material_service.py`、`catalog_ingestion_service.py`、`catalog_kg_service.py`、`catalog_resource_generation_service.py`、`catalog_quiz_generation_service.py` 和 `catalog_presenters.py`。
+- **测试结果**: 旧 helper 检查 `rg "_catalog_item|_material_item|_run_catalog_ingestion_background|_run_catalog_kg_generation_background|_run_quiz_generation_background|_generate_quiz_for_child|_safe_filename|_remove_material_dir|_state_after_material_added" ../backend/app/api/v1/catalogs.py` 无匹配；全 service 语法检查通过；最终 catalogs 回归套件在 MySQL 库 `catalog_full_task8` 下结果为 74 passed, 1 skipped, 1 failed，唯一失败仍为 `tests/test_node_resources.py::test` 的既有 `1 check(s) FAIL`，与本次 catalogs service 拆分路径无直接关系。
+- **是否有接口漂移**: 无。
+- **代码审查结果**: `catalogs.py` 不再包含 ingestion/KG/resource/quiz 后台任务实现；后台任务均位于对应 service 模块并使用独立 session；Agent 调用路径和任务 result payload 未改变。

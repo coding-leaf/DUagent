@@ -1,15 +1,34 @@
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
+import os
+import uuid
 
 import pytest
 from fastapi import HTTPException
 
+from app.models.catalog import CourseCatalog, CourseCatalogMaterial
+from app.schemas.catalog import CourseCatalogMaterialCreateRequest
 from app.services.catalog_material_service import (
     CatalogMaterialService,
     remove_material_dir,
     safe_filename,
     state_after_material_added,
 )
+
+
+def _require_mysql_test_db():
+    test_database_url = os.environ.get("TEST_DATABASE_URL", "")
+    if not test_database_url.startswith("mysql+"):
+        pytest.skip("requires TEST_DATABASE_URL=mysql+...")
+    test_database_name = urlparse(test_database_url).path.strip("/")
+    if test_database_name == "duagent":
+        pytest.skip("refusing to use the real duagent database")
+    os.environ["DATABASE_URL"] = test_database_url
+
+    from app.db.session import async_session_factory, engine, init_db
+
+    return async_session_factory, engine, init_db
 
 
 def test_catalog_material_service_uses_class_style_with_db_dependency():
@@ -40,3 +59,139 @@ def test_remove_material_dir_mocks_rmtree():
     with patch("app.services.catalog_material_service.shutil.rmtree") as mock_rmtree:
         remove_material_dir(target)
     mock_rmtree.assert_called_once_with(target.parent, ignore_errors=True)
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_list_materials_excludes_deleted_records():
+    async_session_factory, engine, init_db = _require_mysql_test_db()
+    try:
+        await init_db()
+        suffix = uuid.uuid4().hex[:8]
+        catalog = CourseCatalog(
+            id=f"cat-list-{suffix}",
+            title=f"Catalog List {suffix}",
+            status="ready",
+            knowledge_status="ready",
+        )
+        visible = CourseCatalogMaterial(
+            id=f"mat-visible-{suffix}",
+            catalog_id=catalog.id,
+            filename="visible.pdf",
+            source_type="pdf",
+            status="uploaded",
+        )
+        deleted = CourseCatalogMaterial(
+            id=f"mat-deleted-{suffix}",
+            catalog_id=catalog.id,
+            filename="deleted.pdf",
+            source_type="pdf",
+            status="uploaded",
+            is_deleted=True,
+        )
+        async with async_session_factory() as db:
+            db.add_all([catalog, visible, deleted])
+            await db.commit()
+
+            materials = await CatalogMaterialService(db).list_materials(catalog.id)
+
+        assert [material.id for material in materials] == [visible.id]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_delete_material_recomputes_catalog_counts_and_marks_knowledge_dirty():
+    async_session_factory, engine, init_db = _require_mysql_test_db()
+    try:
+        await init_db()
+        suffix = uuid.uuid4().hex[:8]
+        catalog_id = f"cat-delete-{suffix}"
+        target_id = f"mat-delete-{suffix}"
+        keep_id = f"mat-keep-{suffix}"
+        catalog = CourseCatalog(
+            id=catalog_id,
+            title=f"Catalog Delete {suffix}",
+            status="ready",
+            knowledge_status="partial",
+            material_count=2,
+            chunk_count=8,
+            last_error="old error",
+        )
+        target = CourseCatalogMaterial(
+            id=target_id,
+            catalog_id=catalog_id,
+            filename="target.pdf",
+            source_type="pdf",
+            status="ingested",
+            chunk_count=3,
+        )
+        keep = CourseCatalogMaterial(
+            id=keep_id,
+            catalog_id=catalog_id,
+            filename="keep.pdf",
+            source_type="pdf",
+            status="ingested",
+            chunk_count=5,
+        )
+        async with async_session_factory() as db:
+            db.add_all([catalog, target, keep])
+            await db.commit()
+
+            result = await CatalogMaterialService(db).delete_material(catalog, target_id)
+            await db.commit()
+            refreshed_catalog = await db.get(CourseCatalog, catalog_id)
+            refreshed_target = await db.get(CourseCatalogMaterial, target_id)
+
+        assert result == {
+            "id": target_id,
+            "catalog_id": catalog_id,
+            "deleted": True,
+            "knowledge_status": "dirty",
+        }
+        assert refreshed_target.is_deleted is True
+        assert refreshed_catalog.material_count == 1
+        assert refreshed_catalog.chunk_count == 5
+        assert refreshed_catalog.knowledge_status == "dirty"
+        assert refreshed_catalog.last_error is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_create_external_material_preserves_ready_catalog_transition():
+    async_session_factory, engine, init_db = _require_mysql_test_db()
+    try:
+        await init_db()
+        suffix = uuid.uuid4().hex[:8]
+        catalog_id = f"cat-create-{suffix}"
+        catalog = CourseCatalog(
+            id=catalog_id,
+            title=f"Catalog Create {suffix}",
+            status="ready",
+            knowledge_status="ready",
+            material_count=0,
+            last_error="old error",
+        )
+        req = CourseCatalogMaterialCreateRequest(
+            filename=" external.pdf ",
+            source_type=" pdf ",
+            storage_uri="local://external.pdf",
+        )
+        async with async_session_factory() as db:
+            db.add(catalog)
+            await db.commit()
+
+            material = await CatalogMaterialService(db).create_external_material(catalog, req)
+            await db.commit()
+            refreshed_catalog = await db.get(CourseCatalog, catalog_id)
+
+        assert material.catalog_id == catalog_id
+        assert material.filename == "external.pdf"
+        assert material.source_type == "pdf"
+        assert material.status == "uploaded"
+        assert refreshed_catalog.status == "ready"
+        assert refreshed_catalog.knowledge_status == "dirty"
+        assert refreshed_catalog.material_count == 1
+        assert refreshed_catalog.last_error is None
+    finally:
+        await engine.dispose()

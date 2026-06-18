@@ -424,7 +424,7 @@ async def _api_test_upload_cleans_file_when_db_write_fails(tmp_path, monkeypatch
     storage_root = tmp_path / "course_catalogs"
     monkeypatch.setattr("app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT", str(storage_root))
 
-    async def fake_get_catalog(_db, _catalog_id):
+    async def fake_get_catalog(_service, _catalog_id):
         return SimpleNamespace(
             id="catalog-db-fail",
             status="draft",
@@ -432,7 +432,7 @@ async def _api_test_upload_cleans_file_when_db_write_fails(tmp_path, monkeypatch
         )
 
     monkeypatch.setattr(
-        "app.api.v1.catalogs._get_admin_catalog_or_404",
+        "app.api.v1.catalogs.CatalogService.get_catalog",
         fake_get_catalog,
     )
     db = _FailingFlushDb()
@@ -474,7 +474,7 @@ async def _api_test_upload_rechecks_ingesting_state_during_catalog_update(tmp_pa
     storage_root = tmp_path / "course_catalogs"
     monkeypatch.setattr("app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT", str(storage_root))
 
-    async def fake_get_catalog(_db, _catalog_id):
+    async def fake_get_catalog(_service, _catalog_id):
         return SimpleNamespace(
             id="catalog-race",
             status="draft",
@@ -482,7 +482,7 @@ async def _api_test_upload_rechecks_ingesting_state_during_catalog_update(tmp_pa
         )
 
     monkeypatch.setattr(
-        "app.api.v1.catalogs._get_admin_catalog_or_404",
+        "app.api.v1.catalogs.CatalogService.get_catalog",
         fake_get_catalog,
     )
     db = _ConcurrentIngestingDb()
@@ -523,7 +523,7 @@ async def _api_test_upload_cleans_partial_file_when_read_fails(tmp_path, monkeyp
     storage_root = tmp_path / "course_catalogs"
     monkeypatch.setattr("app.core.config.settings.COURSE_CATALOG_STORAGE_ROOT", str(storage_root))
 
-    async def fake_get_catalog(_db, _catalog_id):
+    async def fake_get_catalog(_service, _catalog_id):
         return SimpleNamespace(
             id="catalog-read-fail",
             status="draft",
@@ -531,7 +531,7 @@ async def _api_test_upload_cleans_partial_file_when_read_fails(tmp_path, monkeyp
         )
 
     monkeypatch.setattr(
-        "app.api.v1.catalogs._get_admin_catalog_or_404",
+        "app.api.v1.catalogs.CatalogService.get_catalog",
         fake_get_catalog,
     )
 

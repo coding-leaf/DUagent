@@ -31,6 +31,7 @@ from app.services.catalog_presenters import (
     material_item,
 )
 from app.services.catalog_material_service import (
+    CatalogMaterialService,
     remove_material_dir,
     safe_filename,
     state_after_material_added,
@@ -571,37 +572,7 @@ async def admin_create_catalog_material(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    update_result = await db.execute(
-        update(CourseCatalog)
-        .where(
-            CourseCatalog.id == catalog.id,
-            CourseCatalog.is_deleted == False,
-            CourseCatalog.status != "ingesting",
-            CourseCatalog.knowledge_status != "ingesting",
-        )
-        .values(
-            material_count=CourseCatalog.material_count + 1,
-            status="ready" if catalog.status == "ready" else "draft",
-            knowledge_status="dirty" if catalog.status == "ready" else "draft",
-            last_error=None,
-        )
-    )
-    if update_result.rowcount == 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
-        )
-    material = CourseCatalogMaterial(
-        catalog_id=catalog.id,
-        filename=req.filename.strip(),
-        source_type=req.source_type.strip(),
-        storage_uri=req.storage_uri,
-        file_size=0,
-        status="uploaded",
-    )
-    db.add(material)
-    await db.flush()
-    await db.refresh(material)
+    material = await CatalogMaterialService(db).create_external_material(catalog, req)
     return {"code": 201, "message": "created", "data": material_item(material)}
 
 
@@ -612,15 +583,7 @@ async def admin_list_catalog_materials(
     db: AsyncSession = Depends(get_db),
 ):
     await CatalogService(db).get_catalog(catalog_id)
-    result = await db.execute(
-        select(CourseCatalogMaterial)
-        .where(
-            CourseCatalogMaterial.catalog_id == catalog_id,
-            CourseCatalogMaterial.is_deleted == False,
-        )
-        .order_by(CourseCatalogMaterial.create_time.desc())
-    )
-    materials = result.scalars().all()
+    materials = await CatalogMaterialService(db).list_materials(catalog_id)
     return {
         "code": 200,
         "message": "success",
@@ -638,54 +601,13 @@ async def admin_delete_catalog_material(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    if catalog.status == "ingesting" or catalog.knowledge_status == "ingesting":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
-        )
-
-    result = await db.execute(
-        select(CourseCatalogMaterial).where(
-            CourseCatalogMaterial.id == material_id,
-            CourseCatalogMaterial.catalog_id == catalog.id,
-            CourseCatalogMaterial.is_deleted == False,
-        )
-    )
-    material = result.scalar_one_or_none()
-    if material is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 40411, "message": "课程资源库资料不存在", "data": None},
-        )
-
-    material.is_deleted = True
-    remaining_result = await db.execute(
-        select(
-            func.count(CourseCatalogMaterial.id),
-            func.coalesce(func.sum(CourseCatalogMaterial.chunk_count), 0),
-        ).where(
-            CourseCatalogMaterial.catalog_id == catalog.id,
-            CourseCatalogMaterial.is_deleted == False,
-            CourseCatalogMaterial.id != material.id,
-        )
-    )
-    remaining_count, remaining_chunks = remaining_result.one()
-    catalog.material_count = int(remaining_count or 0)
-    catalog.chunk_count = int(remaining_chunks or 0)
-    if catalog.knowledge_status in {"ready", "partial"}:
-        catalog.knowledge_status = "dirty"
-    catalog.last_error = None
+    delete_result = await CatalogMaterialService(db).delete_material(catalog, material_id)
     await db.commit()
 
     return {
         "code": 200,
         "message": "deleted",
-        "data": {
-            "id": material.id,
-            "catalog_id": catalog.id,
-            "deleted": True,
-            "knowledge_status": catalog.knowledge_status,
-        },
+        "data": delete_result,
     }
 
 

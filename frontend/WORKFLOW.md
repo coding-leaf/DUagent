@@ -975,3 +975,9 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - **测试结果**: `npm run test:unit -- src/api/__tests__/client.test.js` 通过，7/7 passed。
 - **是否有接口漂移**: 无。纯前端网络层测试补齐。
 
+### 2026-06-18 (后端 catalogs.py 响应格式化提取)
+- **改了什么文件**: `backend/app/api/v1/catalogs.py`, `backend/app/services/catalog_presenters.py`, `backend/tests/test_catalog_presenters.py`。
+- **核心改动**: 按 catalogs 模块化重构计划 Task 1，将 `_catalog_item`、`_material_item`、`_knowledge_graph_summary`、`_knowledge_graph_task_summary` 从胖路由提取到 `catalog_presenters.py`。`catalogs.py` 保留原响应包装调用，不移动 DB 查询或业务状态逻辑。
+- **测试结果**: RED: `../.venv/bin/python -m pytest tests/test_catalog_presenters.py -q -p no:cacheprovider` 因缺少 `app.services.catalog_presenters` 失败；GREEN: `tests/test_catalog_presenters.py` 3/3 passed；语法检查: `PYTHONPYCACHEPREFIX=/tmp/eduagent_pycache ../.venv/bin/python -m py_compile app/api/v1/catalogs.py app/services/catalog_presenters.py` 通过；回归: `TEST_DATABASE_URL=mysql+aiomysql://root:123456@127.0.0.1:3306/catalog_task1_presenters_test?charset=utf8mb4 ../.venv/bin/python -m pytest tests/test_catalog_presenters.py tests/test_course_catalogs.py -q -p no:cacheprovider` 7/7 passed。
+- **是否有接口漂移**: 无。响应 key、HTTP 状态码、Client API / Agent API 路径均未改变。
+- **代码审查结果**: Diff 仅包含 presenter 函数搬迁和调用替换；未移动查询逻辑，未新增后台任务，未触碰文件系统/上传目录。

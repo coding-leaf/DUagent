@@ -25,6 +25,12 @@ from app.schemas.catalog import (
 )
 from app.schemas.operations import CatalogResourceGenerateRequest
 from app.services.agent_client import AgentClient, AgentServiceError, agent_client
+from app.services.catalog_presenters import (
+    catalog_item,
+    knowledge_graph_summary,
+    knowledge_graph_task_summary,
+    material_item,
+)
 from app.services.catalog_service import CatalogService
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.kg_generation import KGGenerationInputError, generate_knowledge_graph_version
@@ -47,22 +53,6 @@ HOST_COURSE_NAME_PREFIX = "[KG HOST] "
 COURSE_NAME_MAX_LENGTH = 100
 
 
-def _catalog_item(catalog: CourseCatalog) -> dict:
-    return {
-        "id": catalog.id,
-        "title": catalog.title,
-        "description": catalog.description or "",
-        "status": catalog.status,
-        "knowledge_status": catalog.knowledge_status,
-        "material_count": catalog.material_count,
-        "last_ingestion_task_id": catalog.last_ingestion_task_id,
-        "last_ingestion_status": catalog.last_ingestion_status,
-        "chunk_count": catalog.chunk_count or 0,
-        "last_error": catalog.last_error,
-        "created_at": catalog.create_time.isoformat() if catalog.create_time else "",
-    }
-
-
 def _safe_filename(filename: str) -> str:
     raw_name = (filename or "").strip()
     name = Path(raw_name).name.strip()
@@ -80,24 +70,6 @@ def _safe_filename(filename: str) -> str:
             detail={"code": 40020, "message": "文件名不合法", "data": None},
         )
     return name
-
-
-def _material_item(material: CourseCatalogMaterial, include_storage_uri: bool = False) -> dict:
-    item = {
-        "id": material.id,
-        "catalog_id": material.catalog_id,
-        "filename": material.filename,
-        "source_type": material.source_type,
-        "file_size": material.file_size or 0,
-        "status": material.status,
-        "chunk_count": material.chunk_count or 0,
-        "last_error": material.last_error,
-        "ingested_at": material.ingested_at.isoformat() if material.ingested_at else None,
-        "created_at": material.create_time.isoformat() if material.create_time else "",
-    }
-    if include_storage_uri:
-        item["storage_uri"] = material.storage_uri
-    return item
 
 
 def _state_after_material_added(catalog: CourseCatalog) -> tuple[str, str]:
@@ -241,32 +213,6 @@ async def _get_or_create_catalog_kg_host_course(
 def _catalog_kg_host_course_name(title: str) -> str:
     max_title_length = max(COURSE_NAME_MAX_LENGTH - len(HOST_COURSE_NAME_PREFIX), 0)
     return f"{HOST_COURSE_NAME_PREFIX}{(title or '')[:max_title_length]}"
-
-
-def _knowledge_graph_summary(graph) -> dict:
-    return {
-        "graph_id": graph.id,
-        "course_id": graph.course_id,
-        "version": graph.version,
-        "source_type": graph.source_type,
-        "generation_strategy": graph.generation_strategy,
-        "node_count": len(graph.nodes or []),
-        "edge_count": len(graph.edges or []),
-        "is_active": graph.is_active,
-        "created_at": graph.create_time.isoformat() if graph.create_time else "",
-    }
-
-
-def _knowledge_graph_task_summary(task: AsyncTask) -> dict:
-    return {
-        "task_id": task.id,
-        "status": task.status,
-        "progress": task.progress,
-        "error_code": task.error_code,
-        "error_message": task.error_message,
-        "created_at": task.create_time.isoformat() if task.create_time else "",
-        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-    }
 
 
 async def _run_catalog_kg_generation_background(task_id: str) -> None:
@@ -510,7 +456,7 @@ async def admin_list_course_catalogs(
         "code": 200,
         "message": "success",
         "data": {
-            "catalogs": [_catalog_item(c) for c in catalogs],
+            "catalogs": [catalog_item(c) for c in catalogs],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -526,7 +472,7 @@ async def admin_create_course_catalog(
 ):
     service = CatalogService(db)
     catalog = await service.create_catalog(req.title, req.description)
-    return {"code": 201, "message": "created", "data": _catalog_item(catalog)}
+    return {"code": 201, "message": "created", "data": catalog_item(catalog)}
 
 
 @router.get("/admin/course-catalogs/{catalog_id}")
@@ -537,7 +483,7 @@ async def admin_get_course_catalog(
 ):
     service = CatalogService(db)
     catalog = await service.get_catalog(catalog_id)
-    return {"code": 200, "message": "success", "data": _catalog_item(catalog)}
+    return {"code": 200, "message": "success", "data": catalog_item(catalog)}
 
 
 @router.post("/admin/course-catalogs/{catalog_id}/materials/upload", status_code=201)
@@ -639,7 +585,7 @@ async def admin_upload_catalog_material(
         await db.rollback()
         raise
 
-    return {"code": 201, "message": "created", "data": _material_item(material)}
+    return {"code": 201, "message": "created", "data": material_item(material)}
 
 
 @router.post("/admin/course-catalogs/{catalog_id}/materials", status_code=201)
@@ -681,7 +627,7 @@ async def admin_create_catalog_material(
     db.add(material)
     await db.flush()
     await db.refresh(material)
-    return {"code": 201, "message": "created", "data": _material_item(material)}
+    return {"code": 201, "message": "created", "data": material_item(material)}
 
 
 @router.get("/admin/course-catalogs/{catalog_id}/materials")
@@ -704,7 +650,7 @@ async def admin_list_catalog_materials(
         "code": 200,
         "message": "success",
         "data": {
-            "materials": [_material_item(m) for m in materials]
+            "materials": [material_item(m) for m in materials]
         },
     }
 
@@ -847,9 +793,9 @@ async def admin_get_catalog_knowledge_graph_status(
         "data": {
             "catalog_id": catalog.id,
             "course_id": host_course.id,
-            "active_graph": _knowledge_graph_summary(graph) if graph else None,
+            "active_graph": knowledge_graph_summary(graph) if graph else None,
             "last_generation_task": (
-                _knowledge_graph_task_summary(last_generation_task)
+                knowledge_graph_task_summary(last_generation_task)
                 if last_generation_task is not None
                 else None
             ),
@@ -1754,5 +1700,5 @@ async def list_ready_course_catalogs(
     return {
         "code": 200,
         "message": "success",
-        "data": {"catalogs": [_catalog_item(c) for c in catalogs]},
+        "data": {"catalogs": [catalog_item(c) for c in catalogs]},
     }

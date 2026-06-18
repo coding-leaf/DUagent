@@ -995,3 +995,10 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - **测试结果**: RED: `tests/test_catalog_material_service.py::test_delete_material_recomputes_catalog_counts_and_marks_knowledge_dirty` 因 `CatalogMaterialService.delete_material` 缺失失败；GREEN: 同测试 1/1 passed；老 patch 路径修复验证: 3/3 passed；回归: `tests/test_catalog_material_service.py tests/test_course_catalogs.py tests/test_course_catalog_ingestion.py` 39/39 passed；语法检查: `PYTHONPYCACHEPREFIX=/tmp/eduagent_pycache ../.venv/bin/python -m py_compile app/api/v1/catalogs.py app/services/catalog_material_service.py` 通过。MySQL 回归使用非生产库 `catalog_task1_presenters_test`。
 - **是否有接口漂移**: 无。material create/list/delete 路径、状态码、响应字段、错误码和状态转换语义未改变。
 - **代码审查结果**: `CatalogMaterialService` 方法内不执行 `commit()`；删除响应仍返回 `id/catalog_id/deleted/knowledge_status`；`tests/test_course_catalog_ingestion.py` 的 monkeypatch 从已移除的 `_get_admin_catalog_or_404` 更新为当前 `CatalogService.get_catalog`。
+
+### 2026-06-18 (后端 catalogs.py 入库任务服务提取)
+- **改了什么文件**: `backend/app/api/v1/catalogs.py`, `backend/app/services/catalog_ingestion_service.py`, `backend/tests/test_course_catalog_ingestion.py`。
+- **核心改动**: 按 catalogs 模块化重构计划 Task 4，新增类风格 `CatalogIngestionService(db)` 承载入库启动逻辑，新增模块级 `run_catalog_ingestion_background(task_id)` 承载后台 Agent 调用和异常恢复逻辑。Route 仅保留鉴权、service 调用、background task 注册和响应包装。
+- **测试结果**: RED: `tests/test_course_catalog_ingestion.py::test_start_catalog_ingestion_success` 因缺少 `app.services.catalog_ingestion_service` 失败；GREEN: 同测试 1/1 passed；回归: `tests/test_course_catalog_ingestion.py` 22/22 passed；语法检查: `PYTHONPYCACHEPREFIX=/tmp/eduagent_pycache ../.venv/bin/python -m py_compile app/api/v1/catalogs.py app/services/catalog_ingestion_service.py` 通过。MySQL 回归使用非生产库 `catalog_task1_presenters_test`。
+- **是否有接口漂移**: 无。保留现有 `task_type="course_catalog_ingestion"`、Agent 路径 `/agent/v1/knowledge/ingestions`、响应字段和错误码语义。
+- **代码审查结果**: 后台 runner 为 service 模块级函数并自行创建 `async_session_factory()` session；未接收 request-scoped `db`；测试 Agent mock 路径已更新为 `app.services.catalog_ingestion_service.ingestion_agent_client.post_json`。

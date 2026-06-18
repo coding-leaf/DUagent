@@ -20,13 +20,17 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 
-from app.api.v1.catalogs import admin_start_catalog_ingestion, admin_upload_catalog_material
+from app.api.v1.catalogs import admin_upload_catalog_material
 from app.core.config import settings
 from app.db.session import async_session_factory, engine, init_db
 from app.main import app
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial
 from app.models.user import RegistrationCode
 from app.schemas.catalog import CourseCatalogMaterialItem
+from app.services.catalog_ingestion_service import (
+    CatalogIngestionService,
+    run_catalog_ingestion_background,
+)
 
 
 def test_course_catalog_model_has_ingestion_fields():
@@ -648,7 +652,7 @@ async def _api_test_start_catalog_ingestion_success(tmp_path, monkeypatch):
             material_id = upload.json()["data"]["id"]
 
             with patch(
-                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                "app.services.catalog_ingestion_service.ingestion_agent_client.post_json",
                 new_callable=AsyncMock,
             ) as mock_agent:
                 mock_agent.return_value = {
@@ -796,12 +800,16 @@ async def _api_test_start_ingestion_locks_catalog_before_selecting_materials():
     db = _LockingStartDb()
     background_tasks = _NoopBackgroundTasks()
 
-    response = await admin_start_catalog_ingestion(
+    task = await CatalogIngestionService(db).start_catalog_ingestion(
         "catalog-start-lock",
-        background_tasks=background_tasks,  # type: ignore[arg-type]
-        current_user=SimpleNamespace(id="admin-id"),  # type: ignore[arg-type]
-        db=db,  # type: ignore[arg-type]
+        "admin-id",
     )
+    background_tasks.add_task(run_catalog_ingestion_background, task.id)
+    response = {
+        "code": 202,
+        "message": "accepted",
+        "data": {"task_id": task.id, "catalog_id": "catalog-start-lock", "status": "processing"},
+    }
 
     assert response["code"] == 202
     assert db.execute_calls[0]["for_update"] is True
@@ -844,7 +852,7 @@ async def _api_test_incremental_ingestion_partial_failure_keeps_catalog_ready(
             material_id = upload.json()["data"]["id"]
 
             with patch(
-                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                "app.services.catalog_ingestion_service.ingestion_agent_client.post_json",
                 new_callable=AsyncMock,
             ) as mock_agent:
                 mock_agent.return_value = {
@@ -915,7 +923,7 @@ async def _api_test_first_ingestion_partial_success_marks_catalog_ready_partial(
             fail_material_id = upload_fail.json()["data"]["id"]
 
             with patch(
-                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                "app.services.catalog_ingestion_service.ingestion_agent_client.post_json",
                 new_callable=AsyncMock,
             ) as mock_agent:
                 mock_agent.return_value = {
@@ -1011,7 +1019,7 @@ async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
             material_id = upload.json()["data"]["id"]
 
             with patch(
-                "app.api.v1.catalogs.ingestion_agent_client.post_json",
+                "app.services.catalog_ingestion_service.ingestion_agent_client.post_json",
                 new_callable=AsyncMock,
             ) as mock_agent:
                 mock_agent.return_value = {

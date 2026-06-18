@@ -445,7 +445,7 @@ async def test_catalog_kg_generation_reuses_existing_hidden_host_course_when_no_
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+    with patch("app.services.catalog_kg_service.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
         async def _reuse_result(**kwargs):
             return {
                 "course_id": kwargs["course_id"],
@@ -506,7 +506,7 @@ async def test_catalog_kg_generation_without_offering_returns_202_not_40915():
         await db.commit()
     catalog_id = "catalog-host-course"
 
-    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+    with patch("app.services.catalog_kg_service.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
         async def _create_result(**kwargs):
             return {
                 "course_id": kwargs["course_id"],
@@ -570,7 +570,7 @@ async def test_catalog_kg_generation_creates_hidden_host_course_with_long_catalo
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+    with patch("app.services.catalog_kg_service.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
         async def _long_title_result(**kwargs):
             return {
                 "course_id": kwargs["course_id"],
@@ -632,7 +632,7 @@ async def test_catalog_kg_generation_truncates_hidden_host_course_name_for_long_
         )
         await db.commit()
 
-    with patch("app.api.v1.catalogs.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
+    with patch("app.services.catalog_kg_service.generate_knowledge_graph_version", new_callable=AsyncMock) as mock_generate:
         async def _create_result(**kwargs):
             return {
                 "course_id": kwargs["course_id"],
@@ -787,7 +787,7 @@ async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
     await _seed_user("admin-kg-gen", "admin")
 
     with patch(
-        "app.api.v1.catalogs.generate_knowledge_graph_version",
+        "app.services.catalog_kg_service.generate_knowledge_graph_version",
         new_callable=AsyncMock,
     ) as mock_generate:
         mock_generate.return_value = {

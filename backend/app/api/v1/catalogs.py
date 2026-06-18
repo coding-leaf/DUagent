@@ -6,14 +6,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.core.config import settings
 from app.db.session import async_session_factory
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
-from app.models.course import Course
 from app.models.others import AsyncTask, Resource
 from app.models.quiz import QuizQuestion
 from app.models.user import User
@@ -40,9 +38,12 @@ from app.services.catalog_ingestion_service import (
     CatalogIngestionService,
     run_catalog_ingestion_background,
 )
+from app.services.catalog_kg_service import (
+    CatalogKGService,
+    run_catalog_kg_generation_background,
+)
 from app.services.catalog_service import CatalogService
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.kg_generation import KGGenerationInputError, generate_knowledge_graph_version
 from app.services.kg_resource_targets import select_core_resource_targets
 from app.services.resource_scope import resource_scope_clause
 
@@ -57,8 +58,6 @@ KG_RESOURCE_TARGET_LIMIT = 10
 QUIZ_GENERATION_CONCURRENCY = 2
 QUIZ_BASELINE_SINGLE_COUNT = 3
 QUIZ_BASELINE_MULTI_COUNT = 4
-HOST_COURSE_NAME_PREFIX = "[KG HOST] "
-COURSE_NAME_MAX_LENGTH = 100
 
 
 def _now_utc() -> datetime:
@@ -98,138 +97,6 @@ def _course_offering_missing() -> HTTPException:
         status_code=status.HTTP_409_CONFLICT,
         detail={"code": 40915, "message": "课程资源库尚未绑定教学班", "data": None},
     )
-
-
-def _kg_knowledge_base_not_ready() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={
-            "code": 40917,
-            "message": "课程资料尚未完成入库",
-            "data": {"error_code": "knowledge_base_not_ready"},
-        },
-    )
-
-
-def _kg_knowledge_base_empty() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={
-            "code": 40918,
-            "message": "课程知识库为空",
-            "data": {"error_code": "knowledge_base_empty"},
-        },
-    )
-
-
-async def _first_catalog_offering(db: AsyncSession, catalog_id: str) -> CourseOffering | None:
-    result = await db.execute(
-        select(CourseOffering)
-        .where(
-            CourseOffering.catalog_id == catalog_id,
-            CourseOffering.is_deleted == False,
-        )
-        .order_by(CourseOffering.create_time.asc(), CourseOffering.id.asc())
-    )
-    return result.scalars().first()
-
-
-async def _get_or_create_catalog_kg_host_course(
-    db: AsyncSession,
-    catalog: CourseCatalog,
-    *,
-    actor_user_id: str,
-) -> Course:
-    catalog_id = catalog.id
-    locked_catalog = (
-        await db.execute(
-            select(CourseCatalog)
-            .where(
-                CourseCatalog.id == catalog_id,
-                CourseCatalog.is_deleted == False,
-            )
-            .with_for_update()
-        )
-    ).scalar_one()
-
-    if locked_catalog.kg_host_course_id:
-        existing = await db.get(Course, locked_catalog.kg_host_course_id)
-        if existing is not None and not existing.is_deleted:
-            catalog.kg_host_course_id = existing.id
-            return existing
-
-    host_course = Course(
-        name=_catalog_kg_host_course_name(locked_catalog.title),
-        description=f"System host course for catalog {locked_catalog.id} knowledge graphs",
-        course_code=f"KGH{uuid4().hex[:8].upper()}",
-        teacher_id=actor_user_id,
-    )
-    try:
-        db.add(host_course)
-        await db.flush()
-        locked_catalog.kg_host_course_id = host_course.id
-        catalog.kg_host_course_id = host_course.id
-        await db.flush()
-        return host_course
-    except IntegrityError:
-        await db.rollback()
-        reloaded_catalog = await db.get(CourseCatalog, catalog_id)
-        if reloaded_catalog is not None and reloaded_catalog.kg_host_course_id:
-            existing = await db.get(Course, reloaded_catalog.kg_host_course_id)
-            if existing is not None and not existing.is_deleted:
-                return existing
-        raise
-
-
-def _catalog_kg_host_course_name(title: str) -> str:
-    max_title_length = max(COURSE_NAME_MAX_LENGTH - len(HOST_COURSE_NAME_PREFIX), 0)
-    return f"{HOST_COURSE_NAME_PREFIX}{(title or '')[:max_title_length]}"
-
-
-async def _run_catalog_kg_generation_background(task_id: str) -> None:
-    async with async_session_factory() as db:
-        result = await db.execute(
-            select(AsyncTask).where(AsyncTask.id == task_id, AsyncTask.is_deleted == False)
-        )
-        task = result.scalar_one_or_none()
-        if task is None:
-            logger.error("Catalog KG generation task missing: %s", task_id)
-            return
-
-        task_context = task.result or {}
-        try:
-            service_result = await generate_knowledge_graph_version(
-                course_id=str(task_context.get("course_id") or task.course_id or ""),
-                source_type=str(task_context.get("source_type") or ""),
-                catalog_id=task_context.get("catalog_id"),
-                outline_text=task_context.get("outline_text"),
-                kg_json=task_context.get("kg_json"),
-                activate=bool(task_context.get("activate", True)),
-            )
-            task.status = "completed"
-            task.progress = 100
-            task.error_code = None
-            task.error_message = ""
-            task.completed_at = _now_utc()
-            task.result = {**task_context, **service_result}
-            await db.commit()
-        except KGGenerationInputError as exc:
-            task.status = "failed"
-            task.progress = 100
-            task.error_code = getattr(exc, "error_code", "kg_invalid_input")
-            task.error_message = str(exc)[:500]
-            task.completed_at = _now_utc()
-            task.result = task_context
-            await db.commit()
-        except Exception as exc:
-            logger.exception("Catalog KG generation task failed unexpectedly: %s", task_id)
-            task.status = "failed"
-            task.progress = 100
-            task.error_code = "llm_kg_generation_failed"
-            task.error_message = str(exc)[:500]
-            task.completed_at = _now_utc()
-            task.result = task_context
-            await db.commit()
 
 
 @router.get("/admin/course-catalogs")
@@ -479,24 +346,13 @@ async def admin_get_catalog_knowledge_graph_status(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    host_course = await _get_or_create_catalog_kg_host_course(
-        db,
+    status_data = await CatalogKGService(db).get_knowledge_graph_status(
         catalog,
         actor_user_id=current_user.id,
     )
-    graph = await get_active_knowledge_graph(db, host_course.id)
-
-    task_result = await db.execute(
-        select(AsyncTask)
-        .where(
-            AsyncTask.task_type == "kg_generation",
-            AsyncTask.is_deleted == False,
-            _async_task_catalog_id_expr() == catalog.id,
-        )
-        .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
-        .limit(1)
-    )
-    last_generation_task = task_result.scalar_one_or_none()
+    host_course = status_data["host_course"]
+    graph = status_data["graph"]
+    last_generation_task = status_data["last_generation_task"]
 
     return {
         "code": 200,
@@ -543,65 +399,12 @@ async def admin_generate_catalog_knowledge_graph(
 ):
     req = req or CatalogKnowledgeGraphGenerationRequest()
     catalog = await CatalogService(db).get_catalog(catalog_id)
-
-    if req.source_type == "catalog_chunks":
-        if catalog.knowledge_status not in {"ready", "partial"}:
-            raise _kg_knowledge_base_not_ready()
-        if (catalog.chunk_count or 0) <= 0:
-            raise _kg_knowledge_base_empty()
-
-    duplicate_result = await db.execute(
-        select(AsyncTask)
-        .where(
-            AsyncTask.task_type == "kg_generation",
-            AsyncTask.status == "processing",
-            AsyncTask.is_deleted == False,
-            _async_task_catalog_id_expr() == catalog.id,
-        )
-        .order_by(AsyncTask.create_time.desc(), AsyncTask.id.desc())
-        .limit(1)
-    )
-    if duplicate_result.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": 40916,
-                "message": "课程知识图谱正在生成中",
-                "data": {"error_code": "kg_task_running"},
-            },
-        )
-
-    host_course = await _get_or_create_catalog_kg_host_course(
-        db,
+    task = await CatalogKGService(db).start_kg_generation(
         catalog,
+        req,
         actor_user_id=current_user.id,
     )
-
-    task_result = {
-        "catalog_id": catalog.id,
-        "course_id": host_course.id,
-        "source_type": req.source_type,
-        "activate": req.activate,
-    }
-    if req.outline_text is not None:
-        task_result["outline_text"] = req.outline_text
-    if req.kg_json is not None:
-        task_result["kg_json"] = req.kg_json
-
-    task = AsyncTask(
-        task_type="kg_generation",
-        status="processing",
-        progress=10,
-        user_id=current_user.id,
-        course_id=host_course.id,
-        result=task_result,
-    )
-    db.add(task)
-    await db.flush()
-    await db.refresh(task)
-    await db.commit()
-
-    asyncio.create_task(_run_catalog_kg_generation_background(task.id))
+    asyncio.create_task(run_catalog_kg_generation_background(task.id))
 
     return {
         "code": 202,

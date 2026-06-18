@@ -534,6 +534,8 @@ async def get_node_resources(
         catalog = catalog_result.scalar_one_or_none()
         if catalog is not None and catalog.kg_host_course_id:
             kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
+    if kg is None:
+        kg = await get_active_knowledge_graph(db, course_id)
 
     # 2. 从 KG 获取 node_name 和 chapter
     if kg and kg.nodes:

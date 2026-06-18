@@ -68,7 +68,7 @@
 | 编号 | 功能 | 状态 | 前端入口 | 说明 |
 |------|------|------|----------|------|
 | ai0301 | 动态路径规划 | ✅ 已实现 | `LearningPath.jsx` | 树形节点结构展示；当前进度位置标记；节点状态（in_progress/recommended/pending）；可触发路径刷新（异步任务） |
-| ai0302 | 路径资源推送 | ✅ 已实现 | `LearningPath.jsx` → 节点展开 | 每个节点展开后呈现三类资源：教程（Tutorials）、练习题（Practice，可直接启动 Quiz）、材料（Materials）；资源可跳转详情页 |
+| ai0302 | 路径资源推送 | ✅ 已实现 | `LearningPath.jsx` → 节点展开 | 每个节点展开后呈现三类资源：教程（Tutorials）、练习题（Practice，可直接启动 Quiz）、材料（Materials）；资源可跳转详情页。后端节点资源接口优先使用 catalog host course active KG 解析 chapter，并兼容旧课程直接挂 `course_id` active KG 的资料查询链路 |
 
 ### 多智能体协同的资源生成 ai04
 

@@ -11,8 +11,11 @@ class ProfileDialogueUpdateRequest(BaseModel):
 
 class ProfileGoalUpdateRequest(BaseModel):
     course_id: str
-    learning_goal: str = Field(..., min_length=1, max_length=200)
+    goal_type: str = Field(..., min_length=1, max_length=200)
 
 class ProfileInstructionUpdateRequest(BaseModel):
     course_id: str
-    custom_instruction: str = Field(..., min_length=0, max_length=1000)
+    instruction: str = Field(..., min_length=0, max_length=1000)
+
+class ProfileRefreshRequest(BaseModel):
+    course_id: str

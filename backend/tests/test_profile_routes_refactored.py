@@ -62,7 +62,7 @@ def test_update_learning_goal_route(mock_verify, mock_service_cls):
         mock_user.return_value = AsyncMock(id="u123", role="student")
         response = client.post(
             "/api/v1/profile/learning-goal",
-            json={"course_id": "c456", "learning_goal": "exam_sprint"}
+            json={"course_id": "c456", "goal_type": "exam_sprint"}
         )
         assert response.status_code == 200
 
@@ -77,7 +77,7 @@ def test_update_custom_instruction_route(mock_verify, mock_service_cls):
         mock_user.return_value = AsyncMock(id="u123", role="student")
         response = client.post(
             "/api/v1/profile/custom-instruction",
-            json={"course_id": "c456", "custom_instruction": "use diagrams"}
+            json={"course_id": "c456", "instruction": "use diagrams"}
         )
         assert response.status_code == 200
 
@@ -107,12 +107,18 @@ def test_refresh_profile_route(mock_run_bg, mock_verify, mock_refresh_service_cl
         mock_user.return_value = AsyncMock(id="u123", role="student")
         
         # 1. When task exists
-        response = client.post("/api/v1/profile/refresh?course_id=c456")
-        assert response.status_code == 200
+        response = client.post(
+            "/api/v1/profile/refresh",
+            json={"course_id": "c456"}
+        )
+        assert response.status_code == 202
         assert response.json()["data"]["task_id"] == "t123"
         
         # 2. When no task exists
         mock_refresh_service.get_processing_refresh_task.return_value = None
-        response = client.post("/api/v1/profile/refresh?course_id=c456")
+        response = client.post(
+            "/api/v1/profile/refresh",
+            json={"course_id": "c456"}
+        )
         assert response.status_code == 202
         assert response.json()["data"]["task_id"] == "t456"

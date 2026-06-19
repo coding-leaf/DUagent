@@ -4,7 +4,6 @@ from app.models.user import User
 from app.models.others import UserProfile
 
 DEFAULT_PROFILE = {
-    "guidance_level_current": "L2",
     "modal_preference": {
         "video_animation": 50,
         "chart_logic": 50,
@@ -49,23 +48,59 @@ def _resource_preference_summary(modal_preference: dict) -> str:
     return "、".join(pref_mapping[p] for p in valid_prefs if p in pref_mapping)
 
 def _profile_dimensions(profile: dict) -> list[dict]:
-    dimensions = [
-        {"name": "自主学习度", "value": 60},
-        {"name": "成就导向度", "value": 60},
-        {"name": "反思性特征", "value": 60},
-        {"name": "持久力指数", "value": 60},
+    drive_intent = profile.get("drive_intent") or {}
+    learning_habits = drive_intent.get("learning_habits") or {}
+    knowledge_progress_summary = drive_intent.get("knowledge_progress_summary") or {}
+    blindspots = profile.get("cognitive_blindspots") or []
+    modal_preference = profile.get("modal_preference") or {}
+    knowledge_coordinates = profile.get("knowledge_coordinates") or []
+    guidance_level = profile.get("guidance_level") or {}
+
+    weak_source = "profile_dialogue" if any(
+        isinstance(item, dict) and item.get("source") == "profile_dialogue"
+        for item in blindspots
+    ) else ("evaluation" if blindspots else "system_pending")
+
+    return [
+        {
+            "key": "learning_goal",
+            "label": "学习目标",
+            "value": drive_intent.get("type") or "待补充",
+            "source": drive_intent.get("source") or "system_profile",
+        },
+        {
+            "key": "weak_points",
+            "label": "薄弱点",
+            "value": [item.get("name") if isinstance(item, dict) else item for item in blindspots],
+            "source": weak_source,
+        },
+        {
+            "key": "resource_preference",
+            "label": "资源偏好",
+            "value": _resource_preference_summary(modal_preference),
+            "source": "profile_dialogue" if any(
+                key not in DEFAULT_PROFILE["modal_preference"] for key in modal_preference
+            ) else "resource_usage",
+        },
+        {
+            "key": "guidance_level",
+            "label": "引导强度",
+            "value": guidance_level.get("current") or "L2",
+            "source": "system_profile",
+        },
+        {
+            "key": "knowledge_progress",
+            "label": "知识进展",
+            "value": knowledge_progress_summary if knowledge_progress_summary else len(knowledge_coordinates),
+            "source": "kg_quiz_activity",
+        },
+        {
+            "key": "learning_habits",
+            "label": "学习习惯",
+            "value": learning_habits,
+            "source": "activity",
+        },
     ]
-    if not profile:
-        return dimensions
-    
-    habits = profile.get("drive_intent", {}).get("learning_habits", {})
-    if habits:
-        dimensions[0]["value"] = max(30, min(100, _safe_int(habits.get("autonomy_score"), 60)))
-        dimensions[1]["value"] = max(30, min(100, _safe_int(habits.get("achievement_score"), 60)))
-        dimensions[2]["value"] = max(30, min(100, _safe_int(habits.get("reflective_score"), 60)))
-        dimensions[3]["value"] = max(30, min(100, _safe_int(habits.get("persistence_score"), 60)))
-        
-    return dimensions
 
 def profile_data(pf: UserProfile | None, course_id: str, user: User | None = None) -> dict:
     if pf is None:
@@ -77,6 +112,10 @@ def profile_data(pf: UserProfile | None, course_id: str, user: User | None = Non
             "generated_at": None,
             "knowledge_coordinates": [],
             "cognitive_blindspots": [],
+            "guidance_level": {
+                "current": user.guidance_level if user and user.guidance_level else "L2",
+                "updated_at": "",
+            },
         })
     else:
         data = {
@@ -84,21 +123,22 @@ def profile_data(pf: UserProfile | None, course_id: str, user: User | None = Non
             "user_id": pf.user_id,
             "course_id": pf.course_id,
             "generated_at": pf.generated_at.isoformat() if pf.generated_at else None,
-            "guidance_level_current": pf.guidance_level_current or "L2",
+            "guidance_level": {
+                "current": user.guidance_level if user and user.guidance_level else (pf.guidance_level_current or "L2"),
+                "updated_at": pf.guidance_level_updated_at.isoformat() if pf.guidance_level_updated_at else "",
+            },
             "modal_preference": pf.modal_preference or copy.deepcopy(DEFAULT_PROFILE["modal_preference"]),
             "knowledge_coordinates": pf.knowledge_coordinates or [],
             "cognitive_blindspots": pf.cognitive_blindspots or [],
             "drive_intent": pf.drive_intent or copy.deepcopy(DEFAULT_PROFILE["drive_intent"]),
             "discipline_badge": pf.discipline_badge or copy.deepcopy(DEFAULT_PROFILE["discipline_badge"]),
         }
-        
+
     data["resource_preference_summary"] = _resource_preference_summary(data["modal_preference"])
-    data["dimensions"] = _profile_dimensions(data)
+    data["profile_dimensions"] = _profile_dimensions(data)
     if user:
         data["role"] = user.role
-        data["guidance_level_base"] = user.guidance_level
     else:
         data["role"] = "student"
-        data["guidance_level_base"] = "L2"
-        
+
     return data

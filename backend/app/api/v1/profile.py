@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from app.schemas.profile import (
     ProfileDialogueUpdateRequest,
     ProfileGoalUpdateRequest,
     ProfileInstructionUpdateRequest,
+    ProfileRefreshRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,7 +113,7 @@ async def update_learning_goal(
     await _verify_course_enrollment(current_user, req.course_id, db)
     try:
         service = ProfileService(db)
-        pf = await service.update_learning_goal(current_user.id, req.course_id, req.learning_goal)
+        pf = await service.update_learning_goal(current_user.id, req.course_id, req.goal_type)
         await db.commit()
         return {"code": 200, "message": "success", "data": profile_data(pf, req.course_id, current_user)}
     except Exception as e:
@@ -127,7 +129,7 @@ async def update_custom_instruction(
     await _verify_course_enrollment(current_user, req.course_id, db)
     try:
         service = ProfileService(db)
-        pf = await service.update_custom_instruction(current_user.id, req.course_id, req.custom_instruction)
+        pf = await service.update_custom_instruction(current_user.id, req.course_id, req.instruction)
         await db.commit()
         return {"code": 200, "message": "success", "data": profile_data(pf, req.course_id, current_user)}
     except Exception as e:
@@ -136,38 +138,45 @@ async def update_custom_instruction(
 
 @router.post("/refresh")
 async def refresh_profile(
-    course_id: str,
+    req: ProfileRefreshRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _verify_course_enrollment(current_user, course_id, db)
+    await _verify_course_enrollment(current_user, req.course_id, db)
     
     refresh_service = ProfileRefreshService(db)
-    active_task = await refresh_service.get_processing_refresh_task(current_user.id, course_id)
+    active_task = await refresh_service.get_processing_refresh_task(current_user.id, req.course_id)
     if active_task:
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "task_id": active_task.id,
-                "status": active_task.status,
-                "created_at": active_task.create_time.isoformat(),
-            },
-        }
+        return JSONResponse(
+            status_code=202,
+            content={
+                "code": 202,
+                "message": "accepted",
+                "data": {
+                    "task_id": active_task.id,
+                    "status": active_task.status,
+                    "created_at": active_task.create_time.isoformat(),
+                },
+            }
+        )
 
-    task = await refresh_service.create_refresh_task(current_user.id, course_id)
+    task = await refresh_service.create_refresh_task(current_user.id, req.course_id)
     await db.commit()
+    await db.refresh(task)
 
     asyncio.create_task(
-        run_profile_refresh_background(task.id, current_user.id, course_id)
+        run_profile_refresh_background(task.id, current_user.id, req.course_id)
     )
 
-    return {
-        "code": 202,
-        "message": "accepted",
-        "data": {
-            "task_id": task.id,
-            "status": task.status,
-            "created_at": task.create_time.isoformat(),
-        },
-    }
+    return JSONResponse(
+        status_code=202,
+        content={
+            "code": 202,
+            "message": "accepted",
+            "data": {
+                "task_id": task.id,
+                "status": task.status,
+                "created_at": task.create_time.isoformat(),
+            },
+        }
+    )

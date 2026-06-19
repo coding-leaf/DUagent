@@ -90,11 +90,7 @@ def _merge_profile(pf: UserProfile, normalized: dict) -> dict:
     now = datetime.now(timezone.utc)
     learning_goal = normalized.get("learning_goal")
     weak_points = _as_list(normalized.get("weak_points") or normalized.get("cognitive_blindspots"))
-    preferred_resources = _as_list(
-        normalized.get("preferred_resources")
-        or normalized.get("learning_preferences")
-        or normalized.get("resource_preference")
-    )
+    preferred_resources = _as_list(normalized.get("preferred_resources"))
     guidance_level = normalized.get("guidance_level")
 
     # Use deepcopy defensively

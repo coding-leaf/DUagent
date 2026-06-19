@@ -103,3 +103,20 @@ async def test_update_from_dialogue_service(mock_lock):
     assert db_session.flush.call_count >= 2
 
 
+def test_invalid_resource_preference_is_ignored_and_does_not_pollute_profile():
+    extracted = {
+        "learning_preferences": ["不匹配的垃圾信息"],
+    }
+    normalized = _normalize_fields(extracted)
+    assert normalized["preferred_resources"] == []
+    
+    pf = UserProfile(
+        user_id="u1",
+        course_id="c1",
+        modal_preference={"video_animation": 50}
+    )
+    _merge_profile(pf, normalized)
+    assert "不匹配的垃圾信息" not in pf.modal_preference
+
+
+

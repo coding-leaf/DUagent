@@ -20,10 +20,10 @@ from app.services.resource_scope import ensure_course_resource_access, resolve_c
 from app.schemas.ai_features import RefreshRequest
 from app.services.knowledge_progress import build_node_progress_rows
 from app.services.learning_path_service import (
-    _apply_progress_to_nodes,
-    _assemble_learning_path_payload,
-    _build_current_position_from_nodes,
-    _synthesize_kg_fallback_path,
+    apply_progress_to_nodes,
+    assemble_learning_path_payload,
+    build_current_position_from_nodes,
+    synthesize_kg_fallback_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ async def get_learning_path(
 
     if lp is not None:
         # Merge 模式：用实时状态覆盖快照节点的 status/mastery，其余字段保留
-        merged_nodes = _apply_progress_to_nodes(lp.nodes or [], progress_by_id)
+        merged_nodes = apply_progress_to_nodes(lp.nodes or [], progress_by_id)
         # merged_nodes 为空时快照中的 current_node_id 可能指向不存在节点，返回 None
         if merged_nodes and lp.current_node_id:
             current_position = {"node_id": lp.current_node_id, "node_name": lp.current_node_name}
@@ -97,10 +97,10 @@ async def get_learning_path(
         }
 
     # 3. 无快照，尝试 KG 构建模式
-    fallback = await _synthesize_kg_fallback_path(db, course_id)
+    fallback = await synthesize_kg_fallback_path(db, course_id)
     if fallback is not None:
-        kg_nodes = _apply_progress_to_nodes(fallback["nodes"], progress_by_id)
-        current_position = _build_current_position_from_nodes(kg_nodes)
+        kg_nodes = apply_progress_to_nodes(fallback["nodes"], progress_by_id)
+        current_position = build_current_position_from_nodes(kg_nodes)
         # 显式组装字段，避免 **fallback unpack 导致 current_position 被隐式覆盖
         return {
             "code": 200,
@@ -270,7 +270,7 @@ async def refresh_learning_path(
             )
 
     # 组装 payload（需要 DB，在请求内完成）
-    payload = await _assemble_learning_path_payload(current_user.id, course_id, db)
+    payload = await assemble_learning_path_payload(current_user.id, course_id, db)
 
     # 创建任务并立即提交
     task = AsyncTask(

@@ -1,4 +1,4 @@
-"""Unit tests for _topo_sort_kg_nodes in learning_path.py fallback path.
+"""Unit tests for topo_sort_kg_nodes in learning_path service fallback path.
 
 Run: python -m pytest tests/test_learning_path_fallback.py -v
 """
@@ -13,7 +13,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 
 import pytest
-from app.services.learning_path_service import _topo_sort_kg_nodes
+from app.services.learning_path_service import topo_sort_kg_nodes
 
 
 class TestTopoSortKgNodes:
@@ -27,7 +27,7 @@ class TestTopoSortKgNodes:
             {"from": "a", "to": "b"},
             {"from": "b", "to": "c"},
         ]
-        result = _topo_sort_kg_nodes(nodes, edges)
+        result = topo_sort_kg_nodes(nodes, edges)
         ids = [n["id"] for n in result]
         assert ids == ["a", "b", "c"]
 
@@ -41,7 +41,7 @@ class TestTopoSortKgNodes:
             {"from": "a", "to": "c"},
             {"from": "b", "to": "c"},
         ]
-        result = _topo_sort_kg_nodes(nodes, edges)
+        result = topo_sort_kg_nodes(nodes, edges)
         ids = [n["id"] for n in result]
         assert ids[0] in ("a", "b")
         assert ids[1] in ("a", "b")
@@ -52,18 +52,18 @@ class TestTopoSortKgNodes:
             {"id": "z", "name": "Z", "chapter": "Ch3"},
             {"id": "a", "name": "A", "chapter": "Ch1"},
         ]
-        result = _topo_sort_kg_nodes(nodes, [])
+        result = topo_sort_kg_nodes(nodes, [])
         ids = [n["id"] for n in result]
         assert ids == ["z", "a"]
 
     def test_empty_nodes(self):
-        assert _topo_sort_kg_nodes([], []) == []
+        assert topo_sort_kg_nodes([], []) == []
 
     def test_preserves_all_node_fields(self):
         nodes = [
             {"id": "n1", "name": "Node1", "chapter": "Ch1"},
         ]
-        result = _topo_sort_kg_nodes(nodes, [{"from": "n1", "to": "n2"}])
+        result = topo_sort_kg_nodes(nodes, [{"from": "n1", "to": "n2"}])
         assert result[0]["id"] == "n1"
         assert result[0]["name"] == "Node1"
         assert result[0]["chapter"] == "Ch1"
@@ -79,7 +79,7 @@ class TestTopoSortKgNodes:
             {"from": "a", "to": "b"},
             {"from": "c", "to": "d"},
         ]
-        result = _topo_sort_kg_nodes(nodes, edges)
+        result = topo_sort_kg_nodes(nodes, edges)
         ids = [n["id"] for n in result]
         assert ids.index("a") < ids.index("b")
         assert ids.index("c") < ids.index("d")

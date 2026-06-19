@@ -6,7 +6,7 @@ from app.models.others import Evaluation, UserProfile
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 
 
-def _topo_sort_kg_nodes(
+def topo_sort_kg_nodes(
     nodes: list[dict],
     edges: list[dict],
 ) -> list[dict]:
@@ -53,7 +53,7 @@ def _topo_sort_kg_nodes(
     return [node_map[nid] for nid in sorted_ids if nid in node_map]
 
 
-def _map_assessment_to_status(assessment_state: str) -> str:
+def map_assessment_to_status(assessment_state: str) -> str:
     return {
         "mastered": "completed",
         "learning": "in_progress",
@@ -63,7 +63,7 @@ def _map_assessment_to_status(assessment_state: str) -> str:
     }.get(assessment_state, "pending")
 
 
-def _apply_progress_to_nodes(
+def apply_progress_to_nodes(
     nodes: list[dict],
     progress_by_id: dict[str, dict],
 ) -> list[dict]:
@@ -76,7 +76,7 @@ def _apply_progress_to_nodes(
             result.append(dict(node))
             continue
         updated = dict(node)
-        updated["status"] = _map_assessment_to_status(progress.get("assessment_state", "unstarted"))
+        updated["status"] = map_assessment_to_status(progress.get("assessment_state", "unstarted"))
         mastery_score = progress.get("mastery_score")
         if mastery_score is not None:
             updated["mastery"] = mastery_score
@@ -84,7 +84,7 @@ def _apply_progress_to_nodes(
     return result
 
 
-def _build_current_position_from_nodes(nodes: list[dict]) -> dict | None:
+def build_current_position_from_nodes(nodes: list[dict]) -> dict | None:
     """取第一个非 pending 节点作为 current_position；全为 pending 时取第一个节点。"""
     if not nodes:
         return None
@@ -95,7 +95,7 @@ def _build_current_position_from_nodes(nodes: list[dict]) -> dict | None:
     return {"node_id": first.get("id", ""), "node_name": first.get("name", "")}
 
 
-async def _synthesize_kg_fallback_path(
+async def synthesize_kg_fallback_path(
     db: AsyncSession,
     course_id: str,
 ) -> dict | None:
@@ -140,7 +140,7 @@ async def _synthesize_kg_fallback_path(
     kg_edges = kg.edges if isinstance(kg.edges, list) else []
 
     # 4. Topo sort
-    sorted_nodes = _topo_sort_kg_nodes(kg_nodes, kg_edges)
+    sorted_nodes = topo_sort_kg_nodes(kg_nodes, kg_edges)
 
     # 5. Assemble nodes with status/mastery/order
     assembled_nodes = []
@@ -169,7 +169,7 @@ async def _synthesize_kg_fallback_path(
     }
 
 
-async def _assemble_learning_path_payload(
+async def assemble_learning_path_payload(
     user_id: str, course_id: str, db: AsyncSession,
 ) -> dict:
     """组装调用 Agent /learning-path/generate 所需的 payload。"""

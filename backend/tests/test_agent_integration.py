@@ -280,7 +280,7 @@ class TestTutoringChatIntegration:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             s_h, course_id = await self._setup_tutoring(client)
-            with patch("app.api.v1.tutoring.agent_client.stream_sse", fake_stream_sse):
+            with patch("app.services.tutoring_stream_adapter.agent_client.stream_sse", fake_stream_sse):
                 r = await client.post("/api/v1/tutoring/chat", headers=s_h, json={
                     "message": "先讲一下数组",
                     "scope": "course",
@@ -314,7 +314,7 @@ class TestTutoringChatIntegration:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             headers, course_id = await self._setup_tutoring(client)
-            with patch("app.api.v1.tutoring.agent_client.stream_sse", fake_stream_sse):
+            with patch("app.services.tutoring_stream_adapter.agent_client.stream_sse", fake_stream_sse):
                 created = await client.post(
                     "/api/v1/tutoring/chat",
                     headers=headers,

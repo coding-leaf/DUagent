@@ -16,6 +16,7 @@ os.environ["DATABASE_URL"] = database_url
 
 from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course, CourseEnrollment
+from app.models.others import Evaluation, LearningPath, UserProfile
 from app.models.user import User
 
 
@@ -231,3 +232,91 @@ async def test_list_students_query_count_does_not_grow_with_page_size():
 
         assert one_student_count > 0
         assert twenty_student_count == one_student_count
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_student_learning_uses_latest_records_and_real_score():
+    async with async_session_factory() as db:
+        teacher, course = await _course(db)
+        student = await _user(db, "student", "report-student")
+        db.add(CourseEnrollment(course_id=course.id, student_id=student.id))
+        old_time = datetime(2026, 1, 1, 8, 0, 0)
+        new_time = datetime(2026, 1, 2, 8, 0, 0)
+        db.add_all(
+            [
+                Evaluation(
+                    user_id=student.id,
+                    course_id=course.id,
+                    mastery_table={"rows": [{"average_score": 10}]},
+                    summary_text="old evaluation",
+                    generated_at=old_time,
+                ),
+                Evaluation(
+                    user_id=student.id,
+                    course_id=course.id,
+                    mastery_table={
+                        "rows": [
+                            {"average_score": 70},
+                            {"average_score": "80"},
+                            {"average_score": 101},
+                        ]
+                    },
+                    summary_text="new evaluation",
+                    generated_at=new_time,
+                ),
+                UserProfile(
+                    user_id=student.id,
+                    course_id=course.id,
+                    knowledge_coordinates=[{"status": "weak"}],
+                    generated_at=old_time,
+                ),
+                UserProfile(
+                    user_id=student.id,
+                    course_id=course.id,
+                    modal_preference={"text_analysis": 80},
+                    knowledge_coordinates=[
+                        {"status": "mastered"},
+                        {"status": "weak"},
+                        {"status": "learning"},
+                        {"status": "pending"},
+                    ],
+                    generated_at=new_time,
+                ),
+                LearningPath(
+                    user_id=student.id,
+                    course_id=course.id,
+                    current_node_name="old node",
+                    nodes=[{"status": "completed"}, {"status": "completed"}],
+                    generated_at=old_time,
+                ),
+                LearningPath(
+                    user_id=student.id,
+                    course_id=course.id,
+                    current_node_name="new node",
+                    nodes=[{"status": "completed"}, {"status": "pending"}],
+                    generated_at=new_time,
+                ),
+            ]
+        )
+        await db.commit()
+
+        data = await TeachingService(db).get_student_learning(
+            course.id,
+            student.id,
+            teacher,
+        )
+
+        assert data["student"]["id"] == student.id
+        assert data["evaluation_summary"] == {
+            "overall_score": 75.0,
+            "generated_at": new_time.isoformat(),
+            "summary_text": "new evaluation",
+        }
+        assert data["profile_summary"]["knowledge_mastered"] == 1
+        assert data["profile_summary"]["knowledge_weak"] == 1
+        assert data["profile_summary"]["modal_preference"] == ["text_analysis"]
+        assert data["path_progress"] == {
+            "current_node": "new node",
+            "completed_nodes": 1,
+            "total_nodes": 2,
+        }

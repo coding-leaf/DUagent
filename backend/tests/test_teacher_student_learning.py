@@ -16,18 +16,24 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-os.environ["DATABASE_URL"] = os.environ.get(
-    "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:///./test_teacher_learning.db",
-)
+database_url = os.environ.get("TEST_DATABASE_URL")
+if not database_url or not database_url.startswith("mysql+aiomysql://"):
+    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+os.environ["DATABASE_URL"] = database_url
 
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
 from httpx import AsyncClient, ASGITransport
 
-asyncio.run(init_db())
+
+async def _init_schema():
+    await init_db()
+    await engine.dispose()
+
+
+asyncio.run(_init_schema())
 
 from app.main import app
-from app.models.others import UserProfile
+from app.models.others import Evaluation, UserProfile
 from app.models.user import RegistrationCode
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 
@@ -57,7 +63,7 @@ async def _register_and_login(client, code, email, username):
     return {"Authorization": f"Bearer {r.json()['data']['token']}"}, user_id
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test():
     transport = ASGITransport(app=app)
     ok = fail = 0
@@ -107,6 +113,15 @@ async def test():
         async with async_session_factory() as db:
             qs = QuizSession(user_id=stu_id, course_id=course_id, chapter="ch1",
                              score=50, correct_count=1, total_count=2, time_spent=60)
+            db.add(Evaluation(
+                user_id=stu_id,
+                course_id=course_id,
+                mastery_table={"rows": [
+                    {"average_score": 60},
+                    {"average_score": "80"},
+                ]},
+                summary_text="真实评估摘要",
+            ))
             db.add(qs)
             await db.flush()
 
@@ -148,6 +163,7 @@ async def test():
         ev_sum = data.get("evaluation_summary")
         if ev_sum is not None:
             chk("evaluation_summary has summary_text key", "summary_text" in ev_sum)
+            chk("evaluation_summary uses real overall_score", ev_sum.get("overall_score") == 70.0)
 
         pf_sum = data.get("profile_summary")
         if pf_sum is not None:

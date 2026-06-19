@@ -13,7 +13,9 @@ DEFAULT_PROFILE = {
         "formula_derivation": 50,
     },
     "drive_intent": {
+        "type": "casual",
         "learning_goal": "casual",
+        "intensity": 30,
         "learning_habits": {},
         "knowledge_progress_summary": {},
     },

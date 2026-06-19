@@ -11,6 +11,7 @@ import time
 import uuid
 from unittest.mock import AsyncMock, patch
 import pytest
+import pytest_asyncio
 
 os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
@@ -20,12 +21,19 @@ os.environ["DATABASE_URL"] = os.environ.get(
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.session import async_session_factory
+from app.db.session import async_session_factory, engine
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.models.user import RegistrationCode
 from app.models.others import UserProfile
 from sqlalchemy import func, select, text
+
+
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def _dispose_engine_for_module_loop():
+    await engine.dispose()
+    yield
+    await engine.dispose()
 
 
 async def _register_and_login(client, code, email, username):
@@ -67,7 +75,7 @@ async def _poll_task(client, task_id, headers, timeout=15):
     return None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test():
     transport = ASGITransport(app=app)
     ok = fail = 0
@@ -178,7 +186,7 @@ async def test():
             chk("lp lock acquired", lr.scalar() == 1)
 
             print("  (waiting ~5s for lp lock timeout...)")
-            with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+            with patch("app.services.learning_path_refresh_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
                 mock_agent.return_value = {"nodes": [], "edges": [], "current_position": None}
                 r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
                 chk("lp lock held → 202", r.status_code == 202)

@@ -469,7 +469,7 @@ async def test():
         # 7. learning-path/refresh success
         # =============================================
         print("\n-- 7. learning-path/refresh success --")
-        with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        with patch("app.services.learning_path_refresh_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {
                 "nodes": [{"id": "n1", "name": "Intro", "status": "pending", "mastery": 0, "order": 0}],
                 "edges": [],
@@ -501,7 +501,7 @@ async def test():
         # 8. learning-path/refresh Agent failure
         # =============================================
         print("\n-- 8. learning-path/refresh Agent failure --")
-        with patch("app.api.v1.learning_path.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        with patch("app.services.learning_path_refresh_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="lp failed", status_code=500, agent_code=50002)
             r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})

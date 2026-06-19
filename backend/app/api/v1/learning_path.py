@@ -1,51 +1,28 @@
 import asyncio
-import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, text, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.db.session import async_session_factory
 from app.models.course import CourseEnrollment
 from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.others import AsyncTask, LearningPath, Resource
+from app.models.others import LearningPath, Resource
 from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.resource_scope import ensure_course_resource_access, resolve_course_resource_scope, resource_scope_clause
 from app.schemas.ai_features import RefreshRequest
+from app.services.learning_path_refresh_service import (
+    LearningPathRefreshService,
+    run_learning_path_refresh_background,
+)
 from app.services.learning_path_service import (
-    assemble_learning_path_payload,
     LearningPathService,
 )
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
-
-
-async def _acquire_learning_path_lock(db: AsyncSession, user_id: str, course_id: str) -> str:
-    """Acquire a MySQL named lock for serializing learning-path writes."""
-    lock_name = f"learningpath_{user_id}_{course_id}"
-    if db.bind.dialect.name == "sqlite":
-        return lock_name
-    lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
-    if not lock_result.scalar():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": 50300, "message": "服务繁忙，请稍后重试", "data": None},
-        )
-    return lock_name
-
-
-async def _release_learning_path_lock(db: AsyncSession, lock_name: str) -> None:
-    """Release a previously acquired MySQL named lock for learning-path writes."""
-    if db.bind.dialect.name == "sqlite":
-        return
-    await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
 @router.get("")
@@ -62,119 +39,6 @@ async def get_learning_path(
     }
 
 
-async def _run_learning_path_refresh_background(
-    task_id: str,
-    user_id: str,
-    course_id: str,
-    payload: dict,
-) -> None:
-    """后台异步执行 Agent /learning-path/generate 并写入 LearningPath。
-
-    设计约束：
-    - 只接收原始标量 + 预组装 payload，不接收请求级 ORM 实例或 db session。
-    - 内部自行创建独立 DB session，Agent 调用、锁、写库、task 更新全部在后台完成。
-    - 失败时记录结构化日志 + 落 task failed，不抛异常。
-    """
-    async with async_session_factory() as db:
-        try:
-            data = await agent_client.post_json("/agent/v1/learning-path/generate", payload)
-
-            lock_name = f"learningpath_{user_id}_{course_id}"
-            if db.bind.dialect.name == "sqlite":
-                locked = 1
-            else:
-                lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": lock_name})
-                locked = lock_result.scalar()
-            if not locked:
-                raise RuntimeError(f"GET_LOCK timeout: {lock_name}")
-
-            try:
-                now = datetime.now(timezone.utc)
-                old_result = await db.execute(
-                    select(LearningPath).where(
-                        LearningPath.user_id == user_id,
-                        LearningPath.course_id == course_id,
-                        LearningPath.is_deleted == False,
-                    )
-                )
-                for old in old_result.scalars().all():
-                    old.is_deleted = True
-
-                cp = data.get("current_position") or {}
-                lp = LearningPath(
-                    user_id=user_id,
-                    course_id=course_id,
-                    nodes=data.get("nodes", []),
-                    edges=data.get("edges", []),
-                    current_node_id=cp.get("node_id", ""),
-                    current_node_name=cp.get("node_name", ""),
-                    generated_at=now,
-                )
-                db.add(lp)
-
-                await db.execute(
-                    update(AsyncTask)
-                    .where(AsyncTask.id == task_id)
-                    .values(
-                        status="completed",
-                        result={"updated_at": now.isoformat()},
-                        completed_at=now,
-                    )
-                )
-                await db.commit()
-                logger.info(
-                    "Learning path refresh background: completed task_id=%s user_id=%s course_id=%s",
-                    task_id, user_id, course_id,
-                )
-            finally:
-                try:
-                    if db.bind.dialect.name != "sqlite":
-                        await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
-                except Exception:
-                    logger.warning(
-                        "Learning path refresh background: RELEASE_LOCK failed lock_name=%s",
-                        lock_name,
-                    )
-        except AgentServiceError as e:
-            await db.rollback()
-            await db.execute(
-                update(AsyncTask)
-                .where(AsyncTask.id == task_id)
-                .values(
-                    status="failed",
-                    error_code=str(e.agent_code or "agent_error"),
-                    error_message=e.message,
-                    completed_at=datetime.now(timezone.utc),
-                )
-            )
-            await db.commit()
-            logger.error(
-                "Learning path refresh background: AgentServiceError task_id=%s user_id=%s "
-                "course_id=%s status=%s agent_code=%s message=%s",
-                task_id, user_id, course_id, e.status_code, e.agent_code, e.message,
-            )
-        except Exception as e:
-            await db.rollback()
-            error_msg = str(e)[:500]
-            is_lock_timeout = "GET_LOCK timeout" in str(e)
-            await db.execute(
-                update(AsyncTask)
-                .where(AsyncTask.id == task_id)
-                .values(
-                    status="failed",
-                    error_code="lock_timeout" if is_lock_timeout else "internal_error",
-                    error_message=error_msg,
-                    completed_at=datetime.now(timezone.utc),
-                )
-            )
-            await db.commit()
-            logger.error(
-                "Learning path refresh background: unexpected error task_id=%s user_id=%s "
-                "course_id=%s type=%s message=%s",
-                task_id, user_id, course_id, type(e).__name__, error_msg,
-            )
-
-
 @router.post("/refresh")
 async def refresh_learning_path(
     req: RefreshRequest,
@@ -184,7 +48,7 @@ async def refresh_learning_path(
     """请求刷新学习路径（真异步）。
 
     请求内：权限校验 → payload 组装 → 创建 AsyncTask → commit → 返回 202。
-    后台 _run_learning_path_refresh_background：Agent 调用 → 锁 → 写库 → task 完成/失败。
+    后台 run_learning_path_refresh_background：Agent 调用 → 锁 → 写库 → task 完成/失败。
     """
     course_id = req.course_id
     if current_user.role == "student":
@@ -201,23 +65,14 @@ async def refresh_learning_path(
                 detail={"code": 40300, "message": "未加入该课程", "data": None},
             )
 
-    # 组装 payload（需要 DB，在请求内完成）
-    payload = await assemble_learning_path_payload(current_user.id, course_id, db)
-
-    # 创建任务并立即提交
-    task = AsyncTask(
-        task_type="learning_path_refresh",
-        status="processing",
-        user_id=current_user.id,
-        course_id=course_id,
-    )
-    db.add(task)
-    await db.flush()
-    await db.refresh(task)
+    refresh_service = LearningPathRefreshService(db)
+    payload = await refresh_service.assemble_payload(current_user.id, course_id)
+    task = await refresh_service.create_refresh_task(current_user.id, course_id)
+    # commit point: task persisted before background dispatch
     await db.commit()
 
     # 后台异步执行 Agent 调用 + 写库
-    asyncio.create_task(_run_learning_path_refresh_background(
+    asyncio.create_task(run_learning_path_refresh_background(
         task_id=task.id,
         user_id=current_user.id,
         course_id=course_id,

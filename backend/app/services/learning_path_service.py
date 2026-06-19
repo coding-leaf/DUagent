@@ -2,8 +2,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.others import Evaluation, UserProfile
+from app.models.others import Evaluation, LearningPath, UserProfile
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.knowledge_progress import build_node_progress_rows
 
 
 def topo_sort_kg_nodes(
@@ -209,3 +210,60 @@ async def assemble_learning_path_payload(
         payload["knowledge_graph"] = {"nodes": [], "edges": []}
 
     return payload
+
+
+class LearningPathService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_learning_path(self, user_id: str, course_id: str) -> dict:
+        progress_rows = await build_node_progress_rows(user_id, course_id, self.db)
+        progress_by_id: dict[str, dict] = {row["node_id"]: row for row in progress_rows}
+
+        result = await self.db.execute(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.course_id == course_id,
+                LearningPath.is_deleted == False,
+            )
+            .order_by(LearningPath.generated_at.desc())
+        )
+        learning_path = result.scalars().first()
+
+        if learning_path is not None:
+            merged_nodes = apply_progress_to_nodes(learning_path.nodes or [], progress_by_id)
+            current_position = (
+                {"node_id": learning_path.current_node_id, "node_name": learning_path.current_node_name}
+                if merged_nodes and learning_path.current_node_id
+                else None
+            )
+            return {
+                "course_id": learning_path.course_id,
+                "nodes": merged_nodes,
+                "edges": learning_path.edges or [],
+                "current_position": current_position,
+                "source": "realtime_merged",
+                "generated_at": learning_path.generated_at.isoformat() if learning_path.generated_at else None,
+            }
+
+        fallback = await synthesize_kg_fallback_path(self.db, course_id)
+        if fallback is not None:
+            kg_nodes = apply_progress_to_nodes(fallback["nodes"], progress_by_id)
+            return {
+                "course_id": fallback["course_id"],
+                "nodes": kg_nodes,
+                "edges": fallback.get("edges") or [],
+                "current_position": build_current_position_from_nodes(kg_nodes),
+                "source": "kg_realtime",
+                "generated_at": fallback.get("generated_at"),
+            }
+
+        return {
+            "course_id": course_id,
+            "nodes": [],
+            "edges": [],
+            "current_position": None,
+            "source": "kg_fallback",
+            "generated_at": None,
+        }

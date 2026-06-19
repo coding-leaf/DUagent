@@ -28,7 +28,8 @@ async def _init_schema() -> None:
 
 asyncio.run(_init_schema())
 
-from app.services.teaching_service import TeachingService, _overall_score
+from app.services.student_report_query import _overall_score
+from app.services.teaching_service import TeachingService
 
 
 def _uid(prefix: str) -> str:

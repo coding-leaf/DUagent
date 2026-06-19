@@ -3,8 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.conversation import Conversation, Message
 
@@ -37,6 +38,21 @@ class PreparedTutoringTurn:
     message: str
     scope: str
     course_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationListRow:
+    conversation: Conversation
+    message_count: int
+    last_message: Message | None
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationPage:
+    items: list[ConversationListRow]
+    total: int
+    page: int
+    page_size: int
 
 
 def message_order_key(message: Message):
@@ -262,3 +278,135 @@ class TutoringService:
             scope,
             course_id,
         )
+
+    async def list_conversations(
+        self,
+        *,
+        user_id: str,
+        scope: str | None,
+        course_id: str | None,
+        page: int,
+        page_size: int,
+    ) -> ConversationPage:
+        base_query = select(Conversation).where(
+            Conversation.user_id == user_id,
+            Conversation.is_deleted == False,
+        )
+        if scope:
+            base_query = base_query.where(Conversation.scope == scope)
+        if course_id:
+            base_query = base_query.where(Conversation.course_id == course_id)
+
+        total = (
+            await self.db.execute(
+                select(func.count()).select_from(base_query.subquery())
+            )
+        ).scalar() or 0
+        conversations = list(
+            (
+                await self.db.execute(
+                    base_query
+                    .order_by(Conversation.update_time.desc())
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not conversations:
+            return ConversationPage([], total, page, page_size)
+
+        conversation_ids = [conversation.id for conversation in conversations]
+        count_rows = (
+            await self.db.execute(
+                select(Message.conversation_id, func.count(Message.id))
+                .where(
+                    Message.conversation_id.in_(conversation_ids),
+                    Message.is_deleted == False,
+                )
+                .group_by(Message.conversation_id)
+            )
+        ).all()
+        counts = {conversation_id: count for conversation_id, count in count_rows}
+
+        role_rank = case((Message.role == "user", 0), else_=1)
+        ranked = (
+            select(
+                Message,
+                func.row_number()
+                .over(
+                    partition_by=Message.conversation_id,
+                    order_by=(
+                        Message.create_time.desc(),
+                        Message.update_time.desc(),
+                        role_rank.desc(),
+                    ),
+                )
+                .label("row_number"),
+            )
+            .where(
+                Message.conversation_id.in_(conversation_ids),
+                Message.is_deleted == False,
+            )
+            .subquery()
+        )
+        ranked_message = aliased(Message, ranked)
+        last_messages = list(
+            (
+                await self.db.execute(
+                    select(ranked_message).where(ranked.c.row_number == 1)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        last_by_conversation = {
+            message.conversation_id: message for message in last_messages
+        }
+        items = [
+            ConversationListRow(
+                conversation=conversation,
+                message_count=counts.get(conversation.id, 0),
+                last_message=last_by_conversation.get(conversation.id),
+            )
+            for conversation in conversations
+        ]
+        return ConversationPage(items, total, page, page_size)
+
+    async def get_conversation(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+    ) -> tuple[Conversation, list[Message]]:
+        conversation = await self._owned_conversation(
+            user_id,
+            conversation_id,
+            for_update=False,
+        )
+        result = await self.db.execute(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.is_deleted == False,
+            )
+            .order_by(Message.create_time.asc(), Message.update_time.asc())
+        )
+        messages = list(result.scalars().all())
+        messages.sort(key=message_order_key)
+        return conversation, messages
+
+    async def delete_conversation(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+    ) -> None:
+        conversation = await self._owned_conversation(
+            user_id,
+            conversation_id,
+            for_update=True,
+        )
+        conversation.is_deleted = True
+        await self.db.flush()

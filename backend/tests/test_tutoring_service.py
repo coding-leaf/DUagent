@@ -19,7 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.db.session import async_session_factory, engine, init_db
 from app.models.conversation import Conversation, Message
 from app.models.user import User
+from app.services.tutoring_presenters import conversation_detail, conversation_item
 from app.services.tutoring_service import (
+    ConversationPage,
     ConversationNotFoundError,
     EditConversationRequiredError,
     EditUserMessageRequiredError,
@@ -70,6 +72,9 @@ async def conversation_pair():
         )
         db.add_all([user_message, assistant_message])
         await db.commit()
+        await db.refresh(conversation)
+        await db.refresh(user_message)
+        await db.refresh(assistant_message)
         user_id = user.id
         conversation_id = conversation.id
 
@@ -204,3 +209,101 @@ async def test_prepare_actions_keep_current_validation_errors(conversation_pair)
             scope="global",
             course_id=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_tutoring_presenters_preserve_client_fields(conversation_pair):
+    _, _, conversation, user_message, assistant_message = conversation_pair
+
+    item = conversation_item(
+        conversation,
+        message_count=2,
+        last_message=assistant_message,
+    )
+    detail = conversation_detail(
+        conversation,
+        [user_message, assistant_message],
+    )
+
+    assert set(item) == {
+        "id",
+        "scope",
+        "course_id",
+        "title",
+        "last_message",
+        "message_count",
+        "updated_at",
+    }
+    assert item["last_message"] == "answer"
+    assert set(detail) == {
+        "id",
+        "scope",
+        "course_id",
+        "title",
+        "messages",
+        "created_at",
+        "updated_at",
+    }
+    assert [message["role"] for message in detail["messages"]] == [
+        "user",
+        "assistant",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_uses_four_bounded_queries_and_stable_last_message(
+    conversation_pair,
+):
+    db, user, conversation, _, _ = conversation_pair
+    select_statements: list[str] = []
+
+    def capture_statement(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        page = await TutoringService(db).list_conversations(
+            user_id=user.id,
+            scope="global",
+            course_id=None,
+            page=1,
+            page_size=20,
+        )
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", capture_statement)
+
+    assert isinstance(page, ConversationPage)
+    assert page.total == 1
+    assert len(select_statements) == 4
+    row = page.items[0]
+    assert row.conversation.id == conversation.id
+    assert row.message_count == 2
+    assert row.last_message.role == "assistant"
+    assert row.last_message.content == "answer"
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_empty_page_uses_two_queries(conversation_pair):
+    db, _, _, _, _ = conversation_pair
+    select_statements: list[str] = []
+
+    def capture_statement(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        page = await TutoringService(db).list_conversations(
+            user_id="missing-user",
+            scope="global",
+            course_id=None,
+            page=1,
+            page_size=20,
+        )
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", capture_statement)
+
+    assert page.total == 0
+    assert page.items == []
+    assert len(select_statements) == 2

@@ -64,12 +64,17 @@
 ### 2026-06-17 (Update 7: 拆分 TeacherStudentReport - 完整解耦)
 - **修改文件**：新增 src/components/report 下所有知识解析组件，重构 TeacherStudentReport.jsx 容器。
 - **核心改动**：全面完成了 TeacherStudentReport 页面的 MVVM 架构重构，将近 400 行的页面组件拆解为 9 个独立的表现层子组件，状态和数据获取逻辑统一交由自定义 SWR hook useStudentReport 处理。加入了完整的错误边界防御。
-- **测试结果**：npm run lint 和 npm run build 测试通过。
+- **测试结果**：npm run lint and npm run build 测试通过。
 - **接口漂移**：无
 
 ### 2026-06-19 (Task 5: Profile Refresh Service & Background Runner)
 - **涉及文件**：`backend/app/services/profile_refresh_service.py`, `backend/tests/test_profile_refresh_service.py`
-- **核心改动**：实现并完成了 Profile Refresh 核心服务与后台异步任务执行器 (run_profile_refresh_background)。基于 TDD 流程，为任务的创建、状态查询、画像指标的重新计算 (包括模态偏好、知识坐标、认知盲区、行为特征/意志特征、勋章规则更新) 以及在锁超时和异常抛出时的 AsyncTask 更新建立了单元测试。
+- **核心改动**：实现并完成了 Profile Refresh 核心服务与后台异步任务执行器 (run_profile_refresh_background)。基于 TDD 流程，为任务的创建、状态查询、画像指标的重新计算 (包括模态偏好、知识坐标、认知盲区、行为特征/意志特征、勋章规则更新) 以及在锁超时 and 异常抛出时的 AsyncTask 更新建立了单元测试。
 - **测试结果**：Pytest 单元测试全部通过，涉及 profile 的 19 个相关用例全部通过，py_compile 无语法错误。
 - **接口漂移**：无
 
+### 2026-06-19 (Task 6: Route Refactoring and Translation Integration)
+- **涉及文件**：`backend/app/api/v1/profile.py`, `backend/tests/test_profile_routes_refactored.py`
+- **核心改动**：完成画像路由瘦身与重构。将业务逻辑完全委托至底层的 `ProfileService`、`ProfileDialogueService`、`ProfileRefreshService` 核心模块，清理冗余的合并/清洗/判定辅助函数，统一从 presenter 和对话服务导入；路由层仅保留参数提取、鉴权及极简的调用和数据呈现翻译。基于 TDD 流程设计了对全部重构后路由的完整单元测试。
+- **测试结果**：测试代码与新版路由文件编写完毕并成功提交，`py_compile` 无语法错误。
+- **接口漂移**：更新了部分路由路径（如从旧版的 `/learning-goal` 迁移到 `/update-goal`，`/custom-instruction` 迁移到 `/update-instruction`）。

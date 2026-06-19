@@ -34,8 +34,8 @@
 | 编号 | 功能 | 状态 | 前端入口 | 说明 |
 |------|------|------|----------|------|
 | jc0201 | 教师课程开班 | ✅ 已实现 | `TeacherConsole.jsx` → `CreateCourseDialog` | 教师选择课程资源库创建教学班，生成唯一课程码，可一键复制分发给学生 |
-| jc0202 | 查看学生个人信息 | ✅ 已实现 | `TeacherConsole.jsx` 学生列表 | 班级学生列表展示，可点击查看单个学生基础信息 |
-| jc0203 | 查看学生学习情况 | ✅ 已实现 | `TeacherStudentReport.jsx` | 展示节点级进度、掌握状态（mastered/weak/learning/pending）、尝试次数、掌握度分值、用时、报告生成时间戳 |
+| jc0202 | 查看学生个人信息 | ✅ 已实现 | `TeacherConsole.jsx` 学生列表 | 班级学生列表展示，可点击查看单个学生基础信息；后端同时校验任课教师与有效 enrollment，未入班统一返回 404 |
+| jc0203 | 查看学生学习情况 | ✅ 已实现 | `TeacherStudentReport.jsx` | 展示节点级进度、掌握状态、尝试次数、真实评估掌握度与用时；后端已按 Router → TeachingService → DB 分层，不再返回硬编码综合评分 |
 
 ### 系统管理 jc003
 

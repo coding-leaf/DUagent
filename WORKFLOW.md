@@ -111,3 +111,21 @@
   - 全局 `python tests/test_api.py`：未通过；清理专用 `test_v3.db` 后运行至 profile 初始化，因遗留 SQLite 测试环境不支持生产 MySQL `GET_LOCK` 失败，与本次 tutoring 改动无关。
 - **接口漂移**：Client API 无新增漂移；Agent API 无漂移。保留运行代码既有的 `action=chat|edit|regenerate`，历史 Client OpenAPI 漏记 `action` 仍作为既有文档漂移记录。
 - **范围外债务**：course scope 尚未增加 enrollment 权限校验；该行为会新增 403，需要独立安全 Spec。
+
+## 2026-06-19 teaching 查询分层与数据真实性修复
+
+- **涉及文件**：`backend/app/api/v1/teaching.py`、`backend/app/services/teaching_service.py`、3 个 Teaching 测试文件，以及 Client API 文档。
+- **核心改动**：
+  1. 将 438 行 Teaching 胖路由缩减为 65 行薄 Router，权限、学生列表、学情报告和班级洞察迁入 `TeachingService`。
+  2. 学生详情与学情报告统一校验有效 enrollment，未入班用户统一返回 404“学生未入班”，避免用户信息越权读取。
+  3. 移除硬编码 `overall_score=75.0`，改为最新 Evaluation `mastery_table.rows[].average_score` 的有效平均值；无有效值返回 null。
+  4. 学生列表使用 join 消除 N+1，并按 enrollment 时间和 ID 稳定分页；Evaluation/Profile/LearningPath 按统一规则读取最新有效记录。
+  5. Quiz 汇总改为 SQL 聚合；班级路径用 MySQL 8 窗口函数确保每名学生只统计最新 LearningPath。
+- **测试结果**：
+  - `py_compile`：Router、Service 和 3 个测试文件通过。
+  - MySQL Service：11 passed。
+  - MySQL 学情 HTTP：1 passed（内部 42 项检查）。
+  - MySQL 班级洞察 HTTP：1 passed。
+  - 合并定向覆盖率：85%（TeachingService 86%，Router 77%）。
+- **接口漂移**：Client API 有两项经批准修正：未入班学生详情由错误的 200 改为 404；`evaluation_summary.overall_score` 允许 null。Agent API 无漂移。
+- **范围外债务**：`TeachingService` 当前约 589 行，查询边界已清晰但文件仍偏大；后续应单独评审是否按学生报告与班级洞察拆分 Query Service，避免未经设计继续扩展。

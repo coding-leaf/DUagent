@@ -1,263 +1,221 @@
-# Teaching Service 分层重构设计
+# Teaching Service 分层重构设计（2026-06-19 修订）
 
 ## 背景
 
-Phase 2 已进入架构治理与重构阶段，后端 `backend/app/api/v1/` 中仍存在多个胖路由。`catalogs.py` 已完成服务层拆分样板，下一步需要选择低风险、高收益的后端切片继续建立分层范式。
+`backend/app/api/v1/teaching.py` 当前约 438 行，同时承担 FastAPI 路由、教师权限、学生归属校验、SQLAlchemy 查询、报表聚合和响应 DTO 组装。代码审查还确认了四类不能继续“等价搬迁”的问题：
 
-当前 `backend/app/api/v1/teaching.py` 共 438 行，集中承载教师端学生列表、学生信息、单学生学习报告、班级洞察等查询聚合逻辑。该文件没有 Agent 调用、后台任务、SSE、文件系统或环境变量依赖，主要复杂度来自 SQLAlchemy 查询、权限校验和响应 DTO 拼装。因此它适合作为下一阶段后端 Service Layer 重构目标。
+1. 学生详情接口只验证课程归属，没有验证学生已加入该班级，可能泄露任意用户的邮箱、姓名和学号。
+2. `evaluation_summary.overall_score` 固定返回 `75.0`，属于硬编码假数据。
+3. 学生列表逐条查询 User，存在 N+1，并且分页查询没有稳定排序。
+4. Evaluation、UserProfile、LearningPath 的读取没有统一的“最新有效记录”规则；后两者使用 `scalar_one_or_none()`，但数据库没有对应唯一约束，重复历史记录可能导致 500。
 
-本 Spec 以当前运行代码为事实来源，不以历史 OpenAPI 文档推翻现有行为。
-
-## 外部经验与工程参考
-
-本次不引入新的组件库或运行时依赖。可借鉴的是后端工程组织经验，而不是 UI 组件库：
-
-- **FastAPI 多文件应用组织**：FastAPI 官方文档建议大型应用用 `APIRouter` 和 Python package 拆分不同路由模块。本项目已有 `api/v1/*` 路由分组，本次继续保留 `teaching.py` 作为 HTTP 入口，只把业务查询迁到 service。
-- **Service Layer**：Service Layer 适合定义应用边界、集中应用操作并协调业务响应。本次 `TeachingService` 承接教师端查询操作，避免 route 直接编码复杂聚合。
-- **SQLAlchemy eager loading / N+1 经验**：SQLAlchemy 提供 `selectinload()`、`joinedload()` 等手段处理关系加载和 N+1。当前 `list_students` 确实存在逐个 enrollment 查询 user 的 N+1，但本次目标是行为等价迁移，不顺手优化查询形态。
-- **Repository 模式判断**：Repository 适合复杂领域模型、大量重复查询、需要隔离 domain 与 data mapper 的场景。当前 teaching 查询是报表式聚合，先放在 service 内更直接；后续如果出现重复 query helper，再单独评估 Repository。
-
-## 当前问题
-
-`teaching.py` 当前混合了以下职责：
-
-1. FastAPI route 定义、鉴权依赖、Query 参数约束。
-2. 教师对班级的访问校验 `_verify_teacher`。
-3. 学生分页列表查询与学生字段拼装。
-4. 学生基础信息查询与 404 错误构造。
-5. 单学生学习报告聚合：
-   - enrollment 校验。
-   - evaluation 最新记录查询。
-   - profile 知识点掌握/薄弱统计。
-   - learning path 节点完成进度。
-   - quiz session 统计。
-   - mastery breakdown 聚合。
-   - weak points 聚合。
-   - recent activity 查询。
-6. 班级洞察聚合：
-   - 班级学生 ID 查询。
-   - 平均 quiz 分数与尝试次数。
-   - 班级 weak points top 5。
-   - learning path 节点状态汇总。
-
-这导致：
-
-- 路由文件承担了本应属于业务查询服务的 DB 聚合逻辑。
-- 学生学习报告和班级洞察逻辑无法独立阅读和测试。
-- 后续调整教师端报表字段时需要直接修改 route 文件，容易造成接口漂移。
-- `profile.py`、`learning_path.py` 等更复杂胖路由尚不适合立即重构，需要一个更小的后端分层样板。
-
-## 架构选型判断
-
-### 选用：分层架构
-
-采用 `Router -> TeachingService -> DB`。
-
-- Router 保留 HTTP 层职责：路径、参数、`Depends`、权限依赖、统一 JSON wrapper。
-- `TeachingService` 承接教师端查询业务：班级访问校验、学生列表、学生信息、学习报告、班级洞察。
-- DB 访问暂时在 Service 内使用现有 SQLAlchemy `AsyncSession` 完成。
-
-理由：当前痛点是 route 文件过胖、查询聚合散落。Service Layer 能在不改变部署、接口和数据模型的前提下降低认知负担。
-
-### 暂不选用：Repository 模式
-
-第一阶段不新增 `TeachingRepository` 或通用 DAO。
-
-理由：这些查询高度面向教师端报表，依赖 SQLAlchemy 聚合、`case`、`group_by`、`having`、分页和状态过滤。过早拆 Repository 会增加跳转层，不会显著降低复杂度。若后续多个服务复用相同 quiz/learning path 查询，再评估抽 Repository 或 query helper。
-
-### 暂不选用：CQRS / Read Model
-
-不引入读写分离、物化视图或专用 Query Bus。
-
-理由：教师端洞察是读模型倾向的能力，但目前数据量和行为仍可由 SQLAlchemy 查询满足。当前目标是结构治理，不是性能架构重写。
-
-### 暂不选用：策略模式
-
-不把 weak point、mastery、path progress 拆成多个策略类。
-
-理由：当前没有多套可替换算法，只有固定统计规则。拆策略会让简单查询变得碎片化。
-
-### 暂不选用：后台任务 / 事件驱动
-
-不把报表查询改为异步生成任务。
-
-理由：现有接口是同步查询语义，测试也围绕同步返回字段。改成任务会改变 API 行为和前端调用，不属于本次重构。
+因此，本次不能沿用原计划的“完全保持当前行为”。设计目标改为：在同一 Teaching 模块边界内，先用测试锁定正确契约，再完成安全修复、数据真实性修复和分层重构。
 
 ## 目标
 
-1. 新增 `backend/app/services/teaching_service.py`。
-2. 将 `teaching.py` 从 438 行压缩到约 100-140 行。
-3. 保持现有 API 路径、参数、响应字段、错误码和 HTTP status 不变。
-4. 保持前端调用不变。
-5. 增加 service 级测试，让报表聚合逻辑可脱离 route 阅读和验证。
-6. 复用现有 API 回归测试，确认无接口漂移。
+1. 采用 `Router -> TeachingService -> DB`，让 Router 仅保留 HTTP 边界职责。
+2. 学生详情与学习报告统一校验：当前用户是任课教师，目标学生存在有效 enrollment。
+3. 用 Evaluation 的真实 `mastery_table.rows[].average_score` 计算综合评分；没有有效数据时返回 `null`。
+4. 消除学生列表 N+1，增加确定性分页排序。
+5. Evaluation、UserProfile、LearningPath 明确选择最新有效记录。
+6. 将 Quiz 汇总交给数据库聚合，避免加载全部 QuizSession 后在 Python 计算。
+7. 保持前端已消费的响应结构和同步查询方式不变，并明确记录必要的 Client API 行为修正。
+8. 在独立 MySQL 测试库中完成 TDD 与定向覆盖率验证。
 
 ## 非目标
 
-- 不修改 `profile.py`、`learning_path.py`、`evaluation.py`、`tutoring.py`。
-- 不改数据库 schema。
-- 不改 Agent Service，不新增 Agent 调用。
-- 不修改 `.env`、密钥、volume、上传文件或构建产物。
-- 不重写教师端报表算法，只迁移现有行为。
-- 不更新已偏移的 `docs/feature-ledger.md`。
+- 不修改数据库表结构或索引；如后续 `EXPLAIN` 证明需要复合索引，另写 migration Spec。
+- 不修改 Agent Service，不增加 Agent 调用或后台任务。
+- 不引入 Repository、CQRS、缓存、工作流引擎或第三方依赖。
+- 不修改前端页面；当前前端不展示 `overall_score`，但后端仍按 Client API 返回该字段。
+- 不重构 `evaluation.py`、`profile.py`、`learning_path.py` 或其他路由。
+- 不修改 `.env`、密钥、volume、用户上传内容或 catalog storage。
 
-## 拆分边界
+## 架构与模式选型
 
-### 新增 `backend/app/services/teaching_service.py`
+| 架构或模式 | 结论 | 原因 |
+| --- | --- | --- |
+| 分层架构 | 选用 | Router 负责 HTTP，TeachingService 负责权限和查询编排，符合项目现有样板。 |
+| Service Layer | 选用 | 五个教师查询接口属于同一只读应用边界，适合集中管理一致的权限与聚合规则。 |
+| Presenter/DTO | 在 Service 内使用私有纯函数 | 当前 DTO 数量有限，先避免额外文件；若 Service 实现后仍过大，再单独评审。 |
+| Repository | 不选用 | 查询高度面向教师报表，增加通用数据访问接口只会增加跳转层。 |
+| CQRS/Read Model | 不选用 | 当前数据规模和同步接口不需要独立读模型。 |
+| 策略模式 | 不选用 | 当前没有可替换的多套统计算法。 |
+| 缓存 | 不选用 | 先修正查询边界和复杂度，当前没有缓存失效设计需求。 |
+| 数据库 migration | 不选用 | 本轮不改 schema；索引优化须有 MySQL `EXPLAIN` 证据后单独实施。 |
 
-建议采用与 `CatalogService` 一致的类风格：
+## 文件边界
 
-```python
-class TeachingService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-```
+### `backend/app/api/v1/teaching.py`
 
-公开方法：
+仅保留：
 
-- `verify_teacher(class_id: str, current_user: User) -> Course`
-- `list_students(class_id: str, current_user: User, page: int, page_size: int) -> dict`
-- `get_student_info(class_id: str, student_id: str, current_user: User) -> dict`
-- `get_student_learning(class_id: str, student_id: str, current_user: User) -> dict`
-- `get_class_insights(class_id: str, current_user: User) -> dict`
+- `APIRouter` 和 route decorators；
+- `Depends`、`Query` 与角色依赖；
+- `TeachingService(db)` 调用；
+- `{code, message, data}` 响应包装。
 
-私有 helper 可放在同一文件内：
+不得保留 SQLAlchemy 查询、聚合循环、权限查询或 DTO 细节。
 
-- `_student_list_item(user, enrollment) -> dict`
-- `_student_info_item(user) -> dict`
-- `_empty_class_insights() -> dict`
-- `_weak_point_item(row) -> dict`
-- `_recent_activity_item(session) -> dict`
+### `backend/app/services/teaching_service.py`
 
-`profile_summary` 和 `path_progress` 当前在 route 内是短小内联计算，实现时可以继续在 `get_student_learning` 内保持就近逻辑，不强行抽 helper。暂不新增 `teaching_presenters.py`。当前格式化函数数量可控，先放 service 内私有函数，避免过早拆文件。若实现后 service 超过约 350 行或 DTO 函数明显复用，再单独拆 presenter。
+新增 `TeachingService(db: AsyncSession)`，公开方法：
 
-### 修改 `backend/app/api/v1/teaching.py`
+- `verify_teacher(class_id, current_user) -> Course`
+- `list_students(class_id, current_user, page, page_size) -> dict`
+- `get_student_info(class_id, student_id, current_user) -> dict`
+- `get_student_learning(class_id, student_id, current_user) -> dict`
+- `get_class_insights(class_id, current_user) -> dict`
 
-保留：
+内部 helper：
 
-- `router = APIRouter(...)`
-- route decorators
-- `Depends(require_role("teacher", "admin"))`
-- `Depends(get_db)`
-- `Query` 参数约束
-- `{code, message, data}` 标准 wrapper
+- `_require_enrolled_student(class_id, student_id) -> User`
+- `_latest_evaluation(user_id, course_id) -> Evaluation | None`
+- `_latest_profile(user_id, course_id) -> UserProfile | None`
+- `_latest_learning_path(user_id, course_id) -> LearningPath | None`
+- `_overall_score(mastery_table) -> float | None`
+- DTO 组装所需的短小纯函数。
 
-迁出：
+Service 可以直接使用 SQLAlchemy，不增加 Repository 接口。
 
-- `_verify_teacher`
-- 所有 SQLAlchemy `select` / `func` / `case` 查询
-- 响应 DTO 细节拼装
-- 报表聚合循环
+### 测试文件
 
-route 形态示例：
+- 新增 `backend/tests/test_teaching_service.py`：Service 行为、权限、排序、评分和查询边界。
+- 调整 `backend/tests/test_teacher_student_learning.py`：保持 HTTP 聚合回归，补充真实评分语义。
+- 调整 `backend/tests/test_teacher_class_insights.py`：保持班级聚合与空态回归。
 
-```python
-@router.get("/classes/{class_id}/insights")
-async def get_class_insights(
-    class_id: str,
-    current_user: User = Depends(require_role("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    data = await TeachingService(db).get_class_insights(class_id, current_user)
-    return {"code": 200, "message": "success", "data": data}
-```
+后端规则要求一次不超过 5 个文件；实施按独立小阶段提交，每个阶段只修改当阶段所需文件。
 
-## 行为保持清单
+## 权限与错误语义
 
-必须保持以下现有行为：
+每个公开 Service 方法先执行 `verify_teacher()`：
 
-1. 课程不存在返回 HTTP 404，detail 为 `{"code": 40400, "message": "课程不存在", "data": None}`。
-2. 非任课教师访问返回 HTTP 403，detail 为 `{"code": 40300, "message": "无权访问此班级", "data": None}`。
-3. 学生不存在返回 HTTP 404，detail 为 `{"code": 40400, "message": "学生不存在", "data": None}`。
-4. 学生未入班返回 HTTP 404，detail 为 `{"code": 40400, "message": "学生未入班", "data": None}`。
-5. 学生列表响应字段保持：`students`、`total`、`page`、`page_size`。
-6. 单学生学习报告响应字段保持：`student`、`evaluation_summary`、`profile_summary`、`path_progress`、`quiz_stats`、`weak_points`、`recent_activity`。
-7. `evaluation_summary.overall_score` 当前固定为 `75.0`，本次不改。
-8. `profile_summary.modal_preference` 当前返回 dict keys 的 list，本次不改。
-9. `mastery_breakdown` 过滤空知识点，accuracy 为百分比并保留 1 位小数。
-10. `weak_points` 和 `weak_points_top` 过滤空知识点，只返回 error_count > 0 的知识点，最多 5 条。
-11. `weak_points` 和 `weak_points_top` 按 error_rate 降序、error_count 降序排序。
-12. `recent_activity` 最多 5 条，按 `create_time` 倒序。
-13. 空班级 insights 返回：
-    - `avg_quiz_score: None`
-    - `total_quiz_attempts: 0`
-    - `weak_points_top: []`
-    - `path_node_progress` 四类状态和 `total_nodes` 均为 0。
-14. 班级 path progress 只统计 `completed`、`in_progress`、`recommended`、`pending`，忽略未知状态。
-15. soft-deleted enrollment、quiz session、quiz answer、quiz question、learning path、evaluation、profile 按现有代码过滤逻辑保持。
-16. admin 角色通过 `require_role("teacher", "admin")` 鉴权后，若 `current_user.id` 不是该课程的 `teacher_id`，`verify_teacher` 仍返回 HTTP 403。
+- 课程不存在：HTTP 404，`{"code": 40400, "message": "课程不存在", "data": null}`。
+- 当前用户不是任课教师：HTTP 403，`{"code": 40300, "message": "无权访问此班级", "data": null}`。
 
-## 测试策略
+学生详情与学习报告随后执行 `_require_enrolled_student()`：
 
-### 新增 service 测试
+- 目标必须是未软删除用户，并具有该课程下未软删除的 enrollment。
+- 用户不存在或未入班统一返回 HTTP 404，`{"code": 40400, "message": "学生未入班", "data": null}`，避免通过差异响应探测用户。
+- 学生列表只通过有效 enrollment 返回用户，不返回已软删除用户。
 
-新增 `backend/tests/test_teaching_service.py`，优先覆盖 service 聚合行为而不是 HTTP wrapper：
+保留当前 admin 行为：admin 能通过角色依赖，但若不是该课程 `teacher_id`，仍返回 403。本次不扩大 admin 数据访问范围。
 
-1. `verify_teacher`：
-   - 课程不存在抛 404。
-   - 非任课教师抛 403。
-   - 任课教师返回 course。
-   - admin 但非该课程 `teacher_id` 时仍抛 403。
-2. `list_students`：
-   - 分页 offset/limit 正确。
-   - `total`、`page`、`page_size` 字段保持。
-   - 不包含 soft-deleted enrollment。
-3. `get_student_info`：
-   - 学生不存在抛 404。
-   - 学生存在时返回现有字段。
-4. `get_student_learning`：
-   - 未入班学生抛 404。
-   - weak points 过滤空知识点并只保留错题知识点。
-   - mastery breakdown accuracy 计算保持当前语义。
-   - recent activity 最多 5 条且倒序。
-5. `get_class_insights`：
-   - 空班级返回全零结构。
-   - quiz 平均分与尝试次数聚合正确。
-   - weak points top 过滤空知识点、最多 5 条、排序正确。
-   - soft-deleted enrollment 不参与班级聚合。
-   - path node progress 忽略未知状态。
+## 查询与数据流
 
-### 现有回归测试
+### 学生列表
 
-实现后运行：
+1. 验证任课教师。
+2. 查询有效 enrollment 总数。
+3. 使用 `CourseEnrollment JOIN User` 一次读取当前页。
+4. 按 `CourseEnrollment.create_time ASC, CourseEnrollment.id ASC` 排序后应用 offset/limit。
+5. 返回现有 `students/total/page/page_size` 结构。
 
-```bash
-cd ../backend
-../.venv/bin/python -m py_compile app/api/v1/teaching.py app/services/teaching_service.py
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_refactor_test.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teacher_student_learning_refactor_test.db ../.venv/bin/python -m pytest tests/test_teacher_student_learning.py -q -p no:cacheprovider
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teacher_class_insights_refactor_test.db ../.venv/bin/python -m pytest tests/test_teacher_class_insights.py -q -p no:cacheprovider
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/api_teaching_refactor_test.db ../.venv/bin/python -m pytest tests/test_api.py -q -p no:cacheprovider
-```
+非空页查询次数固定，不随 `page_size` 增长。
 
-如测试暴露现有 fixture 或 SQLite/MySQL 差异，应优先保持现有 API 行为，不借重构机会改变契约。
+### 单学生详情
 
-## 实施步骤
+1. 验证任课教师。
+2. 通过 enrollment 与 User 的组合查询确认学生属于当前班级。
+3. 返回现有账号基础资料字段。
 
-1. 为 `TeachingService` 写 service 级红灯测试，先覆盖 class insights 与 student learning 的关键聚合。
-2. 新增 `backend/app/services/teaching_service.py`，把 `_verify_teacher` 和低风险 helper 迁入。
-3. 迁移学生列表与学生基础信息查询。
-4. 迁移单学生学习报告查询，保持字段和排序不变。
-5. 迁移班级洞察查询，保持空班级结构和聚合语义不变。
-6. 精简 `backend/app/api/v1/teaching.py`，route 只调用 service 并返回 wrapper。
-7. 运行 service 测试、现有 teaching API 回归和语法检查。
-8. 更新 `WORKFLOW.md`，记录文件变更、测试结果、接口无漂移。
-9. commit 代码与记录。
+### 单学生学习报告
 
-## 风险与缓解
+1. 验证任课教师和 enrollment。
+2. Evaluation 按 `generated_at DESC, create_time DESC, id DESC` 选择最新有效记录。
+3. UserProfile 和 LearningPath 按 `generated_at DESC, create_time DESC, id DESC` 选择最新有效记录，使用 `LIMIT 1`，不依赖数据库中不存在的唯一约束。
+4. QuizSession 使用 SQL 聚合获取 `count/avg(score)/avg(time_spent)`。
+5. mastery breakdown 与 weak points 使用有界聚合查询；recent activity 只读取最新 5 条，并以 `create_time DESC, id DESC` 稳定排序。
+6. 返回现有报告结构。
 
-- **聚合查询迁移时字段漂移**：用现有 `test_teacher_student_learning.py` 和 `test_teacher_class_insights.py` 做 API 回归，同时新增 service 测试锁定核心数据结构。
-- **错误 detail 漂移**：service 内继续抛 `HTTPException`，保留现有 detail dict，不引入新异常类型。
-- **`list_students` N+1 查询**：当前 route 对每个 enrollment 单独查询 `User`，这是明确的性能坏味道。本次按“等价迁移”原样保留查询语义，不在同一重构里顺手改 join/selectinload。后续若要优化，单独写 Spec 并增加查询结果等价测试。
-- **SQLite/MySQL 聚合差异**：不改变现有 `case`、`func.sum`、`group_by`、`having` 写法，测试继续覆盖 SQLite；若 MySQL 专属失败，单独记录并修复。
-- **Service 文件再次变胖**：本次 service 目标是承接教学查询聚合，若实现后接近或超过 350 行，再拆 `teaching_presenters.py` 或 `teaching_query_helpers.py`，不在第一版预拆。
-- **权限语义混淆**：`require_role("teacher", "admin")` 保持在 route；`verify_teacher` 继续按当前行为要求 course.teacher_id 等于 current_user.id。因此 admin 角色虽然能通过 role 依赖，但若不是任课教师仍按现有逻辑返回 403。本次不改变该语义。
+### 班级洞察
+
+- 继续保持同步查询和现有响应字段。
+- 使用 enrollment 子查询或 join 限定班级学生，避免先把任意规模的 `student_ids` 列表拼成 Python `IN` 参数。
+- weak points 与 Quiz 聚合只统计有效 enrollment、QuizSession、QuizAnswer 和 QuizQuestion。
+- LearningPath 当前仍需读取 JSON nodes 后在 Python 汇总；必须按每个学生的最新有效 LearningPath 统计，不能把历史路径重复计入。
+
+## 综合评分真实口径
+
+`_overall_score(mastery_table)` 的唯一数据源是最新 Evaluation 的 `mastery_table.rows`：
+
+1. `mastery_table` 必须是 dict，`rows` 必须是 list。
+2. 只读取 row dict 的 `average_score`。
+3. 接受 int、float 或可安全转换的数字字符串；拒绝 bool、非数字、NaN、Infinity 和超出 0–100 的值。
+4. 对有效值求算术平均并保留 1 位小数。
+5. 没有有效值时返回 `None`，映射为 JSON `null`。
+
+不使用 QuizSession 平均分冒充 Evaluation 综合评分，也不继续保留固定 `75.0`。
+
+## Profile 统计语义
+
+- `knowledge_mastered` 只统计 `status == "mastered"`。
+- `knowledge_weak` 只统计 `status == "weak"`。
+- `learning`、`pending`、`recommended`、`unstarted` 和未知状态不计入 weak。
+- `modal_preference` 和 `knowledge_coordinates` 响应形态保持现状。
+
+## Client 与 Agent 契约
+
+### Client API
+
+路径、query 参数和响应对象层级不变，但存在两项明确的行为修正：
+
+1. `GET /teaching/classes/{class_id}/students/{student_id}` 对未入班用户由当前错误的 200 改为 404。
+2. `evaluation_summary.overall_score` 从固定 number 改为真实 number；无有效 mastery 数据时允许 `null`。
+
+需同步更新 Client API 文档中 `overall_score` 的 nullable 说明，并在 WORKFLOW 记录契约漂移。前端当前未消费该字段，无需页面修改。
+
+### Agent API
+
+无漂移。本次不调用或修改 Agent Service。
+
+## 测试设计
+
+所有验收测试使用独立 MySQL 测试库，不以 SQLite 结果替代 MySQL 行为。
+
+### Service 测试
+
+- 课程不存在、非任课教师、admin 非任课教师的错误语义。
+- 未入班学生详情与学习报告均返回 404，且不泄露用户存在性。
+- 学生列表过滤软删除数据、分页稳定、查询次数不随学生数增长。
+- Evaluation/Profile/LearningPath 存在多条历史记录时选择最新有效记录。
+- `_overall_score` 覆盖有效平均、数字字符串、bool、非法字符串、NaN、Infinity、越界值和空 rows。
+- Profile 只把 `weak` 计入薄弱数量。
+- Quiz 汇总、mastery breakdown、weak points、recent activity 保持字段、排序和空态语义。
+- 班级洞察只统计有效 enrollment，并且每名学生只使用最新 LearningPath。
+
+### HTTP 回归
+
+- 保留现有路径、参数、状态码包装和字段结构。
+- 补充学生详情未入班 404。
+- 补充 `overall_score` number/null 两种响应。
+- 空班级 insights 继续返回 `avg_quiz_score: null` 和全零 path progress。
+
+### 验证门槛
+
+- RED：先运行目标测试并确认因缺失行为失败。
+- GREEN：最小实现通过目标测试。
+- IMPROVE：完成分层和查询收口后运行全部 Teaching 回归。
+- `teaching_service.py` 定向覆盖率不低于 80%。
+- `py_compile` 通过。
+- 检查 `teaching.py` 不再导入 SQLAlchemy 查询构造器或业务 ORM 模型。
+
+## 实施阶段
+
+1. 用 MySQL Service 测试锁定权限、最新记录、评分和 Profile 语义。
+2. 新增 TeachingService 的权限与基础学生查询，修复未入班详情泄露和列表 N+1/排序。
+3. 迁移单学生学习报告，落实真实评分、最新记录和数据库 Quiz 聚合。
+4. 迁移班级洞察，限定有效 enrollment 与最新 LearningPath。
+5. 精简 Router，运行 HTTP 回归、覆盖率和语法检查。
+6. 更新 Client API nullable 说明、`WORKFLOW.md` 与 `docs/requirements-coverage.md`，分阶段提交。
 
 ## 验收标准
 
-1. `backend/app/api/v1/teaching.py` 行数降至约 100-140 行。
-2. `backend/app/services/teaching_service.py` 承载教学查询聚合逻辑。
-3. 新增 `backend/tests/test_teaching_service.py`，且 service 测试通过。
-4. 现有 `test_teacher_student_learning.py`、`test_teacher_class_insights.py`、`test_api.py` teaching 链路通过。
-5. 无前端改动，无 API 字段漂移。
-6. `WORKFLOW.md` 追加记录，注明接口无漂移。
+1. `teaching.py` 只保留 HTTP 边界职责，不包含 SQLAlchemy 查询或聚合算法。
+2. 未入班用户不能通过学生详情或学习报告接口被读取。
+3. 不再返回固定 `overall_score=75.0`；真实评分和 null 语义有测试。
+4. 学生列表无 N+1 且分页稳定。
+5. 重复历史 Evaluation/Profile/LearningPath 不导致 500，并按统一规则选择最新记录。
+6. Quiz 汇总不加载全部会话到 Python 计算。
+7. 相关 MySQL 回归全部通过，TeachingService 定向覆盖率不低于 80%。
+8. Client API 漂移已记录，Agent API 明确无漂移。

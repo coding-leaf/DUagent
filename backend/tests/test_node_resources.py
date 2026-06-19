@@ -29,7 +29,7 @@ asyncio.run(init_db())
 asyncio.run(engine.dispose())
 
 from app.main import app
-from app.services.learning_path_service import assemble_learning_path_payload
+from app.services.learning_path_refresh_service import LearningPathRefreshService
 from app.models.user import RegistrationCode, User
 from sqlalchemy import delete, update
 
@@ -129,7 +129,7 @@ async def test_learning_path_payload_uses_active_knowledge_graph():
             )
             await db.commit()
 
-            payload = await assemble_learning_path_payload(user_id, course_id, db)
+            payload = await LearningPathRefreshService(db).assemble_payload(user_id, course_id)
     finally:
         async with async_session_factory() as db:
             await db.execute(

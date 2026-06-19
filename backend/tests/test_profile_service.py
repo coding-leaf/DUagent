@@ -50,6 +50,7 @@ async def test_get_or_create_profile_deleted():
     
     assert pf == mock_pf
     assert pf.is_deleted is False
+    db.flush.assert_awaited_once()
 
 @pytest.mark.asyncio
 @patch("app.services.profile_service.profile_lock", mock_profile_lock)
@@ -71,6 +72,7 @@ async def test_initialize_profile():
     assert pf.guidance_level_current == "L3"
     assert pf.modal_preference == {"text_analysis": 60, "video_animation": 60}
     assert pf.drive_intent["type"] == "exam_sprint"
+    assert pf.drive_intent["learning_goal"] == "exam_sprint"
     assert pf.drive_intent["intensity"] == 50
     db.flush.assert_awaited_once()
     db.refresh.assert_awaited_once_with(mock_pf)
@@ -88,6 +90,7 @@ async def test_update_learning_goal():
     service = ProfileService(db)
     pf = await service.update_learning_goal("user1", "course1", "exam_sprint")
     
+    assert pf.drive_intent["type"] == "exam_sprint"
     assert pf.drive_intent["learning_goal"] == "exam_sprint"
     db.flush.assert_awaited_once()
 

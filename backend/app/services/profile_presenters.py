@@ -3,7 +3,7 @@ from typing import Dict, Any, List
 from app.models.user import User
 from app.models.others import UserProfile
 
-_default_profile = {
+DEFAULT_PROFILE = {
     "guidance_level_current": "L2",
     "modal_preference": {
         "video_animation": 50,
@@ -67,7 +67,7 @@ def _profile_dimensions(profile: dict) -> list[dict]:
 
 def profile_data(pf: UserProfile | None, course_id: str, user: User | None = None) -> dict:
     if pf is None:
-        data = copy.deepcopy(_default_profile)
+        data = copy.deepcopy(DEFAULT_PROFILE)
         data.update({
             "id": None,
             "user_id": user.id if user else None,
@@ -83,11 +83,11 @@ def profile_data(pf: UserProfile | None, course_id: str, user: User | None = Non
             "course_id": pf.course_id,
             "generated_at": pf.generated_at.isoformat() if pf.generated_at else None,
             "guidance_level_current": pf.guidance_level_current or "L2",
-            "modal_preference": pf.modal_preference or copy.deepcopy(_default_profile["modal_preference"]),
+            "modal_preference": pf.modal_preference or copy.deepcopy(DEFAULT_PROFILE["modal_preference"]),
             "knowledge_coordinates": pf.knowledge_coordinates or [],
             "cognitive_blindspots": pf.cognitive_blindspots or [],
-            "drive_intent": pf.drive_intent or copy.deepcopy(_default_profile["drive_intent"]),
-            "discipline_badge": pf.discipline_badge or copy.deepcopy(_default_profile["discipline_badge"]),
+            "drive_intent": pf.drive_intent or copy.deepcopy(DEFAULT_PROFILE["drive_intent"]),
+            "discipline_badge": pf.discipline_badge or copy.deepcopy(DEFAULT_PROFILE["discipline_badge"]),
         }
         
     data["resource_preference_summary"] = _resource_preference_summary(data["modal_preference"])

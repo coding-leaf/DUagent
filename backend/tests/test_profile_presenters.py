@@ -3,13 +3,13 @@ from datetime import datetime
 from app.models.user import User
 from app.models.course import Course, CourseEnrollment
 from app.models.others import UserProfile
-from app.services.profile_presenters import profile_data, _default_profile
+from app.services.profile_presenters import profile_data, DEFAULT_PROFILE
 
 def test_profile_presenters_data_default():
     formatted = profile_data(None, "course456", None)
     assert formatted["guidance_level_current"] == "L2"
-    assert formatted["modal_preference"] == _default_profile["modal_preference"]
-    assert formatted["discipline_badge"] == _default_profile["discipline_badge"]
+    assert formatted["modal_preference"] == DEFAULT_PROFILE["modal_preference"]
+    assert formatted["discipline_badge"] == DEFAULT_PROFILE["discipline_badge"]
     assert len(formatted["dimensions"]) == 4
     assert formatted["resource_preference_summary"] == "未设置偏好"
 
@@ -120,7 +120,7 @@ def test_profile_presenters_deepcopy_safety():
     formatted2 = profile_data(None, "course456", None)
     assert formatted2["modal_preference"]["video_animation"] == 50
     assert formatted2["drive_intent"]["learning_habits"] == {}
-    assert _default_profile["modal_preference"]["video_animation"] == 50
+    assert DEFAULT_PROFILE["modal_preference"]["video_animation"] == 50
 
 def test_profile_presenters_invalid_types():
     pf = UserProfile(

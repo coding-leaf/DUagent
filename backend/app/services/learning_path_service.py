@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.others import Evaluation, LearningPath, UserProfile
+from app.models.others import LearningPath
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.knowledge_progress import build_node_progress_rows
 
@@ -168,48 +168,6 @@ async def synthesize_kg_fallback_path(
         "source": "kg_fallback",
         "generated_at": kg.create_time.isoformat() if kg.create_time else None,
     }
-
-
-async def assemble_learning_path_payload(
-    user_id: str, course_id: str, db: AsyncSession,
-) -> dict:
-    """组装调用 Agent /learning-path/generate 所需的 payload。"""
-    payload: dict = {"user_id": user_id, "course_id": course_id}
-
-    # evaluation: 最近一次评估
-    ev_r = await db.execute(
-        select(Evaluation)
-        .where(Evaluation.user_id == user_id, Evaluation.course_id == course_id, Evaluation.is_deleted == False)
-        .order_by(Evaluation.generated_at.desc())
-    )
-    ev = ev_r.scalars().first()
-    payload["evaluation"] = {
-        "progress_table": ev.progress_table,
-        "mastery_table": ev.mastery_table,
-        "summary_text": ev.summary_text,
-    } if ev else {}
-
-    # profile: 最近画像
-    pf_r = await db.execute(
-        select(UserProfile)
-        .where(UserProfile.user_id == user_id, UserProfile.course_id == course_id, UserProfile.is_deleted == False)
-        .order_by(UserProfile.generated_at.desc())
-    )
-    pf = pf_r.scalars().first()
-    payload["profile"] = {
-        "modal_preference": pf.modal_preference,
-        "guidance_level": pf.guidance_level_current,
-        "knowledge_coordinates": pf.knowledge_coordinates,
-    } if pf else {}
-
-    # knowledge_graph: 课程静态知识图谱
-    kg = await get_active_knowledge_graph(db, course_id)
-    if kg:
-        payload["knowledge_graph"] = {"nodes": kg.nodes or [], "edges": kg.edges or []}
-    else:
-        payload["knowledge_graph"] = {"nodes": [], "edges": []}
-
-    return payload
 
 
 class LearningPathService:

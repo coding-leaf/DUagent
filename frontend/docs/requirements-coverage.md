@@ -67,8 +67,8 @@
 
 | 编号 | 功能 | 状态 | 前端入口 | 说明 |
 |------|------|------|----------|------|
-| ai0301 | 动态路径规划 | ✅ 已实现 | `LearningPath.jsx` | 树形节点结构展示；当前进度位置标记；节点状态（in_progress/recommended/pending）；可触发路径刷新（异步任务） |
-| ai0302 | 路径资源推送 | ✅ 已实现 | `LearningPath.jsx` → 节点展开 | 每个节点展开后呈现三类资源：教程（Tutorials）、练习题（Practice，可直接启动 Quiz）、材料（Materials）；资源可跳转详情页。后端节点资源接口优先使用 catalog host course active KG 解析 chapter，并兼容旧课程直接挂 `course_id` active KG 的资料查询链路 |
+| ai0301 | 动态路径规划 | ✅ 已实现 | `LearningPath.jsx` | 树形节点结构展示；当前进度位置标记；节点状态（in_progress/recommended/pending）；可触发路径刷新（异步任务）。后端已按 `Router -> LearningPathService / LearningPathRefreshService -> DB` 分层，刷新任务在 route commit 后再分发后台 runner。 |
+| ai0302 | 路径资源推送 | ✅ 已实现 | `LearningPath.jsx` → 节点展开 | 每个节点展开后呈现三类资源：教程（Tutorials）、练习题（Practice，可直接启动 Quiz）、材料（Materials）；资源可跳转详情页。后端由 `NodeResourceService` 聚合，优先使用 catalog host course active KG 解析 chapter，并兼容旧课程直接挂 `course_id` active KG 的资料查询链路。 |
 
 ### 多智能体协同的资源生成 ai04
 
@@ -117,4 +117,4 @@
 |---------|-------------|------|-------------|
 | 4.3.1-4.3.4 | RESTful 与标准包装 | ✅ 已实现 | 后端所有接口均未使用裸字典返回，全量套用标准 JSON 结构（`{"code":200, "message":"...", "data":{...}}`），含异常拦截包装。但**缺失找回密码相关的完整前后端 API**（`auth.py` 完全没有找回密码功能）。 |
 | 4.3.5 | 流式输出支持 (SSE) | ✅ 已实现 | 智能辅导对话：前端 `AIChat.jsx` 借助 Fetch Stream 消费后端 `tutoring.py` 中直接使用 `sse_starlette` 返回的流式数据，成功实现打字机效果。 |
-| 4.3.5 | 异步耗时任务 (Task ID) | ✅ 已实现 | 重度生成防阻塞：后端对于节点/进度重算（如 `learning_path.py` 与 `evaluation.py`），严格按照“入库创建Task -> 响应 202 并返回 task_id -> 后台挂起异步 coroutine 生成 -> 前端按需拉取”的模式编写。前端由于组件生命周期特性，当前采用按需触发与挂载拉取，未启动无限轮询，但后端异步架构已完全就绪。 |
+| 4.3.5 | 异步耗时任务 (Task ID) | ✅ 已实现 | 重度生成防阻塞：后端对于节点/进度重算（如学习路径与评估），严格按照“创建 Task -> route commit 持久化 -> 响应 202 并返回 task_id -> 独立 DB session 后台 coroutine 生成 -> 前端按需拉取”的模式编写。学习路径刷新已由 `LearningPathRefreshService` 承载 payload/task/runner，route 保留明确 commit point。 |

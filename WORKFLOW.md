@@ -84,3 +84,30 @@
 - **接口漂移**：无（已恢复 `/learning-goal` 与 `/custom-instruction` 两个历史遗留接口，以保证与前端的完全兼容性）。
 
 
+## 2026-06-19 tutoring 路由分层重构
+
+- **涉及文件**：
+  - `backend/app/api/v1/tutoring.py`
+  - `backend/app/services/tutoring_service.py`
+  - `backend/app/services/tutoring_payload_builder.py`
+  - `backend/app/services/tutoring_stream_adapter.py`
+  - `backend/app/services/tutoring_presenters.py`
+  - `backend/tests/test_tutoring_service.py`
+  - `backend/tests/test_tutoring_privacy.py`
+  - `backend/tests/test_tutoring_stream_adapter.py`
+  - `backend/tests/test_tutoring_routes_refactored.py`
+  - `backend/tests/test_agent_integration.py`
+- **核心改动**：
+  1. 将 591 行 tutoring 胖路由缩减为 203 行 Router，数据库生命周期、Agent payload、SSE 适配及 Client DTO 分别下沉到 Service / Payload Builder / Stream Adapter / Presenter。
+  2. edit/regenerate 在短事务中对 Conversation 使用 MySQL `SELECT ... FOR UPDATE`，Agent 网络 I/O 前显式结束请求级只读事务。
+  3. 会话列表从 `2N+2` 查询改为非空页固定 4 次有界查询；使用 MySQL 8 窗口函数稳定选择每个会话的最后一条消息。
+  4. SSE Adapter 支持 UTF-8 与 data 行跨任意字节分片，并在客户端断连/生成器取消的 `finally` 路径持久化已完整接收内容。
+  5. Agent payload 改为白名单构建，继续排除姓名、邮箱、学号和用户名等身份字段。
+- **测试结果**：
+  - MySQL 分层测试：17 passed。
+  - tutoring 既有集成测试：6 passed（遗留测试模块固定使用 SQLite，单独进程运行）。
+  - 定向覆盖率：82.15%，达到 >=80% 要求。
+  - `py_compile`：路由、四个新 Service 模块及对应测试通过。
+  - 全局 `python tests/test_api.py`：未通过；清理专用 `test_v3.db` 后运行至 profile 初始化，因遗留 SQLite 测试环境不支持生产 MySQL `GET_LOCK` 失败，与本次 tutoring 改动无关。
+- **接口漂移**：Client API 无新增漂移；Agent API 无漂移。保留运行代码既有的 `action=chat|edit|regenerate`，历史 Client OpenAPI 漏记 `action` 仍作为既有文档漂移记录。
+- **范围外债务**：course scope 尚未增加 enrollment 权限校验；该行为会新增 403，需要独立安全 Spec。

@@ -116,5 +116,5 @@
 | 规范章节 | 接口规范要素 | 状态 | 代码落地情况说明 |
 |---------|-------------|------|-------------|
 | 4.3.1-4.3.4 | RESTful 与标准包装 | ✅ 已实现 | 后端所有接口均未使用裸字典返回，全量套用标准 JSON 结构（`{"code":200, "message":"...", "data":{...}}`），含异常拦截包装。但**缺失找回密码相关的完整前后端 API**（`auth.py` 完全没有找回密码功能）。 |
-| 4.3.5 | 流式输出支持 (SSE) | ✅ 已实现 | 智能辅导对话：前端 `AIChat.jsx` 借助 Fetch Stream 消费后端 `tutoring.py` 中直接使用 `sse_starlette` 返回的流式数据，成功实现打字机效果。 |
+| 4.3.5 | 流式输出支持 (SSE) | ✅ 已实现 | 智能辅导对话：前端 `AIChat.jsx` 借助 Fetch Stream 消费 SSE；后端已按 Router → Service / Payload Builder / Stream Adapter / Presenter 分层。Adapter 覆盖字节分片、done ID 转换、Agent 降级和断连后部分内容落库；会话 CRUD、edit/regenerate、隐私 payload 与固定查询均有回归测试。 |
 | 4.3.5 | 异步耗时任务 (Task ID) | ✅ 已实现 | 重度生成防阻塞：后端对于节点/进度重算（如学习路径与评估），严格按照“创建 Task -> route commit 持久化 -> 响应 202 并返回 task_id -> 独立 DB session 后台 coroutine 生成 -> 前端按需拉取”的模式编写。学习路径刷新已由 `LearningPathRefreshService` 承载 payload/task/runner，route 保留明确 commit point。 |

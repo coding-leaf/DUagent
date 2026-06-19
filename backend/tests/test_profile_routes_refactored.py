@@ -61,7 +61,7 @@ def test_update_learning_goal_route(mock_verify, mock_service_cls):
     with patch("app.api.v1.profile.get_current_user") as mock_user:
         mock_user.return_value = AsyncMock(id="u123", role="student")
         response = client.post(
-            "/api/v1/profile/update-goal",
+            "/api/v1/profile/learning-goal",
             json={"course_id": "c456", "learning_goal": "exam_sprint"}
         )
         assert response.status_code == 200
@@ -76,7 +76,7 @@ def test_update_custom_instruction_route(mock_verify, mock_service_cls):
     with patch("app.api.v1.profile.get_current_user") as mock_user:
         mock_user.return_value = AsyncMock(id="u123", role="student")
         response = client.post(
-            "/api/v1/profile/update-instruction",
+            "/api/v1/profile/custom-instruction",
             json={"course_id": "c456", "custom_instruction": "use diagrams"}
         )
         assert response.status_code == 200

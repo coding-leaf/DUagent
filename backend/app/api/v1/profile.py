@@ -102,7 +102,7 @@ async def dialogue_update_profile(
         await db.rollback()
         raise e
 
-@router.post("/update-goal")
+@router.post("/learning-goal")
 async def update_learning_goal(
     req: ProfileGoalUpdateRequest,
     current_user: User = Depends(get_current_user),
@@ -118,7 +118,7 @@ async def update_learning_goal(
         await db.rollback()
         raise e
 
-@router.post("/update-instruction")
+@router.post("/custom-instruction")
 async def update_custom_instruction(
     req: ProfileInstructionUpdateRequest,
     current_user: User = Depends(get_current_user),

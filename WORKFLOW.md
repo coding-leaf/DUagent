@@ -81,5 +81,6 @@
   3. 将 4 个 Pydantic 请求模型模型转移到独立的 `backend/app/schemas/profile.py` 文件中，解耦请求参数校验。
   4. 建立了完善的单元测试套件。
 - **测试结果**：测试代码与新版路由文件编写完毕并成功提交，`py_compile` 无语法错误。
-- **接口漂移**：更新了部分路由路径（如从旧版的 `/learning-goal` 迁移到 `/update-goal`，`/custom-instruction` 迁移到 `/update-instruction`）。
+- **接口漂移**：无（已恢复 `/learning-goal` 与 `/custom-instruction` 两个历史遗留接口，以保证与前端的完全兼容性）。
+
 

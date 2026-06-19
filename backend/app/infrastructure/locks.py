@@ -2,9 +2,13 @@ from contextlib import asynccontextmanager
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-class LockAcquisitionTimeout(Exception):
+from app.exceptions.base import DomainException
+
+class LockAcquisitionTimeout(DomainException):
     """Exception raised when MySQL named lock acquisition times out."""
-    pass
+    def __init__(self, message: str = "服务繁忙，请稍后重试", code: int = 50300, status_code: int = 503):
+        super().__init__(message=message, code=code, status_code=status_code)
+
 
 @asynccontextmanager
 async def profile_lock(db: AsyncSession, user_id: str, course_id: str):

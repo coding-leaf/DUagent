@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import hashlib
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +13,9 @@ class LockAcquisitionTimeout(DomainException):
 
 @asynccontextmanager
 async def profile_lock(db: AsyncSession, user_id: str, course_id: str):
-    lock_name = f"profile_{user_id}_{course_id}"
+    # MySQL GET_LOCK 最大支持 64 字符，对超长 key 做 MD5 截断
+    raw = f"profile_{user_id}_{course_id}"
+    lock_name = hashlib.md5(raw.encode()).hexdigest()[:32]
     
     # Query MySQL Named Lock
     lock_result = await db.execute(

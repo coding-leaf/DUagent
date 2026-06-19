@@ -196,7 +196,8 @@ assert data == {"sentinel": "student-report"}
 Run:
 
 ```bash
-TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_student_report_query.py tests/test_teaching_service.py tests/test_teacher_student_learning.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_student_report_query.py tests/test_teaching_service.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teacher_student_learning.py -q -p no:cacheprovider
 ```
 
 Expected: all selected tests pass.
@@ -330,7 +331,8 @@ assert data == {"sentinel": "class-insights"}
 Run:
 
 ```bash
-TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_class_insights_query.py tests/test_teaching_service.py tests/test_teacher_class_insights.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_class_insights_query.py tests/test_teaching_service.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teacher_class_insights.py -q -p no:cacheprovider
 ```
 
 Expected: all selected tests pass.
@@ -351,7 +353,9 @@ git commit -m "refactor(teaching): 拆分班级洞察查询"
 - [ ] **Step 1: 运行 Teaching 全量 MySQL 回归**
 
 ```bash
-TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_student_report_query.py tests/test_class_insights_query.py tests/test_teacher_student_learning.py tests/test_teacher_class_insights.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_student_report_query.py tests/test_class_insights_query.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teacher_student_learning.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teacher_class_insights.py -q -p no:cacheprovider
 ```
 
 Expected: all selected tests pass.
@@ -359,10 +363,12 @@ Expected: all selected tests pass.
 - [ ] **Step 2: 验证定向覆盖率**
 
 ```bash
-TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_student_report_query.py tests/test_class_insights_query.py tests/test_teacher_student_learning.py tests/test_teacher_class_insights.py --cov=app.services.student_report_query --cov=app.services.class_insights_query --cov-report=term-missing -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_student_report_query.py tests/test_class_insights_query.py --cov=app.services.student_report_query --cov=app.services.class_insights_query --cov-report=term-missing -q -p no:cacheprovider
 ```
 
 Expected: both Query modules report at least 80% coverage.
+
+HTTP 测试必须分别运行。它们在模块导入阶段通过 `asyncio.run(init_db())` 初始化共享全局 engine；将多个 HTTP 测试文件放进同一 pytest 进程会使 aiomysql 连接跨 event loop 复用并产生与业务无关的 `Future attached to a different loop`。
 
 - [ ] **Step 3: 运行语法与边界检查**
 

@@ -10,6 +10,7 @@ Run: python -m pytest tests/test_node_resources.py -v
 import asyncio
 import os
 import pytest
+import pytest_asyncio
 import re
 import sys
 import uuid
@@ -37,6 +38,13 @@ from app.models.others import LearningPath, Resource, CourseKnowledgeGraph
 from app.models.quiz import QuizQuestion
 
 
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def _dispose_engine_for_module_loop():
+    await engine.dispose()
+    yield
+    await engine.dispose()
+
+
 async def _captcha_answer(client):
     r = await client.get("/api/v1/auth/captcha")
     d = r.json()["data"]
@@ -61,7 +69,7 @@ async def _register_and_login(client, code, email, username):
     return {"Authorization": f"Bearer {r.json()['data']['token']}"}, r.json()["data"]["user"]["id"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_learning_path_payload_uses_active_knowledge_graph():
     suffix = uuid.uuid4().hex[:8]
     teacher_id = f"payload_teacher_{suffix}"
@@ -142,7 +150,7 @@ async def test_learning_path_payload_uses_active_knowledge_graph():
     assert inactive_edge not in payload["knowledge_graph"]["edges"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test():
     transport = ASGITransport(app=app)
     ok = fail = 0

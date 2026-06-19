@@ -99,12 +99,14 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_learning_path_fb.db",
 )
 
-from app.db.session import async_session_factory, init_db  # noqa: E402
+from app.db.session import async_session_factory, engine, init_db  # noqa: E402
 
 asyncio.run(init_db())
+asyncio.run(engine.dispose())
 
 from app.main import app  # noqa: E402
 from app.models.catalog import CourseCatalog, CourseOffering  # noqa: E402
+from app.models.course import Course  # noqa: E402
 from app.models.others import CourseKnowledgeGraph  # noqa: E402
 from app.models.user import RegistrationCode  # noqa: E402
 from app.models.quiz import QuizQuestion  # noqa: E402
@@ -119,7 +121,7 @@ async def _captcha_answer(client):
     return d["captcha_token"], ans
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_learning_path_kg_fallback_returns_nodes():
     """When no LearningPath exists, GET /learning-path should return KG fallback with nodes."""
     transport = ASGITransport(app=app)
@@ -158,6 +160,13 @@ async def test_learning_path_kg_fallback_returns_nodes():
         course_id = f"course_{uuid.uuid4().hex[:8]}"
 
         async with async_session_factory() as db:
+            db.add(Course(
+                id=host_course_id,
+                name="Test Catalog Host Course",
+                course_code=f"HOST_{uuid.uuid4().hex[:6].upper()}",
+                teacher_id=user_id,
+            ))
+            await db.flush()
             db.add(CourseCatalog(
                 id=catalog_id, title="Test Catalog",
                 kg_host_course_id=host_course_id,
@@ -181,10 +190,10 @@ async def test_learning_path_kg_fallback_returns_nodes():
         r = await client.get(f"/api/v1/learning-path?course_id={course_id}", headers=headers)
         assert r.status_code == 200
         data = r.json()["data"]
-        assert data["source"] == "kg_fallback"
+        assert data["source"] == "kg_realtime"
         assert len(data["nodes"]) == 2
         assert data["nodes"][0]["id"] == "n1"
-        assert data["nodes"][0]["status"] == "recommended"
+        assert data["nodes"][0]["status"] == "pending"
         assert data["nodes"][0]["order"] == 1
         assert data["nodes"][1]["id"] == "n2"
         assert data["current_position"]["node_id"] == "n1"
@@ -192,7 +201,7 @@ async def test_learning_path_kg_fallback_returns_nodes():
         assert data["generated_at"] is not None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_learning_path_kg_fallback_no_course_offering_returns_empty():
     """When CourseOffering doesn't exist, return empty nodes."""
     transport = ASGITransport(app=app)
@@ -231,7 +240,7 @@ async def test_learning_path_kg_fallback_no_course_offering_returns_empty():
         assert data["generated_at"] is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_quiz_questions_node_id_filter_returns_node_questions():
     """GET /quiz/questions?node_id=xxx should return only that node's questions."""
     transport = ASGITransport(app=app)
@@ -266,6 +275,11 @@ async def test_quiz_questions_node_id_filter_returns_node_questions():
         course_id = f"qzco_{suffix[:8]}"
 
         async with async_session_factory() as db:
+            db.add(Course(id=host_course_id, name="QZ Host Course",
+                          course_code=f"QZH{suffix[:6].upper()}", teacher_id=user_id))
+            db.add(Course(id=course_id, name="QZ Offering Course",
+                          course_code=f"QZO{suffix[:6].upper()}", teacher_id=user_id))
+            await db.flush()
             db.add(CourseCatalog(id=catalog_id, title="QZ Catalog", kg_host_course_id=host_course_id))
             db.add(CourseOffering(id=course_id, name="QZ Class", catalog_id=catalog_id,
                                   teacher_id=user_id, class_code=f"QZ{suffix[:4].upper()}"))

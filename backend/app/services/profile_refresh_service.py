@@ -42,10 +42,8 @@ class ProfileRefreshService:
 
 async def run_profile_refresh_background(task_id: str, user_id: str, course_id: str) -> None:
     async with async_session_factory() as db:
-        lock_acquired = False
         try:
             async with profile_lock(db, user_id, course_id) as lock_name:
-                lock_acquired = True
                 now = datetime.now(timezone.utc)
                 profile_service = ProfileService(db)
                 pf = await profile_service.get_or_create_profile(user_id, course_id)

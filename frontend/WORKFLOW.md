@@ -1043,3 +1043,11 @@ build_node_progress_rows 每次 GET 同步查多张表，高并发场景可后�
 - **测试结果**: 学习路径读取/节点资源/refresh service 最终组合回归 31 passed；refresh 与 lock 宽回归 2 passed（覆盖成功、Agent 失败、lock timeout）；Task 5 节点资源回归 3 passed；全部修改 Python 文件语法检查通过。测试库使用 `learning_path_refactor_test` 与 `learning_path_refactor_refresh_test`。
 - **是否有接口漂移**: 无。GET/POST 路径、HTTP 状态码、响应包装、`source` 语义、task type、Agent 路径和节点资源分组字段均保持不变。
 - **代码审查结果**: `create_refresh_task()` 不提交事务，commit 仍由 route 控制；后台 runner 不接收 request-scoped session；`ensure_course_resource_access`、`resolve_course_resource_scope`、`resource_scope_clause` 继续复用现有 `app.services.resource_scope`，本轮未移动共享工具。
+
+### 2026-06-19 (Teaching 查询职责拆分)
+- **改了什么文件**: `backend/app/services/teaching_service.py`, `backend/app/services/student_report_query.py`, `backend/app/services/class_insights_query.py`, `backend/tests/test_teaching_service.py`, `backend/tests/test_student_report_query.py`, `backend/tests/test_class_insights_query.py`, `WORKFLOW.md`, `docs/requirements-coverage.md`。
+- **核心改动**: 保留 `TeachingService` 作为 Router 唯一门面和权限边界；将单学生 Evaluation/Profile/LearningPath/Quiz 报告聚合拆入 `StudentReportQuery`，将有效 enrollment 范围内的班级 Quiz、薄弱点和最新路径汇总拆入 `ClassInsightsQuery`。`TeachingService` 从约 589 行缩减至 165 行，Router 保持 65 行且不包含业务 SQL。
+- **测试结果**: TDD RED 分别因缺少 `app.services.student_report_query` 与 `app.services.class_insights_query` 失败；GREEN: `test_student_report_query.py` 7/7、`test_class_insights_query.py` 2/2、职责收口后的 `test_teaching_service.py` 6/6、学生报告 HTTP 1/1、班级洞察 HTTP 1/1 均通过。定向覆盖率：`student_report_query.py` 90%，`class_insights_query.py` 95%；四个 Teaching Python 文件 `py_compile` 通过。
+- **测试运行说明**: MySQL 测试文件分别启动 pytest 进程。现有测试模块在 import 阶段通过 `asyncio.run(init_db())` 初始化共享 engine，多个文件合并到同一进程会产生与业务无关的 aiomysql cross-event-loop 错误。
+- **是否有接口漂移**: Client API 无漂移；Agent API 无漂移。本轮不修改 Agent Service、HTTP 路径、请求参数、响应字段、nullable 语义或同步行为。
+- **提交**: `1dbd3e7 refactor(teaching): 拆分学生报告查询`；`c3a9656 refactor(teaching): 拆分班级洞察查询`；`1c9975a test(teaching): 收口门面委派测试`。

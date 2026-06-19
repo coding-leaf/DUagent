@@ -35,7 +35,7 @@
 |------|------|------|----------|------|
 | jc0201 | 教师课程开班 | ✅ 已实现 | `TeacherConsole.jsx` → `CreateCourseDialog` | 教师选择课程资源库创建教学班，生成唯一课程码，可一键复制分发给学生 |
 | jc0202 | 查看学生个人信息 | ✅ 已实现 | `TeacherConsole.jsx` 学生列表 | 班级学生列表展示，可点击查看单个学生基础信息；后端同时校验任课教师与有效 enrollment，未入班统一返回 404 |
-| jc0203 | 查看学生学习情况 | ✅ 已实现 | `TeacherStudentReport.jsx` | 展示节点级进度、掌握状态、尝试次数、真实评估掌握度与用时；后端已按 Router → TeachingService → DB 分层，不再返回硬编码综合评分 |
+| jc0203 | 查看学生学习情况 | ✅ 已实现 | `TeacherStudentReport.jsx` | 展示节点级进度、掌握状态、尝试次数、真实评估掌握度与用时；后端按 Router → TeachingService Facade → StudentReportQuery → MySQL 分层，权限校验集中在门面，不再返回硬编码综合评分 |
 
 ### 系统管理 jc003
 
@@ -55,7 +55,7 @@
 | ai0101 | 跟踪学习进度 | ✅ 已实现 | `LearningEffects.jsx` | 节点级进度表：知识点名称、掌握状态、用时、最后更新时间；可手动刷新触发异步任务重算 |
 | ai0102 | 跟踪测试情况 | ✅ 已实现 | `Quiz.jsx` + `PracticeResult.jsx` | 完整答题流程（单选/多选）、提交、结果页（得分/用时/正确率）；已优化答题后加载动画与动态文案，并延长等待时长至 5 秒；后端有历史记录接口 |
 | ai0103 | 资源使用反馈 | ⚠️ 部分实现 | `StudentProfile.jsx` → 模态偏好卡片 | 已实现：Profile 展示"模态偏好"柱状图（视频/图表/文字/代码/公式使用偏好）。**缺失**：独立的"资源使用情况记录表"（需求要求汇总各类型资源使用比例并单独展示） |
-| ai0104 | 生成学习效果评估图 | ✅ 已实现 | `LearningEffects.jsx` / `TeacherConsole.jsx` 班级洞察 | 学生端展示评估表格并附文字总结（由 Evaluation Agent 生成）；教师端班级洞察页有汇总统计 |
+| ai0104 | 生成学习效果评估图 | ✅ 已实现 | `LearningEffects.jsx` / `TeacherConsole.jsx` 班级洞察 | 学生端展示评估表格并附文字总结（由 Evaluation Agent 生成）；教师端班级洞察由 TeachingService 鉴权后委派 ClassInsightsQuery 聚合 MySQL 真实数据 |
 
 ### 用户画像生成 ai02
 

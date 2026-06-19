@@ -300,6 +300,73 @@ class TestTutoringChatIntegration:
         assert done["message_id"] != "agent-msg-new"
 
     @pytest.mark.asyncio
+    async def test_tutoring_action_field_remains_supported(self):
+        """Client OpenAPI 漏记 action，但当前前后端依赖 edit/regenerate，重构必须保留。"""
+
+        async def fake_stream_sse(path, payload):
+            yield b'data: {"type":"chunk","content":"ok"}\n\n'
+            yield b'data: {"type":"done","message_id":"agent-id"}\n\n'
+
+        from sse_starlette.sse import AppStatus
+        AppStatus.should_exit = False
+        AppStatus.should_exit_event = None
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers, course_id = await self._setup_tutoring(client)
+            with patch("app.api.v1.tutoring.agent_client.stream_sse", fake_stream_sse):
+                created = await client.post(
+                    "/api/v1/tutoring/chat",
+                    headers=headers,
+                    json={"message": "first", "scope": "course", "course_id": course_id},
+                )
+                created_events = [
+                    json.loads(line.removeprefix("data: "))
+                    for line in created.text.splitlines()
+                    if line.startswith("data: ")
+                ]
+                conversation_id = next(
+                    event["conversation_id"]
+                    for event in created_events
+                    if event["type"] == "done"
+                )
+
+                edited = await client.post(
+                    "/api/v1/tutoring/chat",
+                    headers=headers,
+                    json={
+                        "message": "edited",
+                        "action": "edit",
+                        "scope": "course",
+                        "course_id": course_id,
+                        "conversation_id": conversation_id,
+                    },
+                )
+                regenerated = await client.post(
+                    "/api/v1/tutoring/chat",
+                    headers=headers,
+                    json={
+                        "message": "edited",
+                        "action": "regenerate",
+                        "scope": "course",
+                        "course_id": course_id,
+                        "conversation_id": conversation_id,
+                    },
+                )
+                history = await client.get(
+                    f"/api/v1/tutoring/conversations/{conversation_id}",
+                    headers=headers,
+                )
+
+        assert edited.status_code == 200
+        assert regenerated.status_code == 200
+        assert history.status_code == 200
+        messages = history.json()["data"]["messages"]
+        assert [item["role"] for item in messages] == ["user", "assistant"]
+        assert messages[0]["content"] == "edited"
+        assert messages[1]["content"] == "ok"
+
+    @pytest.mark.asyncio
     async def test_tutoring_conversations_list(self):
         """验证对话列表接口正常（含新增 scope/course_id 筛选）。"""
         transport = ASGITransport(app=app)

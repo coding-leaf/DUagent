@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.deepseek.com"
     LLM_MODEL: str = "deepseek-chat"
 
+    # Qdrant — shared with Agent Service (backend uses it for KG context reads)
+    QDRANT_URL: str = "http://127.0.0.1:6333"
+    QDRANT_COURSE_KNOWLEDGE_COLLECTION: str = "course_knowledge_v1_1024"
+
     # CourseCatalog local material storage
     COURSE_CATALOG_STORAGE_ROOT: str = "storage/course_catalogs"
     COURSE_CATALOG_MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024

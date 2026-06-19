@@ -1,6 +1,6 @@
 import client from '../client';
+import { isMockEnabled } from '../mock';
 
-const useMock = import.meta.env.VITE_USE_MOCK === 'true';
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export const chatService = {
@@ -27,7 +27,7 @@ export const chatService = {
   streamChat: (params, onMessage, onDone, onError) => {
     const { message, action = 'chat', scope = 'course', course_id, conversation_id } = params;
 
-    if (useMock) {
+    if (isMockEnabled) {
       // Simulate stream response for mockup mode
       let count = 0;
       const dummyId = 'm-' + Date.now();

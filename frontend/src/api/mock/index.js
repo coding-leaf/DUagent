@@ -30,3 +30,4 @@ if (useMock) {
 }
 
 export default mock;
+export const isMockEnabled = useMock;

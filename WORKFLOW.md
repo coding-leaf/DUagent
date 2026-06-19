@@ -84,6 +84,22 @@
 - **接口漂移**：无（已恢复 `/learning-goal` 与 `/custom-instruction` 两个历史遗留接口，以保证与前端的完全兼容性）。
 
 
+
+---
+
+## 2026-06-19 profile 重构收尾修复
+
+- **改动文件**：
+  - `backend/app/services/profile_presenters.py`：`profile_data` 输出从扁平 `guidance_level_current` 改为嵌套 `guidance_level: {current, updated_at}`；维度字段从 `dimensions` 改回 `profile_dimensions`，恢复原始 `{key, label, value, source}` 结构（Plan Task 2 错误引入了雷达图风格结构导致字段丢失）
+  - `backend/app/api/v1/profile.py`：`/refresh` 路由在 `db.commit()` 后补加 `await db.refresh(task)`，修复访问 `task.create_time` 触发懒加载导致的 `MissingGreenlet` 500 错误
+  - `backend/tests/test_profile_presenters.py`：同步更新断言，移除测试不存在行为的用例，补充 `profile_dimensions` 结构验证
+
+- **测试结果**：24 个 profile 相关测试全部通过（test_lock_infrastructure / test_profile_service / test_profile_presenters / test_profile_dialogue_rules / test_profile_refresh_service）
+
+- **接口漂移**：无
+
+- **重构完成度**：Task 1–6 全部完成，718 行胖路由缩减至 181 行，5 个新模块职责清晰，前端画像页面已可正常同步与展示
+
 ## 2026-06-19 tutoring 路由分层重构
 
 - **涉及文件**：
@@ -129,3 +145,14 @@
   - 合并定向覆盖率：85%（TeachingService 86%，Router 77%）。
 - **接口漂移**：Client API 有两项经批准修正：未入班学生详情由错误的 200 改为 404；`evaluation_summary.overall_score` 允许 null。Agent API 无漂移。
 - **范围外债务**：`TeachingService` 当前约 589 行，查询边界已清晰但文件仍偏大；后续应单独评审是否按学生报告与班级洞察拆分 Query Service，避免未经设计继续扩展。
+
+### 2026-06-20 环境变量清理（Spec: 2026-06-20-env-cleanup.md）
+- **涉及文件**：`backend/app/core/config.py`、`backend/app/services/kg_generation.py`、`frontend/src/api/services/chat.js`、`frontend/src/api/mock/index.js`、`frontend/src/pages/TeacherConsole.jsx`、`backend/.env.example`（新增）、`frontend/.env.example`（新增）
+- **核心改动**：
+  1. `kg_generation.py` 删除 `import os`，消除绕过 settings 直读 `os.environ` 的反模式；`config.py` 新增 `QDRANT_URL`、`QDRANT_COURSE_KNOWLEDGE_COLLECTION` 字段。
+  2. `chat.js` 删除死代码 `const useMock`，改从 `mock/index.js` 导入 `isMockEnabled`，修正 SSE mock 分支引用。
+  3. `mock/index.js` 末尾 `export const isMockEnabled = useMock`，统一 mock 状态出口。
+  4. `TeacherConsole.jsx` 改为从 `api/mock` 导入 `isMockEnabled`，不再直读 `import.meta.env`。
+  5. 补 `backend/.env.example`、`frontend/.env.example`，覆盖所有必要变量并附说明。
+- **测试结果**：`python3 -m py_compile` 两个后端文件均 OK；`npm run lint` 零报错；`npm run build` 构建通过。
+- **接口漂移**：无。

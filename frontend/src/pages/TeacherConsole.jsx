@@ -10,6 +10,7 @@ import ClassSelectorRow from '../components/teacher/ClassSelectorRow';
 import TeacherResourceSection from '../components/teacher/TeacherResourceSection';
 import StudentMonitoringSection from '../components/teacher/StudentMonitoringSection';
 import ClassInsightsSection from '../components/teacher/ClassInsightsSection';
+import { isMockEnabled } from '../api/mock';
 
 const STUDENT_PAGE_SIZE = 14;
 
@@ -17,7 +18,7 @@ export default function TeacherConsole() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const roleLabelMap = { teacher: '教师', admin: '管理员' };
-  const isMockMode = import.meta.env.VITE_USE_MOCK === 'true';
+  const isMockMode = isMockEnabled;
   const [activeClass, setActiveClass] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [pendingCreatedClassId, setPendingCreatedClassId] = useState(null);

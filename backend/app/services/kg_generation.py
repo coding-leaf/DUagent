@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 from pathlib import Path
 from typing import Any
 
@@ -50,11 +49,8 @@ async def build_catalog_kg_context(
     max_chars: int = 18000,
 ) -> str:
     """Build KG generation context from catalog knowledge chunks stored in Qdrant."""
-    qdrant_url = os.environ.get("QDRANT_URL", "http://127.0.0.1:6333").rstrip("/")
-    collection = os.environ.get(
-        "QDRANT_COURSE_KNOWLEDGE_COLLECTION",
-        "course_knowledge_v1_1024",
-    )
+    qdrant_url = settings.QDRANT_URL.rstrip("/")
+    collection = settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION
     payload = {
         "filter": {
             "must": [
@@ -115,9 +111,9 @@ async def build_catalog_kg_context(
 
 async def generate_kg_from_llm(outline: str) -> dict[str, Any]:
     """Call the configured LLM to extract a course KG JSON payload from outline text."""
-    api_key = os.environ.get("LLM_API_KEY") or settings.LLM_API_KEY
-    base_url = os.environ.get("LLM_BASE_URL") or settings.LLM_BASE_URL
-    model = os.environ.get("LLM_MODEL") or settings.LLM_MODEL
+    api_key = settings.LLM_API_KEY
+    base_url = settings.LLM_BASE_URL
+    model = settings.LLM_MODEL
     if not api_key:
         raise KGGenerationInputError("LLM_API_KEY environment variable is not set")
 

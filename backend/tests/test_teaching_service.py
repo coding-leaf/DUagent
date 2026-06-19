@@ -17,6 +17,7 @@ os.environ["DATABASE_URL"] = database_url
 from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course, CourseEnrollment
 from app.models.others import Evaluation, LearningPath, UserProfile
+from app.models.quiz import QuizSession
 from app.models.user import User
 
 
@@ -319,4 +320,70 @@ async def test_student_learning_uses_latest_records_and_real_score():
             "current_node": "new node",
             "completed_nodes": 1,
             "total_nodes": 2,
+        }
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_class_insights_uses_active_enrollments_and_latest_paths():
+    async with async_session_factory() as db:
+        teacher, course = await _course(db)
+        active_student = await _user(db, "student", "active-insight")
+        removed_student = await _user(db, "student", "removed-insight")
+        old_time = datetime(2026, 2, 1, 8, 0, 0)
+        new_time = datetime(2026, 2, 2, 8, 0, 0)
+        db.add_all(
+            [
+                CourseEnrollment(
+                    course_id=course.id,
+                    student_id=active_student.id,
+                ),
+                CourseEnrollment(
+                    course_id=course.id,
+                    student_id=removed_student.id,
+                    is_deleted=True,
+                ),
+                LearningPath(
+                    user_id=active_student.id,
+                    course_id=course.id,
+                    nodes=[
+                        {"status": "completed"},
+                        {"status": "completed"},
+                        {"status": "completed"},
+                    ],
+                    generated_at=old_time,
+                ),
+                LearningPath(
+                    user_id=active_student.id,
+                    course_id=course.id,
+                    nodes=[{"status": "pending"}],
+                    generated_at=new_time,
+                ),
+                LearningPath(
+                    user_id=removed_student.id,
+                    course_id=course.id,
+                    nodes=[{"status": "completed"}],
+                    generated_at=new_time,
+                ),
+                QuizSession(
+                    user_id=removed_student.id,
+                    course_id=course.id,
+                    score=100,
+                    correct_count=1,
+                    total_count=1,
+                    time_spent=10,
+                ),
+            ]
+        )
+        await db.commit()
+
+        data = await TeachingService(db).get_class_insights(course.id, teacher)
+
+        assert data["avg_quiz_score"] is None
+        assert data["total_quiz_attempts"] == 0
+        assert data["path_node_progress"] == {
+            "completed": 0,
+            "in_progress": 0,
+            "recommended": 0,
+            "pending": 1,
+            "total_nodes": 1,
         }

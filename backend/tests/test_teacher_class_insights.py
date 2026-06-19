@@ -14,15 +14,21 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-os.environ["DATABASE_URL"] = os.environ.get(
-    "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:///./test_class_insights.db",
-)
+database_url = os.environ.get("TEST_DATABASE_URL")
+if not database_url or not database_url.startswith("mysql+aiomysql://"):
+    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+os.environ["DATABASE_URL"] = database_url
 
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
 from httpx import AsyncClient, ASGITransport
 
-asyncio.run(init_db())
+
+async def _init_schema():
+    await init_db()
+    await engine.dispose()
+
+
+asyncio.run(_init_schema())
 
 from app.main import app
 from app.models.user import RegistrationCode
@@ -76,7 +82,7 @@ def _uid():
     return uuid.uuid4().hex[:8]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test():
     transport = ASGITransport(app=app)
     ok = fail = 0

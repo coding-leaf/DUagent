@@ -86,16 +86,16 @@ def _normalize_fields(extracted: dict) -> dict:
         "preferred_resources": _classify_resource_preferences(raw_preferences),
     }
 
-def _merge_profile(pf: UserProfile, extracted: dict) -> dict:
+def _merge_profile(pf: UserProfile, normalized: dict) -> dict:
     now = datetime.now(timezone.utc)
-    learning_goal = extracted.get("learning_goal")
-    weak_points = _as_list(extracted.get("weak_points") or extracted.get("cognitive_blindspots"))
+    learning_goal = normalized.get("learning_goal")
+    weak_points = _as_list(normalized.get("weak_points") or normalized.get("cognitive_blindspots"))
     preferred_resources = _as_list(
-        extracted.get("preferred_resources")
-        or extracted.get("learning_preferences")
-        or extracted.get("resource_preference")
+        normalized.get("preferred_resources")
+        or normalized.get("learning_preferences")
+        or normalized.get("resource_preference")
     )
-    guidance_level = extracted.get("guidance_level")
+    guidance_level = normalized.get("guidance_level")
 
     # Use deepcopy defensively
     drive_intent = copy.deepcopy(pf.drive_intent or DEFAULT_PROFILE["drive_intent"])

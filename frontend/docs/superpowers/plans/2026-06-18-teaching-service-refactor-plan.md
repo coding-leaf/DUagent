@@ -1,223 +1,169 @@
-# Teaching Service Refactor Implementation Plan
+# Teaching Service Security and Refactor Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move teacher-side reporting and class insights query logic out of `backend/app/api/v1/teaching.py` into `backend/app/services/teaching_service.py` without changing API behavior.
+**Goal:** 修复 Teaching 学生越权读取与假评分，同时把教师端只读查询迁入 `TeachingService`，消除学生列表 N+1 并保持其余 Client API 行为稳定。
 
-**Architecture:** Keep `teaching.py` as a thin FastAPI router and introduce `TeachingService(db)` as the application query boundary. Service methods keep current SQLAlchemy aggregation behavior, including existing N+1 behavior in `list_students`.
+**Architecture:** `teaching.py` 只负责 FastAPI 路由、依赖和响应包装；`TeachingService(db)` 负责任课教师校验、enrollment 校验、最新记录读取、报表聚合和 DTO。SQLAlchemy 直接位于 Service，不新增 Repository；全部验收使用独立 MySQL 测试库。
 
-**Tech Stack:** FastAPI, SQLAlchemy async ORM, Pytest async tests, existing `{code, message, data}` response wrappers.
-
----
-
-## File Structure
-
-- Create: `../backend/app/services/teaching_service.py`
-  - Owns teacher verification, student list/detail query logic, student learning report aggregation, and class insights aggregation.
-  - May contain small private item-formatting helpers.
-  - Does not introduce Repository, CQRS, background tasks, or Agent calls.
-- Create: `../backend/tests/test_teaching_service.py`
-  - Direct service-level tests with `async_session_factory`.
-  - Covers permissions, list pagination, student detail 404, student learning aggregation, and class insights aggregation.
-- Modify: `../backend/app/api/v1/teaching.py`
-  - Retains route definitions, `Depends`, `Query`, and response wrappers.
-  - Removes inline SQLAlchemy query logic.
-- Modify: `WORKFLOW.md`
-  - Adds one dated entry after implementation and verification.
-
-Do not modify frontend files, `.env`, database schema, build artifacts, uploaded files, or Agent Service.
+**Tech Stack:** Python 3.12、FastAPI、SQLAlchemy 2.x async、MySQL 8、Pytest、pytest-asyncio、pytest-cov。
 
 ---
 
-### Task 1: Add Service Test Scaffolding And Low-Risk Cases
+## 文件结构
+
+- Create: `backend/app/services/teaching_service.py`
+  - Teaching 权限、查询、聚合和短小 DTO helper。
+- Create: `backend/tests/test_teaching_service.py`
+  - Service 单元/集成测试，强制从 `TEST_DATABASE_URL` 使用 MySQL。
+- Modify: `backend/app/api/v1/teaching.py`
+  - 只保留 4 个 route、依赖和标准响应包装。
+- Modify: `backend/tests/test_teacher_student_learning.py`
+  - 补真实评分、最新记录和 Profile 状态回归，取消 SQLite 默认值。
+- Modify: `backend/tests/test_teacher_class_insights.py`
+  - 补最新 LearningPath 统计回归，取消 SQLite 默认值。
+- Modify: `docs/10-client-api/Client-API.openapi.json`
+  - `overall_score` 增加 nullable。
+- Modify: `docs/10-client-api/API_前端接口规范.md`
+  - 记录未入班 404 与评分 null 语义。
+- Modify: `frontend/WORKFLOW.md`
+  - 记录阶段、测试和 Client API 漂移。
+- Modify: `frontend/docs/requirements-coverage.md`
+  - 更新 Teaching 后端分层和真实数据说明。
+
+每个提交最多涉及 5 个文件。禁止纳入现有 `start_all.sh`、storage、真实测试脚本或其他未提交改动。
+
+## 测试库准备
+
+在 `backend/` 目录执行：
+
+```bash
+docker exec eduagent-mysql mysql -uroot -p123456 -e "CREATE DATABASE IF NOT EXISTS teaching_refactor_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+后续统一使用：
+
+```bash
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4'
+```
+
+不要修改 `.env`。
+
+### Task 1: 锁定评分与权限契约
 
 **Files:**
-- Create: `../backend/tests/test_teaching_service.py`
-- No production files yet.
+- Create: `backend/tests/test_teaching_service.py`
 
-- [ ] **Step 1: Create the test file with shared helpers**
+- [ ] **Step 1: 创建 MySQL-only 测试基架**
 
-Use the existing backend test style: set `DATABASE_URL`, call `init_db()`, then import models and service. The first import of `TeachingService` should fail until Task 2 creates the file.
+文件开头使用明确环境约束，不提供 SQLite fallback：
 
 ```python
-"""Service tests for app.services.teaching_service.TeachingService.
-
-Run:
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_refactor_test.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-"""
 import asyncio
+import math
 import os
-import sys
 import uuid
 
 import pytest
 from fastapi import HTTPException
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-os.environ["DATABASE_URL"] = os.environ.get(
-    "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:///./test_teaching_service.db",
-)
+database_url = os.environ.get("TEST_DATABASE_URL")
+if not database_url or not database_url.startswith("mysql+aiomysql://"):
+    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+os.environ["DATABASE_URL"] = database_url
 
 from app.db.session import async_session_factory, init_db
+from app.models.course import Course, CourseEnrollment
+from app.models.others import Evaluation, LearningPath, UserProfile
+from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
+from app.models.user import User
 
 asyncio.run(init_db())
 
-from app.models.course import Course, CourseEnrollment
-from app.models.user import User
-from app.services.teaching_service import TeachingService
+from app.services.teaching_service import TeachingService, _overall_score
 
 
 def _uid(prefix: str) -> str:
-    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+    return f"{prefix}_{uuid.uuid4().hex[:10]}"
 
 
-async def _seed_user(db, role: str, username_prefix: str) -> User:
+async def _user(db, role: str, prefix: str) -> User:
     user = User(
-        email=f"{_uid(username_prefix)}@test.local",
-        username=_uid(username_prefix),
+        username=_uid(prefix),
+        email=f"{_uid(prefix)}@test.local",
         password_hash="test",
         role=role,
-        real_name=f"{username_prefix} Real",
+        real_name=f"{prefix} name",
         student_id=_uid("sid") if role == "student" else "",
-        major="CS" if role == "student" else "",
-        grade="2026" if role == "student" else "",
     )
     db.add(user)
     await db.flush()
     return user
 
 
-async def _seed_course_with_teacher(db):
-    teacher = await _seed_user(db, "teacher", "teacher")
-    other_teacher = await _seed_user(db, "teacher", "other_teacher")
-    admin = await _seed_user(db, "admin", "admin")
-    course = Course(name="Teaching Service Course", course_code=_uid("course"), teacher_id=teacher.id)
+async def _course(db):
+    teacher = await _user(db, "teacher", "teacher")
+    course = Course(name="Teaching Test", course_code=_uid("course"), teacher_id=teacher.id)
     db.add(course)
     await db.flush()
-    return teacher, other_teacher, admin, course
+    return teacher, course
 ```
 
-- [ ] **Step 2: Add `verify_teacher` tests**
+- [ ] **Step 2: 写评分红灯测试**
 
-Append these tests to the same file:
+```python
+@pytest.mark.parametrize(
+    ("table", "expected"),
+    [
+        ({"rows": [{"average_score": 80}, {"average_score": "60"}]}, 70.0),
+        ({"rows": [{"average_score": True}, {"average_score": 101}, {"average_score": -1}]}, None),
+        ({"rows": [{"average_score": "nan"}, {"average_score": "inf"}, {}]}, None),
+        ({"rows": []}, None),
+        (None, None),
+    ],
+)
+def test_overall_score_uses_only_finite_scores_in_range(table, expected):
+    assert _overall_score(table) == expected
+```
+
+- [ ] **Step 3: 写未入班详情红灯测试**
 
 ```python
 @pytest.mark.asyncio
-async def test_verify_teacher_preserves_owner_and_403_semantics():
+async def test_get_student_info_hides_non_enrolled_user():
     async with async_session_factory() as db:
-        teacher, other_teacher, admin, course = await _seed_course_with_teacher(db)
-        await db.commit()
-
-        service = TeachingService(db)
-        verified = await service.verify_teacher(course.id, teacher)
-        assert verified.id == course.id
-
-        with pytest.raises(HTTPException) as other_exc:
-            await service.verify_teacher(course.id, other_teacher)
-        assert other_exc.value.status_code == 403
-        assert other_exc.value.detail == {"code": 40300, "message": "无权访问此班级", "data": None}
-
-        with pytest.raises(HTTPException) as admin_exc:
-            await service.verify_teacher(course.id, admin)
-        assert admin_exc.value.status_code == 403
-        assert admin_exc.value.detail == {"code": 40300, "message": "无权访问此班级", "data": None}
-
-
-@pytest.mark.asyncio
-async def test_verify_teacher_raises_404_for_missing_course():
-    async with async_session_factory() as db:
-        teacher = await _seed_user(db, "teacher", "teacher")
+        teacher, course = await _course(db)
+        outsider = await _user(db, "student", "outsider")
         await db.commit()
 
         with pytest.raises(HTTPException) as exc:
-            await TeachingService(db).verify_teacher("missing_course", teacher)
+            await TeachingService(db).get_student_info(course.id, outsider.id, teacher)
+
         assert exc.value.status_code == 404
-        assert exc.value.detail == {"code": 40400, "message": "课程不存在", "data": None}
+        assert exc.value.detail == {"code": 40400, "message": "学生未入班", "data": None}
 ```
 
-- [ ] **Step 3: Add `list_students` and `get_student_info` tests**
-
-Append:
-
-```python
-@pytest.mark.asyncio
-async def test_list_students_paginates_and_excludes_soft_deleted_enrollments():
-    async with async_session_factory() as db:
-        teacher, _other_teacher, _admin, course = await _seed_course_with_teacher(db)
-        students = [await _seed_user(db, "student", f"student{i}") for i in range(3)]
-        db.add_all([
-            CourseEnrollment(course_id=course.id, student_id=students[0].id),
-            CourseEnrollment(course_id=course.id, student_id=students[1].id),
-            CourseEnrollment(course_id=course.id, student_id=students[2].id, is_deleted=True),
-        ])
-        await db.commit()
-
-        data = await TeachingService(db).list_students(course.id, teacher, page=2, page_size=1)
-
-        assert data["total"] == 2
-        assert data["page"] == 2
-        assert data["page_size"] == 1
-        assert len(data["students"]) == 1
-        returned_ids = {item["id"] for item in data["students"]}
-        assert students[2].id not in returned_ids
-        assert {"id", "username", "real_name", "student_id", "major", "grade", "joined_at"} <= set(data["students"][0])
-
-
-@pytest.mark.asyncio
-async def test_get_student_info_returns_current_fields_and_raises_404_for_missing_student():
-    async with async_session_factory() as db:
-        teacher, _other_teacher, _admin, course = await _seed_course_with_teacher(db)
-        student = await _seed_user(db, "student", "student")
-        await db.commit()
-
-        service = TeachingService(db)
-        data = await service.get_student_info(course.id, student.id, teacher)
-
-        assert data["id"] == student.id
-        assert data["username"] == student.username
-        assert data["email"] == student.email
-        assert data["real_name"] == student.real_name
-        assert data["student_id"] == student.student_id
-        assert data["role"] == "student"
-        assert data["major"] == student.major
-        assert data["grade"] == student.grade
-        assert "created_at" in data
-
-        with pytest.raises(HTTPException) as exc:
-            await service.get_student_info(course.id, "missing_student", teacher)
-        assert exc.value.status_code == 404
-        assert exc.value.detail == {"code": 40400, "message": "学生不存在", "data": None}
-```
-
-- [ ] **Step 4: Run the new tests and verify red**
-
-Run from `../backend`:
+- [ ] **Step 4: 运行 RED**
 
 ```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task1_red.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
 ```
 
-Expected: FAIL during import with `ModuleNotFoundError: No module named 'app.services.teaching_service'`.
+Expected: collection fails with `ModuleNotFoundError: app.services.teaching_service`.
 
-- [ ] **Step 5: Leave red tests unstaged until Task 2 is green**
+不要提交红灯状态，直接进入 Task 2。
 
-Do not commit at this point. Project rules require failing tests to be fixed before committing. Keep `backend/tests/test_teaching_service.py` in the working tree and continue directly to Task 2.
-
----
-
-### Task 2: Create TeachingService For Verification, Student List, And Student Detail
+### Task 2: 实现权限、评分与学生列表
 
 **Files:**
-- Create: `../backend/app/services/teaching_service.py`
-- Test: `../backend/tests/test_teaching_service.py`
+- Create: `backend/app/services/teaching_service.py`
+- Modify: `backend/tests/test_teaching_service.py`
 
-- [ ] **Step 1: Implement the initial service**
-
-Create `../backend/app/services/teaching_service.py` with:
+- [ ] **Step 1: 实现基础 Service 和评分纯函数**
 
 ```python
+import math
+
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -226,13 +172,32 @@ from app.models.course import Course, CourseEnrollment
 from app.models.user import User
 
 
+def _overall_score(mastery_table: object) -> float | None:
+    if not isinstance(mastery_table, dict) or not isinstance(mastery_table.get("rows"), list):
+        return None
+    scores: list[float] = []
+    for row in mastery_table["rows"]:
+        if not isinstance(row, dict):
+            continue
+        raw = row.get("average_score")
+        if isinstance(raw, bool):
+            continue
+        try:
+            score = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(score) and 0 <= score <= 100:
+            scores.append(score)
+    return round(sum(scores) / len(scores), 1) if scores else None
+
+
 class TeachingService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def verify_teacher(self, class_id: str, current_user: User) -> Course:
         result = await self.db.execute(
-            select(Course).where(Course.id == class_id, Course.is_deleted == False)
+            select(Course).where(Course.id == class_id, Course.is_deleted.is_(False))
         )
         course = result.scalar_one_or_none()
         if course is None:
@@ -247,709 +212,375 @@ class TeachingService:
             )
         return course
 
-    async def list_students(self, class_id: str, current_user: User, page: int, page_size: int) -> dict:
-        await self.verify_teacher(class_id, current_user)
-
-        count_r = await self.db.execute(
-            select(func.count(CourseEnrollment.id)).where(
-                CourseEnrollment.course_id == class_id,
-                CourseEnrollment.is_deleted == False,
-            )
-        )
-        total = count_r.scalar() or 0
-
+    async def _require_enrolled_student(self, class_id: str, student_id: str) -> User:
         result = await self.db.execute(
-            select(CourseEnrollment)
+            select(User)
+            .join(CourseEnrollment, CourseEnrollment.student_id == User.id)
             .where(
+                User.id == student_id,
+                User.is_deleted.is_(False),
                 CourseEnrollment.course_id == class_id,
-                CourseEnrollment.is_deleted == False,
+                CourseEnrollment.is_deleted.is_(False),
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            .limit(1)
         )
-        enrollments = result.scalars().all()
-
-        students = []
-        for enrollment in enrollments:
-            user_result = await self.db.execute(select(User).where(User.id == enrollment.student_id))
-            user = user_result.scalar_one_or_none()
-            if user:
-                students.append(_student_list_item(user, enrollment))
-
-        return {"students": students, "total": total, "page": page, "page_size": page_size}
-
-    async def get_student_info(self, class_id: str, student_id: str, current_user: User) -> dict:
-        await self.verify_teacher(class_id, current_user)
-
-        result = await self.db.execute(select(User).where(User.id == student_id))
-        user = result.scalar_one_or_none()
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": 40400, "message": "学生不存在", "data": None},
-            )
-        return _student_info_item(user)
-
-
-def _student_list_item(user: User, enrollment: CourseEnrollment) -> dict:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "real_name": user.real_name,
-        "student_id": user.student_id,
-        "major": user.major,
-        "grade": user.grade,
-        "joined_at": enrollment.create_time.isoformat() if enrollment.create_time else "",
-    }
-
-
-def _student_info_item(user: User) -> dict:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "real_name": user.real_name,
-        "student_id": user.student_id,
-        "role": user.role,
-        "major": user.major,
-        "grade": user.grade,
-        "guidance_level": user.guidance_level,
-        "created_at": user.create_time.isoformat() if user.create_time else "",
-    }
-```
-
-- [ ] **Step 2: Run focused tests**
-
-Run:
-
-```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task2.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-```
-
-Expected: PASS for the tests currently in the file.
-
-- [ ] **Step 3: Commit the first green service slice**
-
-```bash
-git -C .. add backend/app/services/teaching_service.py backend/tests/test_teaching_service.py
-git -C .. commit -m "refactor: 新增 teaching service 基础查询"
-```
-
----
-
-### Task 3: Add Student Learning Service Tests
-
-**Files:**
-- Modify: `../backend/tests/test_teaching_service.py`
-- Production implementation still incomplete at the start of this task.
-
-- [ ] **Step 1: Extend imports**
-
-Add these imports below existing model imports:
-
-```python
-from app.models.others import Evaluation, LearningPath, UserProfile
-from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
-```
-
-- [ ] **Step 2: Add student learning aggregation tests**
-
-Append:
-
-```python
-@pytest.mark.asyncio
-async def test_get_student_learning_aggregates_quiz_profile_path_and_recent_activity():
-    async with async_session_factory() as db:
-        teacher, _other_teacher, _admin, course = await _seed_course_with_teacher(db)
-        student = await _seed_user(db, "student", "student")
-        db.add(CourseEnrollment(course_id=course.id, student_id=student.id))
-        await db.flush()
-
-        db.add(Evaluation(user_id=student.id, course_id=course.id, summary_text="latest summary"))
-        db.add(UserProfile(
-            user_id=student.id,
-            course_id=course.id,
-            modal_preference={"text_analysis": 80, "code_practice": 60},
-            knowledge_coordinates=[
-                {"knowledge_point": "A", "status": "mastered"},
-                {"knowledge_point": "B", "status": "weak"},
-            ],
-        ))
-        db.add(LearningPath(
-            user_id=student.id,
-            course_id=course.id,
-            current_node_name="Node 2",
-            nodes=[
-                {"id": "n1", "status": "completed"},
-                {"id": "n2", "status": "in_progress"},
-            ],
-        ))
-        await db.flush()
-
-        first_session = QuizSession(
-            user_id=student.id,
-            course_id=course.id,
-            chapter="ch1",
-            score=50,
-            correct_count=1,
-            total_count=2,
-            time_spent=60,
-        )
-        db.add(first_session)
-        await db.flush()
-
-        q1 = QuizQuestion(course_id=course.id, chapter="ch1", knowledge_point="AVL树旋转", type="single_choice", content="Q1?", options=["A", "B"], correct_answer="A")
-        q2 = QuizQuestion(course_id=course.id, chapter="ch1", knowledge_point="AVL树旋转", type="single_choice", content="Q2?", options=["A", "B"], correct_answer="A")
-        q3 = QuizQuestion(course_id=course.id, chapter="ch1", knowledge_point="", type="single_choice", content="Q3?", options=["A", "B"], correct_answer="A")
-        db.add_all([q1, q2, q3])
-        await db.flush()
-        db.add_all([
-            QuizAnswer(quiz_id=first_session.id, question_id=q1.id, user_answer="B", is_correct=False, correct_answer="A"),
-            QuizAnswer(quiz_id=first_session.id, question_id=q2.id, user_answer="A", is_correct=True, correct_answer="A"),
-            QuizAnswer(quiz_id=first_session.id, question_id=q3.id, user_answer="B", is_correct=False, correct_answer="A"),
-        ])
-
-        for index in range(6):
-            db.add(QuizSession(user_id=student.id, course_id=course.id, chapter=f"recent-{index}", score=80, correct_count=3, total_count=4, time_spent=30))
-        await db.commit()
-
-        data = await TeachingService(db).get_student_learning(course.id, student.id, teacher)
-
-        assert data["student"] == {"id": student.id, "real_name": student.real_name, "student_id": student.student_id}
-        assert data["evaluation_summary"]["overall_score"] == 75.0
-        assert data["evaluation_summary"]["summary_text"] == "latest summary"
-        assert data["profile_summary"]["knowledge_mastered"] == 1
-        assert data["profile_summary"]["knowledge_weak"] == 1
-        assert data["profile_summary"]["modal_preference"] == ["text_analysis", "code_practice"]
-        assert data["path_progress"] == {"current_node": "Node 2", "completed_nodes": 1, "total_nodes": 2}
-
-        assert data["quiz_stats"]["total_attempts"] == 7
-        assert data["quiz_stats"]["mastery_breakdown"] == [{"knowledge_point": "AVL树旋转", "accuracy": 50.0}]
-        assert data["weak_points"] == [{"knowledge_point": "AVL树旋转", "error_count": 1, "total_attempts": 2, "error_rate": 0.5}]
-        assert len(data["recent_activity"]) == 5
-        recent_dates = [item["created_at"] for item in data["recent_activity"]]
-        assert all(recent_dates[i] >= recent_dates[i + 1] for i in range(len(recent_dates) - 1))
-
-
-@pytest.mark.asyncio
-async def test_get_student_learning_raises_404_for_non_enrolled_student():
-    async with async_session_factory() as db:
-        teacher, _other_teacher, _admin, course = await _seed_course_with_teacher(db)
-        student = await _seed_user(db, "student", "student")
-        await db.commit()
-
-        with pytest.raises(HTTPException) as exc:
-            await TeachingService(db).get_student_learning(course.id, student.id, teacher)
-        assert exc.value.status_code == 404
-        assert exc.value.detail == {"code": 40400, "message": "学生未入班", "data": None}
-```
-
-- [ ] **Step 3: Run tests and verify red**
-
-Run:
-
-```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task3_red.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-```
-
-Expected: FAIL with `AttributeError: 'TeachingService' object has no attribute 'get_student_learning'`.
-
-- [ ] **Step 4: Leave red learning tests unstaged until Task 4 is green**
-
-Do not commit at this point. Keep the red learning tests in the working tree and continue directly to Task 4.
-
----
-
-### Task 4: Implement Student Learning Aggregation In TeachingService
-
-**Files:**
-- Modify: `../backend/app/services/teaching_service.py`
-- Test: `../backend/tests/test_teaching_service.py`
-
-- [ ] **Step 1: Add required imports**
-
-Add to `teaching_service.py`:
-
-```python
-from sqlalchemy import case
-
-from app.models.others import Evaluation, LearningPath, UserProfile
-from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
-```
-
-- [ ] **Step 2: Add `get_student_learning` by moving existing route logic**
-
-Add this method to `TeachingService`. Keep the logic equivalent to current `teaching.py`; do not optimize the queries.
-
-```python
-    async def get_student_learning(self, class_id: str, student_id: str, current_user: User) -> dict:
-        await self.verify_teacher(class_id, current_user)
-
-        enrollment_check = await self.db.execute(
-            select(CourseEnrollment).where(
-                CourseEnrollment.student_id == student_id,
-                CourseEnrollment.course_id == class_id,
-                CourseEnrollment.is_deleted == False,
-            )
-        )
-        if not enrollment_check.scalar_one_or_none():
+        student = result.scalar_one_or_none()
+        if student is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": 40400, "message": "学生未入班", "data": None},
             )
-
-        user_result = await self.db.execute(select(User).where(User.id == student_id))
-        user = user_result.scalar_one_or_none()
-        student_info = {}
-        if user:
-            student_info = {"id": user.id, "real_name": user.real_name, "student_id": user.student_id}
-
-        ev_result = await self.db.execute(
-            select(Evaluation)
-            .where(Evaluation.user_id == student_id, Evaluation.course_id == class_id, Evaluation.is_deleted == False)
-            .order_by(Evaluation.generated_at.desc())
-        )
-        evaluation = ev_result.scalars().first()
-        evaluation_summary = None
-        if evaluation:
-            evaluation_summary = {
-                "overall_score": 75.0,
-                "generated_at": evaluation.generated_at.isoformat() if evaluation.generated_at else None,
-                "summary_text": evaluation.summary_text or None,
-            }
-
-        profile_result = await self.db.execute(
-            select(UserProfile).where(
-                UserProfile.user_id == student_id,
-                UserProfile.course_id == class_id,
-                UserProfile.is_deleted == False,
-            )
-        )
-        profile = profile_result.scalar_one_or_none()
-        profile_summary = None
-        if profile:
-            coordinates = profile.knowledge_coordinates if profile.knowledge_coordinates else []
-            mastered = sum(1 for coordinate in coordinates if coordinate.get("status") == "mastered")
-            weak = len(coordinates) - mastered
-            profile_summary = {
-                "knowledge_mastered": mastered,
-                "knowledge_weak": weak,
-                "modal_preference": list(profile.modal_preference.keys()) if profile.modal_preference else [],
-                "knowledge_coordinates": coordinates,
-            }
-
-        path_result = await self.db.execute(
-            select(LearningPath).where(
-                LearningPath.user_id == student_id,
-                LearningPath.course_id == class_id,
-                LearningPath.is_deleted == False,
-            )
-        )
-        learning_path = path_result.scalar_one_or_none()
-        path_progress = None
-        if learning_path and learning_path.nodes:
-            nodes = learning_path.nodes if isinstance(learning_path.nodes, list) else []
-            completed = sum(1 for node in nodes if node.get("status") == "completed")
-            path_progress = {
-                "current_node": learning_path.current_node_name,
-                "completed_nodes": completed,
-                "total_nodes": len(nodes),
-            }
-
-        quiz_sessions_result = await self.db.execute(
-            select(QuizSession).where(
-                QuizSession.user_id == student_id,
-                QuizSession.course_id == class_id,
-                QuizSession.is_deleted == False,
-            )
-        )
-        quiz_sessions = quiz_sessions_result.scalars().all()
-
-        mastery_breakdown = await self._mastery_breakdown(student_id, class_id)
-        quiz_stats = None
-        if quiz_sessions:
-            total_attempts = len(quiz_sessions)
-            avg_score = sum(session.score for session in quiz_sessions) / total_attempts
-            avg_time = sum(session.time_spent for session in quiz_sessions) / total_attempts
-            quiz_stats = {
-                "total_attempts": total_attempts,
-                "avg_score": round(avg_score, 1),
-                "avg_time_spent": int(avg_time),
-                "mastery_breakdown": mastery_breakdown,
-            }
-
-        return {
-            "student": student_info,
-            "evaluation_summary": evaluation_summary,
-            "profile_summary": profile_summary,
-            "path_progress": path_progress,
-            "quiz_stats": quiz_stats,
-            "weak_points": await self._weak_points(student_id, class_id),
-            "recent_activity": await self._recent_activity(student_id, class_id),
-        }
+        return student
 ```
 
-- [ ] **Step 3: Add private query helpers used by the method**
-
-Add inside the class:
+- [ ] **Step 2: 实现详情和有界学生列表**
 
 ```python
-    async def _mastery_breakdown(self, student_id: str, class_id: str) -> list[dict]:
-        result = await self.db.execute(
-            select(
-                QuizQuestion.knowledge_point,
-                func.count(QuizAnswer.id).label("total"),
-                func.sum(case((QuizAnswer.is_correct == True, 1), else_=0)).label("correct"),
-            )
-            .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
-            .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
-            .where(
-                QuizSession.user_id == student_id,
-                QuizSession.course_id == class_id,
-                QuizSession.is_deleted == False,
-                QuizAnswer.is_deleted == False,
-                QuizQuestion.is_deleted == False,
-                QuizQuestion.knowledge_point != "",
-            )
-            .group_by(QuizQuestion.knowledge_point)
-        )
-        breakdown = []
-        for row in result:
-            total = row.total or 0
-            correct = row.correct or 0
-            breakdown.append({
-                "knowledge_point": row.knowledge_point,
-                "accuracy": round(correct / total * 100, 1) if total > 0 else 0,
-            })
-        return breakdown
-
-    async def _weak_points(self, student_id: str, class_id: str) -> list[dict]:
-        error_count_expr = func.sum(case((QuizAnswer.is_correct == False, 1), else_=0))
-        total_attempts_expr = func.count(QuizAnswer.id)
-        result = await self.db.execute(
-            select(
-                QuizQuestion.knowledge_point,
-                total_attempts_expr.label("total_attempts"),
-                error_count_expr.label("error_count"),
-            )
-            .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
-            .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
-            .where(
-                QuizSession.user_id == student_id,
-                QuizSession.course_id == class_id,
-                QuizSession.is_deleted == False,
-                QuizAnswer.is_deleted == False,
-                QuizQuestion.is_deleted == False,
-                QuizQuestion.knowledge_point != "",
-            )
-            .group_by(QuizQuestion.knowledge_point)
-            .having(error_count_expr > 0)
-            .order_by((error_count_expr / total_attempts_expr).desc(), error_count_expr.desc())
-            .limit(5)
-        )
-        return [_weak_point_item(row) for row in result]
-
-    async def _recent_activity(self, student_id: str, class_id: str) -> list[dict]:
-        result = await self.db.execute(
-            select(QuizSession)
-            .where(
-                QuizSession.user_id == student_id,
-                QuizSession.course_id == class_id,
-                QuizSession.is_deleted == False,
-            )
-            .order_by(QuizSession.create_time.desc())
-            .limit(5)
-        )
-        return [_recent_activity_item(session) for session in result.scalars().all()]
-```
-
-Add module-level helpers:
-
-```python
-def _weak_point_item(row) -> dict:
-    total = row.total_attempts
-    errors = row.error_count or 0
-    return {
-        "knowledge_point": row.knowledge_point,
-        "error_count": errors,
-        "total_attempts": total,
-        "error_rate": round(errors / total, 2) if total > 0 else 0,
-    }
-
-
-def _recent_activity_item(session: QuizSession) -> dict:
-    return {
-        "quiz_id": session.id,
-        "chapter": session.chapter or "",
-        "score": session.score,
-        "correct_count": session.correct_count,
-        "total_count": session.total_count,
-        "time_spent": session.time_spent,
-        "created_at": session.create_time.isoformat() if session.create_time else "",
-    }
-```
-
-- [ ] **Step 4: Run service tests**
-
-Run:
-
-```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task4.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-```
-
-Expected: PASS for all current service tests.
-
-- [ ] **Step 5: Commit learning service implementation and its tests**
-
-```bash
-git -C .. add backend/app/services/teaching_service.py backend/tests/test_teaching_service.py
-git -C .. commit -m "refactor: 迁移教师端学生学习报告查询"
-```
-
----
-
-### Task 5: Add And Implement Class Insights Service Tests
-
-**Files:**
-- Modify: `../backend/tests/test_teaching_service.py`
-- Modify: `../backend/app/services/teaching_service.py`
-
-- [ ] **Step 1: Add class insights test**
-
-Append:
-
-```python
-@pytest.mark.asyncio
-async def test_get_class_insights_aggregates_quiz_weak_points_and_path_progress():
-    async with async_session_factory() as db:
-        teacher, _other_teacher, _admin, course = await _seed_course_with_teacher(db)
-        student1 = await _seed_user(db, "student", "student1")
-        student2 = await _seed_user(db, "student", "student2")
-        db.add_all([
-            CourseEnrollment(course_id=course.id, student_id=student1.id),
-            CourseEnrollment(course_id=course.id, student_id=student2.id, is_deleted=True),
-        ])
-        await db.flush()
-
-        session1 = QuizSession(user_id=student1.id, course_id=course.id, chapter="ch1", score=60, correct_count=3, total_count=5, time_spent=120)
-        session2 = QuizSession(user_id=student2.id, course_id=course.id, chapter="ch1", score=100, correct_count=5, total_count=5, time_spent=90)
-        db.add_all([session1, session2])
-        await db.flush()
-
-        question = QuizQuestion(course_id=course.id, chapter="ch1", knowledge_point="AVL树旋转", type="single_choice", content="Q?", options=["A", "B"], correct_answer="A")
-        empty_question = QuizQuestion(course_id=course.id, chapter="ch1", knowledge_point="", type="single_choice", content="Empty?", options=["A", "B"], correct_answer="A")
-        db.add_all([question, empty_question])
-        await db.flush()
-        db.add_all([
-            QuizAnswer(quiz_id=session1.id, question_id=question.id, user_answer="B", is_correct=False, correct_answer="A"),
-            QuizAnswer(quiz_id=session1.id, question_id=empty_question.id, user_answer="B", is_correct=False, correct_answer="A"),
-            QuizAnswer(quiz_id=session2.id, question_id=question.id, user_answer="B", is_correct=False, correct_answer="A"),
-        ])
-        db.add_all([
-            LearningPath(user_id=student1.id, course_id=course.id, nodes=[
-                {"id": "n1", "status": "completed"},
-                {"id": "n2", "status": "in_progress"},
-                {"id": "n3", "status": "unknown_status"},
-            ]),
-            LearningPath(user_id=student2.id, course_id=course.id, nodes=[
-                {"id": "n1", "status": "completed"},
-            ]),
-        ])
-        await db.commit()
-
-        data = await TeachingService(db).get_class_insights(course.id, teacher)
-
-        assert data["avg_quiz_score"] == 60.0
-        assert data["total_quiz_attempts"] == 1
-        assert data["weak_points_top"] == [{"knowledge_point": "AVL树旋转", "error_count": 1, "total_attempts": 1, "error_rate": 1.0}]
-        assert data["path_node_progress"] == {
-            "completed": 1,
-            "in_progress": 1,
-            "recommended": 0,
-            "pending": 0,
-            "total_nodes": 2,
-        }
-
-
-@pytest.mark.asyncio
-async def test_get_class_insights_returns_empty_shape_for_empty_class():
-    async with async_session_factory() as db:
-        teacher, _other_teacher, _admin, course = await _seed_course_with_teacher(db)
-        await db.commit()
-
-        data = await TeachingService(db).get_class_insights(course.id, teacher)
-
-        assert data == {
-            "avg_quiz_score": None,
-            "total_quiz_attempts": 0,
-            "weak_points_top": [],
-            "path_node_progress": {
-                "completed": 0,
-                "in_progress": 0,
-                "recommended": 0,
-                "pending": 0,
-                "total_nodes": 0,
-            },
-        }
-```
-
-- [ ] **Step 2: Run tests and verify red**
-
-Run:
-
-```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task5_red.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-```
-
-Expected: FAIL with `AttributeError: 'TeachingService' object has no attribute 'get_class_insights'`.
-
-- [ ] **Step 3: Implement `get_class_insights`**
-
-Add inside `TeachingService`:
-
-```python
-    async def get_class_insights(self, class_id: str, current_user: User) -> dict:
+    async def get_student_info(self, class_id: str, student_id: str, current_user: User) -> dict:
         await self.verify_teacher(class_id, current_user)
-
-        enrolled_result = await self.db.execute(
-            select(CourseEnrollment.student_id).where(
-                CourseEnrollment.course_id == class_id,
-                CourseEnrollment.is_deleted == False,
-            )
-        )
-        student_ids = [row[0] for row in enrolled_result.all()]
-
-        if not student_ids:
-            return _empty_class_insights()
-
-        quiz_result = await self.db.execute(
-            select(
-                func.avg(QuizSession.score).label("avg_score"),
-                func.count(QuizSession.id).label("total_attempts"),
-            ).where(
-                QuizSession.course_id == class_id,
-                QuizSession.user_id.in_(student_ids),
-                QuizSession.is_deleted == False,
-            )
-        )
-        quiz_row = quiz_result.one()
-        avg_quiz_score = round(quiz_row.avg_score, 1) if quiz_row.avg_score is not None else None
-        total_quiz_attempts = quiz_row.total_attempts or 0
-
+        user = await self._require_enrolled_student(class_id, student_id)
         return {
-            "avg_quiz_score": avg_quiz_score,
-            "total_quiz_attempts": total_quiz_attempts,
-            "weak_points_top": await self._class_weak_points_top(class_id, student_ids),
-            "path_node_progress": await self._class_path_node_progress(class_id, student_ids),
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "real_name": user.real_name,
+            "student_id": user.student_id,
+            "role": user.role,
+            "major": user.major,
+            "grade": user.grade,
+            "guidance_level": user.guidance_level,
+            "created_at": user.create_time.isoformat() if user.create_time else "",
+        }
+
+    async def list_students(
+        self, class_id: str, current_user: User, page: int, page_size: int
+    ) -> dict:
+        await self.verify_teacher(class_id, current_user)
+        active = (
+            CourseEnrollment.course_id == class_id,
+            CourseEnrollment.is_deleted.is_(False),
+            User.is_deleted.is_(False),
+        )
+        count_result = await self.db.execute(
+            select(func.count(CourseEnrollment.id))
+            .join(User, User.id == CourseEnrollment.student_id)
+            .where(*active)
+        )
+        rows = await self.db.execute(
+            select(CourseEnrollment, User)
+            .join(User, User.id == CourseEnrollment.student_id)
+            .where(*active)
+            .order_by(CourseEnrollment.create_time.asc(), CourseEnrollment.id.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        students = [
+            {
+                "id": user.id,
+                "username": user.username,
+                "real_name": user.real_name,
+                "student_id": user.student_id,
+                "major": user.major,
+                "grade": user.grade,
+                "joined_at": enrollment.create_time.isoformat() if enrollment.create_time else "",
+            }
+            for enrollment, user in rows.all()
+        ]
+        return {
+            "students": students,
+            "total": count_result.scalar() or 0,
+            "page": page,
+            "page_size": page_size,
         }
 ```
 
-Add inside the class:
+- [ ] **Step 3: 补列表顺序、软删除和固定查询数测试**
 
-```python
-    async def _class_weak_points_top(self, class_id: str, student_ids: list[str]) -> list[dict]:
-        error_count_expr = func.sum(case((QuizAnswer.is_correct == False, 1), else_=0))
-        total_attempts_expr = func.count(QuizAnswer.id)
-        result = await self.db.execute(
-            select(
-                QuizQuestion.knowledge_point,
-                total_attempts_expr.label("total_attempts"),
-                error_count_expr.label("error_count"),
-            )
-            .join(QuizAnswer, QuizAnswer.question_id == QuizQuestion.id)
-            .join(QuizSession, QuizSession.id == QuizAnswer.quiz_id)
-            .where(
-                QuizSession.course_id == class_id,
-                QuizSession.user_id.in_(student_ids),
-                QuizSession.is_deleted == False,
-                QuizAnswer.is_deleted == False,
-                QuizQuestion.is_deleted == False,
-                QuizQuestion.knowledge_point != "",
-            )
-            .group_by(QuizQuestion.knowledge_point)
-            .having(error_count_expr > 0)
-            .order_by((error_count_expr / total_attempts_expr).desc(), error_count_expr.desc())
-            .limit(5)
-        )
-        return [_weak_point_item(row) for row in result]
+测试使用 SQLAlchemy `event.listen(engine.sync_engine, "before_cursor_execute", listener)`；在调用 `list_students()` 前清空计数，断言 1 人和 20 人的语句数相同且均为 3（teacher、count、page）。在 `finally` 中 `event.remove`，避免污染其他测试。另断言返回顺序与 enrollment `create_time/id` 一致、软删除 enrollment 和 User 均不出现。
 
-    async def _class_path_node_progress(self, class_id: str, student_ids: list[str]) -> dict:
-        result = await self.db.execute(
-            select(LearningPath).where(
-                LearningPath.course_id == class_id,
-                LearningPath.user_id.in_(student_ids),
-                LearningPath.is_deleted == False,
-            )
-        )
-        known_statuses = {"completed", "in_progress", "recommended", "pending"}
-        progress = {status_name: 0 for status_name in known_statuses}
-        for learning_path in result.scalars().all():
-            nodes = learning_path.nodes if isinstance(learning_path.nodes, list) else []
-            for node in nodes:
-                node_status = node.get("status")
-                if node_status in known_statuses:
-                    progress[node_status] += 1
-        return {**progress, "total_nodes": sum(progress.values())}
+- [ ] **Step 4: 运行 GREEN 与覆盖率**
+
+```bash
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider --cov=app.services.teaching_service --cov-report=term-missing
 ```
 
-Add module-level helper:
+Expected: 当前测试通过；覆盖率不足 80%可以继续后续任务，不在本阶段伪造覆盖。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add backend/app/services/teaching_service.py backend/tests/test_teaching_service.py
+git commit -m "refactor(teaching): 收口权限与学生查询"
+```
+
+### Task 3: 迁移单学生学习报告
+
+**Files:**
+- Modify: `backend/app/services/teaching_service.py`
+- Modify: `backend/tests/test_teaching_service.py`
+- Modify: `backend/tests/test_teacher_student_learning.py`
+
+- [ ] **Step 1: 写最新记录、真实评分和 Profile 红灯测试**
+
+构造同一学生同一课程的两条 Evaluation/Profile/LearningPath，旧记录使用较早 `generated_at`，新记录使用较晚时间。断言：
 
 ```python
-def _empty_class_insights() -> dict:
-    return {
-        "avg_quiz_score": None,
-        "total_quiz_attempts": 0,
-        "weak_points_top": [],
-        "path_node_progress": {
-            "completed": 0,
-            "in_progress": 0,
-            "recommended": 0,
-            "pending": 0,
-            "total_nodes": 0,
-        },
+assert data["evaluation_summary"]["overall_score"] == 75.0  # rows 70 与 80
+assert data["evaluation_summary"]["summary_text"] == "new evaluation"
+assert data["profile_summary"]["knowledge_mastered"] == 1
+assert data["profile_summary"]["knowledge_weak"] == 1
+assert data["path_progress"]["current_node"] == "new node"
+```
+
+新 Profile coordinates 必须同时包含 `mastered`、`weak`、`learning`、`pending`，验证后两者不计入 weak。再增加无有效 `average_score` 时 `overall_score is None` 的用例。
+
+- [ ] **Step 2: 运行 RED**
+
+```bash
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
+```
+
+Expected: `TeachingService` 缺少 `get_student_learning`。
+
+- [ ] **Step 3: 实现统一最新记录 helper**
+
+```python
+    async def _latest_evaluation(self, user_id: str, course_id: str):
+        result = await self.db.execute(
+            select(Evaluation)
+            .where(
+                Evaluation.user_id == user_id,
+                Evaluation.course_id == course_id,
+                Evaluation.is_deleted.is_(False),
+            )
+            .order_by(
+                Evaluation.generated_at.desc(),
+                Evaluation.create_time.desc(),
+                Evaluation.id.desc(),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+```
+
+同时实现另外两个明确 helper：
+
+```python
+    async def _latest_profile(self, user_id: str, course_id: str):
+        result = await self.db.execute(
+            select(UserProfile)
+            .where(
+                UserProfile.user_id == user_id,
+                UserProfile.course_id == course_id,
+                UserProfile.is_deleted.is_(False),
+            )
+            .order_by(
+                UserProfile.generated_at.desc(),
+                UserProfile.create_time.desc(),
+                UserProfile.id.desc(),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _latest_learning_path(self, user_id: str, course_id: str):
+        result = await self.db.execute(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.course_id == course_id,
+                LearningPath.is_deleted.is_(False),
+            )
+            .order_by(
+                LearningPath.generated_at.desc(),
+                LearningPath.create_time.desc(),
+                LearningPath.id.desc(),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+```
+
+- [ ] **Step 4: 实现学习报告**
+
+`get_student_learning()` 先调用 `verify_teacher()` 和 `_require_enrolled_student()`；复用当前 `teaching.py` 的 mastery breakdown、weak points、recent activity 查询与 DTO 字段，但做以下强制替换：
+
+```python
+quiz_result = await self.db.execute(
+    select(
+        func.count(QuizSession.id).label("total_attempts"),
+        func.avg(QuizSession.score).label("avg_score"),
+        func.avg(QuizSession.time_spent).label("avg_time"),
+    ).where(
+        QuizSession.user_id == student_id,
+        QuizSession.course_id == class_id,
+        QuizSession.is_deleted.is_(False),
+    )
+)
+quiz_row = quiz_result.one()
+quiz_stats = None
+if quiz_row.total_attempts:
+    quiz_stats = {
+        "total_attempts": quiz_row.total_attempts,
+        "avg_score": round(float(quiz_row.avg_score), 1),
+        "avg_time_spent": int(float(quiz_row.avg_time)),
+        "mastery_breakdown": mastery_breakdown,
     }
 ```
 
-- [ ] **Step 4: Run service tests**
-
-Run:
-
-```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task5.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit class insights service implementation**
-
-```bash
-git -C .. add backend/app/services/teaching_service.py backend/tests/test_teaching_service.py
-git -C .. commit -m "refactor: 迁移教师端班级洞察查询"
-```
-
----
-
-### Task 6: Thin The Teaching Router
-
-**Files:**
-- Modify: `../backend/app/api/v1/teaching.py`
-- Test: `../backend/tests/test_api.py`, `../backend/tests/test_teacher_student_learning.py`, `../backend/tests/test_teacher_class_insights.py`
-
-- [ ] **Step 1: Replace route internals with service calls**
-
-Rewrite `teaching.py` to keep only imports needed by the router and the five routes:
+Evaluation DTO：
 
 ```python
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+evaluation_summary = None
+if evaluation:
+    evaluation_summary = {
+        "overall_score": _overall_score(evaluation.mastery_table),
+        "generated_at": evaluation.generated_at.isoformat() if evaluation.generated_at else None,
+        "summary_text": evaluation.summary_text or None,
+    }
+```
 
-from app.api.deps import get_db, require_role
-from app.models.user import User
-from app.services.teaching_service import TeachingService
+Profile 计数：
 
-router = APIRouter(prefix="/api/v1/teaching", tags=["teaching"])
+```python
+coordinates = profile.knowledge_coordinates if isinstance(profile.knowledge_coordinates, list) else []
+mastered = sum(row.get("status") == "mastered" for row in coordinates if isinstance(row, dict))
+weak = sum(row.get("status") == "weak" for row in coordinates if isinstance(row, dict))
+```
 
+recent activity 必须增加 `QuizSession.id.desc()` 次排序。所有原响应 key 保持不变。
 
+- [ ] **Step 5: 将既有 HTTP 测试切换为 MySQL-only 并补评分断言**
+
+在 `test_teacher_student_learning.py` 用以下代码替换 SQLite fallback：
+
+```python
+database_url = os.environ.get("TEST_DATABASE_URL")
+if not database_url or not database_url.startswith("mysql+aiomysql://"):
+    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+os.environ["DATABASE_URL"] = database_url
+```
+
+为测试 Evaluation 写入 `mastery_table={"rows": [{"average_score": 70}, {"average_score": 80}]}`，断言 `overall_score == 75.0`；再写空 rows 断言 null。
+
+- [ ] **Step 6: 运行 GREEN 并提交**
+
+```bash
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_teacher_student_learning.py -q -p no:cacheprovider
+git add backend/app/services/teaching_service.py backend/tests/test_teaching_service.py backend/tests/test_teacher_student_learning.py
+git commit -m "refactor(teaching): 迁移真实学情聚合"
+```
+
+Expected: 全部通过。
+
+### Task 4: 迁移班级洞察
+
+**Files:**
+- Modify: `backend/app/services/teaching_service.py`
+- Modify: `backend/tests/test_teaching_service.py`
+- Modify: `backend/tests/test_teacher_class_insights.py`
+
+- [ ] **Step 1: 写每名学生只统计最新路径的红灯测试**
+
+同一学生写入旧/新两条 LearningPath，旧路径含 3 个 completed，新路径含 1 个 pending。断言班级结果仅为：
+
+```python
+assert data["path_node_progress"] == {
+    "completed": 0,
+    "in_progress": 0,
+    "recommended": 0,
+    "pending": 1,
+    "total_nodes": 1,
+}
+```
+
+另写 soft-deleted enrollment 完全不参与 quiz、weak points 和 path progress 的用例。
+
+- [ ] **Step 2: 运行 RED**
+
+Expected: 缺少 `get_class_insights`。
+
+- [ ] **Step 3: 实现班级聚合**
+
+使用有效 enrollment 子查询：
+
+```python
+enrolled = (
+    select(CourseEnrollment.student_id)
+    .join(User, User.id == CourseEnrollment.student_id)
+    .where(
+        CourseEnrollment.course_id == class_id,
+        CourseEnrollment.is_deleted.is_(False),
+        User.is_deleted.is_(False),
+    )
+)
+```
+
+Quiz 和 weak point 查询用 `QuizSession.user_id.in_(enrolled)`，不先构造 Python `student_ids`。LearningPath 用 MySQL 8 窗口函数：
+
+```python
+ranked = (
+    select(
+        LearningPath.id.label("path_id"),
+        LearningPath.nodes.label("nodes"),
+        func.row_number().over(
+            partition_by=LearningPath.user_id,
+            order_by=(
+                LearningPath.generated_at.desc(),
+                LearningPath.create_time.desc(),
+                LearningPath.id.desc(),
+            ),
+        ).label("row_num"),
+    )
+    .where(
+        LearningPath.course_id == class_id,
+        LearningPath.user_id.in_(enrolled),
+        LearningPath.is_deleted.is_(False),
+    )
+    .subquery()
+)
+latest_paths = await self.db.execute(select(ranked.c.nodes).where(ranked.c.row_num == 1))
+```
+
+复用当前四种状态与空班级 DTO；未知状态继续忽略。
+
+- [ ] **Step 4: 切换并扩展 HTTP 测试**
+
+`test_teacher_class_insights.py` 删除 SQLite fallback，替换为：
+
+```python
+database_url = os.environ.get("TEST_DATABASE_URL")
+if not database_url or not database_url.startswith("mysql+aiomysql://"):
+    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+os.environ["DATABASE_URL"] = database_url
+```
+
+然后补充 Step 1 定义的重复 LearningPath 用例。
+
+- [ ] **Step 5: 运行与提交**
+
+```bash
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_teacher_class_insights.py -q -p no:cacheprovider
+git add backend/app/services/teaching_service.py backend/tests/test_teaching_service.py backend/tests/test_teacher_class_insights.py
+git commit -m "refactor(teaching): 迁移班级洞察查询"
+```
+
+### Task 5: 精简 Router 并锁定 HTTP 契约
+
+**Files:**
+- Modify: `backend/app/api/v1/teaching.py`
+- Modify: `backend/tests/test_teaching_service.py`
+- Modify: `backend/tests/test_teacher_student_learning.py`
+
+- [ ] **Step 1: 增加未入班详情 HTTP 红灯测试**
+
+通过真实 teacher token 请求 `/api/v1/teaching/classes/{class_id}/students/{outsider_id}`，断言 404 和 `学生未入班`，同时保留非任课教师 403 回归。
+
+- [ ] **Step 2: 将 Router 改为薄适配层**
+
+四个 route 均采用以下形态：
+
+```python
 @router.get("/classes/{class_id}/students")
 async def list_students(
     class_id: str,
@@ -960,157 +591,117 @@ async def list_students(
 ):
     data = await TeachingService(db).list_students(class_id, current_user, page, page_size)
     return {"code": 200, "message": "success", "data": data}
-
-
-@router.get("/classes/{class_id}/students/{student_id}")
-async def get_student_info(
-    class_id: str,
-    student_id: str,
-    current_user: User = Depends(require_role("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    data = await TeachingService(db).get_student_info(class_id, student_id, current_user)
-    return {"code": 200, "message": "success", "data": data}
-
-
-@router.get("/classes/{class_id}/students/{student_id}/learning")
-async def get_student_learning(
-    class_id: str,
-    student_id: str,
-    current_user: User = Depends(require_role("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    data = await TeachingService(db).get_student_learning(class_id, student_id, current_user)
-    return {"code": 200, "message": "success", "data": data}
-
-
-@router.get("/classes/{class_id}/insights")
-async def get_class_insights(
-    class_id: str,
-    current_user: User = Depends(require_role("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    data = await TeachingService(db).get_class_insights(class_id, current_user)
-    return {"code": 200, "message": "success", "data": data}
 ```
 
-- [ ] **Step 2: Run syntax check**
+学生详情、学习报告、班级洞察只替换 Service 方法名和路径参数。删除 `case/func/select` 与 Course、Enrollment、Evaluation、Profile、Path、Quiz ORM imports。
 
-Run:
+- [ ] **Step 3: 运行 Router 回归和语法检查**
 
 ```bash
-../.venv/bin/python -m py_compile app/api/v1/teaching.py app/services/teaching_service.py
+PYTHONPYCACHEPREFIX=/tmp/eduagent_pycache ../.venv/bin/python -m py_compile app/api/v1/teaching.py app/services/teaching_service.py
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_teacher_student_learning.py tests/test_teacher_class_insights.py -q -p no:cacheprovider
+rg -n "from sqlalchemy import|CourseEnrollment|Evaluation|LearningPath|UserProfile|Quiz" app/api/v1/teaching.py
 ```
 
-Expected: no output and exit code 0.
+Expected: 语法与测试通过；`rg` 无匹配。
 
-- [ ] **Step 3: Run service and API regressions**
-
-Run:
+- [ ] **Step 4: 运行定向覆盖率**
 
 ```bash
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task6.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teacher_student_learning_task6.db ../.venv/bin/python -m pytest tests/test_teacher_student_learning.py -q -p no:cacheprovider
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teacher_class_insights_task6.db ../.venv/bin/python -m pytest tests/test_teacher_class_insights.py -q -p no:cacheprovider
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/api_teaching_task6.db ../.venv/bin/python -m pytest tests/test_api.py -q -p no:cacheprovider
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_teacher_student_learning.py tests/test_teacher_class_insights.py -q -p no:cacheprovider --cov=app.services.teaching_service --cov=app.api.v1.teaching --cov-report=term-missing
 ```
 
-Expected: all PASS.
+Expected: 总定向覆盖率 >= 80%。若不足，针对 missing lines 增加具体分支测试后重跑，不使用 pragma 排除业务分支。
 
-- [ ] **Step 4: Check router line count**
-
-Run:
+- [ ] **Step 5: 提交**
 
 ```bash
-wc -l app/api/v1/teaching.py app/services/teaching_service.py
+git add backend/app/api/v1/teaching.py backend/app/services/teaching_service.py backend/tests/test_teaching_service.py backend/tests/test_teacher_student_learning.py backend/tests/test_teacher_class_insights.py
+git commit -m "refactor(teaching): 收口路由与接口权限"
 ```
 
-Expected: `app/api/v1/teaching.py` is close to 100-140 lines or lower. If it is slightly below 100 because imports are minimal, that is acceptable.
-
-- [ ] **Step 5: Commit router thinning**
-
-```bash
-git -C .. add backend/app/api/v1/teaching.py backend/app/services/teaching_service.py backend/tests/test_teaching_service.py
-git -C .. commit -m "refactor: 瘦身 teaching 路由"
-```
-
----
-
-### Task 7: Record Workflow And Final Verification
+### Task 6: 更新 Client 契约文档
 
 **Files:**
-- Modify: `WORKFLOW.md`
+- Modify: `docs/10-client-api/Client-API.openapi.json`
+- Modify: `docs/10-client-api/API_前端接口规范.md`
 
-- [ ] **Step 1: Append workflow entry**
+- [ ] **Step 1: 更新 OpenAPI nullable**
 
-Append an entry with this content shape:
+在 `StudentLearning.evaluation_summary.overall_score` 增加：
+
+```json
+"nullable": true
+```
+
+描述改为“最新评估知识点 average_score 的有效平均值；无有效掌握度数据时为 null”。不改变路径、参数或其他字段。
+
+- [ ] **Step 2: 更新中文规范**
+
+明确：
 
 ```markdown
-## 2026-06-18 TeachingService 分层重构
-
-- 修改文件：
-  - `backend/app/api/v1/teaching.py`
-  - `backend/app/services/teaching_service.py`
-  - `backend/tests/test_teaching_service.py`
-- 核心改动：
-  - 将教师端学生列表、学生详情、学生学习报告、班级洞察查询从胖路由迁移到 `TeachingService`。
-  - `teaching.py` 保留 FastAPI route、Depends、Query 参数和标准 JSON wrapper。
-  - 保持 admin 非任课教师仍 403、学生未入班 404、weak points/learning path 聚合字段不变。
-  - `list_students` 的 N+1 查询按等价迁移保留，未在本次重构中优化。
-- 测试结果：
-  - `../.venv/bin/python -m py_compile app/api/v1/teaching.py app/services/teaching_service.py` 通过。
-  - `TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_task6.db ../.venv/bin/python -m pytest tests/test_teaching_service.py -q -p no:cacheprovider` 通过。
-  - `TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teacher_student_learning_task6.db ../.venv/bin/python -m pytest tests/test_teacher_student_learning.py -q -p no:cacheprovider` 通过。
-  - `TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teacher_class_insights_task6.db ../.venv/bin/python -m pytest tests/test_teacher_class_insights.py -q -p no:cacheprovider` 通过。
-  - `TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/api_teaching_task6.db ../.venv/bin/python -m pytest tests/test_api.py -q -p no:cacheprovider` 通过。
-- 接口漂移：无。API 路径、参数、响应字段、错误 detail 和 HTTP status 保持不变。
+- `evaluation_summary.overall_score` 为最新 Evaluation `mastery_table` 中有效 `average_score` 的平均值；没有有效值时为 `null`。
+- 学生个人信息与学习情况接口均要求 `student_id` 存在当前班级的有效 enrollment；否则统一返回 404“学生未入班”。
 ```
 
-If any command fails and is then fixed, record the final passing command and the fixed failure in the same entry.
-
-- [ ] **Step 2: Run final verification**
-
-Run again from `../backend`:
+- [ ] **Step 3: 校验并提交**
 
 ```bash
-../.venv/bin/python -m py_compile app/api/v1/teaching.py app/services/teaching_service.py
-TEST_DATABASE_URL=sqlite+aiosqlite:////tmp/teaching_service_final.db ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_teacher_student_learning.py tests/test_teacher_class_insights.py tests/test_api.py -q -p no:cacheprovider
+python -m json.tool docs/10-client-api/Client-API.openapi.json >/tmp/client-api-openapi-check.json
+git diff --check -- docs/10-client-api/Client-API.openapi.json docs/10-client-api/API_前端接口规范.md
+git add docs/10-client-api/Client-API.openapi.json docs/10-client-api/API_前端接口规范.md
+git commit -m "docs: 对齐 teaching 权限与评分契约"
 ```
 
-Expected: syntax check passes and all selected tests pass.
+### Task 7: 最终验证与记录
 
-- [ ] **Step 3: Inspect changed files**
+**Files:**
+- Modify: `frontend/WORKFLOW.md`
+- Modify: `frontend/docs/requirements-coverage.md`
 
-Run:
+- [ ] **Step 1: 运行最终验证**
 
 ```bash
-git -C .. diff --stat
-git -C .. diff -- backend/app/api/v1/teaching.py backend/app/services/teaching_service.py backend/tests/test_teaching_service.py frontend/WORKFLOW.md
+cd backend
+PYTHONPYCACHEPREFIX=/tmp/eduagent_pycache ../.venv/bin/python -m py_compile app/api/v1/teaching.py app/services/teaching_service.py
+TEST_DATABASE_URL='mysql+aiomysql://root:123456@127.0.0.1:3306/teaching_refactor_test?charset=utf8mb4' ../.venv/bin/python -m pytest tests/test_teaching_service.py tests/test_teacher_student_learning.py tests/test_teacher_class_insights.py -q -p no:cacheprovider --cov=app.services.teaching_service --cov=app.api.v1.teaching --cov-report=term-missing
 ```
 
-Expected: only intended teaching service refactor and workflow entry changes.
+Expected: 全部通过、定向覆盖率 >= 80%。
 
-- [ ] **Step 4: Commit workflow and any final verification-only fixes**
+- [ ] **Step 2: 人工审查 diff**
 
 ```bash
-git -C .. add frontend/WORKFLOW.md
-git -C .. commit -m "docs: 记录 teaching service 重构"
+git status --short
+git diff --check HEAD~5..HEAD
+git diff --stat HEAD~5..HEAD
 ```
 
-If final verification required a code/test fix, include those fixed files in the same commit with message:
+确认未包含 `start_all.sh`、storage、`.env`、密钥、volume、用户文件或 Agent Service 改动。
+
+- [ ] **Step 3: 更新记录**
+
+`frontend/WORKFLOW.md` 记录：安全缺口、假评分、Service 分层、查询优化、实际测试命令与结果、Client API 两项漂移、Agent API 无漂移。
+
+`frontend/docs/requirements-coverage.md` 在教师学情项注明：详情与报告均校验 enrollment，评分来自真实 mastery 数据，后端已按 Router → TeachingService → DB 分层。
+
+- [ ] **Step 4: 提交记录**
 
 ```bash
-git -C .. add frontend/WORKFLOW.md backend/app/api/v1/teaching.py backend/app/services/teaching_service.py backend/tests/test_teaching_service.py
-git -C .. commit -m "fix: 完成 teaching service 重构验证"
+git add frontend/WORKFLOW.md frontend/docs/requirements-coverage.md
+git commit -m "docs: 记录 teaching 重构验证结果"
 ```
 
----
+## 最终验收清单
 
-## Final Acceptance Checklist
-
-- [ ] `backend/app/api/v1/teaching.py` no longer imports `case`, `func`, `select`, `Course`, `CourseEnrollment`, `Evaluation`, `LearningPath`, `UserProfile`, `QuizAnswer`, `QuizQuestion`, or `QuizSession`.
-- [ ] `backend/app/api/v1/teaching.py` route functions only construct `TeachingService(db)`, call one service method, and return the wrapper.
-- [ ] `backend/app/services/teaching_service.py` preserves current HTTPException details.
-- [ ] `backend/tests/test_teaching_service.py` covers `verify_teacher`, `list_students`, `get_student_info`, `get_student_learning`, and `get_class_insights`.
-- [ ] Existing API regression tests pass.
-- [ ] `WORKFLOW.md` records no interface drift.
+- [ ] Router 不包含 SQLAlchemy 查询或业务 ORM imports。
+- [ ] 未入班用户的详情和学习报告均为 404，不泄露用户存在性。
+- [ ] `overall_score` 不再硬编码，number/null 均有测试。
+- [ ] 学生列表查询数不随学生数增长，分页排序稳定。
+- [ ] Evaluation/Profile/LearningPath 重复历史数据按统一规则选择最新记录。
+- [ ] 班级路径统计每名学生只使用最新 LearningPath。
+- [ ] Quiz 汇总由 SQL 聚合完成。
+- [ ] MySQL 回归通过，定向覆盖率 >= 80%。
+- [ ] Client API 漂移已同步文档，Agent API 无漂移。
+- [ ] 每个提交不超过 5 个文件，未纳入无关工作区改动。

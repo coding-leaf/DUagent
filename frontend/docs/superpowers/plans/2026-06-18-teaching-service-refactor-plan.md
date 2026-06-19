@@ -72,13 +72,18 @@ if not database_url or not database_url.startswith("mysql+aiomysql://"):
     raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
 os.environ["DATABASE_URL"] = database_url
 
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course, CourseEnrollment
 from app.models.others import Evaluation, LearningPath, UserProfile
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 
-asyncio.run(init_db())
+async def _init_schema() -> None:
+    await init_db()
+    await engine.dispose()
+
+
+asyncio.run(_init_schema())
 
 from app.services.teaching_service import TeachingService, _overall_score
 
@@ -296,7 +301,7 @@ class TeachingService:
 
 - [ ] **Step 3: 补列表顺序、软删除和固定查询数测试**
 
-测试使用 SQLAlchemy `event.listen(engine.sync_engine, "before_cursor_execute", listener)`；在调用 `list_students()` 前清空计数，断言 1 人和 20 人的语句数相同且均为 3（teacher、count、page）。在 `finally` 中 `event.remove`，避免污染其他测试。另断言返回顺序与 enrollment `create_time/id` 一致、软删除 enrollment 和 User 均不出现。
+测试使用 SQLAlchemy `event.listen(engine.sync_engine, "before_cursor_execute", listener)`；在调用 `list_students()` 前清空计数，分别记录 1 人和 20 人页面的语句数，断言两者相同且为固定正数，不硬编码具体次数（ORM 的固定 eager-load 查询不应被误判为 N+1）。在 `finally` 中 `event.remove`，避免污染其他测试。另断言返回顺序与 enrollment `create_time/id` 一致、软删除 enrollment 和 User 均不出现。
 
 - [ ] **Step 4: 运行 GREEN 与覆盖率**
 
@@ -461,6 +466,20 @@ if not database_url or not database_url.startswith("mysql+aiomysql://"):
 os.environ["DATABASE_URL"] = database_url
 ```
 
+并把模块级 `asyncio.run(init_db())` 替换为以下初始化，确保建表连接在初始化事件循环关闭前释放：
+
+```python
+from app.db.session import async_session_factory, engine, init_db
+
+
+async def _init_schema() -> None:
+    await init_db()
+    await engine.dispose()
+
+
+asyncio.run(_init_schema())
+```
+
 为测试 Evaluation 写入 `mastery_table={"rows": [{"average_score": 70}, {"average_score": 80}]}`，断言 `overall_score == 75.0`；再写空 rows 断言 null。
 
 - [ ] **Step 6: 运行 GREEN 并提交**
@@ -554,6 +573,8 @@ if not database_url or not database_url.startswith("mysql+aiomysql://"):
     raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
 os.environ["DATABASE_URL"] = database_url
 ```
+
+并使用与 Task 3 相同的 `_init_schema()`（`init_db()` 后在同一事件循环 `await engine.dispose()`）替换模块级 `asyncio.run(init_db())`，避免 aiomysql 连接池跨事件循环。
 
 然后补充 Step 1 定义的重复 LearningPath 用例。
 

@@ -74,7 +74,12 @@
 - **接口漂移**：无
 
 ### 2026-06-19 (Task 6: Route Refactoring and Translation Integration)
-- **涉及文件**：`backend/app/api/v1/profile.py`, `backend/tests/test_profile_routes_refactored.py`
-- **核心改动**：完成画像路由瘦身与重构。将业务逻辑完全委托至底层的 `ProfileService`、`ProfileDialogueService`、`ProfileRefreshService` 核心模块，清理冗余的合并/清洗/判定辅助函数，统一从 presenter 和对话服务导入；路由层仅保留参数提取、鉴权及极简的调用和数据呈现翻译。基于 TDD 流程设计了对全部重构后路由的完整单元测试。
+- **涉及文件**：`backend/app/api/v1/profile.py`, `backend/app/infrastructure/locks.py`, `backend/app/schemas/profile.py`, `backend/tests/test_profile_routes_refactored.py`
+- **核心改动**：完成画像路由瘦身与重构，成功将路由代码优化至约 150 行。主要改动包括：
+  1. 将 `LockAcquisitionTimeout` 异常重构为继承自 `DomainException`，由 FastAPI 全局异常处理器统一拦截处理。
+  2. 移除了路由层的所有 `try-except LockAcquisitionTimeout` 代码，使异常处理更为简洁，实现自然的异常冒泡。
+  3. 将 4 个 Pydantic 请求模型模型转移到独立的 `backend/app/schemas/profile.py` 文件中，解耦请求参数校验。
+  4. 建立了完善的单元测试套件。
 - **测试结果**：测试代码与新版路由文件编写完毕并成功提交，`py_compile` 无语法错误。
 - **接口漂移**：更新了部分路由路径（如从旧版的 `/learning-goal` 迁移到 `/update-goal`，`/custom-instruction` 迁移到 `/update-instruction`）。
+

@@ -384,7 +384,7 @@ GET /api/v1/teaching/classes/:class_id/students/:student_id
 
 **权限：** 仅该班级的教师
 
-**说明：** 只读查看学生账号基础资料，不返回课程列表、不返回密码。
+**说明：** 只读查看学生账号基础资料，不返回课程列表、不返回密码。`student_id` 必须存在当前班级的有效 enrollment；用户不存在或未入班时统一返回 404“学生未入班”，避免泄露用户存在性。
 
 **响应 `data`：** 与 `GET /users/me` 结构一致
 
@@ -407,7 +407,7 @@ GET /api/v1/teaching/classes/:class_id/students/:student_id/learning
 | student.real_name | string | 真实姓名 |
 | student.student_id | string | 学号 |
 | evaluation_summary | object | 学习效果评估摘要 |
-| evaluation_summary.overall_score | number | 综合评分 0-100 |
+| evaluation_summary.overall_score | number \| null | 最新 Evaluation `mastery_table.rows[].average_score` 中有效 0-100 数值的平均值；无有效值时为 `null` |
 | evaluation_summary.generated_at | string | 评估生成时间 |
 | profile_summary | object | 用户画像摘要 |
 | profile_summary.knowledge_mastered | integer | 已掌握知识点数 |
@@ -440,6 +440,7 @@ GET /api/v1/teaching/classes/:class_id/students/:student_id/learning
 - `weak_points: []` 表示当前课程下暂无可聚合的错题知识点，不回退 mock 数据。
 - `recent_activity: []` 表示当前课程下暂无练习记录。
 - `quiz_stats.avg_score`、`quiz_stats.avg_time_spent` 可为 `0`，表示尚无可统计结果或统计值为 0。
+- 学生个人信息与学习情况接口均要求 `student_id` 存在当前班级的有效 enrollment；否则统一返回 404“学生未入班”。
 
 ### 4.4 查看班级洞察
 

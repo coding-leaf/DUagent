@@ -4800,7 +4800,8 @@
             "properties": {
               "overall_score": {
                 "type": "number",
-                "description": "综合评分 0-100"
+                "nullable": true,
+                "description": "最新评估知识点 average_score 的有效平均值 0-100；无有效掌握度数据时为 null"
               },
               "generated_at": {
                 "type": "string",

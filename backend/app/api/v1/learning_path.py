@@ -11,7 +11,7 @@ from app.api.deps import get_current_user, get_db
 from app.db.session import async_session_factory
 from app.models.course import CourseEnrollment
 from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.others import AsyncTask, Evaluation, LearningPath, Resource, UserProfile
+from app.models.others import AsyncTask, LearningPath, Resource
 from app.models.quiz import QuizQuestion
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
@@ -19,6 +19,12 @@ from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.resource_scope import ensure_course_resource_access, resolve_course_resource_scope, resource_scope_clause
 from app.schemas.ai_features import RefreshRequest
 from app.services.knowledge_progress import build_node_progress_rows
+from app.services.learning_path_service import (
+    _apply_progress_to_nodes,
+    _assemble_learning_path_payload,
+    _build_current_position_from_nodes,
+    _synthesize_kg_fallback_path,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
@@ -43,169 +49,6 @@ async def _release_learning_path_lock(db: AsyncSession, lock_name: str) -> None:
     if db.bind.dialect.name == "sqlite":
         return
     await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
-
-
-def _topo_sort_kg_nodes(
-    nodes: list[dict],
-    edges: list[dict],
-) -> list[dict]:
-    """Kahn topological sort of KG nodes based on edges.
-
-    Returns nodes ordered so that prerequisites come before dependents.
-    Falls back to original array order if edges is empty.
-    """
-    if not nodes:
-        return []
-    if not edges:
-        return list(nodes)
-
-    node_ids = {n["id"] for n in nodes}
-    in_degree: dict[str, int] = {n["id"]: 0 for n in nodes}
-    adj: dict[str, list[str]] = {n["id"]: [] for n in nodes}
-
-    for edge in edges:
-        from_id = edge.get("from", "")
-        to_id = edge.get("to", "")
-        if from_id in node_ids and to_id in node_ids:
-            adj[from_id].append(to_id)
-            in_degree[to_id] = in_degree.get(to_id, 0) + 1
-
-    # Start with nodes that have zero in-degree, in original array order
-    queue = [n["id"] for n in nodes if in_degree.get(n["id"], 0) == 0]
-    sorted_ids: list[str] = []
-    while queue:
-        node_id = queue.pop(0)
-        sorted_ids.append(node_id)
-        for neighbor in adj.get(node_id, []):
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    # Append any remaining nodes not reached (cycles or missing edge refs)
-    sorted_set = set(sorted_ids)
-    for n in nodes:
-        if n["id"] not in sorted_set:
-            sorted_ids.append(n["id"])
-
-    # Map back to node dicts preserving all fields
-    node_map = {n["id"]: dict(n) for n in nodes}
-    return [node_map[nid] for nid in sorted_ids if nid in node_map]
-
-
-def _map_assessment_to_status(assessment_state: str) -> str:
-    return {
-        "mastered": "completed",
-        "learning": "in_progress",
-        "weak": "recommended",
-        "pending_practice": "pending",
-        "unstarted": "pending",
-    }.get(assessment_state, "pending")
-
-
-def _apply_progress_to_nodes(
-    nodes: list[dict],
-    progress_by_id: dict[str, dict],
-) -> list[dict]:
-    """用实时进度覆盖节点的 status 和 mastery，其余字段保留。"""
-    result = []
-    for node in nodes:
-        node_id = node.get("id") or node.get("node_id", "")
-        progress = progress_by_id.get(node_id)
-        if progress is None:
-            result.append(dict(node))
-            continue
-        updated = dict(node)
-        updated["status"] = _map_assessment_to_status(progress.get("assessment_state", "unstarted"))
-        mastery_score = progress.get("mastery_score")
-        if mastery_score is not None:
-            updated["mastery"] = mastery_score
-        result.append(updated)
-    return result
-
-
-def _build_current_position_from_nodes(nodes: list[dict]) -> dict | None:
-    """取第一个非 pending 节点作为 current_position；全为 pending 时取第一个节点。"""
-    if not nodes:
-        return None
-    for node in nodes:
-        if node.get("status") != "pending":
-            return {"node_id": node.get("id", ""), "node_name": node.get("name", "")}
-    first = nodes[0]
-    return {"node_id": first.get("id", ""), "node_name": first.get("name", "")}
-
-
-async def _synthesize_kg_fallback_path(
-    db: AsyncSession,
-    course_id: str,
-) -> dict | None:
-    """从 active KG 合成学习路径骨架。
-
-    查找链: CourseOffering(id=course_id) → catalog_id →
-            CourseCatalog → kg_host_course_id → active KG.
-    返回 KG 节点（拓扑排序）+ 边，全部 status="recommended"。
-    如果任一环节查不到，返回 None。
-    """
-    # 1. CourseOffering → catalog_id
-    offering_result = await db.execute(
-        select(CourseOffering).where(
-            CourseOffering.id == course_id,
-            CourseOffering.is_deleted == False,
-        )
-    )
-    offering = offering_result.scalar_one_or_none()
-    if offering is None:
-        return None
-
-    # 2. CourseCatalog → kg_host_course_id
-    catalog_result = await db.execute(
-        select(CourseCatalog).where(
-            CourseCatalog.id == offering.catalog_id,
-            CourseCatalog.is_deleted == False,
-        )
-    )
-    catalog = catalog_result.scalar_one_or_none()
-    if catalog is None or not catalog.kg_host_course_id:
-        return None
-
-    # 3. Active KG
-    kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
-    if kg is None:
-        return None
-
-    kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
-    if not kg_nodes:
-        return None
-
-    kg_edges = kg.edges if isinstance(kg.edges, list) else []
-
-    # 4. Topo sort
-    sorted_nodes = _topo_sort_kg_nodes(kg_nodes, kg_edges)
-
-    # 5. Assemble nodes with status/mastery/order
-    assembled_nodes = []
-    for idx, node in enumerate(sorted_nodes):
-        assembled_nodes.append({
-            "id": node.get("id", ""),
-            "name": node.get("name", ""),
-            "chapter": node.get("chapter", ""),
-            "order": idx + 1,
-            "status": "recommended",
-            "mastery": 0,
-        })
-
-    first_node = assembled_nodes[0]
-
-    return {
-        "course_id": course_id,
-        "nodes": assembled_nodes,
-        "edges": kg_edges or [],
-        "current_position": {
-            "node_id": first_node["id"],
-            "node_name": first_node["name"],
-        },
-        "source": "kg_fallback",
-        "generated_at": kg.create_time.isoformat() if kg.create_time else None,
-    }
 
 
 @router.get("")
@@ -285,48 +128,6 @@ async def get_learning_path(
             "generated_at": None,
         },
     }
-
-
-async def _assemble_learning_path_payload(
-    user_id: str, course_id: str, db: AsyncSession,
-) -> dict:
-    """组装调用 Agent /learning-path/generate 所需的 payload。"""
-    payload: dict = {"user_id": user_id, "course_id": course_id}
-
-    # evaluation: 最近一次评估
-    ev_r = await db.execute(
-        select(Evaluation)
-        .where(Evaluation.user_id == user_id, Evaluation.course_id == course_id, Evaluation.is_deleted == False)
-        .order_by(Evaluation.generated_at.desc())
-    )
-    ev = ev_r.scalars().first()
-    payload["evaluation"] = {
-        "progress_table": ev.progress_table,
-        "mastery_table": ev.mastery_table,
-        "summary_text": ev.summary_text,
-    } if ev else {}
-
-    # profile: 最近画像
-    pf_r = await db.execute(
-        select(UserProfile)
-        .where(UserProfile.user_id == user_id, UserProfile.course_id == course_id, UserProfile.is_deleted == False)
-        .order_by(UserProfile.generated_at.desc())
-    )
-    pf = pf_r.scalars().first()
-    payload["profile"] = {
-        "modal_preference": pf.modal_preference,
-        "guidance_level": pf.guidance_level_current,
-        "knowledge_coordinates": pf.knowledge_coordinates,
-    } if pf else {}
-
-    # knowledge_graph: 课程静态知识图谱
-    kg = await get_active_knowledge_graph(db, course_id)
-    if kg:
-        payload["knowledge_graph"] = {"nodes": kg.nodes or [], "edges": kg.edges or []}
-    else:
-        payload["knowledge_graph"] = {"nodes": [], "edges": []}
-
-    return payload
 
 
 async def _run_learning_path_refresh_background(

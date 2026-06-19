@@ -13,7 +13,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 
 import pytest
-from app.api.v1.learning_path import _topo_sort_kg_nodes
+from app.services.learning_path_service import _topo_sort_kg_nodes
 
 
 class TestTopoSortKgNodes:

@@ -281,6 +281,14 @@ async def test():
             f"/api/v1/teaching/classes/{course_id}/students/{stu3_id}/learning",
             headers=tea1_headers)
         chk("non-enrolled student -> 404", r.status_code == 404)
+        detail_r = await client.get(
+            f"/api/v1/teaching/classes/{course_id}/students/{stu3_id}",
+            headers=tea1_headers)
+        chk("non-enrolled student detail -> 404", detail_r.status_code == 404)
+        chk(
+            "non-enrolled detail hides user existence",
+            detail_r.json().get("detail", {}).get("message") == "学生未入班",
+        )
 
         # ===== 5. recent_activity max 5 + created_at DESC ordering =====
         print("\n-- 5. recent_activity max 5 --")

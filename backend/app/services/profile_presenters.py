@@ -1,3 +1,4 @@
+import copy
 from typing import Dict, Any, List
 from app.models.user import User
 from app.models.others import UserProfile
@@ -24,10 +25,16 @@ _default_profile = {
     },
 }
 
+def _safe_int(val: Any, default: int = 60) -> int:
+    try:
+        return int(val) if val is not None else default
+    except (ValueError, TypeError):
+        return default
+
 def _resource_preference_summary(modal_preference: dict) -> str:
-    if not modal_preference or all(v == 50 for v in modal_preference.values()):
+    if not modal_preference or all(_safe_int(v, 50) == 50 for v in modal_preference.values()):
         return "未设置偏好"
-    valid_prefs = [k for k, v in modal_preference.items() if v >= 70]
+    valid_prefs = [k for k, v in modal_preference.items() if _safe_int(v, 50) >= 70]
     if not valid_prefs:
         return "偏好均衡"
     pref_mapping = {
@@ -51,16 +58,16 @@ def _profile_dimensions(profile: dict) -> list[dict]:
     
     habits = profile.get("drive_intent", {}).get("learning_habits", {})
     if habits:
-        dimensions[0]["value"] = max(30, min(100, int(habits.get("autonomy_score", 60))))
-        dimensions[1]["value"] = max(30, min(100, int(habits.get("achievement_score", 60))))
-        dimensions[2]["value"] = max(30, min(100, int(habits.get("reflective_score", 60))))
-        dimensions[3]["value"] = max(30, min(100, int(habits.get("persistence_score", 60))))
+        dimensions[0]["value"] = max(30, min(100, _safe_int(habits.get("autonomy_score"), 60)))
+        dimensions[1]["value"] = max(30, min(100, _safe_int(habits.get("achievement_score"), 60)))
+        dimensions[2]["value"] = max(30, min(100, _safe_int(habits.get("reflective_score"), 60)))
+        dimensions[3]["value"] = max(30, min(100, _safe_int(habits.get("persistence_score"), 60)))
         
     return dimensions
 
 def profile_data(pf: UserProfile | None, course_id: str, user: User | None = None) -> dict:
     if pf is None:
-        data = dict(_default_profile)
+        data = copy.deepcopy(_default_profile)
         data.update({
             "id": None,
             "user_id": user.id if user else None,
@@ -76,11 +83,11 @@ def profile_data(pf: UserProfile | None, course_id: str, user: User | None = Non
             "course_id": pf.course_id,
             "generated_at": pf.generated_at.isoformat() if pf.generated_at else None,
             "guidance_level_current": pf.guidance_level_current or "L2",
-            "modal_preference": pf.modal_preference or _default_profile["modal_preference"],
+            "modal_preference": pf.modal_preference or copy.deepcopy(_default_profile["modal_preference"]),
             "knowledge_coordinates": pf.knowledge_coordinates or [],
             "cognitive_blindspots": pf.cognitive_blindspots or [],
-            "drive_intent": pf.drive_intent or _default_profile["drive_intent"],
-            "discipline_badge": pf.discipline_badge or _default_profile["discipline_badge"],
+            "drive_intent": pf.drive_intent or copy.deepcopy(_default_profile["drive_intent"]),
+            "discipline_badge": pf.discipline_badge or copy.deepcopy(_default_profile["discipline_badge"]),
         }
         
     data["resource_preference_summary"] = _resource_preference_summary(data["modal_preference"])

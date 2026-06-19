@@ -110,3 +110,47 @@ def test_profile_dimensions_clamping():
     assert formatted["dimensions"][1]["value"] == 100
     assert formatted["dimensions"][2]["value"] == 75
     assert formatted["dimensions"][3]["value"] == 50
+
+def test_profile_presenters_deepcopy_safety():
+    # Make sure mutations on formatted default profiles don't pollute the global _default_profile
+    formatted1 = profile_data(None, "course456", None)
+    formatted1["modal_preference"]["video_animation"] = 999
+    formatted1["drive_intent"]["learning_habits"]["autonomy_score"] = 999
+    
+    formatted2 = profile_data(None, "course456", None)
+    assert formatted2["modal_preference"]["video_animation"] == 50
+    assert formatted2["drive_intent"]["learning_habits"] == {}
+    assert _default_profile["modal_preference"]["video_animation"] == 50
+
+def test_profile_presenters_invalid_types():
+    pf = UserProfile(
+        id="profile123",
+        user_id="user123",
+        course_id="course456",
+        modal_preference={
+            "video_animation": "invalid",
+            "chart_logic": None,
+            "text_analysis": 80,
+            "code_practice": [1, 2],
+            "formula_derivation": {},
+        },
+        drive_intent={
+            "learning_goal": "casual",
+            "learning_habits": {
+                "autonomy_score": "not_an_int",
+                "achievement_score": None,
+                "reflective_score": [100],
+                "persistence_score": 85
+            }
+        }
+    )
+    
+    formatted = profile_data(pf, "course456", None)
+    # text_analysis is 80 (>= 70), others are invalid and fallback to 50 (< 70)
+    assert formatted["resource_preference_summary"] == "文本阅读"
+    
+    # Check fallback values for dimensions when parsing fails
+    assert formatted["dimensions"][0]["value"] == 60  # Default value fallback
+    assert formatted["dimensions"][1]["value"] == 60  # Default value fallback
+    assert formatted["dimensions"][2]["value"] == 60  # Default value fallback
+    assert formatted["dimensions"][3]["value"] == 85  # Clean parsing

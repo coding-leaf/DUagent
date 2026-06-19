@@ -7,12 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.course import CourseEnrollment
-from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.others import LearningPath, Resource
-from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.resource_scope import ensure_course_resource_access, resolve_course_resource_scope, resource_scope_clause
 from app.schemas.ai_features import RefreshRequest
 from app.services.learning_path_refresh_service import (
     LearningPathRefreshService,
@@ -21,6 +16,7 @@ from app.services.learning_path_refresh_service import (
 from app.services.learning_path_service import (
     LearningPathService,
 )
+from app.services.node_resource_service import NodeResourceService
 
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
 
@@ -92,145 +88,9 @@ async def get_node_resources(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取指定学习路径节点的关联资源。
-
-    从 LearningPath.nodes 中查找节点名称，从 Resource/QuizQuestion 表中
-    按 knowledge_point 和 chapter 匹配资源并分组返回。
-    """
-    await ensure_course_resource_access(db, current_user, course_id)
-    resource_scope = await resolve_course_resource_scope(db, course_id)
-
-    node_name = node_id
-    chapter = ""
-
-    # 1. 查 KG（通过 CourseOffering → Catalog → kg_host_course_id）
-    kg = None
-    offering_result = await db.execute(
-        select(CourseOffering).where(
-            CourseOffering.id == course_id,
-            CourseOffering.is_deleted == False,
-        )
-    )
-    offering = offering_result.scalar_one_or_none()
-    if offering is not None:
-        catalog_result = await db.execute(
-            select(CourseCatalog).where(
-                CourseCatalog.id == offering.catalog_id,
-                CourseCatalog.is_deleted == False,
-            )
-        )
-        catalog = catalog_result.scalar_one_or_none()
-        if catalog is not None and catalog.kg_host_course_id:
-            kg = await get_active_knowledge_graph(db, catalog.kg_host_course_id)
-    if kg is None:
-        kg = await get_active_knowledge_graph(db, course_id)
-
-    # 2. 从 KG 获取 node_name 和 chapter
-    if kg and kg.nodes:
-        kg_nodes = kg.nodes if isinstance(kg.nodes, list) else []
-        for kg_node in kg_nodes:
-            if isinstance(kg_node, dict) and kg_node.get("id") == node_id:
-                node_name = kg_node.get("name", node_id)
-                chapter = kg_node.get("chapter", "")
-                break
-
-    # 3. 查找用户在该课程的最新 LearningPath（LP 中的 node_name 优先于 KG）
-    lp_result = await db.execute(
-        select(LearningPath)
-        .where(
-            LearningPath.user_id == current_user.id,
-            LearningPath.course_id == course_id,
-            LearningPath.is_deleted == False,
-        )
-        .order_by(LearningPath.generated_at.desc())
-    )
-    lp = lp_result.scalars().first()
-    if lp and lp.nodes:
-        nodes = lp.nodes if isinstance(lp.nodes, list) else []
-        for node in nodes:
-            if isinstance(node, dict) and node.get("id") == node_id:
-                node_name = node.get("name", node_name)
-                break
-
-    # 3. weak_point_tutorials: Resource 按 knowledge_point 匹配
-    weak_point_tutorials = []
-    res_result = await db.execute(
-        select(Resource)
-        .where(
-            resource_scope_clause(course_id, resource_scope.catalog_id),
-            Resource.knowledge_point == node_name,
-            Resource.is_deleted == False,
-        )
-    )
-    for r in res_result.scalars().all():
-        weak_point_tutorials.append({
-            "id": r.id,
-            "title": r.title,
-            "content": (r.content or "")[:160],
-        })
-
-    # 4. exercises: QuizQuestion 按 knowledge_point 匹配
-    exercises = []
-    qq_result = await db.execute(
-        select(QuizQuestion)
-        .where(
-            QuizQuestion.course_id == course_id,
-            QuizQuestion.knowledge_point == node_name,
-            QuizQuestion.is_deleted == False,
-        )
-    )
-    for q in qq_result.scalars().all():
-        exercises.append({
-            "id": q.id,
-            "type": q.type,
-            "content": q.content,
-        })
-
-    # 5. chapter_materials: Resource 按 chapter 匹配（依赖 KG 预置数据）
-    chapter_materials = []
-    if chapter:
-        ch_result = await db.execute(
-            select(Resource)
-            .where(
-                resource_scope_clause(course_id, resource_scope.catalog_id),
-                Resource.chapter == chapter,
-                Resource.is_deleted == False,
-            )
-        )
-        for r in ch_result.scalars().all():
-            chapter_materials.append({
-                "id": r.id,
-                "title": r.title,
-                "type": r.type,
-                "url": r.url or "",
-            })
-
-    # 6. full_exercise_set: 课程全部 QuizQuestion（限 50 条）
-    full_exercise_set = []
-    all_qq_result = await db.execute(
-        select(QuizQuestion)
-        .where(
-            QuizQuestion.course_id == course_id,
-            QuizQuestion.is_deleted == False,
-        )
-        .limit(50)
-    )
-    for q in all_qq_result.scalars().all():
-        full_exercise_set.append({
-            "id": q.id,
-            "type": q.type,
-            "content": q.content,
-        })
-
+    data = await NodeResourceService(db).get_node_resources(current_user, course_id, node_id)
     return {
         "code": 200,
         "message": "success",
-        "data": {
-            "node_id": node_id,
-            "node_name": node_name,
-            "weak_point_tutorials": weak_point_tutorials,
-            "exercises": exercises,
-            "chapter_materials": chapter_materials,
-            "full_exercise_set": full_exercise_set,
-        },
+        "data": data,
     }

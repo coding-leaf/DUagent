@@ -1,8 +1,10 @@
+import json
 import os
 import sys
 import uuid
 
 import pytest
+import pytest_asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -11,13 +13,19 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_tutoring_privacy.db",
 )
 
-from app.api.v1.tutoring import _assemble_tutoring_payload, _build_learner_context
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.conversation import Conversation, Message
 from app.models.course import Course
 from app.models.others import CourseKnowledgeGraph, UserProfile
 from app.models.user import User
+from app.services.tutoring_payload_builder import TutoringPayloadBuilder
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _dispose_engine_after_test():
+    yield
+    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -41,16 +49,25 @@ async def test_tutoring_payload_excludes_personal_identifiers():
         db.add(user)
         await db.flush()
 
+        course_id = f"course_privacy_{suffix}"
+        db.add(Course(
+            id=course_id,
+            name="隐私测试课程",
+            course_code=f"PRIV{suffix[:6].upper()}",
+            teacher_id=user.id,
+        ))
+        await db.flush()
+
         conversation = Conversation(
             user_id=user.id,
             scope="course",
-            course_id=f"course_privacy_{suffix}",
+            course_id=course_id,
             title="privacy",
         )
         db.add(conversation)
         db.add(UserProfile(
             user_id=user.id,
-            course_id=f"course_privacy_{suffix}",
+            course_id=course_id,
             guidance_level_current="L1",
             modal_preference=["text"],
             knowledge_coordinates=[
@@ -60,16 +77,15 @@ async def test_tutoring_payload_excludes_personal_identifiers():
         ))
         await db.commit()
 
-        payload = await _assemble_tutoring_payload(
-            user.id,
-            "course",
-            f"course_privacy_{suffix}",
-            conversation.id,
-            "讲一下队列",
-            db,
+        payload = await TutoringPayloadBuilder(db).build(
+            user_id=user.id,
+            scope="course",
+            course_id=course_id,
+            conversation_id=conversation.id,
+            message="讲一下队列",
         )
 
-    payload_text = str(payload)
+    payload_text = json.dumps(payload, ensure_ascii=False)
     assert "real_name" not in payload_text
     assert "email" not in payload_text
     assert "student_id" not in payload_text
@@ -78,10 +94,12 @@ async def test_tutoring_payload_excludes_personal_identifiers():
     assert email not in payload_text
     assert student_id not in payload_text
     assert "learner_context" not in payload
-    assert _build_learner_context(user) == {
-        "major": "计算机科学",
-        "grade": "大一 (Freshman)",
-        "guidance_level": "L3",
+    assert set(payload["user_profile"]) == {
+        "guidance_level",
+        "modal_preference",
+        "knowledge_mastered",
+        "knowledge_weak",
+        "custom_instruction",
     }
 
 
@@ -154,13 +172,12 @@ async def test_tutoring_payload_uses_active_kg_nodes_field():
         ])
         await db.commit()
 
-        payload = await _assemble_tutoring_payload(
-            user.id,
-            "course",
-            course_id,
-            conversation.id,
-            "讲一下 malloc",
-            db,
+        payload = await TutoringPayloadBuilder(db).build(
+            user_id=user.id,
+            scope="course",
+            course_id=course_id,
+            conversation_id=conversation.id,
+            message="讲一下 malloc",
         )
 
     assert payload["active_kg_nodes"] == [
@@ -184,6 +201,13 @@ async def test_tutoring_payload_recent_messages_excludes_current_turn_placeholde
         await db.flush()
 
         course_id = f"course_recent_{suffix}"
+        db.add(Course(
+            id=course_id,
+            name="最近消息测试课程",
+            course_code=f"REC{suffix[:6].upper()}",
+            teacher_id=user.id,
+        ))
+        await db.flush()
         conversation = Conversation(
             user_id=user.id,
             scope="course",
@@ -220,13 +244,12 @@ async def test_tutoring_payload_recent_messages_excludes_current_turn_placeholde
         db.add_all([current_user_msg, current_assistant_placeholder])
         await db.commit()
 
-        payload = await _assemble_tutoring_payload(
-            user.id,
-            "course",
-            course_id,
-            conversation.id,
-            "我刚才说的变量名是什么？",
-            db,
+        payload = await TutoringPayloadBuilder(db).build(
+            user_id=user.id,
+            scope="course",
+            course_id=course_id,
+            conversation_id=conversation.id,
+            message="我刚才说的变量名是什么？",
             exclude_message_ids={current_user_msg.id, current_assistant_placeholder.id},
         )
 
@@ -234,3 +257,33 @@ async def test_tutoring_payload_recent_messages_excludes_current_turn_placeholde
         "请记住：变量名是 alpha_count",
         "我记住了，变量名是 alpha_count。",
     ]
+
+
+@pytest.mark.asyncio
+async def test_global_payload_uses_default_profile_and_no_course_context():
+    await init_db()
+    async with async_session_factory() as db:
+        suffix = uuid.uuid4().hex[:8]
+        user = User(
+            username=f"global_payload_{suffix}",
+            email=f"global_payload_{suffix}@example.com",
+            password_hash="hash",
+        )
+        db.add(user)
+        await db.flush()
+        conversation = Conversation(user_id=user.id, scope="global", title="global")
+        db.add(conversation)
+        await db.commit()
+
+        payload = await TutoringPayloadBuilder(db).build(
+            user_id=user.id,
+            scope="global",
+            course_id=None,
+            conversation_id=conversation.id,
+            message="hello",
+        )
+
+    assert "course_id" not in payload
+    assert "catalog_id" not in payload
+    assert payload["active_kg_nodes"] == []
+    assert payload["user_profile"] == {"guidance_level": "L2"}

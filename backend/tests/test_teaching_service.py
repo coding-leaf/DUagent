@@ -1,4 +1,4 @@
-"""Focused MySQL tests for the teaching service."""
+"""Focused MySQL tests for the teaching authorization facade."""
 
 import asyncio
 import os
@@ -16,8 +16,6 @@ os.environ["DATABASE_URL"] = database_url
 
 from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course, CourseEnrollment
-from app.models.others import Evaluation, LearningPath, UserProfile
-from app.models.quiz import QuizSession
 from app.models.user import User
 
 
@@ -28,7 +26,8 @@ async def _init_schema() -> None:
 
 asyncio.run(_init_schema())
 
-from app.services.student_report_query import _overall_score
+from app.services.class_insights_query import ClassInsightsQuery
+from app.services.student_report_query import StudentReportQuery
 from app.services.teaching_service import TeachingService
 
 
@@ -60,38 +59,6 @@ async def _course(db) -> tuple[User, Course]:
     db.add(course)
     await db.flush()
     return teacher, course
-
-
-@pytest.mark.parametrize(
-    ("table", "expected"),
-    [
-        ({"rows": [{"average_score": 80}, {"average_score": "60"}]}, 70.0),
-        (
-            {
-                "rows": [
-                    {"average_score": True},
-                    {"average_score": 101},
-                    {"average_score": -1},
-                ]
-            },
-            None,
-        ),
-        (
-            {
-                "rows": [
-                    {"average_score": "nan"},
-                    {"average_score": "inf"},
-                    {},
-                ]
-            },
-            None,
-        ),
-        ({"rows": []}, None),
-        (None, None),
-    ],
-)
-def test_overall_score_uses_only_finite_scores_in_range(table, expected):
-    assert _overall_score(table) == expected
 
 
 @pytest.mark.asyncio(loop_scope="module")
@@ -154,39 +121,15 @@ async def test_list_students_is_stable_and_filters_soft_deleted_rows():
         enrollment_prefix = uuid.uuid4().hex[:10]
         db.add_all(
             [
-                CourseEnrollment(
-                    id=f"{enrollment_prefix}-b",
-                    course_id=course.id,
-                    student_id=second.id,
-                    create_time=joined_at,
-                ),
-                CourseEnrollment(
-                    id=f"{enrollment_prefix}-a",
-                    course_id=course.id,
-                    student_id=first.id,
-                    create_time=joined_at,
-                ),
-                CourseEnrollment(
-                    course_id=course.id,
-                    student_id=removed_enrollment_user.id,
-                    create_time=joined_at + timedelta(minutes=1),
-                    is_deleted=True,
-                ),
-                CourseEnrollment(
-                    course_id=course.id,
-                    student_id=removed_user.id,
-                    create_time=joined_at + timedelta(minutes=2),
-                ),
+                CourseEnrollment(id=f"{enrollment_prefix}-b", course_id=course.id, student_id=second.id, create_time=joined_at),
+                CourseEnrollment(id=f"{enrollment_prefix}-a", course_id=course.id, student_id=first.id, create_time=joined_at),
+                CourseEnrollment(course_id=course.id, student_id=removed_enrollment_user.id, create_time=joined_at + timedelta(minutes=1), is_deleted=True),
+                CourseEnrollment(course_id=course.id, student_id=removed_user.id, create_time=joined_at + timedelta(minutes=2)),
             ]
         )
         await db.commit()
 
-        data = await TeachingService(db).list_students(
-            course.id,
-            teacher,
-            page=1,
-            page_size=20,
-        )
+        data = await TeachingService(db).list_students(course.id, teacher, page=1, page_size=20)
 
         assert data["total"] == 2
         assert [item["id"] for item in data["students"]] == [first.id, second.id]
@@ -199,12 +142,8 @@ async def test_list_students_query_count_does_not_grow_with_page_size():
     async with async_session_factory() as db:
         teacher, course = await _course(db)
         students = [await _user(db, "student", f"student-{i}") for i in range(20)]
-        db.add_all(
-            CourseEnrollment(course_id=course.id, student_id=student.id)
-            for student in students
-        )
+        db.add_all(CourseEnrollment(course_id=course.id, student_id=student.id) for student in students)
         await db.commit()
-
         statements: list[str] = []
 
         def count_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
@@ -213,21 +152,10 @@ async def test_list_students_query_count_does_not_grow_with_page_size():
         event.listen(engine.sync_engine, "before_cursor_execute", count_statement)
         try:
             statements.clear()
-            await TeachingService(db).list_students(
-                course.id,
-                teacher,
-                page=1,
-                page_size=1,
-            )
+            await TeachingService(db).list_students(course.id, teacher, page=1, page_size=1)
             one_student_count = len(statements)
-
             statements.clear()
-            await TeachingService(db).list_students(
-                course.id,
-                teacher,
-                page=1,
-                page_size=20,
-            )
+            await TeachingService(db).list_students(course.id, teacher, page=1, page_size=20)
             twenty_student_count = len(statements)
         finally:
             event.remove(engine.sync_engine, "before_cursor_execute", count_statement)
@@ -237,154 +165,37 @@ async def test_list_students_query_count_does_not_grow_with_page_size():
 
 
 @pytest.mark.asyncio(loop_scope="module")
-async def test_student_learning_uses_latest_records_and_real_score():
+async def test_student_learning_validates_enrollment_before_delegating(monkeypatch):
     async with async_session_factory() as db:
         teacher, course = await _course(db)
-        student = await _user(db, "student", "report-student")
+        student = await _user(db, "student", "delegate-student")
         db.add(CourseEnrollment(course_id=course.id, student_id=student.id))
-        old_time = datetime(2026, 1, 1, 8, 0, 0)
-        new_time = datetime(2026, 1, 2, 8, 0, 0)
-        db.add_all(
-            [
-                Evaluation(
-                    user_id=student.id,
-                    course_id=course.id,
-                    mastery_table={"rows": [{"average_score": 10}]},
-                    summary_text="old evaluation",
-                    generated_at=old_time,
-                ),
-                Evaluation(
-                    user_id=student.id,
-                    course_id=course.id,
-                    mastery_table={
-                        "rows": [
-                            {"average_score": 70},
-                            {"average_score": "80"},
-                            {"average_score": 101},
-                        ]
-                    },
-                    summary_text="new evaluation",
-                    generated_at=new_time,
-                ),
-                UserProfile(
-                    user_id=student.id,
-                    course_id=course.id,
-                    knowledge_coordinates=[{"status": "weak"}],
-                    generated_at=old_time,
-                ),
-                UserProfile(
-                    user_id=student.id,
-                    course_id=course.id,
-                    modal_preference={"text_analysis": 80},
-                    knowledge_coordinates=[
-                        {"status": "mastered"},
-                        {"status": "weak"},
-                        {"status": "learning"},
-                        {"status": "pending"},
-                    ],
-                    generated_at=new_time,
-                ),
-                LearningPath(
-                    user_id=student.id,
-                    course_id=course.id,
-                    current_node_name="old node",
-                    nodes=[{"status": "completed"}, {"status": "completed"}],
-                    generated_at=old_time,
-                ),
-                LearningPath(
-                    user_id=student.id,
-                    course_id=course.id,
-                    current_node_name="new node",
-                    nodes=[{"status": "completed"}, {"status": "pending"}],
-                    generated_at=new_time,
-                ),
-            ]
-        )
         await db.commit()
 
-        data = await TeachingService(db).get_student_learning(
-            course.id,
-            student.id,
-            teacher,
-        )
+        async def fake_execute(query, class_id, enrolled_student):
+            assert query.db is db
+            assert class_id == course.id
+            assert enrolled_student.id == student.id
+            return {"sentinel": "student-report"}
 
-        assert data["student"]["id"] == student.id
-        assert data["evaluation_summary"] == {
-            "overall_score": 75.0,
-            "generated_at": new_time.isoformat(),
-            "summary_text": "new evaluation",
-        }
-        assert data["profile_summary"]["knowledge_mastered"] == 1
-        assert data["profile_summary"]["knowledge_weak"] == 1
-        assert data["profile_summary"]["modal_preference"] == ["text_analysis"]
-        assert data["path_progress"] == {
-            "current_node": "new node",
-            "completed_nodes": 1,
-            "total_nodes": 2,
-        }
+        monkeypatch.setattr(StudentReportQuery, "execute", fake_execute)
+        data = await TeachingService(db).get_student_learning(course.id, student.id, teacher)
+
+        assert data == {"sentinel": "student-report"}
 
 
 @pytest.mark.asyncio(loop_scope="module")
-async def test_class_insights_uses_active_enrollments_and_latest_paths():
+async def test_class_insights_validates_teacher_before_delegating(monkeypatch):
     async with async_session_factory() as db:
         teacher, course = await _course(db)
-        active_student = await _user(db, "student", "active-insight")
-        removed_student = await _user(db, "student", "removed-insight")
-        old_time = datetime(2026, 2, 1, 8, 0, 0)
-        new_time = datetime(2026, 2, 2, 8, 0, 0)
-        db.add_all(
-            [
-                CourseEnrollment(
-                    course_id=course.id,
-                    student_id=active_student.id,
-                ),
-                CourseEnrollment(
-                    course_id=course.id,
-                    student_id=removed_student.id,
-                    is_deleted=True,
-                ),
-                LearningPath(
-                    user_id=active_student.id,
-                    course_id=course.id,
-                    nodes=[
-                        {"status": "completed"},
-                        {"status": "completed"},
-                        {"status": "completed"},
-                    ],
-                    generated_at=old_time,
-                ),
-                LearningPath(
-                    user_id=active_student.id,
-                    course_id=course.id,
-                    nodes=[{"status": "pending"}],
-                    generated_at=new_time,
-                ),
-                LearningPath(
-                    user_id=removed_student.id,
-                    course_id=course.id,
-                    nodes=[{"status": "completed"}],
-                    generated_at=new_time,
-                ),
-                QuizSession(
-                    user_id=removed_student.id,
-                    course_id=course.id,
-                    score=100,
-                    correct_count=1,
-                    total_count=1,
-                    time_spent=10,
-                ),
-            ]
-        )
         await db.commit()
 
+        async def fake_execute(query, class_id):
+            assert query.db is db
+            assert class_id == course.id
+            return {"sentinel": "class-insights"}
+
+        monkeypatch.setattr(ClassInsightsQuery, "execute", fake_execute)
         data = await TeachingService(db).get_class_insights(course.id, teacher)
 
-        assert data["avg_quiz_score"] is None
-        assert data["total_quiz_attempts"] == 0
-        assert data["path_node_progress"] == {
-            "completed": 0,
-            "in_progress": 0,
-            "recommended": 0,
-            "pending": 1,
-            "total_nodes": 1,
-        }
+        assert data == {"sentinel": "class-insights"}

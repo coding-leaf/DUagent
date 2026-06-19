@@ -7,9 +7,9 @@
 该模块混杂了以下多重职责：
 1. **接口生命周期控制与权限校验**（学生选课校验、响应体封装）。
 2. **并发锁逻辑**（MySQL Named Lock 的获取与释放）。
-3. **数据存取 (CRUD)**（画像初始化、学习目标和自定义指令读写）。
+3. **数据存取 (CRUD) 与初始化**（画像 `/initialize` 路由的写库事务、学习目标和自定义指令读写）。
 4. **对话画像解析与合并规则引擎**（调用 Agent 对话分析、数据类型规范化、多版本规则合并）。
-5. **异步刷新计算**（创建后台刷新任务、聚合各种学习记录进行画像刷新）。
+5. **异步刷新计算**（创建后台刷新任务、调用 `app/services/profile_rules.py` 的 `compute_profile_fields` 并刷新画像）。
 6. **展现层数据转化 (Presenter/DTO)**（为前端卡片及雷达图组装字段）。
 
 为了保证系统架构可读性、高内聚性以及在测试时可完全隔离数据库对核心“画像规则合并”进行纯逻辑单测，本 Spec 制定了将该模块进行彻底重构的分层设计方案。
@@ -18,11 +18,12 @@
 
 ## 目标
 
-1. 将 `profile.py` 缩减为纯路由控制器（100行以内），仅负责路由声明、权限校验、Service 调用与后台任务派发。
-2. 剥离 MySQL Named Lock 并下沉至独立基础设施层 `infrastructure/locks.py`，保持非 Web 依赖。
+1. 将 `backend/app/api/v1/profile.py` 缩减为纯路由控制器（100行以内），仅负责路由声明、权限校验、Service 调用与后台任务派发。
+2. 剥离 MySQL Named Lock 并下沉至新建的独立基础设施层 `backend/app/infrastructure/locks.py`，保持非 Web 依赖。
 3. 创建画像基本服务 `ProfileService`、对话合并服务 `ProfileDialogueService`、后台刷新服务 `ProfileRefreshService` 与呈现器 `profile_presenters.py`。
-4. 保持所有外部接口契约、Pydantic Schema、API 路由路径、HTTP 状态码、任务类型（`profile_refresh`）和错误语义完全不变。
-5. 编写或调整测试覆盖纯逻辑归一化与合并规则函数，确保重构不发生功能退化。
+4. 保持 `backend/app/services/profile_rules.py`（画像数据刷新计算规则）职责纯粹，重构范围不侵入该模块逻辑，由服务层直接调用。
+5. 保持所有外部接口契约、Pydantic Schema、API 路由路径、HTTP 状态码、任务类型（`profile_refresh`）和错误语义完全不变。
+6. 编写或调整测试覆盖纯逻辑归一化与合并规则函数，确保重构不发生功能退化。
 
 ## 非目标
 
@@ -31,6 +32,7 @@
 * 不改变 Agent Service 端点与契约。
 * 不在基础设施层引入任何 FastAPI 依赖（不抛 HTTPException）。
 * 不做多数据库类型（如 SQLite）的抽象妥协（锁定 MySQL 生产环境）。
+* 不修改 `backend/app/services/profile_rules.py` 内部计算逻辑。
 
 ---
 
@@ -47,18 +49,20 @@
 
 ### 2. `backend/app/services/profile_presenters.py` (新建)
 
-* **职责**：无状态数据转换层（DTO），负责组装面向前端的响应结构。
-* **迁移函数**：
+* **职责**：无状态数据转换层（DTO），负责组装面向前端的响应结构，并集中定义画像基础常量。
+* **主要内容**：
+  * 定义全局画像缺省常量 `_default_profile = { ... }`（供 presenters, service 和 dialogue_service 导入使用）。
   * `_resource_preference_summary(modal_preference: dict) -> str`
   * `_profile_dimensions(profile: dict) -> list[dict]`
   * `profile_data(pf: UserProfile | None, course_id: str, user: User | None = None) -> dict`
 
 ### 3. `backend/app/services/profile_service.py` (新建)
 
-* **职责**：画像基本生命周期 CRUD 与事务。
+* **职责**：画像基本生命周期 CRUD 与事务封装。
 * **方法定义**：
   * `ProfileService(db: AsyncSession)` 类。
   * `get_or_create_profile(user_id: str, course_id: str) -> UserProfile`
+  * `initialize_profile(user_id: str, course_id: str, answers: dict) -> UserProfile`：封装 `/initialize` 路由的初始化业务，使用 `profile_lock` 上锁，执行首选项、目标与默认指标计算并写入。
   * `update_learning_goal(user_id: str, course_id: str, goal: str)`
   * `update_custom_instruction(user_id: str, course_id: str, instruction: str)`
 
@@ -72,18 +76,19 @@
 
 ### 5. `backend/app/services/profile_refresh_service.py` (新建)
 
-* **职责**：画像后台计算与刷新。
+* **职责**：画像后台计算与刷新触发。
 * **内容定义**：
   * `ProfileRefreshService(db: AsyncSession)` 类，暴露 `create_refresh_task(user_id: str, course_id: str) -> AsyncTask`，在当前请求事务中创建并持久化任务记录。
-  * 模块级后台 Runner `run_profile_refresh_background(task_id: int, user_id: str, course_id: str)`：供 `asyncio.create_task` 在后台线程中调度。使用独立 session 工厂，并在内部通过 `profile_lock` 对更新操作加锁。
+  * 模块级后台 Runner `run_profile_refresh_background(task_id: int, user_id: str, course_id: str)`：供 `asyncio.create_task` 在后台线程中调度。使用独立 session 工厂，并在内部通过 `profile_lock` 对更新操作加锁。内部直接调用外部的 `backend/app/services/profile_rules.py` 进行数据统计更新。
 
 ### 6. `backend/app/api/v1/profile.py` (精简)
 
 * **职责**：仅包含 API 依赖项、权限拦截器声明、HTTP 错误包装翻译。
 * **主要变动**：
   * 路由函数内只调用对应的 Service 方法。
-  * 捕获 `LockAcquisitionTimeout` 异常并翻译为 `HTTPException(status_code=503, ...)`。
+  * 捕获 `LockAcquisitionTimeout` 异常并统一翻译为 `HTTPException(status_code=503, ...)`。
   * `/dialogue-update` 路由在**锁区间外**请求 Agent（硬约束），获得提取结果后再转入 `ProfileDialogueService` 锁区间写库，避免网络超时导致长时间霸占 DB 锁。
+  * `/initialize` 路由调用 `ProfileService(db).initialize_profile(...)`，不包含业务写入逻辑。
 
 ---
 
@@ -92,9 +97,9 @@
 | 架构/模式 | 选择状态 | 理由 |
 | :--- | :--- | :--- |
 | **分层架构** | **选用** | `Router -> Service -> DB` 三层架构已在 `catalogs` 和 `learning_path` 重构中验证，高度契合本项目单体后端现状。 |
-| **Service Layer** | **选用** | 新增三个服务模块（`profile_service`, `profile_dialogue_service`, `profile_refresh_service`）将复杂的 CRUD、规则合并和异步刷新彻底解耦。 |
+| **Service Layer** | **选用** | 新增三个服务模块（`profile_service`, `profile_dialogue_service`, `profile_refresh_service`）将复杂的 CRUD、初始化、规则合并和异步刷新彻底解耦。 |
 | **Presenter / DTO** | **选用** | 新增 `profile_presenters.py` 将数据库 ORM 字典在输出层统一清洗转换，隔离底层数据库字段变更对前端的直接冲击。 |
-| **基础设施解耦** | **选用** | 锁管理器挪入 `app.infrastructure`，采用 `LockAcquisitionTimeout` 领域异常，切断底层组件对 FastAPI 的反向依赖。 |
+| **基础设施解耦** | **选用** | 锁管理器挪入新建的 `backend/app/infrastructure` 目录，采用 `LockAcquisitionTimeout` 领域异常，切断底层组件对 FastAPI 的反向依赖。 |
 | **数据库降级适配** | **弃用** | 坚持“数据库只用 MySQL”的绝对环境边界，基础设施层不做 SQLite/Dialect 动态降级，测试环境统一用 mock 代理或在 MySQL 库中覆盖锁断言。 |
 
 ---

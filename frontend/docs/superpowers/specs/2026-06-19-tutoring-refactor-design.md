@@ -25,7 +25,7 @@
 4. 将 Agent SSE → Client SSE 的协议适配、内容累积和流后落库下沉到 `TutoringStreamAdapter`。
 5. 将会话列表与历史详情 DTO 下沉到 `tutoring_presenters.py`。
 6. 消除会话列表的 `2N+2` 查询，在保持排序和字段语义不变的前提下改为批量或聚合查询。
-7. 保持 Client API、Agent API、数据库结构、HTTP 状态码及现有 SSE 可见行为不变。
+7. 保持 Client API、Agent API、数据库结构和 HTTP 状态码不变；仅实施本 Spec 明确列出的 SSE 可靠性修复。
 8. 通过特征测试和分层单测保证重构不引入功能退化，相关新增或调整代码覆盖率不低于 80%。
 
 ## 非目标
@@ -53,6 +53,22 @@
 - Agent 不可用时，若尚未转发 done，则以现有 SSE `done` 错误事件结束流。
 - 历史消息在数据库时间精度不足时仍稳定保持 user 在 assistant 之前。
 - 删除采用 Conversation 软删除，不物理删除 Message。
+
+### 已批准的内部可靠性修复
+
+以下两项修复不新增 API 字段或状态码，但会改善异常情况下的持久化结果，因此不伪装成纯代码搬迁：
+
+- SSE data 行跨多个上游字节块时，先缓冲为完整行再解析，避免合法事件因网络分片丢失累积。
+- 客户端断开或生成器取消时，在 `finally` 路径持久化已经完整接收的 assistant 内容，避免用户刷新历史后丢失已展示片段。
+- 会话列表的 last message 与历史详情统一采用稳定顺序：`create_time`、`update_time`、role rank（user 在 assistant 前）；取最后一条时使用该顺序的逆序，消除同秒写入时数据库返回顺序不确定。
+
+### 既有契约文档漂移
+
+当前前端与 Backend 代码均使用 `action=chat|edit|regenerate`，但历史 Client OpenAPI 的 `ChatRequest` 尚未声明 `action`。本次重构以当前运行代码为行为真相，必须保留该字段和三种 action，不借重构删除或改名。由于本次不改变调用方式，该问题登记为既有文档漂移，不在本次修改历史 OpenAPI。
+
+### 范围外安全债务
+
+course scope 当前只要求提供 `course_id`，没有验证当前用户是否已加入或有权访问该课程。补充课程权限校验会新增 403 行为，属于可见契约变化，不能混入本次“契约不变”的分层重构。应另行产出安全修复 Spec 并确认契约后实施。
 
 ## 目标文件结构
 
@@ -162,20 +178,23 @@ Presenter 不访问数据库、不调用 Agent、不提交事务。
 3. Service 校验会话归属并创建或更新 user/assistant 消息。
 4. 当前短事务 flush、commit，确保 ID 对后续独立 session 可见。
 5. Payload Builder 在已提交状态上查询画像、KG、摘要和历史消息。
-6. Router 创建 Stream Adapter 的异步事件迭代器并交给 `EventSourceResponse`。
-7. Stream Adapter 调用 Agent、转换并转发事件。
-8. 流结束后以独立 session 持久化已累积的 assistant 内容并更新时间。
+6. Payload 构建完成后显式结束 Builder 产生的只读事务，确保请求级 session 在开始 Agent I/O 前释放连接。
+7. Router 创建 Stream Adapter 的异步事件迭代器并交给 `EventSourceResponse`。
+8. Stream Adapter 调用 Agent、转换并转发事件，不持有请求级数据库 session 或连接。
+9. 流结束后以独立 session 持久化已累积的 assistant 内容并更新时间。
 
-硬约束：Agent 网络 I/O 期间不得持有未提交的写事务。
+硬约束：Agent 网络 I/O 期间不得持有请求级数据库事务或连接，而不只是“不得持有未提交写事务”。实现必须通过显式 transaction 结束和注入 session 的状态测试证明该约束。
 
 ### 会话查询
 
-会话列表必须避免逐会话执行 count 和 last-message 查询。实现可以选择：
+会话列表禁止把本页会话的全部历史消息加载到 Python 内存。采用有界数据库查询：
 
-- 一次 Conversation 分页查询，加一次针对本页 conversation IDs 的 Message 批量查询；或
-- MySQL 兼容的聚合子查询/窗口查询。
+1. Conversation 总数查询；
+2. Conversation 分页查询；
+3. 按本页 conversation IDs 分组的 Message count 聚合查询；
+4. 使用 MySQL 8 窗口函数 `row_number() over (partition by conversation_id order by create_time desc, update_time desc, role_rank desc)` 获取每个会话最多一条 last message，其中 user 的 role rank 为 0、assistant 为 1。
 
-优先选择可读性更高、测试更稳定的“分页会话 + 本页消息批量查询”方案。该方案查询次数固定，不随 N 增长，且更容易保持现有 message ordering 规则。
+查询次数固定为 4 次，返回数据规模为 O(页大小)，不随单个会话历史消息总量增长。历史详情与列表使用同一排序定义；特征测试必须锁定同秒 user/assistant 时列表 last message 为 assistant。
 
 ## SSE 生命周期与异常处理
 
@@ -204,6 +223,8 @@ Presenter 不访问数据库、不调用 Agent、不提交事务。
 - 取消上游 Agent 流，不继续无界读取；
 - 在 `finally` 路径处理已经累积内容的落库；
 - 不把客户端断开翻译成新的 Client API 事件。
+
+这是本 Spec 明确批准的内部可靠性修复：当前实现的取消异常可能跳过生成器尾部落库；修复后，已经完整接收并转发的内容会进入历史记录。
 
 ### 持久化失败
 
@@ -297,7 +318,8 @@ Service 在短事务内使用 MySQL 行锁（例如对所属 Conversation 执行
 - 软删除；
 - 同一会话并发 edit/regenerate 的行锁串行化；
 - 会话列表筛选、分页、message_count 和 last_message；
-- 查询次数不随分页结果 N 线性增长。
+- 会话列表固定 4 次查询，且不会加载本页会话的全部历史 Message；
+- Payload Builder 完成后请求级 session 不再处于 transaction 中。
 
 纯转换逻辑使用无数据库单测；涉及 MySQL 一致性或 SQL 行为的测试使用 MySQL 测试库，不用 SQLite 结果代替生产行为。相关新增或调整代码覆盖率目标不低于 80%。
 
@@ -315,7 +337,7 @@ Service 在短事务内使用 MySQL 行锁（例如对所属 Conversation 执行
 
 ## 契约判断
 
-- Client API 契约：**不改变**。
+- Client API 契约：**不改变**；保留代码中既有但历史 OpenAPI 漏记的 `action` 字段。
 - Agent API 契约：**不改变**。
 - 数据库 Schema：**不改变**。
 - 前端 UI 行为：**不改变**。
@@ -325,8 +347,8 @@ Service 在短事务内使用 MySQL 行锁（例如对所属 Conversation 执行
 ## 验收标准
 
 1. Router 不再包含 Conversation/Message SQL、payload 组装或 SSE JSON 解析。
-2. Agent 调用期间无未提交数据库写事务。
-3. 会话列表不存在随 N 增长的逐会话查询。
+2. Agent 调用期间不持有请求级数据库事务或连接。
+3. 会话列表固定 4 次有界查询，不加载本页会话的全部历史消息。
 4. Client API 与 Agent API 契约测试通过。
 5. tutoring 隐私、SSE、排序、CRUD 与 action 回归测试通过。
 6. 相关新增或调整代码覆盖率不低于 80%。

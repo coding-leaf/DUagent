@@ -122,7 +122,7 @@ Agent 返回的 `nodes`、`edges`、`current_position` 由 refresh service 适�
 
 - 暴露 `NodeResourceService(db)`。
 - 提供 `get_node_resources(user, course_id, node_id)`。
-- 复用 `ensure_course_resource_access`、`resolve_course_resource_scope`、`resource_scope_clause`。
+- 复用现有共享 scope 工具 `app.services.resource_scope` 中的 `ensure_course_resource_access`、`resolve_course_resource_scope`、`resource_scope_clause`。
 - 解析 KG node name/chapter，并用 latest LearningPath node name 覆盖 KG name。
 - 返回现有字段：
   - `node_id`
@@ -138,9 +138,15 @@ Agent 返回的 `nodes`、`edges`、`current_position` 由 refresh service 适�
 
 - 保留 `router = APIRouter(...)`。
 - `GET ""` 调用 `LearningPathService(db).get_learning_path(...)`。
-- `POST "/refresh"` 保留学生选课权限校验，调用 refresh service 组装 payload 和创建 task，然后 `asyncio.create_task(...)`。
+- `POST "/refresh"` 保留学生选课权限校验，调用 refresh service 组装 payload 和创建 task，然后在 route 中执行 commit 并标注注释 `# commit point: task persisted before background dispatch`，再调用 `asyncio.create_task(...)`。
 - `GET "/nodes/{node_id}/resources"` 调用 `NodeResourceService(db).get_node_resources(...)`。
 - 不再包含 KG 排序、payload 组装、后台写库和资源聚合查询细节。
+
+## 共享工具边界
+
+`ensure_course_resource_access`、`resolve_course_resource_scope`、`resource_scope_clause` 当前已经位于 `app/services/resource_scope.py`，并被 evaluation、quiz、resources、learning_activities 和 catalog resource generation 复用。本次不迁移到 `app/services/shared/` 或 `app/utils/`，避免扩大重构面。`NodeResourceService` 直接复用该模块即可。
+
+如果后续 service 层继续增长，再单独评估是否建立 `app/services/shared/` 命名空间；该调整不属于本轮 learning path 路由拆分。
 
 ## 接口兼容性
 
@@ -194,6 +200,12 @@ Agent 返回的 `nodes`、`edges`、`current_position` 由 refresh service 适�
 
 ### 回归命令
 
+以下 MySQL 回归命令使用新的测试库名。实施前先确认库存在；若不存在，先创建空库，避免 pytest 初始化前连接失败：
+
+```bash
+mysql -uroot -p123456 -h127.0.0.1 -e "CREATE DATABASE IF NOT EXISTS learning_path_refactor_test DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS learning_path_refactor_refresh_test DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
 后端局部回归：
 
 ```bash
@@ -227,7 +239,7 @@ npm run build
 1. 新建 `learning_path_service.py`，先迁移纯函数和 KG fallback，更新纯函数测试 import。
 2. 将 `GET /learning-path` 委托给 `LearningPathService`，跑 fallback/realtime/node resources 相关回归。
 3. 新建 `learning_path_refresh_service.py`，迁移 payload 组装和后台 runner，更新 mock patch 路径。
-4. 将 `POST /learning-path/refresh` 委托给 refresh service，跑 refresh/lock 回归。
+4. 将 `POST /learning-path/refresh` 委托给 refresh service；route 在 `await db.commit()` 前保留注释 `# commit point: task persisted before background dispatch`，再调度后台 runner；跑 refresh/lock 回归。
 5. 新建 `node_resource_service.py`，迁移节点资源聚合查询，补 service 测试。
 6. 将 `GET /learning-path/nodes/{node_id}/resources` 委托给 node resource service，跑 node resources 回归。
 7. 清理 `learning_path.py` 残留 helper 和未使用 import，确保路由文件只保留 HTTP glue。

@@ -1,8 +1,10 @@
 // src/context/ChatContext.jsx
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import useSWR from 'swr';
 import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
 import { normalizeTextList, normalizeMessages } from '../utils/chatContent';
+import { fetcherWrapper } from '../utils/fetcher';
 
 const ChatContext = createContext(null);
 
@@ -21,26 +23,42 @@ const createEmptyAiMessage = (id = 'ai-placeholder') => ({
 
 export const ChatProvider = ({ children }) => {
   const { activeCourseId } = useCourse();
-  const [sessions, setSessions] = useState([]);
+  const { data: sessionsRes, mutate: mutateSessions } = useSWR(
+    activeCourseId ? ['chatSessions', activeCourseId] : null,
+    () => fetcherWrapper(chatService.getSessions(activeCourseId))
+  );
+
+  const sessions = useMemo(() => {
+    return sessionsRes?.data?.conversations || sessionsRes?.data || [];
+  }, [sessionsRes]);
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
   
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
+  const prevCourseIdRef = useRef(activeCourseId);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (activeCourseId) {
-      chatService.getSessions(activeCourseId).then(res => {
-        if (res.code === 200 && res.data) {
-          const list = res.data.conversations || res.data;
-          setSessions(list);
-          if (list.length > 0) setActiveSession(list[0].id);
-          else { setActiveSession(null); setMessages([]); }
-        }
-      }).catch(console.error);
+    if (prevCourseIdRef.current !== activeCourseId) {
+      prevCourseIdRef.current = activeCourseId;
+      setActiveSession(null);
+      setMessages([]);
+      return;
     }
-  }, [activeCourseId]);
+
+    if (activeCourseId && sessions.length > 0) {
+      const activeSessionExists = sessions.some(s => s.id === activeSession);
+      if (!activeSession || !activeSessionExists) {
+        setActiveSession(sessions[0].id);
+      }
+    } else if (activeCourseId && sessionsRes) {
+      setActiveSession(null);
+      setMessages([]);
+    }
+  }, [sessions, activeCourseId, activeSession, sessionsRes]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (activeSession) {
@@ -79,16 +97,28 @@ export const ChatProvider = ({ children }) => {
 
   const deleteSession = async (sessionId) => {
     try {
+      const updatedSessions = sessions.filter(s => s.id !== sessionId);
+      const newCacheData = sessionsRes ? {
+        ...sessionsRes,
+        data: sessionsRes.data && Array.isArray(sessionsRes.data)
+          ? updatedSessions
+          : { ...sessionsRes.data, conversations: updatedSessions }
+      } : undefined;
+
+      mutateSessions(newCacheData, { revalidate: false });
+
       await chatService.deleteSession(sessionId);
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      mutateSessions();
+
       if (activeSession === sessionId) {
         resetConversation();
-        if (sessions.length > 1) {
-          setActiveSession(sessions.find(s => s.id !== sessionId)?.id || null);
+        if (updatedSessions.length > 0) {
+          setActiveSession(updatedSessions[0].id);
         }
       }
     } catch (err) {
       console.error('Failed to delete session', err);
+      mutateSessions();
     }
   };
 
@@ -139,9 +169,7 @@ export const ChatProvider = ({ children }) => {
         
         if (!activeSession && doneData.conversation_id) {
           setActiveSession(doneData.conversation_id);
-          chatService.getSessions(activeCourseId).then(res => {
-            if (res.code === 200 && res.data) setSessions(res.data.conversations || res.data);
-          });
+          mutateSessions();
         }
       },
       onError: (err) => {

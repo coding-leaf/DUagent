@@ -1,58 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useCourse } from '../../context/CourseContext';
 import { useChat } from '../../context/ChatContext';
-import { learningService } from '../../api/services/learning';
+import { useRecommendedResources } from '../../hooks/useRecommendedResources';
 import Icon from '../Icon';
 
 export default function SidebarResources({ activeCourseName, rightCollapsed, rightDrawerOpen, onToggleCollapse, onCloseDrawer }) {
-  const [resources, setResources] = useState([]);
-  const [error, setError] = useState(false);
   const { activeCourseId } = useCourse();
   const { messages } = useChat();
-
-  useEffect(() => {
-    let active = true;
-    if (activeCourseId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError(false);
-      learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 100 })
-        .then(res => {
-          if (active && res.code === 200 && res.data) {
-            setResources(Array.isArray(res.data.resources || res.data) ? (res.data.resources || res.data) : []);
-          } else if (active) {
-            setError(true);
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          if (active) setError(true);
-        });
-    } else {
-      setTimeout(() => { if (active) setResources([]); }, 0);
-    }
-    return () => { active = false; };
-  }, [activeCourseId]);
-
-  const activeKPs = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.role === 'assistant' && msg.knowledge_points && msg.knowledge_points.length > 0) {
-        return msg.knowledge_points;
-      }
-    }
-    return [];
-  }, [messages]);
-
-  const recommendedResources = useMemo(() => {
-    return resources.filter(res => {
-      if (activeKPs.length === 0) return true;
-      return activeKPs.some(kp => 
-        res.knowledge_point?.toLowerCase().includes(kp.toLowerCase()) ||
-        res.title?.toLowerCase().includes(kp.toLowerCase())
-      );
-    });
-  }, [resources, activeKPs]);
+  const { recommendedResources, error } = useRecommendedResources(activeCourseId, messages);
 
   return (
     <>

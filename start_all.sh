@@ -19,10 +19,7 @@ cd ..
 
 echo "[3/4] Starting Backend on port 8001..."
 cd backend
-set -a
-. ./.env
-set +a
-# 使用项目的 root venv 执行后端
+# pydantic-settings reads .env directly via env_file config — no need to source
 ../.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload &
 cd ..
 

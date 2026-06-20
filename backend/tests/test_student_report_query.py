@@ -7,9 +7,9 @@ from datetime import datetime
 
 import pytest
 
-database_url = os.environ.get("TEST_DATABASE_URL")
-if not database_url or not database_url.startswith("mysql+aiomysql://"):
-    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+database_url = os.environ.get("TEST_DATABASE_URL", "")
+if not database_url.startswith("mysql+"):
+    pytest.skip("requires TEST_DATABASE_URL=mysql+...", allow_module_level=True)
 os.environ["DATABASE_URL"] = database_url
 
 from app.db.session import async_session_factory, engine, init_db

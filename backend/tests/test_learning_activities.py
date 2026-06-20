@@ -14,7 +14,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 
 from app.api.deps import get_current_user
-from app.api.v1.evaluation import _build_node_progress_rows
+from app.services.knowledge_progress import build_node_progress_rows as _build_node_progress_rows
 from app.db.session import async_session_factory, init_db
 
 asyncio.run(init_db())

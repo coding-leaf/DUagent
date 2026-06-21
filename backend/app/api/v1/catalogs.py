@@ -1,14 +1,11 @@
 import asyncio
-from pathlib import Path
-from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
-from app.core.config import settings
-from app.models.catalog import CourseCatalog, CourseCatalogMaterial
+from app.models.catalog import CourseCatalog
 from app.models.others import AsyncTask
 from app.models.user import User
 from app.schemas.catalog import (
@@ -23,12 +20,7 @@ from app.services.catalog_presenters import (
     knowledge_graph_task_summary,
     material_item,
 )
-from app.services.catalog_material_service import (
-    CatalogMaterialService,
-    remove_material_dir,
-    safe_filename,
-    state_after_material_added,
-)
+from app.services.catalog_material_service import CatalogMaterialService
 from app.services.catalog_ingestion_service import (
     CatalogIngestionService,
     run_catalog_ingestion_background,
@@ -46,8 +38,7 @@ from app.services.catalog_service import CatalogService
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 
-SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
-UPLOAD_CHUNK_SIZE = 1024 * 1024
+
 
 
 def _webhook_url(request: Request) -> str:
@@ -111,97 +102,7 @@ async def admin_upload_catalog_material(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    if catalog.status == "ingesting" or catalog.knowledge_status == "ingesting":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
-        )
-
-    filename = safe_filename(file.filename or "")
-    suffix = Path(filename).suffix.lower()
-    if suffix not in SUPPORTED_MATERIAL_SUFFIXES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": 40021, "message": "不支持的资料类型", "data": None},
-        )
-
-    material_id = uuid4().hex[:16]
-    root = Path(settings.COURSE_CATALOG_STORAGE_ROOT)
-    relative_path = Path(root.name) / catalog.id / material_id / filename
-    target_path = root / catalog.id / material_id / filename
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-
-    file_size = 0
-    try:
-        with target_path.open("wb") as f:
-            while chunk := await file.read(UPLOAD_CHUNK_SIZE):
-                file_size += len(chunk)
-                if file_size > settings.COURSE_CATALOG_MAX_UPLOAD_BYTES:
-                    remove_material_dir(target_path)
-                    raise HTTPException(
-                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail={"code": 41320, "message": "资料文件过大", "data": None},
-                    )
-                f.write(chunk)
-    except HTTPException:
-        raise
-    except Exception:
-        remove_material_dir(target_path)
-        raise
-
-    if file_size == 0:
-        remove_material_dir(target_path)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": 40022, "message": "资料文件不能为空", "data": None},
-        )
-
-    next_status, next_knowledge_status = state_after_material_added(catalog)
-    material = CourseCatalogMaterial(
-        id=material_id,
-        catalog_id=catalog.id,
-        filename=filename,
-        source_type="file",
-        storage_uri=relative_path.as_posix(),
-        file_size=file_size,
-        status="uploaded",
-    )
-
-    try:
-        update_result = await db.execute(
-            update(CourseCatalog)
-            .where(
-                CourseCatalog.id == catalog.id,
-                CourseCatalog.is_deleted == False,
-                CourseCatalog.status != "ingesting",
-                CourseCatalog.knowledge_status != "ingesting",
-            )
-            .values(
-                material_count=CourseCatalog.material_count + 1,
-                status=next_status,
-                knowledge_status=next_knowledge_status,
-                last_error=None,
-            )
-        )
-        if update_result.rowcount == 0:
-            remove_material_dir(target_path)
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"code": 40911, "message": "课程资源库正在入库中", "data": None},
-            )
-
-        db.add(material)
-        await db.flush()
-        await db.refresh(material)
-        await db.commit()
-    except HTTPException:
-        raise
-    except Exception:
-        remove_material_dir(target_path)
-        await db.rollback()
-        raise
-
+    material = await CatalogMaterialService(db).save_uploaded_material(catalog, file)
     return {"code": 201, "message": "created", "data": material_item(material)}
 
 
@@ -243,7 +144,6 @@ async def admin_delete_catalog_material(
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
     delete_result = await CatalogMaterialService(db).delete_material(catalog, material_id)
-    await db.commit()
 
     return {
         "code": 200,
@@ -259,28 +159,7 @@ async def admin_get_catalog_knowledge_status(
     db: AsyncSession = Depends(get_db),
 ):
     catalog = await CatalogService(db).get_catalog(catalog_id)
-    pending_count = (
-        await db.execute(
-            select(func.count())
-            .select_from(CourseCatalogMaterial)
-            .where(
-                CourseCatalogMaterial.catalog_id == catalog.id,
-                CourseCatalogMaterial.is_deleted == False,
-                CourseCatalogMaterial.status == "uploaded",
-            )
-        )
-    ).scalar() or 0
-    failed_count = (
-        await db.execute(
-            select(func.count())
-            .select_from(CourseCatalogMaterial)
-            .where(
-                CourseCatalogMaterial.catalog_id == catalog.id,
-                CourseCatalogMaterial.is_deleted == False,
-                CourseCatalogMaterial.status == "failed",
-            )
-        )
-    ).scalar() or 0
+    counts = await CatalogMaterialService(db).get_material_counts(catalog.id)
     return {
         "code": 200,
         "message": "success",
@@ -290,8 +169,8 @@ async def admin_get_catalog_knowledge_status(
             "knowledge_status": catalog.knowledge_status,
             "material_count": catalog.material_count or 0,
             "chunk_count": catalog.chunk_count or 0,
-            "pending_material_count": pending_count,
-            "failed_material_count": failed_count,
+            "pending_material_count": counts["pending_material_count"],
+            "failed_material_count": counts["failed_material_count"],
             "last_ingestion_task_id": catalog.last_ingestion_task_id,
             "last_ingestion_status": catalog.last_ingestion_status,
             "last_error": catalog.last_error,

@@ -127,19 +127,20 @@ async def run_learning_path_refresh_background(
                         completed_at=now,
                     )
                 )
-                await db.commit()
-                logger.info(
-                    "Learning path refresh background: completed task_id=%s user_id=%s course_id=%s",
-                    task_id,
-                    user_id,
-                    course_id,
-                )
+                await db.flush()
             finally:
                 try:
                     if db.bind.dialect.name != "sqlite":
                         await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
                 except Exception:
                     logger.warning("Learning path refresh background: RELEASE_LOCK failed lock_name=%s", lock_name)
+            await db.commit()
+            logger.info(
+                "Learning path refresh background: completed task_id=%s user_id=%s course_id=%s",
+                task_id,
+                user_id,
+                course_id,
+            )
         except AgentServiceError as exc:
             await db.rollback()
             await db.execute(

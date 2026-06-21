@@ -196,7 +196,7 @@ async def test():
             knowledge_status="partial",
             chunk_count=2,
         )
-        with patch("app.api.v1.resources.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        with patch("app.services.resource_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {"task_id": "ignored", "estimated_duration": 60}
             r = await client.post("/api/v1/resources/generate", json={
                 "course_id": partial_context["class_course_id"],
@@ -220,7 +220,7 @@ async def test():
                 td.get("result", {}).get("degraded") is True)
 
         print("\n-- 1b. resources/generate success --")
-        with patch("app.api.v1.resources.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        with patch("app.services.resource_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {"task_id": "ignored", "estimated_duration": 60}
             r = await client.post("/api/v1/resources/generate", json={
                 "course_id": course_id,

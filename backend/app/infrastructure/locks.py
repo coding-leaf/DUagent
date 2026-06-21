@@ -33,3 +33,19 @@ async def profile_lock(db: AsyncSession, user_id: str, course_id: str):
             text("SELECT RELEASE_LOCK(:key)"),
             params={"key": lock_name}
         )
+
+
+@asynccontextmanager
+async def evaluation_lock(db: AsyncSession, user_id: str, course_id: str):
+    raw = f"evaluation_{user_id}_{course_id}"
+    if db.bind.dialect.name == "sqlite":
+        yield raw
+        return
+    lock_result = await db.execute(text("SELECT GET_LOCK(:name, 5)"), {"name": raw})
+    if not lock_result.scalar():
+        raise RuntimeError(f"GET_LOCK timeout: {raw}")
+    try:
+        yield raw
+    finally:
+        await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": raw})
+

@@ -1052,9 +1052,11 @@ async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
                 task_id = response.json()["data"]["task_id"]
 
             task_data = await _wait_for_task_status(client, admin_headers, task_id, {"failed"})
+            await asyncio.sleep(0.2)
             assert task_data["status"] == "failed"
             assert task_data["error_code"] == "unexpected_error"
             assert "invalid literal" in task_data["error_message"]
+
 
             status_data = await _get_catalog_status(client, admin_headers, catalog_id)
             first_material = await _get_material_from_list(
@@ -1078,6 +1080,8 @@ async def _api_test_catalog_ingestion_unexpected_exception_recovers_state(
             assert material["ingested_at"] is None
             assert "invalid literal" in material["last_error"]
     finally:
+        import gc
+        gc.collect()
         await engine.dispose()
 
 
@@ -1105,3 +1109,5 @@ def test_incremental_catalog_ingestion_unexpected_exception_keeps_catalog_ready_
             initial=False,
         )
     )
+
+

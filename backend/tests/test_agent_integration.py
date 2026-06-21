@@ -467,6 +467,32 @@ class TestResourcesGenerateIntegration:
 
         r = await client.post("/api/v1/courses", headers=t_h, json={"name": "资源测试课程"})
         course_id = r.json()["data"]["id"]
+
+        from app.models.catalog import CourseCatalog, CourseOffering
+        from app.models.course import Course
+        from sqlalchemy import select
+        catalog_id = f"res-catalog-{uuid.uuid4().hex[:8]}"
+        async with async_session_factory() as db:
+            course = (
+                await db.execute(select(Course).where(Course.id == course_id))
+            ).scalar_one()
+            catalog = CourseCatalog(
+                id=catalog_id,
+                title="Resource Test Catalog",
+                status="ready",
+                knowledge_status="ready",
+                chunk_count=3,
+            )
+            offering = CourseOffering(
+                id=course.id,
+                name=course.name,
+                catalog_id=catalog.id,
+                teacher_id=course.teacher_id,
+                class_code=course.course_code,
+            )
+            db.add_all([catalog, offering])
+            await db.commit()
+
         return t_h, course_id, teacher_id
 
     @pytest.mark.asyncio

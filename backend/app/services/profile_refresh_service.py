@@ -87,11 +87,11 @@ async def run_profile_refresh_background(task_id: str, user_id: str, course_id: 
                     )
                 )
                 await db.flush()
-                await db.commit()
-                logger.info(
-                    "Profile refresh background: completed task_id=%s user_id=%s course_id=%s",
-                    task_id, user_id, course_id,
-                )
+            await db.commit()
+            logger.info(
+                "Profile refresh background: completed task_id=%s user_id=%s course_id=%s",
+                task_id, user_id, course_id,
+            )
         except LockAcquisitionTimeout as e:
             await db.rollback()
             logger.warning(

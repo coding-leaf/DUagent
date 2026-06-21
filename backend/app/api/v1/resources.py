@@ -1,23 +1,11 @@
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
-from app.core.config import settings
-from app.models.others import AsyncTask, Resource
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
-from app.services.agent_client import AgentServiceError, agent_client
-from app.services.course_catalog_gate import resolve_generation_catalog
-from app.services.resource_scope import (
-    ensure_course_resource_access,
-    resolve_course_resource_scope,
-    resource_scope_clause,
-    user_can_access_catalog_resources,
-)
+from app.services.resource_service import ResourceService
 
 router = APIRouter(prefix="/api/v1/resources", tags=["resources"])
 
@@ -32,26 +20,15 @@ async def list_resources(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await ensure_course_resource_access(db, current_user, course_id)
-    scope = await resolve_course_resource_scope(db, course_id)
-
-    query = select(Resource).where(
-        resource_scope_clause(course_id, scope.catalog_id),
-        Resource.is_deleted == False,
+    service = ResourceService(db)
+    resources, total = await service.list_resources(
+        course_id=course_id,
+        current_user=current_user,
+        type=type,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
     )
-    if type:
-        query = query.where(Resource.type == type)
-    if keyword:
-        query = query.where(Resource.title.contains(keyword))
-
-    count_r = await db.execute(select(func.count()).select_from(query.subquery()))
-    total = count_r.scalar() or 0
-
-    offset = (page - 1) * page_size
-    result = await db.execute(
-        query.order_by(Resource.create_time.desc()).offset(offset).limit(page_size)
-    )
-    resources = result.scalars().all()
 
     return {
         "code": 200,
@@ -59,9 +36,13 @@ async def list_resources(
         "data": {
             "resources": [
                 {
-                    "id": r.id, "title": r.title, "type": r.type,
-                    "description": r.description or "", "tags": r.tags or [],
-                    "chapter": r.chapter, "knowledge_point": r.knowledge_point,
+                    "id": r.id,
+                    "title": r.title,
+                    "type": r.type,
+                    "description": r.description or "",
+                    "tags": r.tags or [],
+                    "chapter": r.chapter,
+                    "knowledge_point": r.knowledge_point,
                     "view_count": r.view_count,
                     "created_at": r.create_time.isoformat() if r.create_time else "",
                 }
@@ -80,22 +61,8 @@ async def get_resource_detail(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Resource).where(Resource.id == id, Resource.is_deleted == False)
-    )
-    resource = result.scalar_one_or_none()
-    if resource is None:
-        raise HTTPException(status_code=404, detail="Resource not found")
-
-    if resource.catalog_id:
-        if not await user_can_access_catalog_resources(db, current_user, resource.catalog_id):
-            raise HTTPException(status_code=403, detail="No access to this resource")
-    else:
-        await ensure_course_resource_access(db, current_user, resource.course_id)
-
-    preview = None
-    if resource.type in ("document", "reading") and resource.content:
-        preview = resource.content[:500]
+    service = ResourceService(db)
+    resource, preview = await service.get_resource_detail(id, current_user)
 
     return {
         "code": 200,
@@ -131,49 +98,12 @@ async def generate_resources(
     db: AsyncSession = Depends(get_db),
 ):
     """触发资源生成。创建任务后调用 Agent /resources/generate，Agent 完成后通过 Webhook 回调落库。"""
-    catalog_context = await resolve_generation_catalog(db, req.course_id)
-
-    # 创建任务
-    task = AsyncTask(
-        task_type="resource_generation",
-        status="processing",
-        user_id=current_user.id,
-        course_id=req.course_id,
-        result=catalog_context.model_dump(),
+    service = ResourceService(db)
+    task = await service.generate_resources(
+        req=req,
+        current_user=current_user,
+        webhook_url=_webhook_url(request),
     )
-    db.add(task)
-    await db.flush()
-    await db.refresh(task)
-
-    # 组装 Agent payload — task_id 由 Backend 生成并原样传入
-    payload: dict = {
-        "task_id": task.id,
-        "user_id": current_user.id,
-        "course_id": catalog_context.catalog_id,
-        "webhook_url": _webhook_url(request),
-    }
-    if req.chapter:
-        payload["chapter"] = req.chapter
-    if req.knowledge_point:
-        payload["knowledge_point"] = req.knowledge_point
-    if req.resource_types:
-        payload["resource_types"] = req.resource_types
-
-    try:
-        # 调用 Agent（异步，立即返回 202）
-        await agent_client.post_json("/agent/v1/resources/generate", payload)
-    except AgentServiceError as e:
-        task.status = "failed"
-        task.error_code = str(e.agent_code or "agent_error")
-        task.error_message = e.message
-        task.completed_at = datetime.now(timezone.utc)
-        await db.commit()
-        return JSONResponse(
-            status_code=202,
-            content={"code": 202, "message": "accepted", "data": {"task_id": task.id}},
-        )
-
-    await db.flush()
 
     return JSONResponse(
         status_code=202,

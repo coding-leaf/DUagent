@@ -156,3 +156,11 @@
   5. 补 `backend/.env.example`、`frontend/.env.example`，覆盖所有必要变量并附说明。
 - **测试结果**：`python3 -m py_compile` 两个后端文件均 OK；`npm run lint` 零报错；`npm run build` 构建通过。
 - **接口漂移**：无。
+
+### 2026-06-21 完善系统架构、流程图与重构报告文档
+- **涉及文件**：`docs/architecture_flow_overview.md`、`docs/refactoring_report.md`
+- **核心改动**：
+  1. 全面扩展并补全系统架构与核心数据流图文档（并翻译为全中文版）。补充了“资源入库与知识图谱生成”、“多 Agent 协同课程资源生成”、“核心学习与个性化学习路径”、“个性化测试与 AI 诊断”以及“学生画像刷新与动态引导”五大模块的中文文字与 ASCII 数据流图描述，定义了前端、后端及 Agent Service 的架构与数据边界规范。
+  2. 将系统画像与架构重构成果报告复制至工作区 `docs/refactoring_report.md`，总结了评估、资源、课件入库服务拆分方案及 MySQL 并发锁安全设计。
+- **测试结果**：文档编辑与中文翻译完成，语法及 markdown 结构正常。
+- **接口漂移**：无。

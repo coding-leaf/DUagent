@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { catalogService } from '../api/services/catalog';
 import { taskService } from '../api/services/task';
 import { getErrorMessage } from '../utils/apiError';
@@ -22,431 +23,282 @@ const createGenerationForm = () => ({
 });
 
 export function useCatalog({ catalog, open, onChanged }) {
-  const [materials, setMaterials] = useState([]);
-  const [resources, setResources] = useState([]);
-  const [knowledgeStatus, setKnowledgeStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const catalogId = catalog?.id;
+
+  // SWR hooks for fetching course catalog details
+  const {
+    data: materialsData,
+    error: materialsError,
+    mutate: mutateMaterials,
+  } = useSWR(
+    catalogId && open ? ['catalog/materials', catalogId] : null,
+    () => catalogService.getCourseCatalogMaterials(catalogId).then(res => res.data?.materials || []),
+    { revalidateOnFocus: false }
+  );
+
+  const {
+    data: statusData,
+    error: statusError,
+    mutate: mutateStatus,
+  } = useSWR(
+    catalogId && open ? ['catalog/status', catalogId] : null,
+    () => catalogService.getCourseCatalogStatus(catalogId).then(res => res.data || null),
+    { revalidateOnFocus: false }
+  );
+
+  const {
+    data: resourcesData,
+    error: resourcesError,
+    mutate: mutateResources,
+  } = useSWR(
+    catalogId && open ? ['catalog/resources', catalogId] : null,
+    () => catalogService.getCourseCatalogResources(catalogId, { page: 1, page_size: 50 }).then(res => res.data?.resources || []),
+    { revalidateOnFocus: false }
+  );
+
+  const {
+    data: kgStatusData,
+    error: kgStatusError,
+    mutate: mutateKgStatus,
+  } = useSWR(
+    catalogId && open ? ['catalog/kg-status', catalogId] : null,
+    () => catalogService.getCourseCatalogKnowledgeGraphStatus(catalogId).then(res => res.data || null),
+    { revalidateOnFocus: false }
+  );
+
+  // States for active tasks (task_id)
+  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [generationTaskId, setGenerationTaskId] = useState(null);
+  const [kgTaskId, setKgTaskId] = useState(null);
+  const [quizGenTaskId, setQuizGenTaskId] = useState(null);
+
+  // States for operation status
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
-  const [activeTask, setActiveTask] = useState(null);
-  const [taskError, setTaskError] = useState('');
-  const [generationForm, setGenerationForm] = useState(createGenerationForm);
   const [generating, setGenerating] = useState(false);
-  const [generationTask, setGenerationTask] = useState(null);
-  const [generationTaskError, setGenerationTaskError] = useState('');
-  const [knowledgeGraphStatus, setKnowledgeGraphStatus] = useState(null);
   const [knowledgeGraphGenerating, setKnowledgeGraphGenerating] = useState(false);
-  const [knowledgeGraphTask, setKnowledgeGraphTask] = useState(null);
-  const [knowledgeGraphTaskError, setKnowledgeGraphTaskError] = useState('');
   const [quizGenerating, setQuizGenerating] = useState(false);
-  const [quizGenTask, setQuizGenTask] = useState(null);
+
+  // Task errors
+  const [taskError, setTaskError] = useState('');
+  const [generationTaskError, setGenerationTaskError] = useState('');
+  const [knowledgeGraphTaskError, setKnowledgeGraphTaskError] = useState('');
   const [quizGenTaskError, setQuizGenTaskError] = useState('');
+  const [error, setError] = useState('');
+
+  // Delete queues/states
   const [deletingMaterialIds, setDeletingMaterialIds] = useState(() => new Set());
   const [deletingResourceIds, setDeletingResourceIds] = useState(() => new Set());
 
-  const requestSeqRef = useRef(0);
-  const isMountedRef = useRef(false);
-  const activeTaskRef = useRef(null);
-  const generationTaskRef = useRef(null);
-  const knowledgeGraphTaskRef = useRef(null);
-  const catalogIdRef = useRef(null);
-  const openRef = useRef(false);
-  const uploadOperationSeqRef = useRef(0);
-  const ingestionOperationSeqRef = useRef(0);
-  const generationOperationSeqRef = useRef(0);
-  const knowledgeGraphOperationSeqRef = useRef(0);
-  const authoritativeTerminalTaskIdsRef = useRef(new Set());
+  // Generation form
+  const [generationForm, setGenerationForm] = useState(createGenerationForm);
 
-  const catalogId = catalog?.id;
-
-  useEffect(() => {
-    activeTaskRef.current = activeTask;
-  }, [activeTask]);
-
-  useEffect(() => {
-    generationTaskRef.current = generationTask;
-  }, [generationTask]);
-
-  useEffect(() => {
-    knowledgeGraphTaskRef.current = knowledgeGraphTask;
-  }, [knowledgeGraphTask]);
-
-  useEffect(() => {
-    catalogIdRef.current = catalogId;
-    openRef.current = open;
-  }, [catalogId, open]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    const authoritativeTerminalTaskIds = authoritativeTerminalTaskIdsRef.current;
-    return () => {
-      isMountedRef.current = false;
-      requestSeqRef.current += 1;
-      uploadOperationSeqRef.current += 1;
-      ingestionOperationSeqRef.current += 1;
-      generationOperationSeqRef.current += 1;
-      knowledgeGraphOperationSeqRef.current += 1;
-      authoritativeTerminalTaskIds.clear();
-    };
-  }, []);
-
-  const canWriteRequest = useCallback((requestSeq) => (
-    isMountedRef.current && requestSeqRef.current === requestSeq
-  ), []);
-
-  const canWriteUploadOperation = useCallback((operationSeq, operationCatalogId) => (
-    isMountedRef.current
-    && openRef.current
-    && catalogIdRef.current === operationCatalogId
-    && uploadOperationSeqRef.current === operationSeq
-  ), []);
-
-  const canWriteIngestionOperation = useCallback((operationSeq, operationCatalogId) => (
-    isMountedRef.current
-    && openRef.current
-    && catalogIdRef.current === operationCatalogId
-    && ingestionOperationSeqRef.current === operationSeq
-  ), []);
-
-  const canWriteGenerationOperation = useCallback((operationSeq, operationCatalogId) => (
-    isMountedRef.current
-    && openRef.current
-    && catalogIdRef.current === operationCatalogId
-    && generationOperationSeqRef.current === operationSeq
-  ), []);
-
-  const canWriteKnowledgeGraphOperation = useCallback((operationSeq, operationCatalogId) => (
-    isMountedRef.current
-    && openRef.current
-    && catalogIdRef.current === operationCatalogId
-    && knowledgeGraphOperationSeqRef.current === operationSeq
-  ), []);
-
-  const refreshDetails = useCallback(async () => {
-    if (!catalogId || !openRef.current) return false;
-
-    const requestSeq = requestSeqRef.current + 1;
-    requestSeqRef.current = requestSeq;
-    setLoading(true);
-    setError('');
-    try {
-      const [materialsRes, statusRes, resourcesRes, knowledgeGraphRes] = await Promise.all([
-        catalogService.getCourseCatalogMaterials(catalogId),
-        catalogService.getCourseCatalogStatus(catalogId),
-        catalogService.getCourseCatalogResources(catalogId, { page: 1, page_size: 50 }),
-        catalogService.getCourseCatalogKnowledgeGraphStatus(catalogId)
-      ]);
-      if (!canWriteRequest(requestSeq)) return false;
-
-      const incomingStatus = statusRes.data || null;
-      const incomingKnowledgeGraphStatus = knowledgeGraphRes.data || null;
-      setMaterials(materialsRes.data?.materials || []);
-      setResources(resourcesRes.data?.resources || []);
-      setKnowledgeStatus(incomingStatus);
-      setKnowledgeGraphStatus(incomingKnowledgeGraphStatus);
-
-      const isIncomingIngesting = incomingStatus?.status === 'ingesting'
-        || incomingStatus?.knowledge_status === 'ingesting';
-      const incomingTaskId = incomingStatus?.last_ingestion_task_id;
-      const incomingTaskStatus = incomingStatus?.last_ingestion_status || 'processing';
-      const isTerminalTask = incomingTaskStatus === 'completed' || incomingTaskStatus === 'failed';
-      const currentTask = activeTaskRef.current;
-      const isCurrentTaskTerminal = currentTask?.task_id === incomingTaskId
-        && (currentTask.status === 'completed' || currentTask.status === 'failed');
-
-      if (isCurrentTaskTerminal) {
-        setIngesting(false);
-      } else if (isIncomingIngesting && incomingTaskId && !isTerminalTask) {
-        setActiveTask((prev) => {
-          if (prev?.task_id === incomingTaskId && prev.status === 'processing') return prev;
-          if (prev?.task_id === incomingTaskId && (prev.status === 'completed' || prev.status === 'failed')) {
-            setIngesting(false);
-            return prev;
-          }
-          setIngesting(true);
-          setTaskError('');
-          return normalizeTask({
-            id: incomingTaskId,
-            task_id: incomingTaskId,
-            status: 'processing',
-            progress: 0
-          }, incomingTaskId);
-        });
-      }
-
-      const incomingKgTask = incomingKnowledgeGraphStatus?.last_generation_task;
-      if (incomingKgTask?.task_id && incomingKgTask.status === 'processing') {
-        setKnowledgeGraphTask((prev) => {
-          if (prev?.task_id === incomingKgTask.task_id && prev.status === 'processing') return prev;
-          setKnowledgeGraphGenerating(true);
-          setKnowledgeGraphTaskError('');
-          return normalizeTask(incomingKgTask, incomingKgTask.task_id, 'kg_generation');
-        });
-      }
-      return true;
-    } catch (err) {
-      console.error('course catalog drawer refresh error', err);
-      if (!canWriteRequest(requestSeq)) return false;
-
-      setError(getErrorMessage(err, '课程资源库详情加载失败'));
-      setMaterials([]);
-      setResources([]);
-      setKnowledgeStatus(null);
-      setKnowledgeGraphStatus(null);
-      return false;
-    } finally {
-      if (canWriteRequest(requestSeq)) {
-        setLoading(false);
-      }
+  // SWR conditional polling for tasks
+  const { data: activeTaskSWR } = useSWR(
+    activeTaskId && open ? ['taskStatus/ingestion', activeTaskId] : null,
+    () => taskService.getTaskStatus(activeTaskId).then(res => normalizeTask(res.data, activeTaskId)),
+    {
+      refreshInterval: (data) => {
+        if (data && (data.status === 'completed' || data.status === 'failed')) {
+          return 0;
+        }
+        return 2000;
+      },
+      revalidateOnFocus: false
     }
-  }, [canWriteRequest, catalogId]);
+  );
 
+  const { data: generationTaskSWR } = useSWR(
+    generationTaskId && open ? ['taskStatus/generation', generationTaskId] : null,
+    () => taskService.getTaskStatus(generationTaskId).then(res => normalizeTask(res.data, generationTaskId, 'resource_generation')),
+    {
+      refreshInterval: (data) => {
+        if (data && (data.status === 'completed' || data.status === 'failed')) {
+          return 0;
+        }
+        return 2000;
+      },
+      revalidateOnFocus: false
+    }
+  );
+
+  const { data: kgTaskSWR } = useSWR(
+    kgTaskId && open ? ['taskStatus/kg', kgTaskId] : null,
+    () => taskService.getTaskStatus(kgTaskId).then(res => normalizeTask(res.data, kgTaskId, 'kg_generation')),
+    {
+      refreshInterval: (data) => {
+        if (data && (data.status === 'completed' || data.status === 'failed')) {
+          return 0;
+        }
+        return 2000;
+      },
+      revalidateOnFocus: false
+    }
+  );
+
+  const { data: quizGenTaskSWR } = useSWR(
+    quizGenTaskId && open ? ['taskStatus/quiz', quizGenTaskId] : null,
+    () => taskService.getTaskStatus(quizGenTaskId).then(res => normalizeTask(res.data, quizGenTaskId, 'quiz_generation')),
+    {
+      refreshInterval: (data) => {
+        if (data && (data.status === 'completed' || data.status === 'partial' || data.status === 'failed')) {
+          return 0;
+        }
+        return 2000;
+      },
+      revalidateOnFocus: false
+    }
+  );
+
+  // Derived tasks
+  const activeTask = useMemo(
+    () => activeTaskSWR || (activeTaskId ? { task_id: activeTaskId, status: 'processing', progress: 0 } : null),
+    [activeTaskSWR, activeTaskId]
+  );
+  const generationTask = useMemo(
+    () => generationTaskSWR || (generationTaskId ? { task_id: generationTaskId, status: 'processing', progress: 0 } : null),
+    [generationTaskSWR, generationTaskId]
+  );
+  const knowledgeGraphTask = useMemo(
+    () => kgTaskSWR || (kgTaskId ? { task_id: kgTaskId, status: 'processing', progress: 0 } : null),
+    [kgTaskSWR, kgTaskId]
+  );
+  const quizGenTask = useMemo(
+    () => quizGenTaskSWR || (quizGenTaskId ? { task_id: quizGenTaskId, status: 'processing', progress: 0 } : null),
+    [quizGenTaskSWR, quizGenTaskId]
+  );
+
+  // Mutation helper for refreshing all SWR queries
+  const mutateAll = useCallback(async () => {
+    await Promise.all([
+      mutateMaterials(),
+      mutateStatus(),
+      mutateResources(),
+      mutateKgStatus(),
+    ]);
+  }, [mutateMaterials, mutateStatus, mutateResources, mutateKgStatus]);
+
+  // Synchronize loading error details
   useEffect(() => {
-    if (!open || !catalogId) return;
+    if (materialsError) setError(getErrorMessage(materialsError, '课程资源库详情加载失败'));
+    else if (statusError) setError(getErrorMessage(statusError, '课程资源库详情加载失败'));
+    else if (resourcesError) setError(getErrorMessage(resourcesError, '课程资源库详情加载失败'));
+    else if (kgStatusError) setError(getErrorMessage(kgStatusError, '课程资源库详情加载失败'));
+  }, [materialsError, statusError, resourcesError, kgStatusError]);
 
-    setMaterials([]);
-    setResources([]);
-    setKnowledgeStatus(null);
+  // Reset task/state on catalogId or open state change
+  useEffect(() => {
+    setActiveTaskId(null);
+    setGenerationTaskId(null);
+    setKgTaskId(null);
+    setQuizGenTaskId(null);
     setUploadQueue([]);
     setUploading(false);
     setIngesting(false);
     setGenerating(false);
-    setGenerationForm(createGenerationForm());
-    setKnowledgeGraphStatus(null);
     setKnowledgeGraphGenerating(false);
-    activeTaskRef.current = null;
-    generationTaskRef.current = null;
-    knowledgeGraphTaskRef.current = null;
-    authoritativeTerminalTaskIdsRef.current.clear();
-    setActiveTask(null);
+    setQuizGenerating(false);
     setTaskError('');
-    setGenerationTask(null);
     setGenerationTaskError('');
-    setKnowledgeGraphTask(null);
     setKnowledgeGraphTaskError('');
+    setQuizGenTaskError('');
+    setError('');
     setDeletingMaterialIds(new Set());
     setDeletingResourceIds(new Set());
-    refreshDetails();
+    setGenerationForm(createGenerationForm());
+  }, [catalogId, open]);
 
-    const authoritativeTerminalTaskIds = authoritativeTerminalTaskIdsRef.current;
-    return () => {
-      requestSeqRef.current += 1;
-      uploadOperationSeqRef.current += 1;
-      ingestionOperationSeqRef.current += 1;
-      generationOperationSeqRef.current += 1;
-      knowledgeGraphOperationSeqRef.current += 1;
-      authoritativeTerminalTaskIds.clear();
-    };
-  }, [catalogId, open, refreshDetails]);
+  // Detect and set ongoing tasks from fetched statuses
+  const incomingTaskId = statusData?.last_ingestion_task_id;
+  const isIncomingIngesting = statusData?.status === 'ingesting' || statusData?.knowledge_status === 'ingesting';
+  const incomingTaskStatus = statusData?.last_ingestion_status || 'processing';
+  const isTerminalTask = incomingTaskStatus === 'completed' || incomingTaskStatus === 'failed';
 
   useEffect(() => {
-    if (
-      !open
-      || !activeTask?.task_id
-      || activeTask.status === 'completed'
-      || activeTask.status === 'failed'
-    ) return;
+    if (isIncomingIngesting && incomingTaskId && !isTerminalTask) {
+      setActiveTaskId(incomingTaskId);
+    }
+  }, [isIncomingIngesting, incomingTaskId, isTerminalTask]);
 
-    let cancelled = false;
-    let timeoutId;
+  const incomingKgTask = kgStatusData?.last_generation_task;
+  useEffect(() => {
+    if (incomingKgTask?.task_id && incomingKgTask.status === 'processing') {
+      setKgTaskId(incomingKgTask.task_id);
+    }
+  }, [incomingKgTask?.task_id, incomingKgTask?.status]);
 
-    const handleTerminalTask = async (task) => {
-      if (cancelled) return;
+  // Handle active task status transitions
+  useEffect(() => {
+    if (!activeTask) return;
+    if (activeTask.status === 'completed' || activeTask.status === 'failed') {
       setIngesting(false);
-      if (task.status === 'failed') {
-        setTaskError(task.error_message || '课程资源库入库失败');
+      if (activeTask.status === 'failed') {
+        setTaskError(activeTask.error_message || '课程资源库入库失败');
       }
-      const refreshed = await refreshDetails();
-      if (!cancelled && refreshed && onChanged) {
-        onChanged();
-      }
-    };
+      mutateAll();
+      if (onChanged) onChanged();
+    } else {
+      setIngesting(true);
+      setTaskError('');
+    }
+  }, [activeTask, mutateAll, onChanged]);
 
-    const pollTask = async () => {
-      try {
-        const res = await taskService.getTaskStatus(activeTask.task_id);
-        if (cancelled) return;
-
-        const task = normalizeTask(res.data, activeTask.task_id);
-        activeTaskRef.current = task;
-        setActiveTask(task);
-        setTaskError('');
-
-        if (task.status === 'completed' || task.status === 'failed') {
-          authoritativeTerminalTaskIdsRef.current.add(task.task_id);
-          await handleTerminalTask(task);
-        } else if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error('course catalog ingestion task poll error', err);
-        const detail = getErrorMessage(err, '');
-        setTaskError(detail ? `任务状态查询失败：${detail}，正在重试` : '任务状态查询失败，正在重试');
-        if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      }
-    };
-
-    timeoutId = setTimeout(pollTask, 2000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [activeTask?.status, activeTask?.task_id, onChanged, open, refreshDetails]);
-
+  // Handle resource generation task transitions
   useEffect(() => {
-    if (
-      !open
-      || !generationTask?.task_id
-      || generationTask.status === 'completed'
-      || generationTask.status === 'failed'
-    ) return;
-
-    let cancelled = false;
-    let timeoutId;
-
-    const handleTerminalTask = async (task) => {
-      if (cancelled) return;
+    if (!generationTask) return;
+    if (generationTask.status === 'completed' || generationTask.status === 'failed') {
       setGenerating(false);
-      if (task.status === 'failed') {
-        setGenerationTaskError(task.error_message || '学习资源生成失败');
+      if (generationTask.status === 'failed') {
+        setGenerationTaskError(generationTask.error_message || '学习资源生成失败');
       }
-      const refreshed = await refreshDetails();
-      if (!cancelled && refreshed && onChanged) {
-        onChanged();
-      }
-    };
+      mutateAll();
+      if (onChanged) onChanged();
+    } else {
+      setGenerating(true);
+      setGenerationTaskError('');
+    }
+  }, [generationTask, mutateAll, onChanged]);
 
-    const pollTask = async () => {
-      try {
-        const res = await taskService.getTaskStatus(generationTask.task_id);
-        if (cancelled) return;
-
-        const task = normalizeTask(res.data, generationTask.task_id, 'resource_generation');
-        generationTaskRef.current = task;
-        setGenerationTask(task);
-        setGenerationTaskError('');
-
-        if (task.status === 'completed' || task.status === 'failed') {
-          await handleTerminalTask(task);
-        } else if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error('course catalog resource generation task poll error', err);
-        const detail = getErrorMessage(err, '');
-        setGenerationTaskError(detail ? `生成任务状态查询失败：${detail}，正在重试` : '生成任务状态查询失败，正在重试');
-        if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      }
-    };
-
-    timeoutId = setTimeout(pollTask, 2000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [generationTask?.status, generationTask?.task_id, onChanged, open, refreshDetails]);
-
+  // Handle knowledge graph generation task transitions
   useEffect(() => {
-    if (
-      !open
-      || !knowledgeGraphTask?.task_id
-      || knowledgeGraphTask.status === 'completed'
-      || knowledgeGraphTask.status === 'failed'
-    ) return;
-
-    let cancelled = false;
-    let timeoutId;
-
-    const handleTerminalTask = async (task) => {
-      if (cancelled) return;
+    if (!knowledgeGraphTask) return;
+    if (knowledgeGraphTask.status === 'completed' || knowledgeGraphTask.status === 'failed') {
       setKnowledgeGraphGenerating(false);
-      if (task.status === 'failed') {
-        setKnowledgeGraphTaskError(task.error_message || '知识图谱生成失败');
+      if (knowledgeGraphTask.status === 'failed') {
+        setKnowledgeGraphTaskError(knowledgeGraphTask.error_message || '知识图谱生成失败');
       }
-      const refreshed = await refreshDetails();
-      if (!cancelled && refreshed && onChanged) {
-        onChanged();
-      }
-    };
+      mutateAll();
+      if (onChanged) onChanged();
+    } else {
+      setKnowledgeGraphGenerating(true);
+      setKnowledgeGraphTaskError('');
+    }
+  }, [knowledgeGraphTask, mutateAll, onChanged]);
 
-    const pollTask = async () => {
-      try {
-        const res = await taskService.getTaskStatus(knowledgeGraphTask.task_id);
-        if (cancelled) return;
-
-        const task = normalizeTask(res.data, knowledgeGraphTask.task_id, 'kg_generation');
-        knowledgeGraphTaskRef.current = task;
-        setKnowledgeGraphTask(task);
-        setKnowledgeGraphTaskError('');
-
-        if (task.status === 'completed' || task.status === 'failed') {
-          await handleTerminalTask(task);
-        } else if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error('course catalog knowledge graph generation task poll error', err);
-        const detail = getErrorMessage(err, '');
-        setKnowledgeGraphTaskError(detail ? `图谱任务状态查询失败：${detail}，正在重试` : '图谱任务状态查询失败，正在重试');
-        if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      }
-    };
-
-    timeoutId = setTimeout(pollTask, 2000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [knowledgeGraphTask?.status, knowledgeGraphTask?.task_id, onChanged, open, refreshDetails]);
-
+  // Handle quiz generation task transitions
   useEffect(() => {
-    if (
-      !quizGenTask?.task_id
-      || quizGenTask.status === 'completed'
-      || quizGenTask.status === 'partial'
-      || quizGenTask.status === 'failed'
-    ) return;
-
-    let cancelled = false;
-    let timeoutId;
-
-    const pollTask = async () => {
-      try {
-        const res = await taskService.getTaskStatus(quizGenTask.task_id);
-        if (cancelled) return;
-        const task = normalizeTask(res.data, quizGenTask.task_id, 'quiz_generation');
-        setQuizGenTask(task);
-        if (task.status === 'completed' || task.status === 'partial' || task.status === 'failed') {
-          setQuizGenerating(false);
-          if (onChanged) onChanged();
-        } else if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
-      } catch (err) {
-        console.error('quiz generation task poll error', err);
-        if (!cancelled) {
-          timeoutId = setTimeout(pollTask, 2000);
-        }
+    if (!quizGenTask) return;
+    if (quizGenTask.status === 'completed' || quizGenTask.status === 'partial' || quizGenTask.status === 'failed') {
+      setQuizGenerating(false);
+      if (quizGenTask.status === 'failed') {
+        setQuizGenTaskError(quizGenTask.error_message || '题库生成失败');
       }
-    };
+      mutateAll();
+      if (onChanged) onChanged();
+    } else {
+      setQuizGenerating(true);
+      setQuizGenTaskError('');
+    }
+  }, [quizGenTask, mutateAll, onChanged]);
 
-    timeoutId = setTimeout(pollTask, 2000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [quizGenTask?.task_id, quizGenTask?.status, onChanged]);
+  // Derived layout-specific properties
+  const materials = useMemo(() => materialsData || [], [materialsData]);
+  const resources = useMemo(() => resourcesData || [], [resourcesData]);
+  const knowledgeStatus = statusData || null;
+  const knowledgeGraphStatus = kgStatusData || null;
+
+  const loading = open && ((!materialsData && !materialsError) || (!resourcesData && !resourcesError));
 
   const summary = useMemo(() => ({
     material_count: knowledgeStatus?.material_count ?? catalog?.material_count ?? catalog?.materials_count ?? materials.length,
@@ -467,13 +319,13 @@ export function useCatalog({ catalog, open, onChanged }) {
     || knowledgeGraphStatus?.last_generation_task?.status === 'processing';
   const sameTerminalKnowledgeTask = taskTerminal
     && activeTask?.task_id
-    && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id
-    && authoritativeTerminalTaskIdsRef.current.has(activeTask.task_id);
+    && activeTask.task_id === knowledgeStatus?.last_ingestion_task_id;
   const catalogIngesting = !sameTerminalKnowledgeTask && (
     catalog?.status === 'ingesting'
     || knowledgeStatus?.status === 'ingesting'
     || knowledgeStatus?.knowledge_status === 'ingesting'
   );
+
   const uploadDisabled = uploading || catalogIngesting || ingesting || taskProcessing || generationProcessing || generating || knowledgeGraphProcessing || knowledgeGraphGenerating;
   const startDisabled = catalogIngesting || uploading || !hasIngestibleMaterials || taskProcessing || ingesting || generationProcessing || generating || knowledgeGraphProcessing || knowledgeGraphGenerating;
   const knowledgeReadyStatus = knowledgeStatus?.knowledge_status || catalog?.knowledge_status;
@@ -507,14 +359,12 @@ export function useCatalog({ catalog, open, onChanged }) {
     || generationProcessing
     || generating;
 
+  // Handlers
   const handleUpload = async (event) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
     if (!catalogId || files.length === 0 || uploadDisabled) return;
 
-    const operationCatalogId = catalogId;
-    const operationSeq = uploadOperationSeqRef.current + 1;
-    uploadOperationSeqRef.current = operationSeq;
     const queuedFiles = files.map((file, index) => ({
       id: `${Date.now()}-${index}-${file.name}`,
       name: file.name,
@@ -522,19 +372,16 @@ export function useCatalog({ catalog, open, onChanged }) {
       message: ''
     }));
 
-    if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
     setUploadQueue(queuedFiles);
     setUploading(true);
     setError('');
 
     for (const [index, item] of queuedFiles.entries()) {
-      if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
       setUploadQueue((prev) => prev.map((queueItem) => (
         queueItem.id === item.id ? { ...queueItem, status: 'uploading', message: '' } : queueItem
       )));
       try {
-        const res = await catalogService.uploadCourseCatalogMaterial(operationCatalogId, files[index]);
-        if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
+        const res = await catalogService.uploadCourseCatalogMaterial(catalogId, files[index]);
         setUploadQueue((prev) => prev.map((queueItem) => (
           queueItem.id === item.id
             ? { ...queueItem, status: 'uploaded', message: res.message || '上传完成' }
@@ -542,7 +389,6 @@ export function useCatalog({ catalog, open, onChanged }) {
         )));
       } catch (err) {
         console.error('course catalog material upload error', err);
-        if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
         setUploadQueue((prev) => prev.map((queueItem) => (
           queueItem.id === item.id
             ? { ...queueItem, status: 'failed', message: getErrorMessage(err, '上传失败') }
@@ -551,34 +397,22 @@ export function useCatalog({ catalog, open, onChanged }) {
       }
     }
 
-    if (!canWriteUploadOperation(operationSeq, operationCatalogId)) return;
     setUploading(false);
-    const refreshed = await refreshDetails();
-    if (canWriteUploadOperation(operationSeq, operationCatalogId) && refreshed && onChanged) {
-      onChanged();
-    }
+    await mutateAll();
+    if (onChanged) onChanged();
   };
 
   const handleStartIngestion = async () => {
     if (!catalogId || startDisabled) return;
-
-    const operationCatalogId = catalogId;
-    const operationSeq = ingestionOperationSeqRef.current + 1;
-    ingestionOperationSeqRef.current = operationSeq;
-    if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
     setIngesting(true);
     setTaskError('');
     setError('');
-    authoritativeTerminalTaskIdsRef.current.clear();
     try {
-      const res = await catalogService.startCourseCatalogIngestion(operationCatalogId);
-      if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
+      const res = await catalogService.startCourseCatalogIngestion(catalogId);
       const task = normalizeTask(res.data);
-      activeTaskRef.current = task;
-      setActiveTask(task);
+      setActiveTaskId(task.task_id);
     } catch (err) {
       console.error('course catalog ingestion start error', err);
-      if (!canWriteIngestionOperation(operationSeq, operationCatalogId)) return;
       setTaskError(getErrorMessage(err, '课程资源库入库启动失败'));
       setIngesting(false);
     }
@@ -602,24 +436,15 @@ export function useCatalog({ catalog, open, onChanged }) {
 
   const handleStartKnowledgeGraphGeneration = async () => {
     if (!catalogId || knowledgeGraphGenerationDisabled) return;
-
-    const operationCatalogId = catalogId;
-    const operationSeq = knowledgeGraphOperationSeqRef.current + 1;
-    knowledgeGraphOperationSeqRef.current = operationSeq;
-    if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
-
     setKnowledgeGraphGenerating(true);
     setKnowledgeGraphTaskError('');
     setError('');
     try {
-      const res = await catalogService.startCourseCatalogKnowledgeGraphGeneration(operationCatalogId);
-      if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
+      const res = await catalogService.startCourseCatalogKnowledgeGraphGeneration(catalogId);
       const task = normalizeTask(res.data, res.data?.task_id, 'kg_generation');
-      knowledgeGraphTaskRef.current = task;
-      setKnowledgeGraphTask(task);
+      setKgTaskId(task.task_id);
     } catch (err) {
       console.error('course catalog knowledge graph generation start error', err);
-      if (!canWriteKnowledgeGraphOperation(operationSeq, operationCatalogId)) return;
       setKnowledgeGraphTaskError(getErrorMessage(err, '知识图谱生成启动失败'));
       setKnowledgeGraphGenerating(false);
     }
@@ -627,12 +452,6 @@ export function useCatalog({ catalog, open, onChanged }) {
 
   const handleStartGeneration = async () => {
     if (!catalogId || generationDisabled) return;
-
-    const operationCatalogId = catalogId;
-    const operationSeq = generationOperationSeqRef.current + 1;
-    generationOperationSeqRef.current = operationSeq;
-    if (!canWriteGenerationOperation(operationSeq, operationCatalogId)) return;
-
     setGenerating(true);
     setGenerationTaskError('');
     setError('');
@@ -642,14 +461,11 @@ export function useCatalog({ catalog, open, onChanged }) {
         knowledge_point: generationForm.knowledge_point.trim(),
         resource_types: generationForm.resource_types
       };
-      const res = await catalogService.startCourseCatalogResourceGeneration(operationCatalogId, payload);
-      if (!canWriteGenerationOperation(operationSeq, operationCatalogId)) return;
+      const res = await catalogService.startCourseCatalogResourceGeneration(catalogId, payload);
       const task = normalizeTask(res.data, res.data?.task_id, 'resource_generation');
-      generationTaskRef.current = task;
-      setGenerationTask(task);
+      setGenerationTaskId(task.task_id);
     } catch (err) {
       console.error('course catalog resource generation start error', err);
-      if (!canWriteGenerationOperation(operationSeq, operationCatalogId)) return;
       setGenerationTaskError(getErrorMessage(err, '学习资源生成启动失败'));
       setGenerating(false);
     }
@@ -659,11 +475,11 @@ export function useCatalog({ catalog, open, onChanged }) {
     if (!catalog || quizGenerating) return;
     setQuizGenerating(true);
     setQuizGenTaskError('');
-    setQuizGenTask(null);
+    setQuizGenTaskId(null);
     try {
       const res = await catalogService.startQuizGeneration(catalog.id);
       if (res.code === 202) {
-        setQuizGenTask({ task_id: res.data.task_id, status: 'processing', progress: 10 });
+        setQuizGenTaskId(res.data.task_id);
       }
     } catch (err) {
       console.error('Failed to start quiz generation:', err);
@@ -674,22 +490,21 @@ export function useCatalog({ catalog, open, onChanged }) {
 
   const handleDeleteMaterial = async (material) => {
     if (!catalogId || !material?.id || materialDeleteDisabled || deletingMaterialIds.has(material.id)) return;
-
     setDeletingMaterialIds((prev) => new Set(prev).add(material.id));
     setError('');
     try {
       const res = await catalogService.deleteCourseCatalogMaterial(catalogId, material.id);
-      setMaterials((prev) => prev.filter((item) => item.id !== material.id));
+      mutateMaterials(materials.filter((item) => item.id !== material.id), false);
       if (res.data?.knowledge_status) {
-        setKnowledgeStatus((prev) => ({
-          ...(prev || {}),
+        mutateStatus({
+          ...(statusData || {}),
           catalog_id: catalogId,
           knowledge_status: res.data.knowledge_status,
-          material_count: Math.max(0, (prev?.material_count ?? materials.length) - 1)
-        }));
+          material_count: Math.max(0, (statusData?.material_count ?? materials.length) - 1)
+        }, false);
       }
-      const refreshed = await refreshDetails();
-      if (refreshed && onChanged) onChanged();
+      await mutateAll();
+      if (onChanged) onChanged();
     } catch (err) {
       console.error('course catalog material delete error', err);
       setError(getErrorMessage(err, '资料删除失败'));
@@ -704,14 +519,13 @@ export function useCatalog({ catalog, open, onChanged }) {
 
   const handleDeleteResource = async (resource) => {
     if (!resource?.id || resourceDeleteDisabled || deletingResourceIds.has(resource.id)) return;
-
     setDeletingResourceIds((prev) => new Set(prev).add(resource.id));
     setError('');
     try {
       await catalogService.deleteResource(resource.id);
-      setResources((prev) => prev.filter((item) => item.id !== resource.id));
-      const refreshed = await refreshDetails();
-      if (refreshed && onChanged) onChanged();
+      mutateResources(resources.filter((item) => item.id !== resource.id), false);
+      await mutateAll();
+      if (onChanged) onChanged();
     } catch (err) {
       console.error('course catalog generated resource delete error', err);
       setError(getErrorMessage(err, '资源删除失败'));
@@ -740,6 +554,7 @@ export function useCatalog({ catalog, open, onChanged }) {
     generating,
     generationTask,
     generationTaskError,
+    generationProcessing,
     knowledgeGraphGenerating,
     knowledgeGraphTask,
     knowledgeGraphTaskError,

@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
-import { learningService } from '../api/services/learning';
+import { useEffect, useRef } from 'react';
+import { useResourceDetail } from '../hooks/useResourceDetail';
 import { learningActivityService } from '../api/services/learningActivity';
 import Icon from '../components/Icon';
 import MarkdownViewer from '../components/common/MarkdownViewer';
@@ -30,20 +30,10 @@ export default function ResourceDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
-  const [resource, setResource] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { resource, loading } = useResourceDetail(id);
   const studyStartRef = useRef(null);
   const trackingResourceRef = useRef(null);
   const nodeContext = location.state?.node || {};
-
-  useEffect(() => {
-    if (id) {
-      learningService.getResourceDetail(id).then(res => {
-        if (res.code === 200) setResource(res.data);
-      }).catch(() => setResource(null))
-      .finally(() => setLoading(false));
-    }
-  }, [id]);
 
   useEffect(() => {
     if (!resource?.id || !resource?.course_id) return undefined;

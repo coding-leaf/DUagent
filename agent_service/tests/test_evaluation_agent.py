@@ -28,14 +28,16 @@ def test_generate_evaluation_data_builds_mastery_table_from_quizzes() -> None:
 
     assert result.mastery_table is not None
     assert [column.key for column in result.mastery_table.columns] == [
+        "knowledge_point",
         "chapter",
         "average_score",
         "quiz_count",
+        "personalized_count",
         "mastery_level",
     ]
     assert result.mastery_table.rows == [
-        {"chapter": "函数", "average_score": 90.0, "quiz_count": 1, "mastery_level": "strong"},
-        {"chapter": "导数", "average_score": 55.0, "quiz_count": 1, "mastery_level": "weak"},
+        {"knowledge_point": "函数", "chapter": "函数", "average_score": 90.0, "quiz_count": 1, "personalized_count": 0, "mastery_level": "strong"},
+        {"knowledge_point": "导数", "chapter": "导数", "average_score": 55.0, "quiz_count": 1, "personalized_count": 0, "mastery_level": "weak"},
     ]
 
 
@@ -56,7 +58,7 @@ def test_generate_evaluation_data_builds_resource_usage_table() -> None:
 def test_generate_evaluation_data_builds_summary_text() -> None:
     result = generate_evaluation_data(_build_request())
 
-    assert result.summary_text == "已学习 2 个章节，平均完成率 60.0%，平均练习正确率 72.5%。薄弱章节：导数。"
+    assert result.summary_text == "已学习 2 个章节，平均完成率 60.0%，平均练习正确率 72.5%。薄弱知识点：导数。"
 
 
 # ── generate_evaluation_with_llm tests ─────────────────────────────

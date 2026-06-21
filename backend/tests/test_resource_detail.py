@@ -21,17 +21,26 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_resource.db",
 )
 
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory
 from httpx import AsyncClient, ASGITransport
-
-# Ensure tables exist
-asyncio.run(init_db())
 
 from app.main import app
 from app.models.user import RegistrationCode
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course, CourseEnrollment
 from app.models.others import Resource
+
+async def init_test_db():
+    from app.db.base import Base
+    from app.db.session import engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+
+# Ensure tables exist and are clean
+asyncio.run(init_test_db())
+
+
 
 
 async def _captcha_answer(client):

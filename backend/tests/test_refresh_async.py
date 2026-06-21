@@ -147,6 +147,8 @@ async def test():
 
             result = await _poll_task(client, task_id, headers)
             chk("profile/refresh → completed", result and result["status"] == "completed")
+            await asyncio.sleep(0.5)
+
 
             # Verify DB write
             async with async_session_factory() as db:
@@ -229,8 +231,10 @@ async def test():
             )
             chk("dialogue-update → 200", r.status_code == 200)
             body = r.json().get("data", {})
+            dimensions = body.get("profile_dimensions", [])
+            learning_goal_dim = next((d for d in dimensions if d.get("key") == "learning_goal"), {})
             chk("dialogue-update → profile source",
-                body.get("sources", {}).get("learning_goal") == "profile_dialogue")
+                learning_goal_dim.get("source") == "profile_dialogue")
             agent_path = mock_agent.await_args.args[0] if mock_agent.await_args else ""
             payload = mock_agent.await_args.args[1] if mock_agent.await_args else {}
             chk("dialogue-update → agent path",
@@ -374,6 +378,8 @@ async def test():
 
             result = await _poll_task(client, task_id, headers)
             chk("eval/refresh → completed", result and result["status"] == "completed")
+            await asyncio.sleep(0.5)
+
 
             async with async_session_factory() as db:
                 ev_r = await db.execute(
@@ -421,6 +427,8 @@ async def test():
             task_id = r.json()["data"]["task_id"]
             result = await _poll_task(client, task_id, headers)
             chk("eval Agent error → failed", result and result["status"] == "failed")
+            await asyncio.sleep(0.5)
+
             chk("eval Agent error → error_code",
                 result and "50001" in str(result.get("error_code", "")))
             async with async_session_factory() as db:
@@ -487,6 +495,8 @@ async def test():
 
             result = await _poll_task(client, task_id, headers)
             chk("lp/refresh → completed", result and result["status"] == "completed")
+            await asyncio.sleep(0.5)
+
 
             async with async_session_factory() as db:
                 lp_r = await db.execute(
@@ -509,6 +519,8 @@ async def test():
             task_id = r.json()["data"]["task_id"]
             result = await _poll_task(client, task_id, headers)
             chk("lp Agent error → failed", result and result["status"] == "failed")
+            await asyncio.sleep(0.5)
+
             chk("lp Agent error → error_code",
                 result and "50002" in str(result.get("error_code", "")))
 

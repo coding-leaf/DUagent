@@ -9,8 +9,8 @@
 | # | Name | Scope | Dependencies | Status |
 |---|---|---|---|---|
 | 1 | AI Chat & Tutoring | Frontend `AIChat`, Backend `tutoring` & `evaluation`, Agent `tutoring` | None | DONE (Conv: d67cefab-553f-4f69-9acf-01899594be20) |
-| 2 | Resource Generation & Mounting | Frontend `ResourceDetail` & Catalogs, Backend `resources` & `catalogs`, Agent `resources` | None | IN_PROGRESS (Conv: fb6ae602-7f1d-4a3e-a8fd-788cb518196a) |
-| 3 | Core Learning | Frontend `LearningPath` & `Quiz`, Backend `learning-path` & `learning-activities`, Agent `learning_path` | None | PLANNED |
+| 2 | Resource Generation & Mounting | Frontend `ResourceDetail` & Catalogs, Backend `resources` & `catalogs`, Agent `resources` | None | DONE (Conv: e661892b-3a1c-4442-b648-d4f645404d06) |
+| 3 | Core Learning | Frontend `LearningPath` & `Quiz`, Backend `learning-path` & `learning-activities`, Agent `learning_path` | None | IN_PROGRESS (Conv: 77866b9b-6ff5-4d92-8e3e-4c7274b142db) |
 
 ## Interface Contracts
 ### Backend ↔ Agent Service

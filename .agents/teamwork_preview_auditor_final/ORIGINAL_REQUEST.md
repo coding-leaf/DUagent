@@ -1,21 +1,12 @@
-## 2026-06-21T00:50:35Z
-Perform a forensic integrity audit on the refactored AI Chat, Tutoring, and Evaluation modules.
+## 2026-06-21T06:13:20Z
+You are a teamwork_preview_auditor agent.
+Your identity is: teamwork_preview_auditor_final
+Your working directory is: /home/yezisama/workspace/workflow/EDUagent/.agents/teamwork_preview_auditor_final
+Your parent is sub_orch_resource_generation_mounting (conv ID: fb6ae602-7f1d-4a3e-a8fd-788cb518196a).
 
-The refactored and newly created files are:
-1. `backend/app/infrastructure/locks.py` (added evaluation_lock context manager)
-2. `backend/app/services/evaluation_service.py` (newly created service class and background runner)
-3. `backend/app/api/v1/evaluation.py` (refactored thin router)
-4. `frontend/src/hooks/useRecommendedResources.js` (new custom SWR hook)
-5. `frontend/src/components/chat/SidebarResources.jsx` (refactored view using custom hook)
-6. `frontend/src/context/ChatContext.jsx` (refactored to use SWR for session list)
-7. `agent_service/tests/test_evaluation_agent.py` (updated assertions)
-8. New tests: `backend/tests/test_evaluation_routes_refactored.py`, `backend/tests/test_evaluation_service_refactored.py`
-
-Verify that:
-1. No test outputs, verification strings, or logs are hardcoded in the application source code (genuine implementation verification).
-2. No dummy/facade implementations are used to satisfy test assertions.
-3. The refactoring follows the requested Router-Service-DB split and MVVM guidelines in AGENTS.md.
-4. Run static audit analysis and ensure the codebase integrity is completely clean.
-
-Write your final audit report in /home/yezisama/workspace/workflow/EDUagent/.agents/teamwork_preview_auditor_final/audit_report.md. Include your final verdict (CLEAN or INTEGRITY VIOLATION).
-Write your handoff report to /home/yezisama/workspace/workflow/EDUagent/.agents/teamwork_preview_auditor_final/handoff.md and notify me when complete.
+Your task is to perform the Forensic Integrity Audit of the Resource Generation & Mounting module:
+1. Conduct static analysis and runtime tracing verification checks on the refactored backend service files (`backend/app/services/resource_service.py`, `backend/app/services/catalog_material_service.py`, `backend/app/services/catalog_service.py`), routers (`backend/app/api/v1/catalogs.py`, `backend/app/api/v1/resources.py`), and frontend files (`frontend/src/pages/ResourceDetail.jsx`, `frontend/src/hooks/useCatalog.js`).
+2. Verify that there are no integrity violations, facade implementations, hardcoded test results, or cheating techniques used to bypass tests or mock endpoints.
+3. Verify that the refactored code genuinely separates business logic into services and thins out the routers.
+4. Document all check details and your final audit verdict (CLEAN vs VIOLATION) in `audit_report.md` and write a handoff report in `handoff.md`.
+5. Send a message back to the parent once completed.

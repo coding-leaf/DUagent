@@ -1,4 +1,4 @@
-# BRIEFING — 2026-06-21T13:50:35+08:00
+# BRIEFING — 2026-06-21T14:19:01+08:00
 
 ## Mission
 Refactor the EDUagent full-stack project functional modules in structured phases.
@@ -47,12 +47,13 @@ Refactor the EDUagent full-stack project functional modules in structured phases
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
 | sub_orch_ai_chat | self | AI Chat & Tutoring Module Refactoring | completed | d67cefab-553f-4f69-9acf-01899594be20 |
-| sub_orch_resource | self | Resource Generation & Mounting Module Refactoring | in-progress | e661892b-3a1c-4442-b648-d4f645404d06 |
+| sub_orch_resource | self | Resource Generation & Mounting Module Refactoring | completed | e661892b-3a1c-4442-b648-d4f645404d06 |
+| sub_orch_learning | self | Core Learning Module Refactoring | in-progress | 77866b9b-6ff5-4d92-8e3e-4c7274b142db |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 4 / 16
-- Pending subagents: e661892b-3a1c-4442-b648-d4f645404d06
+- Spawn count: 5 / 16
+- Pending subagents: 77866b9b-6ff5-4d92-8e3e-4c7274b142db
 - Predecessor: de6d8910-4fb8-48da-9dd8-33bb9f982a02
 - Successor: not yet spawned
 

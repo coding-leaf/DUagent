@@ -11,7 +11,7 @@
 | 1 | Baseline Verification | Capturing baseline tests for catalogs, resources and personalized resources | None | DONE |
 | 2 | Backend Catalogs & Resources Refactoring | Refactor `catalogs.py` and `resources.py` to move business logic and direct queries to services, ensuring thin routers. Update/add tests | M1 | DONE |
 | 3 | Frontend ResourceDetail & Catalogs Refactoring | Refactor `ResourceDetail.jsx` to use custom SWR hooks (`useResourceDetail`), separate view from API calls (MVVM) | M2 | DONE |
-| 4 | Final Integration & Verification | Run all pytest/Vitest suites for catalogs/resources; run Forensic Integrity Audit | M3 | IN_PROGRESS |
+| 4 | Final Integration & Verification | Run all pytest/Vitest suites for catalogs/resources; run Forensic Integrity Audit | M3 | DONE |
 
 ## Interface Contracts
 - Backend `catalogs` exposes admin endpoints for uploading material, starts ingestion, generates KG and resources.

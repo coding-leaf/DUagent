@@ -27,10 +27,10 @@ Refactor the Resource Generation & Mounting module of the EDUagent project, incl
 - **Work items**:
   1. Baseline Verification [done]
   2. Backend Catalogs & Resources Refactoring [done]
-  3. Frontend ResourceDetail & Catalogs Refactoring [in-progress]
-  4. Final Integration & Verification [pending]
-- **Current phase**: 3
-- **Current focus**: Frontend ResourceDetail & Catalogs Refactoring
+  3. Frontend ResourceDetail & Catalogs Refactoring [done]
+  4. Final Integration & Verification [done]
+- **Current phase**: 4
+- **Current focus**: none (All milestones complete)
 
 ## 🔒 Key Constraints
 - Only modify files related to Resource Generation & Mounting.
@@ -41,7 +41,10 @@ Refactor the Resource Generation & Mounting module of the EDUagent project, incl
 - Updated: not yet
 
 ## Key Decisions Made
-- Initial setup
+- Transitioned `useCatalog.js` and `ResourceDetail.jsx` from manual fetching and timeout-based polling to SWR conditional polling.
+- Extracted business logic, chunked stream saving, and database queries from API routes (`backend/app/api/v1/catalogs.py` and `resources.py`) to thin routers calling specialized services (`CatalogService`, `CatalogMaterialService`, `ResourceService`).
+- Utilized `NullPool` in SQLAlchemy testing environments to prevent connection leakage across event loops during integration tests.
+- Captured local SWR `mutate` from `<SWRConfig>` using a custom helper wrapper in test suites to prevent test pollution.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
@@ -55,12 +58,12 @@ Refactor the Resource Generation & Mounting module of the EDUagent project, incl
 | Worker 3 Repl | teamwork_preview_worker | Frontend Refactoring | failed | 7de7d5ed-2285-4962-bf7d-7aa984adf1f0 |
 | Worker 3 Repl 2 | teamwork_preview_worker | Frontend Refactoring | completed | 8b5483a1-eafe-4e87-b665-00760b3fa6bf |
 | Worker 4 | teamwork_preview_worker | Final Verification | failed | e89e4ff2-49e6-4375-86d5-fdcd86f1aeb9 |
-| Worker 4 Repl | teamwork_preview_worker | Final Verification | in-progress | d2da7385-f97a-4d8a-973b-4a52cb6e69a7 |
+| Auditor 1 | teamwork_preview_auditor | Forensic Integrity Audit | completed | 364aa463-f6b5-4ddb-8771-75797c7ef72a |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 10 / 16
-- Pending subagents: d2da7385-f97a-4d8a-973b-4a52cb6e69a7
+- Spawn count: 11 / 16
+- Pending subagents: none
 - Predecessor: none
 - Successor: not yet spawned
 

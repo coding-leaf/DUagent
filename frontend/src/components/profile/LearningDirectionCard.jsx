@@ -3,7 +3,6 @@ import Icon from '../Icon';
 export default function LearningDirectionCard({
   drive_intent,
   handleGoalChange,
-  goalSubmitting,
   customInstruction,
   setCustomInstruction,
   handleInstructionSubmit,
@@ -30,8 +29,7 @@ export default function LearningDirectionCard({
               <button
                 key={key}
                 onClick={() => handleGoalChange(key)}
-                disabled={goalSubmitting}
-                className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-sm font-bold transition-colors ${
                   active
                     ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
                     : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-cyan-300 hover:bg-cyan-50/50'

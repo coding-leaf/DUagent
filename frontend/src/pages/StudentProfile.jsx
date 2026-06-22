@@ -51,7 +51,7 @@ export default function StudentProfile() {
   const [instructionSubmitting, setInstructionSubmitting] = useState(false);
   const [instructionError, setInstructionError] = useState('');
   const [instructionSuccess, setInstructionSuccess] = useState(false);
-  const [goalSubmitting, setGoalSubmitting] = useState(false);
+  const [localDriveIntentType, setLocalDriveIntentType] = useState(null);
   const [localGuidanceLevel, setLocalGuidanceLevel] = useState(
     user?.guidance_level || 'L2'
   );
@@ -285,17 +285,9 @@ export default function StudentProfile() {
 
 
 
-  const handleGoalChange = async (goalType) => {
-    if (goalSubmitting) return;
-    setGoalSubmitting(true);
-    try {
-      await profileService.updateLearningGoal(activeCourseId, goalType);
-      mutateProfile();
-    } catch (err) {
-      console.error('更新学习方向失败:', err);
-    } finally {
-      setGoalSubmitting(false);
-    }
+  const handleGoalChange = (goalType) => {
+    setLocalDriveIntentType(goalType);
+    profileService.updateLearningGoal(activeCourseId, goalType).catch(() => {});
   };
 
   const handleInstructionSubmit = async () => {
@@ -348,9 +340,8 @@ export default function StudentProfile() {
             />
 
             <LearningDirectionCard
-              drive_intent={drive_intent}
+              drive_intent={{ ...drive_intent, type: localDriveIntentType ?? drive_intent.type }}
               handleGoalChange={handleGoalChange}
-              goalSubmitting={goalSubmitting}
               customInstruction={customInstruction}
               setCustomInstruction={(val) => {
                 setCustomInstruction(val);

@@ -208,4 +208,23 @@
 
 **接口漂移：** 无
 
+### 2026-06-26 — 实现交互式 QuizCard, MermaidViewer 和 MarkdownViewer 插件组件
 
+**涉及文件：**
+- `frontend/src/components/workspace/plugins/QuizCard.jsx`
+- `frontend/src/components/workspace/plugins/MermaidViewer.jsx`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+
+**核心改动：**
+实现并扩展了前端工作区的三个核心展示与交互插件：
+1. `QuizCard.jsx`：实现了包含题干渲染、选项高亮、提交控制以及对错反馈的交互式单选题卡片。
+2. `MermaidViewer.jsx`：集成 `mermaid` 库，并使用 `useEffect` 侦听并解析渲染动态流程图。
+3. `MarkdownViewer.jsx`：利用 `react-markdown` 配合 `remark-gfm` 实现课件与笔记排版。
+
+**验证结果：**
+- 前端 lint / build：通过（lint 零错误，build 打包成功）
+- 前端测试：PluginRegistry 测试通过
+- 后端 py_compile / pytest：未运行（前端专属修改）
+- Agent pytest：未运行（前端专属修改）
+
+**接口漂移：** 无

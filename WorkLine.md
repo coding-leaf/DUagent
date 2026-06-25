@@ -227,4 +227,25 @@
 - 后端 py_compile / pytest：未运行（前端专属修改）
 - Agent pytest：未运行（前端专属修改）
 
+
 **接口漂移：** 无
+
+### 2026-06-26 — 修复 MarkdownViewer 样式依赖及 MermaidViewer 渲染缓存 bug
+
+**涉及文件：**
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+- `frontend/src/components/workspace/plugins/MermaidViewer.jsx`
+
+**核心改动：**
+根据规格合规性检查（Spec Compliance Review）反馈进行了以下两项修复：
+1. `MarkdownViewer.jsx`：去除了对未声明的 `@tailwindcss/typography` (`prose`) 依赖。采用 `react-markdown` 的 `components` 属性针对每个元素自定义映射渲染并绑定特定的 Tailwind 样式类。
+2. `MermaidViewer.jsx`：移除直接操作 `innerHTML` 的同步渲染行为，改为使用异步 `mermaid.render` API 并将生成的 SVG 存入 state 进行渲染，避免 `data-processed="true"` 缓存残留与全局副作用。
+
+**验证结果：**
+- 前端 lint / build：通过（ESLint 零错误，Vite 构建打包成功）
+- 前端测试：PluginRegistry 单元测试通过
+- 后端 py_compile / pytest：未运行（前端专属修改）
+- Agent pytest：未运行（前端专属修改）
+
+**接口漂移：** 无
+

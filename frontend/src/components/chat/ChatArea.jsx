@@ -24,13 +24,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
     return () => cancelAnimationFrame(frameId);
   }, [messages]);
 
-  useEffect(() => {
-    const handler = (e) => {
-      sendMockArtifact(e.detail);
-    };
-    window.addEventListener('mock-artifact', handler);
-    return () => window.removeEventListener('mock-artifact', handler);
-  }, [sendMockArtifact]);
+
 
   const handleSendMessage = (overrideText = '') => {
     const textToSend = (overrideText || inputValue).trim();
@@ -182,17 +176,14 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                 </button>
                 <button 
                   onClick={() => {
-                    const event = new CustomEvent('mock-artifact', {
-                      detail: {
-                        type: 'QuizCard',
-                        props: {
-                          question: '以下哪个是线性数据结构？',
-                          choices: ['二叉树', '图', '队列', '网'],
-                          correctAnswer: 2
-                        }
+                    sendMockArtifact({
+                      type: 'QuizCard',
+                      props: {
+                        question: '以下哪个是线性数据结构？',
+                        choices: ['二叉树', '图', '队列', '网'],
+                        correctAnswer: 2
                       }
                     });
-                    window.dispatchEvent(event);
                   }}
                   className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
                   title="生成模拟 Artifact"

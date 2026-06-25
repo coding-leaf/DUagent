@@ -101,6 +101,7 @@ const materialToLucide = {
     'more_horiz': 'MoreHorizontal',
     'design_services': 'PencilRuler',
     'dashboard_customize': 'LayoutGrid',
+    'data_object': 'Braces',
 };
 
 export default function Icon({ name, className = "", style = {} }) {

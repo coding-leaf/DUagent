@@ -36,7 +36,7 @@ This file applies only to frontend-specific work scoped from `frontend/` and sup
 
 1. **当前运行代码**：前端 `src/`、后端 `backend/app/`、Agent `agent_service/`。代码是最终事实。
 2. **`docs/superpowers/specs/`**：本 session 产出的设计文档，近期决策在这里。
-3. **`WorkLine.md`**：根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
+3. **`WorkLine.md`**：根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于只读追溯历史上下文，不再追加新记录，也不作为当前状态源。
 4. **`docs/feature-ledger.md`**：功能级看板，但已与实际实现存在较大偏差，**只作参考，不作约束**。用它了解历史意图，不用它判断现状。
 5. **`../docs/10-client-api/` OpenAPI 和前端接口规范**：历史契约，**已过时**，仅在核对某个字段来源时参考，不作为实现约束。
 6. **`docs/requirements-coverage.md`**：接口实现功能记录，可参考。
@@ -69,6 +69,10 @@ This file applies only to frontend-specific work scoped from `frontend/` and sup
 
 > 反例：手写 `setInterval` 轮询时忘记 cleanup 导致内存泄漏；手写深拷贝遗漏 `Date`/`Map` 类型。
 > 正例：用 React Query 的 `refetchInterval: (data) => data?.done ? false : 2000` 替代 30 行脆弱的 `pollTask`。
+
+### React / SWR / MVVM
+
+前端状态和接口调用按 React 组件、SWR 数据层、MVVM 视图模型拆分职责：页面组件只表达交互和渲染，接口缓存与重试交给 SWR，可复用的页面状态与字段映射沉到 hook 或 view model。
 
 ### 计划驱动的重构原则 (Plan-Driven Refactoring)
 
@@ -103,56 +107,28 @@ This file applies only to frontend-specific work scoped from `frontend/` and sup
 OpenAPI 已过时，不以它为强约束。但改动接口时：
 
 - 要同时改前后端对应的调用点（不能只改一侧）
-- 在根目录 `WorkLine.md` 记录漂移点（改了什么字段、为什么）。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
+- 接口漂移记录位置统一为 `WorkLine.md`。
 - 不需要审批，但需要记录
-
----
-
-## 改动规模分级
-
-| 规模 | 判断标准 | 操作方式 |
-|------|---------|---------|
-| 小修 | 1-2 个文件，局部字段/逻辑 | 直接修改，commit，记录 |
-| 中等 | 3-5 个文件，跨前后端联调 | 说明范围和影响，确认后修改 |
-| 大改 | 涉及数据结构/Agent/核心 service/多页面 | 先写 spec（`docs/superpowers/specs/`），走设计流程 |
-
-> **优先级规则**：凡涉及跨模块提取、前后端分离、环境清理等重构操作，无论文件数量多少，一律按"大改"流程处理，先写 Spec 再动手。
 
 ---
 
 ## 测试与检查
 
-每次修改后运行：
+前端修改后运行：
 
 ```bash
-# 前端
 npm run lint
 npm run build
-
-# 后端语法
-python3 -m py_compile <修改的 .py 文件>
-
-# 后端测试（如果涉及已有测试）
-cd backend && python3 -m pytest tests/<相关测试文件> -v
 ```
 
 构建失败必须修复后再 commit。如果测试失败需说明：命令、失败位置、是否修复。
 
 ---
 
-## Git
-
-- 当前分支规则以根目录 `Agents.md` 为准。
-- 不运行 `git reset --hard`、`git clean -fd`、`git push --force`
-- 不运行 `git push`，除非用户明确要求
-- 每完成一批文件修改后 commit
-- commit message 用简洁中文，描述做了什么
-
----
-
 ## 进度记录
 
-完成一个功能点后，在根目录 `WorkLine.md` 末尾追加：日期、改了什么文件、核心改动、测试结果、是否有接口漂移。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
+完成前端功能或接口调用变更后，在根目录 `WorkLine.md` 追加记录。若需要追溯 v2 阶段历史，可只读查询旧版 `WORKFLOW.md`。
+接口漂移记录位置统一为 `WorkLine.md`。
 
 `docs/feature-ledger.md` 不要频繁更新，它已经偏移，更新它的收益低于维护成本。
 `docs/requirements-coverage.md` 需要更新功能/接口实现记录。

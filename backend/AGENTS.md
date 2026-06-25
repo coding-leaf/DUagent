@@ -15,6 +15,7 @@
 - 负责用户、鉴权、课程、SQL 持久化、任务状态、前端 API、Agent Service HTTP 调用适配和 Webhook 落库。
 - 不负责 `agent_service/` 内部的 LLM、AgentScope、Qdrant RAG、提示词、智能体编排实现。
 - Backend 只通过 HTTP 调用 Agent Service，使用统一的 `app/services/agent_client.py`，不导入 `agent_service` Python 模块。
+- Backend 不直接访问 Qdrant；RAG 检索由 Agent Service 负责。
 - Agent Service 不直接写 Backend SQL；Backend 负责校验 Agent 返回结果并写入 SQL。
 
 ## Source Of Truth
@@ -29,7 +30,7 @@
 
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
 - `README.md` 是模块文档入口。
-- 根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
+- 根目录 `WorkLine.md` 是当前工作存档。旧版 `WORKFLOW.md` 仅用于只读追溯历史联调记录。
 
 ## Contract Discipline
 
@@ -70,12 +71,12 @@
 
 ### Backend 分层职责
 
-- `api/v1`：FastAPI 路由、鉴权依赖、参数校验、统一返回包装 `{code, message, data}`、SSE 代理、异步任务协议适配。
+- `api/v1` / Router：FastAPI 路由、鉴权依赖、参数校验、统一返回包装 `{code, message, data}`、SSE 代理、异步任务协议适配。
 - `schemas`：前端请求/响应 Pydantic 实体，以及 Webhook 请求实体。
 - `models`：SQLAlchemy ORM 实体，对齐 `backend/schema.sql`。
 - `db`：数据库连接、会话初始化。
 - `core`：配置（`AGENT_SERVICE_URL` 等）、安全、JWT。
-- `services`：跨路由复用的业务编排，核心是 `agent_client.py` 统一 Agent HTTP 客户端。
+- `services` / Service：跨路由复用的业务编排，核心是 `agent_client.py` 统一 Agent HTTP 客户端。
 
 避免把复杂业务逻辑堆进 `api` 层。API 层做鉴权、参数校验、响应包装；Agent 请求组装、Webhook 结果落库、任务状态流转下沉到 service。
 
@@ -101,17 +102,9 @@
 - Agent Service 直接写 Backend SQL
 - Agent Service 自行生成 `task_id`（必须由 Backend 传入）
 - 修改 `../docs/` 下已有文档，除非用户明确要求
-- 根目录 `WorkLine.md` 只维护“状态、最近验证、下一步”，不要重复工作流程、测试文件清单、长篇操作说明；旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 ## Code Change Rules
 
-- 修改代码前需要分析并说明问题。
-- 修改代码前必须先输出：
-  1. 问题分析
-  2. 计划修改的文件
-  3. 修改方案
-  4. 可能影响的功能
-- 用户确认后，才允许修改文件。
 - 保持命名风格和当前项目结构。
 - 以接口或明确子能力为修改边界，不要过度影响其他功能。
 - 一次不超过 5 个文件。
@@ -129,18 +122,11 @@
   4. 运行相关测试确认通过
   5. 重构优化（IMPROVE）
   6. 确认覆盖率 >= 80%
-  7. 更新根目录 `WorkLine.md`
+  7. 按根目录 `Agents.md` 要求记录进展
 
 ## Progress Tracking
 
-每次完成一个小阶段后更新根目录 `WorkLine.md`，至少同步：
-
-- 对应接口的联调状态
-- 当前上下文
-- 下一步建议
-- 已运行的测试命令和结果
-
-临时进度、当前任务、下一步队列写入根目录 `WorkLine.md`，不写入 `AGENTS.md`。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
+Backend 开发完成后，在根目录 `WorkLine.md` 记录接口状态、测试命令和结果、契约是否漂移。旧版 `WORKFLOW.md` 仅用于只读追溯历史联调记录。
 
 ## Testing
 
@@ -156,6 +142,7 @@
   - Agent 超时处理
   - SQL 落库正确性
 - 修改 `models/`/`db`/`schema.sql` 后运行导入检查。
+- 导入检查可使用 `py_compile` 或项目现有等价命令。
 - 如无现有测试，至少运行基本导入检查或启动检查，不应静默跳过验证。
 - 测试文件放在 `tests/` 目录下。
 - 不为测试而大规模重构项目。
@@ -170,7 +157,7 @@ git status --short
 curl -s http://127.0.0.1:8002/agent/v1/health
 ```
 
-跨窗口继续时，优先读取 `AGENTS.md`、根目录 `WorkLine.md`、`git status --short`、最近测试结果；旧版 `WORKFLOW.md` 仅作为历史备份只读查询。
+跨窗口继续时，优先读取 `AGENTS.md`、根目录 `WorkLine.md`、`git status --short`、最近测试结果；旧版 `WORKFLOW.md` 仅作为历史联调记录只读查询。
 
 ## Git
 
@@ -178,7 +165,6 @@ curl -s http://127.0.0.1:8002/agent/v1/health
 - 当前分支规则以根目录 `Agents.md` 为准。
 - 修改前识别已有未提交内容，不回滚无关改动。
 - 使用 `git stash` 前告知用户。
-- 每次修改后 git commit（不 push）。
 - 提交只纳入本轮文件。
 
 ## Completion Summary

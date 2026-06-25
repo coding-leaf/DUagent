@@ -34,6 +34,17 @@ export const ChatProvider = ({ children }) => {
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [workspaceArtifacts, setWorkspaceArtifacts] = useState([]);
+
+  const sendMockArtifact = (payload) => {
+    const newArtifact = {
+      id: `artifact-${crypto.randomUUID()}`,
+      type: payload.type,
+      props: payload.props || {},
+      timestamp: new Date().toISOString()
+    };
+    setWorkspaceArtifacts(prev => [...prev, newArtifact]);
+  };
   
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
@@ -237,7 +248,8 @@ export const ChatProvider = ({ children }) => {
   return (
     <ChatContext.Provider value={{
       sessions, activeSession, setActiveSession, messages, isSending,
-      sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession
+      sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession,
+      workspaceArtifacts, sendMockArtifact
     }}>
       {children}
     </ChatContext.Provider>

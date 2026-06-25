@@ -5,6 +5,9 @@
 > **【作用域声明】**
 > 本约束文档为局部规范，仅在以当前子目录作为工作区根目录进行独立开发时，才具备强制约束力。在跨模块开发或以项目主目录（全局）为工作区时，本文档仅作参考，实际开发请以项目根目录下的全局约束文档（`.agents/AGENTS.md`）为准。
 
+> 根目录 `Agents.md` 是全局协作约束；本文件只补充当前子模块的局部规则。
+> 若流程规则冲突，以根目录 `Agents.md` 为准；若模块边界细节冲突，以本文件为准。
+
 - 开始前先读 `README.md` 获取文件导读和阅读顺序。
 - `AGENTS.md` 只负责协作规则与修改约束，不承担模块文档导航职责。
 
@@ -26,7 +29,7 @@
 
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
 - `README.md` 是模块文档入口。
-- `WORKFLOW.md` 是联调进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
+- 根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 ## Contract Discipline
 
@@ -98,7 +101,7 @@
 - Agent Service 直接写 Backend SQL
 - Agent Service 自行生成 `task_id`（必须由 Backend 传入）
 - 修改 `../docs/` 下已有文档，除非用户明确要求
-- WORKFLOW.md 只维护“状态、最近验证、下一步”，不要重复工作流程、测试文件清单、长篇操作说明。
+- 根目录 `WorkLine.md` 只维护“状态、最近验证、下一步”，不要重复工作流程、测试文件清单、长篇操作说明；旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 ## Code Change Rules
 
@@ -126,18 +129,18 @@
   4. 运行相关测试确认通过
   5. 重构优化（IMPROVE）
   6. 确认覆盖率 >= 80%
-  7. 更新 `WORKFLOW.md`
+  7. 更新根目录 `WorkLine.md`
 
 ## Progress Tracking
 
-每次完成一个小阶段后更新 `WORKFLOW.md`，至少同步：
+每次完成一个小阶段后更新根目录 `WorkLine.md`，至少同步：
 
 - 对应接口的联调状态
 - 当前上下文
 - 下一步建议
 - 已运行的测试命令和结果
 
-临时进度、当前任务、下一步队列写入 `WORKFLOW.md`，不写入 `AGENTS.md`。
+临时进度、当前任务、下一步队列写入根目录 `WorkLine.md`，不写入 `AGENTS.md`。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 ## Testing
 
@@ -167,12 +170,12 @@ git status --short
 curl -s http://127.0.0.1:8002/agent/v1/health
 ```
 
-跨窗口继续时，以 `AGENTS.md`、`WORKFLOW.md`、`git status --short`、最近测试结果为主要上下文。
+跨窗口继续时，优先读取 `AGENTS.md`、根目录 `WorkLine.md`、`git status --short`、最近测试结果；旧版 `WORKFLOW.md` 仅作为历史备份只读查询。
 
 ## Git
 
 - 避免在 `main` / `dev` 直接开发。
-- 默认在 `feat/backend-agent-integration` 分支。
+- 当前分支规则以根目录 `Agents.md` 为准。
 - 修改前识别已有未提交内容，不回滚无关改动。
 - 使用 `git stash` 前告知用户。
 - 每次修改后 git commit（不 push）。

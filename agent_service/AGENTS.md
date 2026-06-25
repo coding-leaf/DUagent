@@ -5,6 +5,9 @@
 > **【作用域声明】**
 > 本约束文档为局部规范，仅在以当前子目录作为工作区根目录进行独立开发时，才具备强制约束力。在跨模块开发或以项目主目录（全局）为工作区时，本文档仅作参考，实际开发请以项目根目录下的全局约束文档（`.agents/AGENTS.md`）为准。
 
+> 根目录 `Agents.md` 是全局协作约束；本文件只补充当前子模块的局部规则。
+> 若流程规则冲突，以根目录 `Agents.md` 为准；若模块边界细节冲突，以本文件为准。
+
 - 开始前先读 `README.md` 获取文件导读和阅读顺序。
 - `AGENTS.md` 只负责协作规则与修改约束，不承担模块文档导航职责。
 
@@ -20,13 +23,13 @@
 2. `../docs/20-agent-api/API_Agent内部接口规范.md`
 3. `../docs/30-dev-guide/Agent-Service_开发导读.md`
 4. 当前 `agent_service/` 代码
-5. `WORKFLOW.md`
+5. 根目录 `WorkLine.md`
 
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
 
 `README.md` 是模块文档入口。
 
-`WORKFLOW.md` 是开发进度和跨窗口恢复上下文的主状态文件，不是接口契约来源。
+根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 `docs/supplemental/Agent架构演进与多智能体进程.md` 记录 Agent 架构演进讨论、multi-agent 候选项和阶段性取舍，不是接口契约来源，也不是具体实现计划。
 
@@ -65,7 +68,7 @@
 - 以接口或明确子能力为修改边界，不要过度影响其他功能；如确需跨边界修改，先说明原因和风险。
 - 可申请大范围文件修改权限，但申请时必须说明修改范围、必要性和可能后果。
 - 不要过度工程化；除非能简化代码或减少真实重复，否则不要引入复杂抽象。
-- `WORKFLOW.md` 可随已确认的开发任务同步更新，但不能以更新进度为理由扩大业务代码修改范围。
+- 根目录 `WorkLine.md` 可随已确认的开发任务同步更新，但不能以更新进度为理由扩大业务代码修改范围。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 - 新增对外承接函数、Agent 编排函数、协议转换函数时，需要添加简短注释，说明作用、主要输入和输出。
 - 简单私有辅助函数不强制添加长注释，优先用清晰命名表达意图。
 - 注释应与 `API_Agent内部接口规范.md` 的语义保持一致，不要编造协议字段。
@@ -77,7 +80,7 @@
   2. 运行测试确认失败
   3. 最小实现
   4. 运行相关测试
-  5. 更新 `WORKFLOW.md`
+  5. 更新根目录 `WorkLine.md`
 - 接入 AgentScope、LLM、Qdrant、工具等框架调用。
 - 非必要功能可最小实现,优先满足主要功能的实现而非注重细枝末节
 
@@ -92,25 +95,25 @@
 
 - 涉及 AgentScope API、用法、配置时，优先参考 AgentScope 官方文档和项目当前已有代码。
 - 不凭空编造 AgentScope 接口。
-- 若无法确认 AgentScope 行为，先实现规则版或接口承接层，并在 `WORKFLOW.md` 标注后续替换点。
+- 若无法确认 AgentScope 行为，先实现规则版或接口承接层，并在根目录 `WorkLine.md` 标注后续替换点。
 
 ## AgentScope Boundary
 
   - 官方文档索引优先使用 `https://docs.agentscope.io/llms.txt`；本仓库导航使用 `docs/skills/agentscope-framework/SKILL.md`。
   - 若官方文档、当前安装版本和历史示例冲突，优先以官方当前文档和本地安装包 introspection 为准。
-  - 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在 `WORKFLOW.md` 标注后续替换点。
+  - 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在根目录 `WorkLine.md` 标注后续替换点。
   - 涉及 RAG、Msg、ReActAgent、structured output、Memory、Tool 等 AI 相关实现时需优先参考agentscope框架
 
 ## Progress Tracking
 
-每次完成一个小阶段后，必须更新 `WORKFLOW.md`，至少同步：
+每次完成一个小阶段后，必须更新根目录 `WorkLine.md`，至少同步：
 
 - 对应接口的实现状态
 - 当前上下文
 - 下一步建议
 - 已运行的测试命令和结果
 
-接口状态以 `WORKFLOW.md` 的项目进度表为准。临时进度、当前任务、下一步队列写入 `WORKFLOW.md`，不要写入 `AGENTS.md`。
+接口状态以根目录 `WorkLine.md` 的项目进度表为准。临时进度、当前任务、下一步队列写入根目录 `WorkLine.md`，不要写入 `AGENTS.md`。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 ## Context Handoff
 
@@ -119,21 +122,21 @@
 ```bash
 pwd
 git status --short
-sed -n '1,260p' WORKFLOW.md
+sed -n '1,260p' ../WorkLine.md
 ```
 
 如果当前目录在仓库根目录，则读取：
 
 ```bash
-sed -n '1,260p' agent_service/WORKFLOW.md
+sed -n '1,260p' WorkLine.md
 ```
 
-跨窗口继续开发时，以 `WORKFLOW.md`、`git status --short`、最近测试结果为主要上下文。
+跨窗口继续开发时，以根目录 `WorkLine.md`、`git status --short`、最近测试结果为主要上下文；旧版 `WORKFLOW.md` 仅作为历史备份只读查询。
 
 ## Git
 
 - 避免在 `master` / `main` / `dev` 等主分支直接开发。
-- 默认在 `feat/agent` 或用户当前指定的 agent 功能分支开发。
+- 当前分支规则以根目录 `Agents.md` 为准。
 - 修改前如工作区已有未提交内容，必须先识别哪些是用户改动，不能回滚或覆盖无关改动。
 - 如需使用 `git stash`，必须先告知用户。
 - 每次文件修改后需要总结修改内容并git commit(并非git push)

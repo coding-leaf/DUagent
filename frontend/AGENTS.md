@@ -5,6 +5,9 @@
 > **【作用域声明】**
 > 本约束文档为局部规范，仅在以当前子目录作为工作区根目录进行独立开发时，才具备强制约束力。在跨模块开发或以项目主目录（全局）为工作区时，本文档仅作参考，实际开发请以项目根目录下的全局约束文档（`.agents/AGENTS.md`）为准。
 
+> 根目录 `Agents.md` 是全局协作约束；本文件只补充当前子模块的局部规则。
+> 若流程规则冲突，以根目录 `Agents.md` 为准；若模块边界细节冲突，以本文件为准。
+
 This file applies to the full EDUagent project (frontend / backend / agent_service), scoped from `frontend/`. Subdirectory AGENTS.md takes precedence if present.
 
 ---
@@ -33,12 +36,12 @@ This file applies to the full EDUagent project (frontend / backend / agent_servi
 
 1. **当前运行代码**：前端 `src/`、后端 `backend/app/`、Agent `agent_service/`。代码是最终事实。
 2. **`docs/superpowers/specs/`**：本 session 产出的设计文档，近期决策在这里。
-3. **`WORKFLOW.md`**：按日期的施工记录，回溯某次改了什么、跑了什么。
+3. **`WorkLine.md`**：根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 4. **`docs/feature-ledger.md`**：功能级看板，但已与实际实现存在较大偏差，**只作参考，不作约束**。用它了解历史意图，不用它判断现状。
 5. **`../docs/10-client-api/` OpenAPI 和前端接口规范**：历史契约，**已过时**，仅在核对某个字段来源时参考，不作为实现约束。
 6. **`docs/requirements-coverage.md`**：接口实现功能记录，可参考。
 
-**不要用文档推翻实际运行代码的行为。如果文档和代码冲突，以代码为准，顺带在 WORKFLOW.md 记一笔。**
+**不要用文档推翻实际运行代码的行为。如果文档和代码冲突，以代码为准，顺带在根目录 `WorkLine.md` 记一笔。**
 
 > 注意：权威来源第1条（当前运行代码）判断的是实现逻辑和格式，而"以 UI 行为为真相"判断的是功能完成度。二者适用场景不同，不冲突。
 
@@ -100,7 +103,7 @@ This file applies to the full EDUagent project (frontend / backend / agent_servi
 OpenAPI 已过时，不以它为强约束。但改动接口时：
 
 - 要同时改前后端对应的调用点（不能只改一侧）
-- 在 WORKFLOW.md 记录漂移点（改了什么字段、为什么）
+- 在根目录 `WorkLine.md` 记录漂移点（改了什么字段、为什么）。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 - 不需要审批，但需要记录
 
 ---
@@ -139,7 +142,7 @@ cd backend && python3 -m pytest tests/<相关测试文件> -v
 
 ## Git
 
-- 当前分支：`refactor/v2-architecture`，不切换分支
+- 当前分支规则以根目录 `Agents.md` 为准。
 - 不运行 `git reset --hard`、`git clean -fd`、`git push --force`
 - 不运行 `git push`，除非用户明确要求
 - 每完成一批文件修改后 commit
@@ -149,7 +152,7 @@ cd backend && python3 -m pytest tests/<相关测试文件> -v
 
 ## 进度记录
 
-完成一个功能点后，在 `WORKFLOW.md` 末尾追加：日期、改了什么文件、核心改动、测试结果、是否有接口漂移。
+完成一个功能点后，在根目录 `WorkLine.md` 末尾追加：日期、改了什么文件、核心改动、测试结果、是否有接口漂移。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
 
 `docs/feature-ledger.md` 不要频繁更新，它已经偏移，更新它的收益低于维护成本。
 `docs/requirements-coverage.md` 需要更新功能/接口实现记录。

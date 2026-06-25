@@ -265,8 +265,31 @@
 - 前端 lint / build：通过（lint 零错误，build 打包成功）
 - 前端测试：PluginRegistry 单元测试通过
 - 后端 py_compile / pytest：未运行（前端专属修改）
+**接口漂移：** 无
+
+---
+
+### 2026-06-26 — 实现 AgentWorkspace 容器组件并解决 SWR 测试污染
+
+**涉及文件：**
+- `frontend/src/components/workspace/AgentWorkspace.jsx`
+- `frontend/src/components/workspace/AgentWorkspace.test.jsx`
+- `frontend/src/hooks/__tests__/useQuizEngine.test.js`
+- `frontend/src/components/Icon.jsx`
+
+**核心改动：**
+1. 实现了 `AgentWorkspace` 容器组件，它根据 `ChatContext` 提供的 `workspaceArtifacts` 在工作区面板中动态渲染对应的插件组件或呈现暂无生成产物的提示页面。
+2. 编写了 `AgentWorkspace.test.jsx` 单元测试，覆盖空状态、正常渲染和未知类型报错。
+3. 修正了 `useQuizEngine.test.js` 中因 `nodeId` 和 `quiz_id` 同名引起的 SWR 全局测试缓存污染问题。
+4. 在 `Icon.jsx` 的 Material 图标转换映射表中追加了 `design_services` 和 `dashboard_customize`，避免工作区图标 fallback 为问号。
+
+**验证结果：**
+- 前端 lint / build：通过（lint 零报错，build 打包成功）
+- 前端测试：运行 `npm run test:unit` 全部 86 个单元测试通过
+- 后端 py_compile / pytest：未运行（前端专属修改）
 - Agent pytest：未运行（前端专属修改）
 
 **接口漂移：** 无
+
 
 

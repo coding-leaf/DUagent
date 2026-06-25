@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import useSWR from 'swr';
 import { quizService } from '../api/services/quiz';
 import { learningActivityService } from '../api/services/learningActivity';
 import { profileService } from '../api/services/profile';
@@ -39,46 +40,46 @@ export function useQuizEngine({
 }) {
   const { activeCourseId, courses } = useCourse();
   
-  const [quizData, setQuizData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  
   const quizStartRef = useRef(null);
   const practiceStartTrackedRef = useRef(null);
 
-  useEffect(() => {
-    const fetchQuestions = async () => {
-      if (!activeCourseId) return;
-      try {
-        setLoading(true);
-        setError(null);
-        setCurrentQuestionIndex(0);
-        setAnswers({});
-        const extraParams = {};
-        if (sourceParam) extraParams.source = sourceParam;
-        if (knowledgePointParam) extraParams.knowledge_point = knowledgePointParam;
-        if (questionIdsParam) extraParams.question_ids = questionIdsParam;
-        
-        const res = await quizService.getQuestions(activeCourseId, nodeId || undefined, extraParams);
-        if (res.code === 200) {
-          setQuizData(res.data);
-          quizStartRef.current = Date.now();
-        } else {
-          throw new Error(res.message || "Failed to load questions");
-        }
-      } catch (err) {
-        console.error("Failed to load questions", err);
-        setError(err.message || "Failed to load questions");
-        toast.error("加载题目失败，请稍后重试");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchQuestions();
-  }, [activeCourseId, nodeId, sourceParam, knowledgePointParam, questionIdsParam]);
+  const swrKey = activeCourseId
+    ? ['quiz-questions', activeCourseId, nodeId, sourceParam, knowledgePointParam, questionIdsParam]
+    : null;
+
+  const { data: quizRes, error: swrError, isLoading: loading } = useSWR(
+    swrKey,
+    async () => {
+      const extraParams = {};
+      if (sourceParam) extraParams.source = sourceParam;
+      if (knowledgePointParam) extraParams.knowledge_point = knowledgePointParam;
+      if (questionIdsParam) extraParams.question_ids = questionIdsParam;
+      const res = await quizService.getQuestions(activeCourseId, nodeId || undefined, extraParams);
+      if (res.code !== 200) throw new Error(res.message || 'Failed to load questions');
+      // 记录答题开始时间（SWR 数据到达时）
+      quizStartRef.current = Date.now();
+      return res.data;
+    },
+    {
+      revalidateOnFocus: false,
+      onError: () => toast.error('加载题目失败，请稍后重试'),
+    }
+  );
+
+  const quizData = quizRes || null;
+  const error = swrError?.message || null;
+
+  // 答题进度状态随 quiz_id 独立，quizId 变化时自动重置
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const prevQuizIdRef = useRef(quizData?.quiz_id);
+  if (quizData?.quiz_id !== prevQuizIdRef.current) {
+    prevQuizIdRef.current = quizData?.quiz_id;
+    // 在 render 阶段重置派生状态，避免多余的 re-render
+    setCurrentQuestionIndex(0);
+    setAnswers({});
+  }
 
   useEffect(() => {
     const trackKp = knowledgePointParam || quizData?.questions?.[0]?.knowledge_point || null;

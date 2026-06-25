@@ -188,3 +188,24 @@
 
 **接口漂移：** 无
 
+### 2026-06-26 — 新增 PluginRegistry 及其插件存根与单元测试
+
+**涉及文件：**
+- `frontend/src/components/workspace/PluginRegistry.js`
+- `frontend/src/components/workspace/PluginRegistry.test.js`
+- `frontend/src/components/workspace/plugins/QuizCard.jsx`
+- `frontend/src/components/workspace/plugins/MermaidViewer.jsx`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+
+**核心改动：**
+创建了前端工作区组件注册表 `PluginRegistry`，用于映射和管理 `QuizCard`、`Mermaid`、`Markdown` 对应的渲染组件。在 `plugins` 目录下新增了这三个组件的简单 React 存根（Stub），并编写了 Vitest 单元测试 `PluginRegistry.test.js` 进行正确解析验证，测试和 ESLint 校验已顺利通过。
+
+**验证结果：**
+- 前端 lint / build：通过（ESLint 零报错，build 打包成功）
+- 前端测试：运行 `npm run test:unit -- src/components/workspace/PluginRegistry.test.js` 测试通过
+- 后端 py_compile / pytest：未运行（前端专属修改）
+- Agent pytest：未运行（前端专属修改）
+
+**接口漂移：** 无
+
+

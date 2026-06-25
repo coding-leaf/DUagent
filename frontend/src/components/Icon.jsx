@@ -99,6 +99,8 @@ const materialToLucide = {
     'star_half': 'StarHalf',
     'more_vert': 'MoreVertical',
     'more_horiz': 'MoreHorizontal',
+    'design_services': 'PencilRuler',
+    'dashboard_customize': 'LayoutGrid',
 };
 
 export default function Icon({ name, className = "", style = {} }) {

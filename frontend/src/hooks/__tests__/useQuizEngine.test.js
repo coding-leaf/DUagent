@@ -85,14 +85,14 @@ describe('useQuizEngine', () => {
 
   it('handles answer changes correctly for multiple_choice', async () => {
     const mockQuestions = {
-      quiz_id: 'quiz1',
+      quiz_id: 'quiz-multiple',
       questions: [
         { id: 'q1', type: 'multiple_choice', content: 'Q1' }
       ]
     };
     quizService.getQuestions.mockResolvedValue({ code: 200, data: mockQuestions });
 
-    const { result } = renderHook(() => useQuizEngine({ nodeId: 'node1' }));
+    const { result } = renderHook(() => useQuizEngine({ nodeId: 'node-multiple' }));
 
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 0));

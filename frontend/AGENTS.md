@@ -3,12 +3,12 @@
 ## Scope
 
 > **【作用域声明】**
-> 本约束文档为局部规范，仅在以当前子目录作为工作区根目录进行独立开发时，才具备强制约束力。在跨模块开发或以项目主目录（全局）为工作区时，本文档仅作参考，实际开发请以项目根目录下的全局约束文档（`.agents/AGENTS.md`）为准。
+> 本约束文档为局部规范，仅在以当前子目录作为工作区根目录进行独立开发时，才具备强制约束力。在跨模块开发或以项目主目录（全局）为工作区时，本文档仅作参考，实际开发请以项目根目录 `Agents.md` 为准。
 
 > 根目录 `Agents.md` 是全局协作约束；本文件只补充当前子模块的局部规则。
 > 若流程规则冲突，以根目录 `Agents.md` 为准；若模块边界细节冲突，以本文件为准。
 
-This file applies to the full EDUagent project (frontend / backend / agent_service), scoped from `frontend/`. Subdirectory AGENTS.md takes precedence if present.
+This file applies only to frontend-specific work scoped from `frontend/` and supplements the root `Agents.md`.
 
 ---
 

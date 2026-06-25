@@ -102,6 +102,8 @@ const materialToLucide = {
     'design_services': 'PencilRuler',
     'dashboard_customize': 'LayoutGrid',
     'data_object': 'Braces',
+    'calendar_today': 'Calendar',
+    'broken_image': 'ImageOff',
 };
 
 export default function Icon({ name, className = "", style = {} }) {

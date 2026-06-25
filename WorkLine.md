@@ -312,6 +312,46 @@
 
 **接口漂移：** 无
 
+---
 
+### 2026-06-26 — 注册 Braces 图标映射并清理 window 模拟事件监听
 
+**涉及文件：**
+- `frontend/src/components/Icon.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
 
+**核心改动：**
+1. 在 `Icon.jsx` 中将 `data_object` 图标注册并映射为 Lucide 中的 `Braces`，解决了输入框下方生成模拟 Artifact 按钮默认展示为问号（HelpCircle）的问题。
+2. 清理了 `ChatArea.jsx` 中原本的 `mock-artifact` 自定义 window 事件监听器和对应的 `useEffect` 挂载逻辑，改为在 mock 按钮点击时直接解构并调用 `ChatContext` 提供的 `sendMockArtifact` 接口，解耦了事件流。
+
+**验证结果：**
+- 前端 lint / build：通过 (lint 无报错，Vite 编译打包成功)
+- 后端 py_compile / pytest：未运行
+- Agent pytest：未运行
+
+**接口漂移：** 无
+
+---
+
+### 2026-06-26 — 实现 StudyPlanCard, WeakPointsCard, PathRecommendationCard 组件及 PluginRegistry 注册
+
+**涉及文件：**
+- `frontend/src/components/workspace/plugins/StudyPlanCard.jsx`
+- `frontend/src/components/workspace/plugins/WeakPointsCard.jsx`
+- `frontend/src/components/workspace/plugins/PathRecommendationCard.jsx`
+- `frontend/src/components/workspace/PluginRegistry.js`
+- `frontend/src/components/workspace/PluginRegistry.test.js`
+- `frontend/src/components/Icon.jsx`
+
+**核心改动：**
+1. 实现了 `StudyPlanCard.jsx`（今日学习计划列表与快捷练习）、`WeakPointsCard.jsx`（根据掌握度渲染红/黄/绿颜色条与高/中/低影响标识的薄弱点卡片）、`PathRecommendationCard.jsx`（横向流程节点与核心目标、时长展示的学习路径卡片）三个高保真渲染插件组件。
+2. 在 `PluginRegistry.js` 中完整注册了三个新卡片，并在 `PluginRegistry.test.js` 中补充了针对这三个卡片类型的解析可用性断言。
+3. 在 `Icon.jsx` 的 Material-to-Lucide 映射表中，为卡片所用图标追加了 `calendar_today` -> `Calendar`、`broken_image` -> `ImageOff` 的映射注册。
+
+**验证结果：**
+- 前端 lint / build：通过 (ESLint 零错误，Vite 构建打包成功)
+- 前端测试：通过 (Vitest 全部 86 个单元测试全部成功)
+- 后端 py_compile / pytest：未运行 (前端组件专属修改)
+- Agent pytest：未运行 (前端组件专属修改)
+
+**接口漂移：** 无

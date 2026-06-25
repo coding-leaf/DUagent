@@ -5,4 +5,7 @@ test('PluginRegistry resolves standard component types correctly', () => {
   expect(PluginRegistry.QuizCard).toBeDefined();
   expect(PluginRegistry.Mermaid).toBeDefined();
   expect(PluginRegistry.Markdown).toBeDefined();
+  expect(PluginRegistry.StudyPlanCard).toBeDefined();
+  expect(PluginRegistry.WeakPointsCard).toBeDefined();
+  expect(PluginRegistry.PathRecommendationCard).toBeDefined();
 });

@@ -67,6 +67,15 @@
 
 > 跨模块提取、环境清理、接口变更——无论文件数量多少，一律按「大改」处理。
 
+**中等 / 大改提交前，必须在回复中附上结构化自检结果：**
+
+- [ ] 新增/修改文件未出现单文件超长（参考上限 300 行）或单函数超长（参考上限 50 行）；若超出已说明拆分理由
+- [ ] 没有引入 `package.json` / `requirements.txt` 中未声明的新依赖
+- [ ] 没有在 Router / Page 层写业务逻辑、SQL 查询或直接 LLM 调用
+- [ ] 注释只写 why，没有解释 what
+
+小修（1-2 文件）免自检。
+
 ---
 
 ## 修改前必须输出
@@ -134,6 +143,151 @@ WorkLine 是否已更新：
 
 ---
 
+## 架构模式规范
+
+> 原则优先，反例说明典型错误。AI 在生成代码时必须主动遵守，不需要用户每次提醒。
+
+### 前端（React / SWR / MVVM）
+
+**原则：**
+- `pages/` 是容器，只负责组装子组件，不写业务逻辑、不直接调 API
+- 所有数据获取统一通过 `hooks/` 下的 SWR hook，不在组件内手写 `useEffect` + `fetch`
+- `components/` 下的组件只接收 props 渲染，不持有异步状态
+
+**典型反例：**
+```js
+// ❌ Page 里直接 fetch
+const [data, setData] = useState()
+useEffect(() => { fetch('/api/xxx').then(r => r.json()).then(setData) }, [])
+
+// ✅ 应该
+const { data, isLoading } = useXxxData(courseId)  // hooks/ 下的 SWR hook
+```
+
+```js
+// ❌ 组件内自己管异步状态
+function ResourceCard() {
+  const [detail, setDetail] = useState()
+  useEffect(() => { fetchDetail(id).then(setDetail) }, [id])
+}
+
+// ✅ 应该由父级 hook 提供数据，组件只渲染
+function ResourceCard({ detail }) { ... }
+```
+
+---
+
+### 后端（FastAPI 分层）
+
+**原则：**
+- `api/v1/` Router 只做：鉴权依赖注入、参数校验、调用 Service、包装响应 `{code, message, data}`
+- 业务逻辑、DB 查询、Agent 调用必须下沉到 `services/`
+- Router 函数体参考上限 30 行；超出说明原因
+
+**典型反例：**
+```python
+# ❌ 路由里直接写 SQL
+@router.get("/courses")
+async def list_courses(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Course).where(Course.is_deleted == 0))
+    return result.scalars().all()
+
+# ✅ 应该
+@router.get("/courses")
+async def list_courses(current_user=Depends(get_current_user), db=Depends(get_db)):
+    data = await course_service.list_courses(db, current_user.id)
+    return success(data)
+```
+
+---
+
+### Agent Service（编排分层）
+
+**原则：**
+- `agents/` 负责编排多步流程，不直接调 LLM
+- `tools/` 封装单一原子能力（RAG 检索、结构化输出等），不包含流程判断
+- `prompts/` 只存提示词模板，不含调用逻辑
+
+**典型反例：**
+```python
+# ❌ 在 api/ 路由里直接调 LLM
+@router.post("/generate")
+async def generate(req: Request):
+    result = await llm.chat(prompt)  # 路由层不该出现 LLM 调用
+    return result
+
+# ✅ 应该走 agents/ 编排
+@router.post("/generate")
+async def generate(req: Request):
+    result = await resource_agent.run(req.task_id, req.context)
+    return result
+```
+
+---
+
+## 代码生成规范
+
+> 以下为 AI 生成代码时的默认风格约束，适用于所有子项目。
+
+### 文件与函数体积
+
+原则：单文件保持聚焦，函数保持短小。文件超过 300 行、函数超过 50 行时，优先考虑拆分，而不是继续堆叠。
+
+反例：
+```
+❌ 把所有逻辑写进一个 500 行的 Page 或路由文件
+✅ 提取 hook / service / 子组件，主文件退化为组装容器
+```
+
+---
+
+### 注释风格
+
+原则：**只写 why，不写 what。** 代码本身说明在做什么，注释解释为什么这样做（隐含约束、历史原因、非直觉决策）。
+
+反例：
+```python
+# ❌ 解释 what（代码已经说清了，注释是噪音）
+# 查询未删除的课程列表
+courses = await course_service.list_active(db)
+
+# ✅ 解释 why（读代码看不出来的原因才值得写）
+# skip catalog-less courses — frontend KG panel crashes on null catalog_id
+courses = await course_service.list_with_catalog(db)
+```
+
+---
+
+### 依赖引入
+
+原则：不引入 `package.json` / `requirements.txt` 中未声明的库。需要引入新依赖时，必须先说明：
+1. 用途是什么
+2. 为什么现有工具不够用
+3. 对 bundle 大小或依赖树的影响
+
+反例：
+```
+❌ 直接 import 一个新库，不解释为什么不用已有的
+❌ pip install 新包，不更新 requirements.txt 说明
+✅ "需要 dayjs 的 duration 插件处理时长显示，项目已安装 dayjs，仅需 import 插件，无需新增依赖"
+```
+
+---
+
+### 工具优先复用
+
+原则：项目已有的工具、封装、hook，直接用，不另造一套。
+
+| 场景 | 使用 | 禁止 |
+|------|------|------|
+| 前端数据获取 | `hooks/` 下对应 SWR hook | 手写 `useEffect` + `useState` fetch |
+| 前端日期格式化 | `src/utils/date.js` | 新写格式化函数 |
+| 前端网络请求 | `src/api/client.js`（已有拦截器） | 直接 `fetch()` 或引入 axios |
+| 后端 Agent 调用 | `services/agent_client.py` | 路由层直接 `httpx.post` |
+| 后端错误响应 | 全局异常处理器 | 路由内自定义 `try/except` 返回错误格式 |
+
+---
+
 ## 禁止操作
 
 - 修改 `.env` 文件（含各子项目）
@@ -141,3 +295,4 @@ WorkLine 是否已更新：
 - 删除或覆盖用户上传文件
 - 提交 `node_modules`、`.venv`、`__pycache__`、构建产物
 - 编造 AgentScope / OpenAPI 接口，未经确认不得使用不存在的 API
+

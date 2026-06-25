@@ -94,26 +94,15 @@
 ## AgentScope Boundary
 
 - 涉及 AgentScope API、用法、配置时，优先参考 AgentScope 官方文档和项目当前已有代码。
+- 官方文档索引优先使用 `https://docs.agentscope.io/llms.txt`；本仓库导航使用 `docs/skills/agentscope-framework/SKILL.md`。
 - 不凭空编造 AgentScope 接口。
-- 若无法确认 AgentScope 行为，先实现规则版或接口承接层，并在根目录 `WorkLine.md` 标注后续替换点。
-
-## AgentScope Boundary
-
-  - 官方文档索引优先使用 `https://docs.agentscope.io/llms.txt`；本仓库导航使用 `docs/skills/agentscope-framework/SKILL.md`。
-  - 若官方文档、当前安装版本和历史示例冲突，优先以官方当前文档和本地安装包 introspection 为准。
-  - 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在根目录 `WorkLine.md` 标注后续替换点。
-  - 涉及 RAG、Msg、ReActAgent、structured output、Memory、Tool 等 AI 相关实现时需优先参考agentscope框架
+- 若官方文档、当前安装版本和历史示例冲突，优先以官方当前文档和本地安装包 introspection 为准。
+- 无法确认 AgentScope 行为时，不允许编造接口；必须先查文档、用 `./.venv/bin/python` introspection 验证，或实现规则版/适配层并在根目录 `WorkLine.md` 标注后续替换点。
+- 涉及 RAG、Msg、ReActAgent、structured output、Memory、Tool 等 AI 相关实现时需优先参考 agentscope 框架。
 
 ## Progress Tracking
 
-每次完成一个小阶段后，必须更新根目录 `WorkLine.md`，至少同步：
-
-- 对应接口的实现状态
-- 当前上下文
-- 下一步建议
-- 已运行的测试命令和结果
-
-接口状态以根目录 `WorkLine.md` 的项目进度表为准。临时进度、当前任务、下一步队列写入根目录 `WorkLine.md`，不要写入 `AGENTS.md`。旧版 `WORKFLOW.md` 仅用于追溯历史上下文，不再追加新记录，也不作为当前状态源。
+Agent Service 开发完成后，在根目录 `WorkLine.md` 记录实现状态、测试命令和结果、契约是否漂移。旧版 `agent_service/WORKFLOW.md` 或根目录 `WORKFLOW.md` 仅用于追溯历史，不再追加新记录。
 
 ## Context Handoff
 
@@ -139,7 +128,6 @@ sed -n '1,260p' WorkLine.md
 - 当前分支规则以根目录 `Agents.md` 为准。
 - 修改前如工作区已有未提交内容，必须先识别哪些是用户改动，不能回滚或覆盖无关改动。
 - 如需使用 `git stash`，必须先告知用户。
-- 每次文件修改后需要总结修改内容并git commit(并非git push)
 
 ## Testing
 
@@ -176,13 +164,3 @@ uv run python -m agent_service.main
 ```
 
 不要在仓库根目录直接运行 `uv sync`。
-
-## Completion Summary
-
-每次完成开发任务后，最终回复需要包含：
-
-- 当前完成
-- 修改文件
-- 测试结果
-- OpenAPI/契约是否漂移
-- 下一步建议

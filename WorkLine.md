@@ -347,6 +347,7 @@
 1. 实现了 `StudyPlanCard.jsx`（今日学习计划列表与快捷练习）、`WeakPointsCard.jsx`（根据掌握度渲染红/黄/绿颜色条与高/中/低影响标识的薄弱点卡片）、`PathRecommendationCard.jsx`（横向流程节点与核心目标、时长展示的学习路径卡片）三个高保真渲染插件组件。
 2. 在 `PluginRegistry.js` 中完整注册了三个新卡片，并在 `PluginRegistry.test.js` 中补充了针对这三个卡片类型的解析可用性断言。
 3. 在 `Icon.jsx` 的 Material-to-Lucide 映射表中，为卡片所用图标追加了 `calendar_today` -> `Calendar`、`broken_image` -> `ImageOff` 的映射注册。
+4. 修复了 `StudyPlanCard.jsx` 缺少学习计划总时长计算和展示的问题，累加 `tasks` 的 `duration` 并于卡片头部徽章展示。
 
 **验证结果：**
 - 前端 lint / build：通过 (ESLint 零错误，Vite 构建打包成功)

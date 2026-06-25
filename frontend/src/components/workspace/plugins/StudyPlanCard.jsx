@@ -1,12 +1,19 @@
 import Icon from '../../Icon';
 
 export default function StudyPlanCard({ planDate, tasks }) {
+  const totalDuration = tasks?.reduce((acc, task) => acc + (Number(task.duration) || 0), 0) || 0;
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
       <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2 text-slate-800 font-bold">
           <Icon name="calendar_today" className="text-cyan-600 text-[18px]" />
           <span>今日学习计划</span>
+          {totalDuration > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md font-medium border border-emerald-100">
+              预计总用时: {totalDuration} 分钟
+            </span>
+          )}
         </div>
         <span className="text-xs text-slate-400 font-mono">{planDate || '今日'}</span>
       </div>

@@ -76,3 +76,22 @@
 - 后端 pytest：未运行（纯重构，逻辑等价）
 
 **接口漂移：** 无
+
+### 2026-06-25 — 对齐子模块 AGENTS.md 到 v3 协作规则
+
+**涉及文件：**
+- `frontend/AGENTS.md`
+- `backend/AGENTS.md`
+- `agent_service/AGENTS.md`
+- `WorkLine.md`
+
+**核心改动：**
+三个子模块文档调整为根目录 `Agents.md` 的局部补充：保留模块独有边界、测试命令和架构注意事项，删除或改写重复的全局流程规则。统一记录规则：根目录 `WorkLine.md` 是当前唯一工作存档，旧版 `WORKFLOW.md` 仅用于历史追溯，不再追加新记录。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅文档变更）
+- 后端 py_compile / pytest：未运行（仅文档变更）
+- Agent pytest：未运行（仅文档变更）
+- 文档检查：通过 `rg` 关键词检查
+
+**接口漂移：** 无

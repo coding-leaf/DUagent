@@ -169,10 +169,7 @@ curl -s http://127.0.0.1:8002/agent/v1/health
 
 ## Completion Summary
 
-每次完成任务后回复包含：
+完成任务后的回复格式以根目录 `Agents.md` 的 Completion Summary 要求为准；后端工作需在契约漂移项中明确报告：
 
-- 当前完成
-- 修改文件
-- 测试结果
+- Client API 契约是否漂移
 - Agent API 契约是否漂移
-- 下一步建议

@@ -55,3 +55,24 @@
 **遗留问题：**
 - 各子项目 AGENTS.md 中的分支引用（`refactor/v2-architecture`）需在后续更新为 v3
 - 各子项目 WORKFLOW.md 可在适当时机清理（历史内容已固化在 git log）
+
+---
+
+### 2026-06-25 — 清理测试遗留文件，重构 Core Learning 链路代码规范
+
+**涉及文件：**
+- `backend/test_*.db`（9 个，已删除）
+- `backend/test_bug.py`（已删除）
+- `backend/app/api/v1/learning_activities.py`（路由瘦身：150 行 → 20 行）
+- `backend/app/services/learning_activity_service.py`（新建）
+- `frontend/src/hooks/useQuizEngine.js`（手写 fetch → SWR）
+
+**核心改动：**
+清理 backend 根目录 10 个测试遗留文件。将 `learning_activities.py` 中的权限校验、资源作用域解析、节点名称解析、活动记录写入全部提取到新建的 `LearningActivityService`，路由层退化为纯参数校验+调用 Service。`useQuizEngine` 题目加载由手写 useEffect+fetch 改为 SWR，获得缓存和请求去重能力。
+
+**验证结果：**
+- 前端 lint / build：通过
+- 后端 py_compile：通过
+- 后端 pytest：未运行（纯重构，逻辑等价）
+
+**接口漂移：** 无

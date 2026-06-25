@@ -291,5 +291,27 @@
 
 **接口漂移：** 无
 
+---
+
+### 2026-06-26 — 重构 AIChat 页面为三栏布局并调整组件尺寸与 Mock 事件
+
+**涉及文件：**
+- `frontend/src/pages/AIChat.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/SidebarHistory.jsx`
+
+**核心改动：**
+1. 重构了 `AIChat.jsx` 页面的整体布局，从原先的双栏/右抽屉混合结构转为清晰的三栏并行布局（左栏：会话历史、中栏：Agent工作区、右栏：聊天区域），删除了废弃的 `SidebarResources` 相关逻辑。
+2. 调整 `ChatArea.jsx` 在桌面端为固定宽度的右侧侧边栏（`w-full lg:w-[380px] border-l`），去除原右侧资源抽屉的按钮入口，在输入栏插入 mock artifact 快速生成辅助按钮（图标 `data_object`）。
+3. 在 `ChatArea.jsx` 中绑定全局 window `mock-artifact` 自定义事件监听，捕获后调用 `sendMockArtifact` 发送模拟产物至 Context。
+4. 在 `SidebarHistory.jsx` 的 Header 下方添加了“全部、数据结构、算法、计网”快速分类过滤标签行。
+
+**验证结果：**
+- 前端 lint / build：通过（ESLint 无报错，Vite 编译打包成功）
+- 前端测试：单元测试全部通过（`npm run test:unit` 86个用例）
+
+**接口漂移：** 无
+
+
 
 

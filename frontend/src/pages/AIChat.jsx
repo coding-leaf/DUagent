@@ -3,7 +3,7 @@ import { useCourse } from '../context/CourseContext';
 import { useChat } from '../context/ChatContext';
 import Navbar from '../components/Navbar';
 import SidebarHistory from '../components/chat/SidebarHistory';
-import SidebarResources from '../components/chat/SidebarResources';
+import AgentWorkspace from '../components/workspace/AgentWorkspace';
 import ChatArea from '../components/chat/ChatArea';
 
 export default function AIChat() {
@@ -11,9 +11,7 @@ export default function AIChat() {
   const { resetConversation, activeSession } = useChat();
   
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
-  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
   const activeCourse = courses?.find(c => c.id === activeCourseId);
   const activeCourseName = activeCourse?.name || activeCourse?.title || '未选择课程';
@@ -25,12 +23,6 @@ export default function AIChat() {
 
   const handleOpenLeftDrawer = () => {
     setLeftDrawerOpen(true);
-    setRightDrawerOpen(false);
-  };
-
-  const handleOpenRightDrawer = () => {
-    setRightDrawerOpen(true);
-    setLeftDrawerOpen(false);
   };
 
   return (
@@ -46,19 +38,12 @@ export default function AIChat() {
           onNewChat={handleNewChat}
         />
 
+        <AgentWorkspace />
+
         <ChatArea 
           key={activeSession || 'empty'}
           activeCourseName={activeCourseName}
           onOpenLeftDrawer={handleOpenLeftDrawer}
-          onOpenRightDrawer={handleOpenRightDrawer}
-        />
-
-        <SidebarResources 
-          activeCourseName={activeCourseName}
-          rightCollapsed={rightCollapsed}
-          rightDrawerOpen={rightDrawerOpen}
-          onToggleCollapse={() => setRightCollapsed(!rightCollapsed)}
-          onCloseDrawer={() => setRightDrawerOpen(false)}
         />
       </div>
     </div>

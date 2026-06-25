@@ -35,6 +35,13 @@ export default function SidebarHistory({ leftCollapsed, leftDrawerOpen, onToggle
                 <Icon name="add" className="material-symbols-outlined text-[18px]"/>
               </button>
             </div>
+            <div className="flex flex-wrap gap-1 px-3 mb-3 mt-3">
+              {['全部', '数据结构', '算法', '计网'].map((tag) => (
+                <span key={tag} className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded-full hover:bg-cyan-50 hover:text-cyan-600 cursor-pointer">
+                  {tag}
+                </span>
+              ))}
+            </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
               <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
               {sessions.map(session => (

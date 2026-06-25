@@ -5,10 +5,11 @@ import ChatMessage from './ChatMessage';
 import ChatEmptyState from './ChatEmptyState';
 import Icon from '../Icon';
 
-export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRightDrawer }) {
+export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   const { 
     sessions, activeSession, messages, isSending,
-    sendMessage, editMessage, cancelStream, regenerate
+    sendMessage, editMessage, cancelStream, regenerate,
+    sendMockArtifact
   } = useChat();
   const { activeCourseId } = useCourse();
   
@@ -22,6 +23,14 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRig
     });
     return () => cancelAnimationFrame(frameId);
   }, [messages]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      sendMockArtifact(e.detail);
+    };
+    window.addEventListener('mock-artifact', handler);
+    return () => window.removeEventListener('mock-artifact', handler);
+  }, [sendMockArtifact]);
 
   const handleSendMessage = (overrideText = '') => {
     const textToSend = (overrideText || inputValue).trim();
@@ -42,7 +51,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRig
   };
 
   return (
-    <main className="flex-1 flex flex-col relative bg-slate-50 min-w-0">
+    <main className="w-full lg:w-[380px] flex flex-col relative bg-slate-50 border-l border-slate-200 flex-shrink-0">
       
       {/* Top Context Bar */}
       <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10 flex-shrink-0">
@@ -59,14 +68,6 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRig
             {activeSession ? sessions.find(s => s.id === activeSession)?.title || '对话中' : '新对话'}
           </div>
         </div>
-
-        <button 
-          onClick={onOpenRightDrawer}
-          className="xl:hidden text-slate-500 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
-          title="查看推荐资源"
-        >
-          <Icon name="menu_book" className="material-symbols-outlined text-[20px]"/>
-        </button>
       </div>
 
       {/* Messages Scroll Area */}
@@ -178,6 +179,26 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer, onOpenRig
                 </button>
                 <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
                   <Icon name="mic" className="material-symbols-outlined text-[18px]"/>
+                </button>
+                <button 
+                  onClick={() => {
+                    const event = new CustomEvent('mock-artifact', {
+                      detail: {
+                        type: 'QuizCard',
+                        props: {
+                          question: '以下哪个是线性数据结构？',
+                          choices: ['二叉树', '图', '队列', '网'],
+                          correctAnswer: 2
+                        }
+                      }
+                    });
+                    window.dispatchEvent(event);
+                  }}
+                  className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                  title="生成模拟 Artifact"
+                  data-testid="mock-artifact-button"
+                >
+                  <Icon name="data_object" className="material-symbols-outlined text-[18px]"/>
                 </button>
               </div>
               

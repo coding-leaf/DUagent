@@ -10,9 +10,16 @@ export default function QuizCard({ question, choices, correctAnswer }) {
       <div className="space-y-2">
         {choices?.map((choice, idx) => {
           let optionStyle = 'border-slate-200 hover:bg-slate-50 text-slate-700';
+          let accessibilityText = '';
+
           if (submitted) {
-            if (idx === correctAnswer) optionStyle = 'bg-green-50 border-green-300 text-green-800';
-            else if (selected === idx) optionStyle = 'bg-red-50 border-red-300 text-red-800';
+            if (idx === correctAnswer) {
+              optionStyle = 'bg-green-50 border-green-300 text-green-800';
+              accessibilityText = ' (正确答案)';
+            } else if (selected === idx) {
+              optionStyle = 'bg-red-50 border-red-300 text-red-800';
+              accessibilityText = ' (回答错误)';
+            }
           } else if (selected === idx) {
             optionStyle = 'bg-cyan-50 border-cyan-400 text-cyan-800';
           }
@@ -23,7 +30,7 @@ export default function QuizCard({ question, choices, correctAnswer }) {
               onClick={() => setSelected(idx)}
               className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all cursor-pointer ${optionStyle}`}
             >
-              {choice}
+              {choice}{accessibilityText}
             </button>
           );
         })}

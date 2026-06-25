@@ -247,5 +247,26 @@
 - 后端 py_compile / pytest：未运行（前端专属修改）
 - Agent pytest：未运行（前端专属修改）
 
+
 **接口漂移：** 无
+
+### 2026-06-26 — 微调优化 MarkdownViewer 性能与 QuizCard 无障碍体验
+
+**涉及文件：**
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+- `frontend/src/components/workspace/plugins/QuizCard.jsx`
+
+**核心改动：**
+根据代码质量审查（Code Quality Review）建议进行微调优化：
+1. `MarkdownViewer.jsx`：将自定义 `components` 渲染映射移到组件函数外层定义，防止组件在重绘时因该对象引用变动导致 `ReactMarkdown` 重建 AST 树并意外重置选中/滚动状态。
+2. `QuizCard.jsx`：在选项提交正误后，在文本尾部分别追加文字标识 ` (正确答案)` 与 ` (回答错误)`，增强非颜色依赖的无障碍可读性。
+
+**验证结果：**
+- 前端 lint / build：通过（lint 零错误，build 打包成功）
+- 前端测试：PluginRegistry 单元测试通过
+- 后端 py_compile / pytest：未运行（前端专属修改）
+- Agent pytest：未运行（前端专属修改）
+
+**接口漂移：** 无
+
 

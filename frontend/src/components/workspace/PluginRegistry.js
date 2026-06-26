@@ -11,5 +11,8 @@ export const PluginRegistry = {
   Markdown: MarkdownViewer,
   StudyPlanCard,
   WeakPointsCard,
-  PathRecommendationCard
+  PathRecommendationCard,
+  StudyPlan: StudyPlanCard,
+  WeakPoints: WeakPointsCard,
+  PathRecommendation: PathRecommendationCard
 };

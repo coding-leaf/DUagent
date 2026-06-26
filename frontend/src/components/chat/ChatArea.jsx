@@ -15,6 +15,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   
   const [inputValue, setInputValue] = useState('');
   const [editingMsg, setEditingMsg] = useState(null);
+  const [showMockMenu, setShowMockMenu] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -151,7 +152,122 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
       {/* Input Composer */}
       <div className="p-4 lg:px-8 pb-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex-shrink-0">
         <div className="max-w-[760px] mx-auto">
-          <div className="bg-white border border-slate-300 rounded-2xl shadow-sm p-3 flex flex-col gap-2 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-all">
+          <div className="bg-white border border-slate-300 rounded-2xl shadow-sm p-3 flex flex-col gap-2 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-all relative">
+            
+            {showMockMenu && (
+              <div className="absolute bottom-16 left-3 bg-white border border-slate-200 rounded-xl shadow-lg p-3 grid grid-cols-2 gap-2 z-50 animate-fadeIn text-xs w-64">
+                <div className="col-span-2 font-bold text-slate-500 mb-1 border-b pb-1">触发模拟 Artifact</div>
+                <button 
+                  onClick={() => { 
+                    sendMockArtifact({ 
+                      type: 'QuizCard', 
+                      props: { 
+                        question: '以下哪个是线性数据结构？', 
+                        choices: ['二叉树', '图', '队列', '网'], 
+                        correctAnswer: 2 
+                      } 
+                    }); 
+                    setShowMockMenu(false); 
+                  }} 
+                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
+                >
+                  + 测验卡片
+                </button>
+                <button 
+                  onClick={() => { 
+                    sendMockArtifact({ 
+                      type: 'Mermaid', 
+                      props: { 
+                        chart: 'graph TD\nA[二叉树] --> B(二叉搜索树)\nA --> C(平衡二叉树)\nC --> D(AVL 树)' 
+                      } 
+                    }); 
+                    setShowMockMenu(false); 
+                  }} 
+                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
+                >
+                  + 流程图
+                </button>
+                <button 
+                  onClick={() => { 
+                    sendMockArtifact({ 
+                      type: 'Markdown', 
+                      props: { 
+                        content: '# 二叉树遍历详解\n\n1. **前序遍历** (根 -> 左 -> 右)\n2. **中序遍历** (左 -> 根 -> 右)\n3. **后序遍历** (左 -> 右 -> 根)' 
+                      } 
+                    }); 
+                    setShowMockMenu(false); 
+                  }} 
+                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
+                >
+                  + Markdown 课件
+                </button>
+                <button 
+                  onClick={() => { 
+                    sendMockArtifact({ 
+                      type: 'StudyPlanCard', 
+                      props: { 
+                        planDate: '2026-06-26', 
+                        tasks: [
+                          { name: '二叉树遍历 (重点突破)', duration: 60 }, 
+                          { name: '递归思想强化训练', duration: 45 }, 
+                          { name: '树的层序遍历与应用', duration: 45 }, 
+                          { name: '今日小结与错题回顾', duration: 20 }
+                        ] 
+                      } 
+                    }); 
+                    setShowMockMenu(false); 
+                  }} 
+                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
+                >
+                  + 学习计划
+                </button>
+                <button 
+                  onClick={() => { 
+                    sendMockArtifact({ 
+                      type: 'WeakPointsCard', 
+                      props: { 
+                        title: '薄弱点分析', 
+                        points: [
+                          { name: '二叉树遍历', mastery: 28 }, 
+                          { name: '递归实现', mastery: 46 }, 
+                          { name: '平衡二叉树 (AVL)', mastery: 58 }, 
+                          { name: '图的最短路径', mastery: 72 }, 
+                          { name: '哈希冲突处理', mastery: 80 }
+                        ] 
+                      } 
+                    }); 
+                    setShowMockMenu(false); 
+                  }} 
+                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
+                >
+                  + 薄弱点分析
+                </button>
+                <button 
+                  onClick={() => { 
+                    sendMockArtifact({ 
+                      type: 'PathRecommendationCard', 
+                      props: { 
+                        strategy: '补强优先', 
+                        duration: '18 天', 
+                        target: '掌握树、图、哈希表等核心结构', 
+                        steps: [
+                          { name: '基础回顾' }, 
+                          { name: '弱点突破' }, 
+                          { name: '综合提升' }, 
+                          { name: '专题拓展' }, 
+                          { name: '项目实战' }
+                        ] 
+                      } 
+                    }); 
+                    setShowMockMenu(false); 
+                  }} 
+                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
+                >
+                  + 推荐路径
+                </button>
+              </div>
+            )}
+
             <textarea 
               className="w-full border-none focus:ring-0 px-2 py-1 text-[15px] text-slate-800 placeholder-slate-400 resize-none outline-none max-h-32" 
               placeholder="在这里输入你的问题..." 
@@ -175,17 +291,8 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                   <Icon name="mic" className="material-symbols-outlined text-[18px]"/>
                 </button>
                 <button 
-                  onClick={() => {
-                    sendMockArtifact({
-                      type: 'QuizCard',
-                      props: {
-                        question: '以下哪个是线性数据结构？',
-                        choices: ['二叉树', '图', '队列', '网'],
-                        correctAnswer: 2
-                      }
-                    });
-                  }}
-                  className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                  onClick={() => setShowMockMenu(!showMockMenu)}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${showMockMenu ? 'bg-cyan-50 text-cyan-600' : 'hover:bg-slate-100 hover:text-slate-600'}`}
                   title="生成模拟 Artifact"
                   data-testid="mock-artifact-button"
                 >

@@ -512,3 +512,27 @@
 - 文档检查：已用 `rg` 检查 design/plan 中包含方案 A、`create_app` 非目标、`WorkbenchSession`、`WorkbenchRunBus`、`WorkbenchWorkspaceManager`、`EDUProtocolAdapter`、`ProtocolMiddleware`、`ToolGroup` 等关键边界
 
 **接口漂移：** 无。仅重写设计和实施计划，未修改 Backend、Frontend 或 Agent Service 对外接口。
+
+### 2026-07-01 — 实现 AIChat v2 RunBus、WorkspaceManager 与协议适配地基
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/runtime/edu_events.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/runtime/sse.py`
+- `agent_service_v2/src/agent_service_v2/session/run_bus.py`
+- `agent_service_v2/src/agent_service_v2/workspaces/workbench_workspace_manager.py`
+- `agent_service_v2/tests/test_run_bus.py`
+- `agent_service_v2/tests/test_workbench_workspace_manager.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `WorkLine.md`
+
+**核心改动：**
+按方案 A 的第一批地基实现 `WorkbenchRunBus`、`WorkbenchWorkspaceManager` 和 `EDUProtocolAdapter`。RunBus 负责单次 run 的内存事件缓冲、订阅、完成与失败事件；WorkspaceManager 使用 AgentScope `LocalWorkspace`，按 user/course/conversation 生成安全隔离路径；ProtocolAdapter 将 AgentScope `ReplyStartEvent`、`TextBlockDeltaEvent`、`ToolCallStartEvent`、`ToolResultEndEvent`、`ReplyEndEvent`、`ExceedMaxItersEvent` 映射成 EDU SSE v2 事件，并提供 SSE 序列化。该批不接 Backend/Frontend，不调用旧 `agent_service/`。
+
+**验证结果：**
+- 前端 lint / build：未运行（Agent v2 内部地基实现）
+- 后端 py_compile / pytest：未运行（Agent v2 内部地基实现）
+- Agent pytest：通过 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_run_bus.py tests/test_workbench_workspace_manager.py tests/test_protocol_adapter.py -q`（7 passed）
+- Agent py_compile：通过 `cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/edu_events.py src/agent_service_v2/session/run_bus.py src/agent_service_v2/workspaces/workbench_workspace_manager.py src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/runtime/sse.py`
+
+**接口漂移：** 无。仅新增 `agent_service_v2` 内部模块和测试，未修改 HTTP API 或 SSE 对外入口。

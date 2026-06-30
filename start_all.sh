@@ -12,9 +12,9 @@ trap 'echo "Stopping all services..."; kill $(jobs -p) 2>/dev/null; echo "All se
 
 cd /home/yezisama/workspace/workflow/EDUagent
 
-echo "[2/4] Starting Agent Service on port 8002..."
-cd agent_service
-./.venv/bin/uvicorn agent_service.main:app --host 127.0.0.1 --port 8002 &
+echo "[2/4] Starting Agent Service v2 on port 8002..."
+cd agent_service_v2
+./.venv/bin/uvicorn agent_service_v2.main:app --host 127.0.0.1 --port 8002 &
 cd ..
 
 echo "[3/4] Starting Backend on port 8001..."
@@ -32,7 +32,7 @@ echo "======================================"
 echo " All services are running!"
 echo " Frontend: http://localhost:5173 (or check your Vite port)"
 echo " Backend:  http://127.0.0.1:8001"
-echo " Agent:    http://127.0.0.1:8002"
+echo " Agent v2: http://127.0.0.1:8002"
 echo " Press Ctrl+C to stop everything."
 echo "======================================"
 

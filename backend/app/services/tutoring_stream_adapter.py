@@ -70,7 +70,7 @@ class TutoringStreamAdapter:
         self._persist_result = persist_result or persist_tutoring_result
 
     @staticmethod
-    def _adapt_data(data_str: str, state: StreamState) -> str:
+    def _adapt_data(data_str: str, state: StreamState) -> str | None:
         try:
             parsed = json.loads(data_str)
         except json.JSONDecodeError:
@@ -100,6 +100,54 @@ class TutoringStreamAdapter:
             parsed["conversation_id"] = state.conversation_id
             parsed["message_id"] = state.assistant_message_id
             return json.dumps(parsed, ensure_ascii=False)
+        elif event_type == "text_delta":
+            payload = (
+                parsed.get("payload")
+                if isinstance(parsed.get("payload"), dict)
+                else {}
+            )
+            content = payload.get("delta", "")
+            state.chunks.append(content)
+            return json.dumps(
+                {"type": "chunk", "content": content},
+                ensure_ascii=False,
+            )
+        elif event_type == "workflow_completed":
+            state.done_sent = True
+            return json.dumps(
+                {
+                    "type": "done",
+                    "conversation_id": state.conversation_id,
+                    "message_id": state.assistant_message_id,
+                },
+                ensure_ascii=False,
+            )
+        elif event_type == "workflow_failed":
+            state.done_sent = True
+            payload = (
+                parsed.get("payload")
+                if isinstance(parsed.get("payload"), dict)
+                else {}
+            )
+            return json.dumps(
+                {
+                    "type": "done",
+                    "conversation_id": state.conversation_id,
+                    "message_id": state.assistant_message_id,
+                    "error": payload.get("reason", "agent_failed"),
+                },
+                ensure_ascii=False,
+            )
+        elif event_type in {
+            "workflow_started",
+            "tool_started",
+            "tool_completed",
+            "tool_failed",
+            "source_refs",
+            "artifact_created",
+            "critic_completed",
+        }:
+            return None
         return data_str
 
     @classmethod
@@ -110,9 +158,23 @@ class TutoringStreamAdapter:
         data_str = stripped[5:].strip()
         if not data_str:
             return None
+        adapted = cls._adapt_data(data_str, state)
+        if adapted is None:
+            return None
         return {
             "event": "message",
-            "data": cls._adapt_data(data_str, state),
+            "data": adapted,
+        }
+
+    @staticmethod
+    def _build_workbench_payload(payload: dict) -> dict:
+        return {
+            "user_id": payload.get("user_id") or "",
+            "scope": payload.get("scope") or "global",
+            "course_id": payload.get("course_id"),
+            "conversation_id": payload.get("conversation_id"),
+            "message": payload.get("message") or "",
+            "context": payload,
         }
 
     async def stream(
@@ -131,8 +193,8 @@ class TutoringStreamAdapter:
 
         try:
             async for raw_bytes in self._stream_sse(
-                "/agent/v1/tutoring/chat",
-                payload,
+                "/agent/v2/workbench/chat",
+                self._build_workbench_payload(payload),
             ):
                 text_buffer += decoder.decode(raw_bytes)
                 while "\n" in text_buffer:

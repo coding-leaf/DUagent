@@ -586,3 +586,35 @@
 - Agent py_compile：通过 `cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/session/run_bus.py src/agent_service_v2/session/workbench_session.py src/agent_service_v2/api/workbench.py src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/agents/workbench_factory.py`
 
 **接口漂移：** 无新增漂移。继续沿用 `POST /agent/v2/workbench/chat`，未修改 Backend 或 Client API。
+
+### 2026-07-01 — 修复 AIChat v2 实时链路并接入 Backend
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py`
+- `agent_service_v2/src/agent_service_v2/api/workbench.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/tests/test_model_provider.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `agent_service_v2/tests/test_workbench_api.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `backend/app/services/tutoring_stream_adapter.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `start_all.sh`
+- `WorkLine.md`
+
+**核心改动：**
+根据 AgentScope 2.x 框架真实性审计修复 AIChat v2 工作台链路。`WorkbenchSession.start_async()` 改为创建 run 后后台启动 AgentScope `agent.reply_stream()`，API 可立即返回 SSE 订阅；同步 `start()` 保留为等待完整运行的测试/工具入口。`EDUProtocolAdapter` 扩展为忽略 AgentScope 正常结构事件（ModelCall/TextBlock/ToolCall/ToolResult 的 start/end 辅助事件），避免误报 `workflow_failed`。新增 v2 模型 provider，按现有 `LLM_PROVIDER=agentscope_openai`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 配置构造 AgentScope 2.x `OpenAIChatModel`，并复用 `agent_service/.env` / `../agent_service/.env`；配置缺失时才走 `model_not_configured`。Backend tutoring SSE 代理从 `/agent/v1/tutoring/chat` 切换到 `/agent/v2/workbench/chat`，将原 Backend payload 包进 v2 `context`，同时把 v2 `text_delta/workflow_completed/workflow_failed` 转回前端兼容的 `chunk/done` 事件。`start_all.sh` 改为启动 `agent_service_v2`，旧 `agent_service` 不再作为默认启动项。
+
+**验证结果：**
+- Agent pytest：通过 `cd agent_service_v2 && ./.venv/bin/pytest tests -q`（20 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：通过 `cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/session/workbench_session.py src/agent_service_v2/api/workbench.py src/agent_service_v2/agents/model_provider.py`
+- Backend tutoring tests：通过 `cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_routes_refactored.py tests/test_tutoring_stream_adapter.py -q`（7 passed，1 skipped）
+- Backend py_compile：通过 `cd backend && ../.venv/bin/python -m py_compile app/services/tutoring_stream_adapter.py`
+- 启动脚本检查：通过 `bash -n start_all.sh`
+- 额外尝试：`cd backend && ../.venv/bin/python -m pytest tests/test_agent_integration.py tests/test_tutoring_routes_refactored.py tests/test_tutoring_stream_adapter.py -q` 中 27 passed、1 skipped、2 failed；失败原因是测试库已有固定注册码 `p_student` / `p_student2`，触发 MySQL duplicate key，和本次 v2 接入无关。
+- diff 检查：`git diff --check -- . ':!TODO.md'` 通过；未纳入已有 `TODO.md` 改动。
+
+**接口漂移：**
+- Backend 到 Agent Service 的内部 HTTP 路径从 `/agent/v1/tutoring/chat` 改为 `/agent/v2/workbench/chat`。
+- Backend 对前端的 tutoring SSE 输出保持兼容，仍输出 `chunk` / `done` 等旧 Client API 事件。

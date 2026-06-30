@@ -2,11 +2,17 @@ import json
 
 from agentscope.event import (
     ExceedMaxItersEvent,
+    ModelCallEndEvent,
+    ModelCallStartEvent,
     ReplyEndEvent,
     ReplyStartEvent,
+    TextBlockEndEvent,
     TextBlockDeltaEvent,
+    TextBlockStartEvent,
+    ToolCallEndEvent,
     ToolCallStartEvent,
     ToolResultEndEvent,
+    ToolResultStartEvent,
 )
 from agentscope.message import ToolResultState
 
@@ -60,3 +66,33 @@ def test_format_sse_serializes_edu_event():
     payload = json.loads(encoded.removeprefix("data: ").strip())
     assert payload["type"] == "text_delta"
     assert payload["payload"] == {"delta": "hi"}
+
+
+def test_protocol_adapter_ignores_normal_structural_events():
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+
+    structural_events = [
+        ModelCallStartEvent(reply_id="reply-1", model_name="deepseek"),
+        TextBlockStartEvent(reply_id="reply-1", block_id="block-1"),
+        TextBlockEndEvent(reply_id="reply-1", block_id="block-1"),
+        ToolCallEndEvent(reply_id="reply-1", tool_call_id="tool-1"),
+        ToolResultStartEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            tool_call_name="TaskCreate",
+        ),
+        ModelCallEndEvent(reply_id="reply-1", input_tokens=12, output_tokens=8),
+    ]
+
+    assert [adapter.adapt(event) for event in structural_events] == [
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ]

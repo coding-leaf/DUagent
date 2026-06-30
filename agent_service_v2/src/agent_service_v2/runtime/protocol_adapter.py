@@ -4,11 +4,17 @@ from typing import Any
 
 from agentscope.event import (
     ExceedMaxItersEvent,
+    ModelCallEndEvent,
+    ModelCallStartEvent,
     ReplyEndEvent,
     ReplyStartEvent,
+    TextBlockEndEvent,
     TextBlockDeltaEvent,
+    TextBlockStartEvent,
+    ToolCallEndEvent,
     ToolCallStartEvent,
     ToolResultEndEvent,
+    ToolResultStartEvent,
 )
 
 from agent_service_v2.runtime.edu_events import EduEvent, EduEventType, utc_now_iso
@@ -27,8 +33,11 @@ class EDUProtocolAdapter:
         self.agent = agent
         self._seq = 0
 
-    def adapt(self, event: Any) -> EduEvent:
-        event_type, payload = self._map_event(event)
+    def adapt(self, event: Any) -> EduEvent | None:
+        mapped = self._map_event(event)
+        if mapped is None:
+            return None
+        event_type, payload = mapped
         self._seq += 1
         return EduEvent(
             type=event_type,
@@ -40,7 +49,7 @@ class EDUProtocolAdapter:
             payload=payload,
         )
 
-    def _map_event(self, event: Any) -> tuple[EduEventType, dict[str, Any]]:
+    def _map_event(self, event: Any) -> tuple[EduEventType, dict[str, Any]] | None:
         if isinstance(event, ReplyStartEvent):
             return EduEventType.WORKFLOW_STARTED, {
                 "reply_id": event.reply_id,
@@ -65,6 +74,18 @@ class EDUProtocolAdapter:
                 "reply_id": event.reply_id,
                 "reason": "exceed_max_iters",
             }
+        if isinstance(
+            event,
+            (
+                ModelCallStartEvent,
+                ModelCallEndEvent,
+                TextBlockStartEvent,
+                TextBlockEndEvent,
+                ToolCallEndEvent,
+                ToolResultStartEvent,
+            ),
+        ):
+            return None
         return EduEventType.WORKFLOW_FAILED, {
             "reason": "unsupported_agentscope_event",
             "event_class": event.__class__.__name__,

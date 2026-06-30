@@ -5,9 +5,15 @@ from fastapi.testclient import TestClient
 
 from agent_service_v2.main import app
 from agent_service_v2.api import workbench
+from agent_service_v2.agents.workbench_factory import WorkbenchAgentFactory
 
 
-def test_workbench_chat_returns_sse_failure_when_model_missing():
+def test_workbench_chat_returns_sse_failure_when_model_missing(monkeypatch):
+    monkeypatch.setattr(
+        workbench,
+        "create_agent_factory",
+        lambda: WorkbenchAgentFactory(model_provider=lambda: None),
+    )
     client = TestClient(app)
 
     response = client.post(

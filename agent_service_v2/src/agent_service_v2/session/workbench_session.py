@@ -26,6 +26,7 @@ class WorkbenchSession:
         self._run_bus = run_bus
         self._workspace_manager = workspace_manager
         self._agent_factory = agent_factory
+        self._tasks: set[asyncio.Task] = set()
 
     def start(
         self,
@@ -37,12 +38,13 @@ class WorkbenchSession:
         context: dict,
     ) -> WorkbenchRun:
         return asyncio.run(
-            self.start_async(
+            self._start_async(
                 user_id=user_id,
                 course_id=course_id,
                 conversation_id=conversation_id,
                 message=message,
                 context=context,
+                run_in_background=False,
             )
         )
 
@@ -54,6 +56,25 @@ class WorkbenchSession:
         conversation_id: str | None,
         message: str,
         context: dict,
+    ) -> WorkbenchRun:
+        return await self._start_async(
+            user_id=user_id,
+            course_id=course_id,
+            conversation_id=conversation_id,
+            message=message,
+            context=context,
+            run_in_background=True,
+        )
+
+    async def _start_async(
+        self,
+        *,
+        user_id: str,
+        course_id: str | None,
+        conversation_id: str | None,
+        message: str,
+        context: dict,
+        run_in_background: bool,
     ) -> WorkbenchRun:
         run = self._run_bus.create_run(conversation_id=conversation_id)
         workspace = self._workspace_manager.get_workspace(
@@ -72,7 +93,15 @@ class WorkbenchSession:
             self._run_bus.fail(run.run_id, reason="model_not_configured")
             return run
 
-        await self._run_agent(run=run, agent=agent, message=message)
+        if not run_in_background:
+            await self._run_agent(run=run, agent=agent, message=message)
+            return run
+
+        task = asyncio.create_task(
+            self._run_agent(run=run, agent=agent, message=message)
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return run
 
     async def _run_agent(self, *, run: WorkbenchRun, agent, message: str) -> None:
@@ -88,7 +117,9 @@ class WorkbenchSession:
         )
         try:
             async for agent_event in agent.reply_stream(user_message):
-                self._run_bus.publish_event(adapter.adapt(agent_event))
+                edu_event = adapter.adapt(agent_event)
+                if edu_event is not None:
+                    self._run_bus.publish_event(edu_event)
             self._run_bus.complete(run.run_id)
         except Exception as exc:
             self._run_bus.fail(run.run_id, reason=exc.__class__.__name__)

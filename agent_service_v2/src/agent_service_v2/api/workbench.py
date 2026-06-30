@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from agent_service_v2.agents.model_provider import build_chat_model_from_settings
 from agent_service_v2.agents.workbench_factory import WorkbenchAgentFactory
 from agent_service_v2.runtime.sse import format_sse
 from agent_service_v2.schemas.workbench import WorkbenchChatRequest
@@ -45,4 +46,4 @@ def _workspace_root() -> Path:
 
 
 def create_agent_factory() -> WorkbenchAgentFactory:
-    return WorkbenchAgentFactory(model_provider=lambda: None)
+    return WorkbenchAgentFactory(model_provider=build_chat_model_from_settings)

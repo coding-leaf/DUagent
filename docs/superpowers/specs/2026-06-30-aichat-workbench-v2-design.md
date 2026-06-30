@@ -1,254 +1,271 @@
-# AIChat AgentScope-native Workbench v2 Design
+# AIChat Workbench v2 Agent Service-inspired Design
 
 > 日期：2026-06-30  
 > 状态：待审核  
-> 范围：以 AIChat / AI 工作台为下一阶段主线，基于 `agent_service_v2` 和 AgentScope 2.0.3 全量实现新智能体链路。  
-> 核心决策：旧 `agent_service/` 保留但不参与 AIChat v2 主链路；新实现必须以 AgentScope Workspace、Agent、Plan、Memory、RAG、Context 和 Toolkit 为架构核心。
+> 范围：AIChat / AI 工作台作为下一阶段主线，`agent_service_v2` 采用 AgentScope 2.0.3 的 Agent Service 资源模型思想，但不直接由 `create_app` 承载整个服务。  
+> 核心决策：选择方案 A。保留 EDU FastAPI facade，内部借鉴 AgentScope Agent Service 的 Session、MessageBus、WorkspaceManager、ProtocolMiddleware、RAG/KnowledgeBaseManager 等分工。
 
-## 1. 设计修正
+## 1. 设计立场
 
-上一版设计把 AgentScope 放在自定义 runtime 之后，实际会演变成“EDU 自己写工作流，AgentScope 只负责模型调用”。该方向废弃。
+本阶段不直接采用 AgentScope `create_app(...)` 作为 `agent_service_v2` 主体。原因：
 
-本版设计改为 AgentScope-native：
+- EDU 已有 Backend 作为用户、课程、鉴权、会话、消息和业务持久化边界。
+- 直接接入 `create_app` 会引入 AgentScope 官方用户、凭据、Agent、Session、Workspace、Schedule 等完整资源模型，迁移面过大。
+- AIChat 当前需要先跑通一条 AgentScope-native 学习工作台链路，而不是重建平台级 Agent 管理后台。
 
-- Workspace 先行，用 `user_id + course_id + conversation_id` 划定每个 AIChat 的工作边界。
-- AgentScope `Agent` 是核心推理与行动引擎，使用 `reply_stream()` 的事件流作为运行时事实。
-- Plan 使用 AgentScope 内置计划工具 `TaskCreate / TaskGet / TaskList / TaskUpdate`，由 LLM 维护学习任务与执行计划。
-- 长期记忆优先接 AgentScope `Mem0Middleware`，而不是先复刻旧 memory 逻辑。
-- RAG 优先采用 AgentScope RAG / RAG service 形态，旧 Qdrant 检索链路只作为数据迁移或后续适配参考。
-- 上下文管理优先使用 AgentScope `ContextConfig` 和 workspace offload。
-- Toolkit 只先定义占位工具边界，不在第一阶段搬运旧智能体业务实现。
-- EDU SSE 只是 AgentScope event adapter，不能反过来主导 runtime 设计。
+但本阶段也不继续手写一套孤立 runtime。`agent_service_v2` 内部必须借鉴 AgentScope Agent Service 的核心分工：
+
+- `Agent` 是可复用智能体模板。
+- `Session` 承载一次会话的运行时状态，对应 Backend `conversation_id`。
+- `WorkspaceManager` 为 session 分配隔离 workspace。
+- `MessageBus` 负责事件流、重连缓冲和后续唤醒。
+- `ProtocolMiddleware` / protocol adapter 负责把 AgentScope `AgentEvent` 转成外部协议。
+- RAG / KnowledgeBaseManager 作为课程知识库边界。
 
 ## 2. 官方能力依据
 
-本设计以 AgentScope 2.0.3 文档与本地包 introspection 为准：
+本设计依据：
 
+- Agent Service：`https://docs.agentscope.io/versions/2.0.3/zh/deploy/agent-service`
 - Agent：`https://docs.agentscope.io/versions/2.0.3/zh/building-blocks/agent`
 - Plan：`https://docs.agentscope.io/versions/2.0.3/zh/building-blocks/plan`
 - RAG：`https://docs.agentscope.io/versions/2.0.3/zh/deploy/rag`
-- 本地版本：`agentscope==2.0.3`
-- 本地已确认可用对象：`Agent`、`ContextConfig`、`ReActConfig`、`Toolkit`、`TaskCreate`、`TaskGet`、`TaskList`、`TaskUpdate`、`LocalWorkspace`、`Mem0Middleware`
+
+本地 AgentScope 2.0.3 已验证能力：
+
+- `agentscope.app.create_app`
+- `agentscope.app.storage.RedisStorage`
+- `agentscope.app.message_bus.InMemoryMessageBus` / `RedisMessageBus`
+- `agentscope.app.workspace_manager.LocalWorkspaceManager`
+- `agentscope.app.middleware.ProtocolMiddlewareBase` / `AGUIProtocolMiddleware`
+- `agentscope.agent.Agent`
+- `agentscope.tool.TaskCreate` / `TaskGet` / `TaskList` / `TaskUpdate`
+- `agentscope.middleware.Mem0Middleware` / `RAGMiddleware`
 
 ## 3. 总体架构
 
 ```mermaid
 flowchart TB
   FE[Frontend AIChat] --> BE[Backend /api/v1/tutoring/chat]
-  BE --> AS[agent_service_v2 /agent/v2/workbench/chat]
+  BE --> API[agent_service_v2 /agent/v2/workbench/chat]
 
-  subgraph ASCore["agent_service_v2 AgentScope Core"]
-    WM[WorkspaceManager]
-    WS[LocalWorkspace per user/course/conversation]
-    AF[AgentFactory]
-    Agent[AgentScope Agent]
-    Plan[Plan Tools: TaskCreate/TaskGet/TaskList/TaskUpdate]
-    Mem[Mem0Middleware long-term memory]
-    Ctx[ContextConfig compression/offload]
-    RAG[AgentScope RAG / RAG service adapter]
-    TK[Placeholder Toolkit]
-    Events[AgentScope AgentEvent stream]
-    Adapter[EDU SSE Adapter]
+  subgraph V2["agent_service_v2 EDU FastAPI facade"]
+    API --> Session[WorkbenchSession<br/>conversation_id scoped]
+    Session --> Bus[WorkbenchRunBus<br/>in-memory first, Redis later]
+    Session --> WSM[WorkbenchWorkspaceManager]
+    WSM --> WS[LocalWorkspace]
+    Session --> Factory[WorkbenchAgentFactory]
+    Factory --> Agent[AgentScope Agent]
+    Factory --> Toolkit[Toolkit + ToolGroups]
+    Factory --> MW[Mem0 / RAG / Tracing middleware]
+    Factory --> Config[ContextConfig + ReActConfig]
+    Agent --> Events[AgentScope AgentEvent stream]
+    Events --> Adapter[EDUProtocolAdapter]
+    Adapter --> Bus
   end
 
-  AS --> WM
-  WM --> WS
-  WS --> AF
-  AF --> Agent
-  Plan --> TK
-  RAG --> TK
-  TK --> Agent
-  Mem --> Agent
-  Ctx --> Agent
-  WS --> Agent
-  Agent --> Events
-  Events --> Adapter
-  Adapter --> BE
+  Bus --> API
+  API --> BE
   BE --> FE
 ```
 
-## 4. Workspace 边界
+## 4. Agent Service 概念映射
 
-Workspace 是 AIChat v2 的第一层隔离，而不是可选能力。
+| AgentScope Agent Service 概念 | EDU AIChat v2 映射 |
+|---|---|
+| Agent | `edu_ai_chat_workbench` agent template |
+| Session | `WorkbenchSession`，映射 Backend `conversation_id` |
+| Workspace | `LocalWorkspace`，由 `WorkbenchWorkspaceManager` 按 user/course/session 隔离 |
+| Storage | 短期不替代 Backend MySQL；仅保存 Agent runtime 状态时再引入 |
+| MessageBus | `WorkbenchRunBus`；第一阶段内存实现，后续可换 Redis |
+| ProtocolMiddleware | `EDUProtocolAdapter`，输出 EDU SSE v2 |
+| KnowledgeBaseManager | `WorkbenchRagBoundary`，后续接 AgentScope RAG service |
+| Schedule | 第一阶段不启用 |
+| ToolOffload | 后续用于长耗时工具，第一阶段只保留边界 |
+| `create_app` | 暂不作为主服务入口，只作为中期迁移参考 |
 
-```text
-workspace_id = ai-chat/{user_id}/{course_id or global}/{conversation_id}
-workdir      = agent_service_v2/workspaces/{safe_workspace_id}
-```
+## 5. 运行时对象
+
+### `WorkbenchSession`
 
 职责：
 
-- 隔离不同用户、课程和会话的 AIChat 工作区。
-- 承载 AgentScope offload 的上下文、工具结果和中间文件。
-- 避免学生端不同 AIChat 会话混合上下文。
-- 为后续 artifact 文件、RAG 上传临时文件、生成内容草稿留出边界。
+- 接收 Backend 传入的 `user_id`、`course_id`、`conversation_id`、`message`、`context`。
+- 生成 `run_id`。
+- 创建或恢复该 conversation 对应的 Agent runtime 状态。
+- 获取 workspace。
+- 启动 Agent run 并把事件写入 `WorkbenchRunBus`。
 
-实现原则：
+它不负责业务消息落库；业务会话与消息仍由 Backend 管。
 
-- 首期使用 `LocalWorkspace`。
-- workspace 路径必须由服务端生成，不能直接信任前端传入路径。
-- workspace 不直接作为业务持久化来源；业务持久化仍由 Backend 管理。
+### `WorkbenchRunBus`
 
-## 5. Agent 设计
+借鉴 AgentScope MessageBus，但第一阶段不直接上 Redis：
+
+- 管理单次 `run_id` 的事件流。
+- 维护短期事件缓冲，支持 Backend SSE 读取。
+- 后续可替换为 `RedisMessageBus` 以支持多进程和断线重连。
+
+第一阶段可使用 in-memory bus，因为 `agent_service_v2` 还没有多实例部署。
+
+### `WorkbenchWorkspaceManager`
+
+借鉴 `WorkspaceManagerBase` / `LocalWorkspaceManager`。
+
+隔离键：
+
+```text
+user_id + course_id/global + conversation_id
+```
+
+workspace 用途：
+
+- AgentScope offload。
+- RAG 上传临时文件。
+- 中间 artifact 草稿。
+- session 工具结果和大上下文文件。
+
+workspace 不作为业务事实源。
+
+### `EDUProtocolAdapter`
+
+借鉴 AgentScope `ProtocolMiddlewareBase`，但输出 EDU SSE v2。
+
+输入：
+
+```text
+AgentScope AgentEvent
+```
+
+输出：
+
+```text
+workflow_started
+tool_started
+tool_completed
+tool_failed
+source_refs
+artifact_created
+critic_completed
+text_delta
+workflow_completed
+workflow_failed
+```
+
+Adapter 只做协议转换，不做业务决策。
+
+## 6. Agent 设计
 
 ```mermaid
 flowchart TB
-  Request[WorkbenchChatRequest] --> WC[WorkbenchContext]
-  WC --> WS[LocalWorkspace]
-  WC --> Prompt[System Prompt]
-  WC --> Toolkit[Toolkit]
-  WC --> Middlewares[Middlewares]
-  WC --> Config[ContextConfig + ReActConfig]
+  Session[WorkbenchSession] --> Factory[WorkbenchAgentFactory]
+  Factory --> Agent[AgentScope Agent]
+  Factory --> Toolkit[Toolkit]
+  Factory --> MW[Middlewares]
+  Factory --> Cfg[ContextConfig / ReActConfig]
+  Factory --> WS[LocalWorkspace offloader]
 
-  Prompt --> Agent[AgentScope Agent]
-  Toolkit --> Agent
-  Middlewares --> Agent
-  Config --> Agent
-  WS --> Agent
+  Toolkit --> Plan[Plan ToolGroup]
+  Toolkit --> Memory[Memory tools]
+  Toolkit --> RAG[RAG tools or RAGMiddleware boundary]
+  Toolkit --> Placeholder[AIChat placeholder tools]
 
   Agent --> Stream[reply_stream]
-  Stream --> EDU[EDU Event Adapter]
+  Stream --> Adapter[EDUProtocolAdapter]
 ```
 
 Agent 配置：
 
 - `name`: `edu_ai_chat_workbench`
-- `system_prompt`: 定义学生学习工作台身份、边界、工具使用约束、必须先规划再回答。
-- `toolkit`: Plan tools + RAG placeholder + AIChat placeholder tools。
-- `middlewares`: `Mem0Middleware` 优先，后续可加 tracing / budget / RAG middleware。
-- `context_config`: 负责上下文压缩、工具结果长度控制。
-- `react_config`: 限制 max iters，避免无限工具循环。
-- `offloader`: 绑定 workspace，允许框架管理大上下文和中间结果。
+- `system_prompt`: 学习工作台角色、边界、工具使用原则、必须先规划再回答。
+- `toolkit`: ToolGroups，而不是一个扁平工具列表。
+- `middlewares`: `Mem0Middleware`、`RAGMiddleware`、tracing/budget middleware。
+- `context_config`: 控制上下文压缩和工具结果长度。
+- `react_config`: 限制 `max_iters`。
+- `offloader`: session workspace。
 
-## 6. Plan 设计
+## 7. Plan / Memory / RAG / Toolkit
 
-AIChat 的 LLM 必须被授予计划能力。计划不由前端按钮硬编码，也不由 Backend 预设 workflow。
+### Plan
 
-Plan 工具：
+Plan 必须使用 AgentScope 内置工具：
 
 - `TaskCreate`
 - `TaskGet`
 - `TaskList`
 - `TaskUpdate`
 
-预期行为：
+任务状态由 AgentScope state / tasks context 管理。前端学习计划 artifact 可以从 plan tool 调用和最终输出派生，但第一阶段不把自定义 artifact 作为计划事实源。
+
+### Memory
+
+长期记忆优先 `Mem0Middleware`：
+
+- `user_id` 使用 Backend 当前用户。
+- `agent_id` 可包含 course scope，例如 `edu_ai_chat_workbench:{course_id}`。
+- 配置不可用时显式返回 memory disabled 状态，不回退旧 `agent_service` memory。
+
+### RAG
+
+RAG 优先顺序：
+
+1. `RAGMiddleware` 可满足上下文注入时，优先 middleware。
+2. 需要前端展示检索过程时，再提供 `retrieve_course_context` 工具。
+3. 后续接 AgentScope RAG service / KnowledgeBaseManager。
+4. 旧 Qdrant 数据通过迁移或 connector 进入新 RAG 边界，不直接复用旧检索模块。
+
+### Toolkit
+
+使用 ToolGroups：
+
+```text
+planning
+memory
+rag
+learning_state
+artifact
+review
+```
+
+第一阶段业务工具均为占位：
+
+- `read_learning_state`
+- `draft_study_artifact`
+- `review_grounding`
+
+占位工具返回结构化 observation，不返回 UI 文案。
+
+## 8. 数据流
 
 ```mermaid
 sequenceDiagram
-  participant U as Student
+  participant FE as Frontend
+  participant BE as Backend
+  participant API as agent_service_v2 API
+  participant S as WorkbenchSession
+  participant B as WorkbenchRunBus
   participant A as AgentScope Agent
-  participant P as Plan Tools
-  participant T as Toolkit
+  participant P as EDUProtocolAdapter
 
-  U->>A: 我今天应该学什么？
-  A->>P: TaskCreate: 制定今日学习目标拆解
-  A->>P: TaskUpdate: 标记需要读取学习状态
-  A->>T: 调用学习上下文占位工具
-  A->>P: TaskUpdate: 标记已获得上下文
-  A->>T: 调用推荐/产物占位工具
-  A->>P: TaskList: 汇总任务完成情况
-  A-->>U: 输出建议和工作区产物
+  FE->>BE: POST /api/v1/tutoring/chat
+  BE->>API: POST /agent/v2/workbench/chat
+  API->>S: create session run
+  S->>B: create run stream
+  S->>A: reply_stream(message)
+  A-->>P: AgentEvent
+  P-->>B: EDU event
+  B-->>API: stream events
+  API-->>BE: SSE
+  BE-->>FE: SSE
 ```
 
-Plan 在第一阶段的验收不是业务推荐质量，而是 Agent 能通过框架计划工具产生可观测计划步骤。
+## 9. 第一阶段验收
 
-## 7. 长期记忆与上下文
-
-长期记忆优先采用 AgentScope `Mem0Middleware`。
-
-设计：
-
-- `user_id` 传给 `Mem0Middleware(user_id=...)`。
-- 模式优先使用 `both`，让 Agent 既能被动获得相关记忆，也能主动 `search_memory / add_memory`。
-- `Mem0Middleware.list_tools()` 返回的 memory tools 注入 `Toolkit`。
-- 若本地缺少 mem0 外部服务或模型配置，第一阶段降级为“middleware disabled but boundary preserved”，不回退到旧 `agent_service` memory。
-
-上下文管理：
-
-- 使用 `ContextConfig(trigger_ratio, reserve_ratio, tool_result_limit)`。
-- 大型工具结果、长文档和多模态内容交给 workspace offload。
-- Backend 传入的学习上下文只作为本轮输入，不替代长期记忆。
-
-## 8. RAG 设计
-
-RAG 优先走 AgentScope RAG / RAG service 形态。
-
-第一阶段只建立适配边界：
-
-- `RagServiceAdapter`: 负责连接 AgentScope RAG service 或本地 RAG 组件。
-- `retrieve_course_context`: Toolkit 中的占位工具，输入 query、course_id、workspace_id，输出标准 observation。
-- 旧 Qdrant 数据不直接复用旧检索代码；后续通过 RAG service 配置、数据迁移或 connector 适配。
-
-RAG 事件要求：
-
-- 检索开始：映射为 `tool_started`。
-- 检索结果：映射为 `tool_completed` 和 `source_refs`。
-- 检索失败：映射为 `tool_failed`，Agent 可继续基于已有上下文回答但必须暴露依据不足。
-
-## 9. Toolkit 占位
-
-第一阶段 Toolkit 不实现完整业务，只划定工具槽位：
-
-| 工具 | 当前状态 | 作用 |
-|---|---|---|
-| Plan tools | 必须接入 | 让 Agent 自主规划 |
-| Memory tools | 优先接入 | 长期记忆搜索与写入 |
-| `retrieve_course_context` | 占位 | 课程 RAG 检索 |
-| `read_learning_state` | 占位 | 读取 Backend 传入的画像、路径、评估摘要 |
-| `draft_study_artifact` | 占位 | 生成工作区 artifact 草稿 |
-| `review_grounding` | 占位 | 审查来源和防幻觉 |
-
-占位工具必须返回结构化 observation，不返回 UI 文案。
-
-## 10. 事件适配
-
-```mermaid
-flowchart LR
-  AS[AgentScope AgentEvent] --> RE[RuntimeEvent normalized]
-  RE --> SSE[EDU SSE v2 event]
-  SSE --> BE[Backend stream adapter]
-  BE --> FE[Frontend ChatContext]
-```
-
-EDU SSE 事件保持产品稳定，但来源必须是 AgentScope 事件或框架工具生命周期：
-
-| EDU 事件 | 来源 |
-|---|---|
-| `workflow_started` | AgentScope reply start |
-| `tool_started` | AgentScope tool call start |
-| `tool_completed` | AgentScope tool result end |
-| `tool_failed` | AgentScope tool error / adapter error |
-| `source_refs` | RAG tool observation |
-| `artifact_created` | artifact placeholder tool observation |
-| `critic_completed` | review placeholder tool observation |
-| `text_delta` | AgentScope text delta |
-| `workflow_completed` | AgentScope reply end |
-| `workflow_failed` | max iters / exception / rejected tool |
-
-## 11. Backend 与 Frontend 边界
-
-Backend：
-
-- 仍提供 `/api/v1/tutoring/chat` 给前端。
-- 内部调用 `/agent/v2/workbench/chat`。
-- 负责会话、消息和后续 artifact 持久化。
-- 不把旧 `/agent/v1/tutoring/chat` 作为 AIChat v2 fallback。
-
-Frontend：
-
-- 不直连 Agent Service。
-- `ChatContext` 消费 EDU SSE v2。
-- 右侧显示 text stream 与 tool trace。
-- 中间 Workspace 渲染 `artifact_created`。
-
-## 12. 验收标准
-
-- `agent_service_v2` 启动时可以创建 per-chat `LocalWorkspace`。
-- AIChat 请求能创建 AgentScope `Agent`，且 Agent 绑定 workspace、Plan tools、ContextConfig、ReActConfig。
-- Plan tools 进入 Toolkit，并能在事件流中观察到计划相关工具调用。
-- Mem0Middleware 边界明确；配置可用时接入，配置不可用时显式 disabled。
-- RAG 使用 AgentScope RAG service adapter 边界，不调用旧智能体检索实现。
-- Toolkit 业务工具处于占位状态，但 schema 和 observation 边界稳定。
-- EDU SSE 由 AgentScope event adapter 产生。
-- 旧 `agent_service/` 不参与 AIChat v2 主链路。
+- `agent_service_v2` 不使用旧 `agent_service/`。
+- `agent_service_v2` 提供 EDU FastAPI facade，而不是直接暴露 AgentScope `create_app` 路由。
+- 内部有 `WorkbenchSession`、`WorkbenchRunBus`、`WorkbenchWorkspaceManager`、`EDUProtocolAdapter` 边界。
+- Agent 由 AgentScope `Agent` 驱动。
+- Plan tools 进入 ToolGroup。
+- Mem0 / RAG 以框架 middleware 或框架 service 边界接入。
+- Backend / Frontend 契约不漂移。
 

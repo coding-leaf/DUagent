@@ -494,3 +494,21 @@
 - Agent import 检查：通过 `./.venv/bin/python -c "import agentscope.app"`；通过导入 `Mem0Middleware`、`RAGMiddleware`、`LocalWorkspace`、`DockerWorkspace`、`E2BWorkspace`；通过导入 AgentScope app 的 `rag`、`storage`、`message_bus`、`workspace_manager` 子模块
 
 **接口漂移：** 无。仅变更 `agent_service_v2` 依赖，未修改 HTTP API 或 SSE 协议。
+
+### 2026-06-30 — 调整 AIChat v2 为 Agent Service-inspired 方案 A
+
+**涉及文件：**
+- `docs/superpowers/specs/2026-06-30-aichat-workbench-v2-design.md`
+- `docs/superpowers/plans/2026-06-30-aichat-workbench-v2-plan.md`
+- `WorkLine.md`
+
+**核心改动：**
+根据用户确认的方案 A，重写 AIChat v2 设计与计划：保留 EDU FastAPI facade，不直接用 AgentScope `create_app` 承载主服务；内部借鉴 AgentScope Agent Service 的资源模型，新增 `WorkbenchSession`、`WorkbenchRunBus`、`WorkbenchWorkspaceManager`、`EDUProtocolAdapter` 等边界。文档明确 `Agent` 仍是唯一执行核心，Plan tools 进入 ToolGroup，Mem0/RAG 作为框架 middleware 或 service 边界接入，Backend/Frontend 契约暂不漂移。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅文档变更）
+- 后端 py_compile / pytest：未运行（仅文档变更）
+- Agent pytest：未运行（仅文档变更）
+- 文档检查：已用 `rg` 检查 design/plan 中包含方案 A、`create_app` 非目标、`WorkbenchSession`、`WorkbenchRunBus`、`WorkbenchWorkspaceManager`、`EDUProtocolAdapter`、`ProtocolMiddleware`、`ToolGroup` 等关键边界
+
+**接口漂移：** 无。仅重写设计和实施计划，未修改 Backend、Frontend 或 Agent Service 对外接口。

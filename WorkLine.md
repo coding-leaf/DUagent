@@ -476,3 +476,21 @@
 - 文档检查：已用 `rg` 检查新文档包含 AgentScope-native、LocalWorkspace、Mem0Middleware、TaskCreate、RAG service 和占位工具等关键边界
 
 **接口漂移：** 无。仅重写设计和实施计划，尚未修改 Backend、Frontend 或 Agent Service 对外接口。
+
+### 2026-06-30 — 全量引入 AgentScope 2.x optional 能力依赖
+
+**涉及文件：**
+- `agent_service_v2/pyproject.toml`
+- `agent_service_v2/uv.lock`
+- `WorkLine.md`
+
+**核心改动：**
+将 `agent_service_v2` 的核心依赖从 `agentscope>=2,<3` 调整为 `agentscope[full]>=2,<3`，用于补齐 AgentScope Agent Service、storage/message bus、workspace manager、RAG、Mem0 长期记忆、工具和模型相关 optional 能力。同步更新 `uv.lock` 并执行 `uv sync`，使本地 `.venv` 安装新增依赖，包括 `apscheduler`、`ag-ui-protocol`、`redis`、`qdrant-client`、`mem0ai`、`aiodocker`、`e2b`、`ripgrep`、S3 与模型 provider 相关包。
+
+**验证结果：**
+- 前端 lint / build：未运行（Agent 依赖变更）
+- 后端 py_compile / pytest：未运行（Agent 依赖变更）
+- Agent pytest：未运行（仅依赖引入，尚未新增代码）
+- Agent import 检查：通过 `./.venv/bin/python -c "import agentscope.app"`；通过导入 `Mem0Middleware`、`RAGMiddleware`、`LocalWorkspace`、`DockerWorkspace`、`E2BWorkspace`；通过导入 AgentScope app 的 `rag`、`storage`、`message_bus`、`workspace_manager` 子模块
+
+**接口漂移：** 无。仅变更 `agent_service_v2` 依赖，未修改 HTTP API 或 SSE 协议。

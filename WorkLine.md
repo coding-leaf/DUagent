@@ -458,3 +458,21 @@
 - `agent_service_v2` 尚未接入 FastAPI/SSE，不运行服务级测试
 
 **接口漂移：** 无。仅新增 v2 骨架和设计准则，尚未修改 Backend、Frontend 或旧 Agent Service 对外接口。
+
+### 2026-06-30 — 重写 AIChat AgentScope-native 工作台 v2 设计与计划
+
+**涉及文件：**
+- `docs/superpowers/specs/2026-06-30-aichat-workbench-v2-design.md`
+- `docs/superpowers/plans/2026-06-30-aichat-workbench-v2-plan.md`
+- `WorkLine.md`
+
+**核心改动：**
+根据用户对上一版设计的否定，废弃“自定义 runtime 优先、AgentScope 只是内部实现”的方向。新设计明确以 AgentScope 2.0.3 为核心：Workspace 先划定 user/course/conversation 边界，Agent 作为主运行时，Plan 使用 `TaskCreate / TaskGet / TaskList / TaskUpdate`，长期记忆优先 `Mem0Middleware`，上下文管理使用 `ContextConfig` 与 workspace offload，RAG 优先走 AgentScope RAG / RAG service 边界。业务 Toolkit 第一阶段仅保留占位工具，不搬运旧 `agent_service/` 业务实现。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅文档变更）
+- 后端 py_compile / pytest：未运行（仅文档变更）
+- Agent pytest：未运行（仅文档变更）
+- 文档检查：已用 `rg` 检查新文档包含 AgentScope-native、LocalWorkspace、Mem0Middleware、TaskCreate、RAG service 和占位工具等关键边界
+
+**接口漂移：** 无。仅重写设计和实施计划，尚未修改 Backend、Frontend 或 Agent Service 对外接口。

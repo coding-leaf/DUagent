@@ -432,3 +432,29 @@
 - Agent pytest：未运行 (前端组件专属修改)
 
 **接口漂移：** 无
+
+---
+
+### 2026-06-30 — 建立 AgentScope 2.x 使用手册并初始化 agent_service_v2 骨架
+
+**涉及文件：**
+- `/home/yezisama/.codex/skills/agentscope-2x/SKILL.md`（仓库外 Codex skill）
+- `/home/yezisama/.codex/skills/agentscope-2x/references/agentscope-2x-guide.md`（仓库外 Codex skill）
+- `agent_service_v2/pyproject.toml`
+- `agent_service_v2/uv.lock`
+- `agent_service_v2/.python-version`
+- `agent_service_v2/README.md`
+- `agent_service_v2/src/agent_service_v2/__init__.py`
+
+**核心改动：**
+1. 创建 Codex skill `$agentscope-2x`，用于后续设计、审查和实现 AgentScope 2.x Agent Runtime、工具、middleware、tracing、Agent Service、Agent Team 与 SSE adapter。
+2. 在 skill 中固化 EDUagent 二阶段准则：新建 `agent_service_v2/` 并行重启，不在旧 `agent_service/` 内直接升级；新协议使用 `/agent/v2/...`，不兼容 `/agent/v1/...`；AI Workbench / Agent Chat 作为第一条样板链路；Agent 动态决策，前端按钮不得硬编码 workflow。
+3. 初始化 `agent_service_v2/` 最小 uv 项目骨架，并在 `pyproject.toml` 中锁定 `agentscope>=2,<3`，旧 `agent_service/` 当前仍保持 AgentScope 1.0.20 可运行。
+4. 明确增量更新原则：旧链路在 v2 验证前保留；每次只迁移一条链路或一个明确子能力；Backend/Frontend 只做必要薄适配。
+
+**验证结果：**
+- Codex skill 校验通过：`Skill is valid!`
+- 旧 `agent_service/.venv` introspection 确认当前 AgentScope 版本为 `1.0.20`
+- `agent_service_v2` 尚未接入 FastAPI/SSE，不运行服务级测试
+
+**接口漂移：** 无。仅新增 v2 骨架和设计准则，尚未修改 Backend、Frontend 或旧 Agent Service 对外接口。

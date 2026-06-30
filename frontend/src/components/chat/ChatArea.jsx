@@ -5,17 +5,23 @@ import ChatMessage from './ChatMessage';
 import ChatEmptyState from './ChatEmptyState';
 import Icon from '../Icon';
 
+const QUICK_ACTIONS = [
+  { key: 'weak_plan', label: '补弱计划', icon: 'route' },
+  { key: 'resources', label: '推荐资源', icon: 'library_books' },
+  { key: 'lesson', label: '讲解页', icon: 'auto_stories' },
+  { key: 'quiz', label: '练习预览', icon: 'quiz' },
+];
+
 export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   const { 
     sessions, activeSession, messages, isSending,
     sendMessage, editMessage, cancelStream, regenerate,
-    sendMockArtifact
+    runMockToolDemo
   } = useChat();
   const { activeCourseId } = useCourse();
   
   const [inputValue, setInputValue] = useState('');
   const [editingMsg, setEditingMsg] = useState(null);
-  const [showMockMenu, setShowMockMenu] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -46,7 +52,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   };
 
   return (
-    <main className="w-full lg:w-[380px] flex flex-col relative bg-slate-50 border-l border-slate-200 flex-shrink-0">
+    <main className="w-full lg:w-[420px] 2xl:w-[460px] flex flex-col relative bg-slate-50 border-l border-slate-200 flex-shrink-0">
       
       {/* Top Context Bar */}
       <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10 flex-shrink-0">
@@ -63,10 +69,13 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
             {activeSession ? sessions.find(s => s.id === activeSession)?.title || '对话中' : '新对话'}
           </div>
         </div>
+        <div className="text-[11px] text-slate-400 truncate max-w-[160px]" title={activeCourseName}>
+          {activeCourseName}
+        </div>
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 lg:px-8 py-8">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 lg:px-6 py-6">
         <div className="max-w-[760px] mx-auto space-y-8 pb-4">
           
           {messages.length === 0 ? (
@@ -80,7 +89,12 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                 const isLastAi = idx === lastAiIndex;
                 return (
                   <div key={msg.id} className="group/message relative pb-3">
-                    <ChatMessage message={msg} onSendMessage={handleSendMessage} />
+                    <ChatMessage
+                      message={msg}
+                      onSendMessage={handleSendMessage}
+                      onRegenerate={regenerate}
+                      isLastAssistant={isLastAi}
+                    />
 
                   {isLastUser && editingMsg && editingMsg.msgId === msg.id ? (
                     <div className="mt-2 bg-white border border-cyan-300 rounded-2xl p-3 shadow-sm">
@@ -121,24 +135,6 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                         <Icon name="edit" className="material-symbols-outlined text-[16px]"/>
                       </button>
                     )}
-                    {msg.role !== 'user' && !msg.loading && (
-                      <button
-                        onClick={() => navigator.clipboard?.writeText(typeof msg.content === 'string' ? msg.content : '').catch(console.error)}
-                        className="w-7 h-7 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 hover:border-slate-300 cursor-pointer transition-all text-[14px]"
-                        title="复制"
-                      >
-                        <Icon name="content_copy" className="material-symbols-outlined text-[16px]"/>
-                      </button>
-                    )}
-                    {isLastAi && !msg.loading && !isSending && (
-                      <button
-                        onClick={regenerate}
-                        className="w-7 h-7 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 hover:border-slate-300 cursor-pointer transition-all text-[14px]"
-                        title="重新生成"
-                      >
-                        <Icon name="refresh" className="material-symbols-outlined text-[16px]"/>
-                      </button>
-                    )}
                   </div>
                 </div>
               );
@@ -150,126 +146,25 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
       </div>
 
       {/* Input Composer */}
-      <div className="p-4 lg:px-8 pb-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex-shrink-0">
+      <div className="p-4 lg:px-6 pb-5 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex-shrink-0">
         <div className="max-w-[760px] mx-auto">
-          <div className="bg-white border border-slate-300 rounded-2xl shadow-sm p-3 flex flex-col gap-2 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-all relative">
-            
-            {showMockMenu && (
-              <div className="absolute bottom-16 left-3 bg-white border border-slate-200 rounded-xl shadow-lg p-3 grid grid-cols-2 gap-2 z-50 animate-fadeIn text-xs w-64">
-                <div className="col-span-2 font-bold text-slate-500 mb-1 border-b pb-1">触发模拟 Artifact</div>
-                <button 
-                  onClick={() => { 
-                    sendMockArtifact({ 
-                      type: 'QuizCard', 
-                      props: { 
-                        question: '以下哪个是线性数据结构？', 
-                        choices: ['二叉树', '图', '队列', '网'], 
-                        correctAnswer: 2 
-                      } 
-                    }); 
-                    setShowMockMenu(false); 
-                  }} 
-                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
-                >
-                  + 测验卡片
-                </button>
-                <button 
-                  onClick={() => { 
-                    sendMockArtifact({ 
-                      type: 'Mermaid', 
-                      props: { 
-                        chart: 'graph TD\nA[二叉树] --> B(二叉搜索树)\nA --> C(平衡二叉树)\nC --> D(AVL 树)' 
-                      } 
-                    }); 
-                    setShowMockMenu(false); 
-                  }} 
-                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
-                >
-                  + 流程图
-                </button>
-                <button 
-                  onClick={() => { 
-                    sendMockArtifact({ 
-                      type: 'Markdown', 
-                      props: { 
-                        content: '# 二叉树遍历详解\n\n1. **前序遍历** (根 -> 左 -> 右)\n2. **中序遍历** (左 -> 根 -> 右)\n3. **后序遍历** (左 -> 右 -> 根)' 
-                      } 
-                    }); 
-                    setShowMockMenu(false); 
-                  }} 
-                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
-                >
-                  + Markdown 课件
-                </button>
-                <button 
-                  onClick={() => { 
-                    sendMockArtifact({ 
-                      type: 'StudyPlanCard', 
-                      props: { 
-                        planDate: '2026-06-26', 
-                        tasks: [
-                          { name: '二叉树遍历 (重点突破)', duration: 60 }, 
-                          { name: '递归思想强化训练', duration: 45 }, 
-                          { name: '树的层序遍历与应用', duration: 45 }, 
-                          { name: '今日小结与错题回顾', duration: 20 }
-                        ] 
-                      } 
-                    }); 
-                    setShowMockMenu(false); 
-                  }} 
-                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
-                >
-                  + 学习计划
-                </button>
-                <button 
-                  onClick={() => { 
-                    sendMockArtifact({ 
-                      type: 'WeakPointsCard', 
-                      props: { 
-                        title: '薄弱点分析', 
-                        points: [
-                          { name: '二叉树遍历', mastery: 28 }, 
-                          { name: '递归实现', mastery: 46 }, 
-                          { name: '平衡二叉树 (AVL)', mastery: 58 }, 
-                          { name: '图的最短路径', mastery: 72 }, 
-                          { name: '哈希冲突处理', mastery: 80 }
-                        ] 
-                      } 
-                    }); 
-                    setShowMockMenu(false); 
-                  }} 
-                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
-                >
-                  + 薄弱点分析
-                </button>
-                <button 
-                  onClick={() => { 
-                    sendMockArtifact({ 
-                      type: 'PathRecommendationCard', 
-                      props: { 
-                        strategy: '补强优先', 
-                        duration: '18 天', 
-                        target: '掌握树、图、哈希表等核心结构', 
-                        steps: [
-                          { name: '基础回顾' }, 
-                          { name: '弱点突破' }, 
-                          { name: '综合提升' }, 
-                          { name: '专题拓展' }, 
-                          { name: '项目实战' }
-                        ] 
-                      } 
-                    }); 
-                    setShowMockMenu(false); 
-                  }} 
-                  className="p-2 hover:bg-slate-50 border border-slate-100 rounded text-left font-semibold text-slate-700 cursor-pointer"
-                >
-                  + 推荐路径
-                </button>
-              </div>
-            )}
-
+          <div className="mb-3 flex flex-wrap gap-2">
+            {QUICK_ACTIONS.map((action) => (
+              <button
+                key={action.key}
+                type="button"
+                onClick={() => runMockToolDemo(action.key)}
+                disabled={!activeCourseId || isSending}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-colors hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Icon name={action.icon} className="text-[14px]" />
+                {action.label}
+              </button>
+            ))}
+          </div>
+          <div className="bg-white border border-slate-300 rounded-2xl shadow-sm p-3 flex flex-col gap-2 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-100 transition-all">
             <textarea 
-              className="w-full border-none focus:ring-0 px-2 py-1 text-[15px] text-slate-800 placeholder-slate-400 resize-none outline-none max-h-32" 
+              className="w-full border-none focus:ring-0 px-2 py-1 text-[13px] text-slate-800 placeholder-slate-400 resize-none outline-none max-h-32" 
               placeholder="在这里输入你的问题..." 
               rows={1}
               value={inputValue}
@@ -289,14 +184,6 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                 </button>
                 <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
                   <Icon name="mic" className="material-symbols-outlined text-[18px]"/>
-                </button>
-                <button 
-                  onClick={() => setShowMockMenu(!showMockMenu)}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${showMockMenu ? 'bg-cyan-50 text-cyan-600' : 'hover:bg-slate-100 hover:text-slate-600'}`}
-                  title="生成模拟 Artifact"
-                  data-testid="mock-artifact-button"
-                >
-                  <Icon name="data_object" className="material-symbols-outlined text-[18px]"/>
                 </button>
               </div>
               

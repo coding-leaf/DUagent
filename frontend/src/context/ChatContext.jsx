@@ -5,6 +5,7 @@ import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
 import { normalizeTextList, normalizeMessages } from '../utils/chatContent';
 import { fetcherWrapper } from '../utils/fetcher';
+import { MOCK_TOOL_DEMOS } from '../components/chat/mockToolDemos';
 
 const ChatContext = createContext(null);
 
@@ -45,6 +46,34 @@ export const ChatProvider = ({ children }) => {
     };
     setWorkspaceArtifacts(prev => [...prev, newArtifact]);
   };
+
+  const runMockToolDemo = (demoKey) => {
+    const demo = MOCK_TOOL_DEMOS[demoKey];
+    if (!demo || isSending) return;
+
+    const createdArtifacts = demo.artifacts.map((artifact) => ({
+      id: `artifact-${crypto.randomUUID()}`,
+      type: artifact.type,
+      props: artifact.props || {},
+      timestamp: new Date().toISOString()
+    }));
+
+    setMessages(prev => [
+      ...prev,
+      { id: `user-${crypto.randomUUID()}`, role: 'user', content: demo.prompt },
+      {
+        id: `ai-${crypto.randomUUID()}`,
+        role: 'assistant',
+        content: demo.answer,
+        loading: false,
+        diagrams: [],
+        knowledge_points: [],
+        suggestions: ['继续细化这份内容', '把结果保存为个性化资源'],
+        toolCalls: demo.toolCalls
+      }
+    ]);
+    setWorkspaceArtifacts(prev => [...prev, ...createdArtifacts]);
+  };
   
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
@@ -56,6 +85,7 @@ export const ChatProvider = ({ children }) => {
       prevCourseIdRef.current = activeCourseId;
       setActiveSession(null);
       setMessages([]);
+      setWorkspaceArtifacts([]);
       return;
     }
 
@@ -67,6 +97,7 @@ export const ChatProvider = ({ children }) => {
     } else if (activeCourseId && sessionsRes) {
       setActiveSession(null);
       setMessages([]);
+      setWorkspaceArtifacts([]);
     }
   }, [sessions, activeCourseId, activeSession, sessionsRes]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -76,11 +107,13 @@ export const ChatProvider = ({ children }) => {
       chatService.getHistory(activeSession).then(res => {
         if (res.code === 200 && res.data) {
           setMessages(normalizeMessages(res.data.messages));
+          setWorkspaceArtifacts([]);
         }
       }).catch(console.error);
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([]);
+      setWorkspaceArtifacts([]);
     }
   }, [activeSession]);
 
@@ -103,6 +136,7 @@ export const ChatProvider = ({ children }) => {
     setActiveSession(null);
     lastMessageIdRef.current = null;
     setMessages([]);
+    setWorkspaceArtifacts([]);
     setIsSending(false);
   };
 
@@ -249,7 +283,7 @@ export const ChatProvider = ({ children }) => {
     <ChatContext.Provider value={{
       sessions, activeSession, setActiveSession, messages, isSending,
       sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession,
-      workspaceArtifacts, sendMockArtifact
+      workspaceArtifacts, sendMockArtifact, runMockToolDemo
     }}>
       {children}
     </ChatContext.Provider>

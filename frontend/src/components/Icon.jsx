@@ -88,6 +88,7 @@ const materialToLucide = {
     'bolt': 'Zap',
     'article': 'FileText',
     'code': 'Code',
+    'content_copy': 'Copy',
     'history': 'History',
     'settings': 'Settings',
     'visibility': 'Eye',

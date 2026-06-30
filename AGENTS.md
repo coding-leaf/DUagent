@@ -26,6 +26,24 @@
 
 ---
 
+## 路径导航与文档分工
+
+| 文件 / 目录 | 用途 |
+|------------|------|
+| `AGENTS.md` | 根目录全局协作约束。文件名必须保持全大写，子模块也统一使用 `AGENTS.md`。 |
+| `frontend/AGENTS.md` | 前端局部规则，只补充 UI、SWR/MVVM、前端验证等细节。 |
+| `backend/AGENTS.md` | 后端局部规则，只补充 FastAPI 分层、数据库、契约和测试细节。 |
+| `agent_service/AGENTS.md` | Agent Service 局部规则，只补充 AgentScope、RAG、多智能体和模型调用边界。 |
+| `TODO.md` | USER 灵感碎片和待办池，允许保留不完整想法，不作为事实结论。 |
+| `赛题疑点` | A3 赛题原文摘录、疑问和需求理解草稿。用于对齐比赛要求，不作为实现状态源。 |
+| `docs/90-review/` | 放正式审计、验收、差距分析文档。例如 A3 赛题需求差距审计。 |
+| `docs/superpowers/specs/` | 放用户确认后的设计文档，不放随手 TODO。 |
+| `docs/superpowers/plans/` | 放已经确认设计后的实施计划。 |
+| `WorkLine.md` | 当前唯一工作存档，记录已完成修改、验证命令、接口漂移和下一步。 |
+| `WORKFLOW.md` | 旧版历史记录，只读追溯，不再追加新记录。 |
+
+---
+
 ## 权威来源（按优先级）
 
 查证"该怎么做"时，按以下顺序：
@@ -295,4 +313,3 @@ courses = await course_service.list_with_catalog(db)
 - 删除或覆盖用户上传文件
 - 提交 `node_modules`、`.venv`、`__pycache__`、构建产物
 - 编造 AgentScope / OpenAPI 接口，未经确认不得使用不存在的 API
-

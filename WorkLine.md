@@ -52,6 +52,82 @@
 
 **接口漂移：** 无
 
+---
+
+### 2026-06-26 — 优化 AIChat 为 Artifact 工作区样子 v1
+
+**涉及文件：**
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/components/chat/ToolCallCard.jsx`
+- `frontend/src/components/chat/ToolCallCard.test.jsx`
+- `frontend/src/components/chat/mockToolDemos.js`
+- `frontend/src/components/Icon.jsx`
+- `docs/superpowers/plans/2026-06-26-aichat-artifact-workbench-ui-v1.md`
+
+**核心改动：**
+1. 将 AIChat 的前端样子收束为左侧历史、中间 Agent artifact 工作区、右侧 AI 对话区；中间工作区继续复用已有 `AgentWorkspace` 和插件注册表。
+2. 在 `ChatContext` 中增加前端专用 `runMockToolDemo`，用于模拟 tool 调用轨迹和生成物产出，预留后续 SSE/tool result 接入的数据边界。
+3. 在右侧 AI 对话区增加 `补弱计划 / 推荐资源 / 讲解页 / 练习预览` 快捷指令，点击后生成对话消息、tool 轨迹和中间工作区 artifact。
+4. 将 `ToolCallCard` 改为只读过程展示卡片，只显示工具名称、状态、输入摘要和输出摘要；重新生成、继续细化、复制等回答级动作放到 AI 回复底部。
+
+**验证结果：**
+- 前端测试：通过 `npm run test:unit -- src/components/chat/ToolCallCard.test.jsx src/components/workspace/AgentWorkspace.test.jsx src/components/workspace/PluginRegistry.test.js`
+- 前端 lint：通过 `npm run lint`
+- 前端 build：通过 `npm run build`（仅保留既有 chunk size warning）
+- 后端 py_compile / pytest：未运行（前端 UI 专属修改）
+- Agent pytest：未运行（前端 UI 专属修改）
+
+**接口漂移：** 无。仅增加前端 mock 数据结构和 UI 预留，未修改真实 API。
+
+**预览地址：** `http://127.0.0.1:5174/`
+
+---
+
+### 2026-06-26 — 缩小 AIChat 右侧对话区字号
+
+**涉及文件：**
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/components/chat/ToolCallCard.jsx`
+
+**核心改动：**
+1. 缩小右侧 AI 对话区消息正文、用户气泡、快捷指令、输入框和回答级操作按钮字号。
+2. 同步压缩 tool 调用轨迹卡片的字号与内边距，使右侧固定宽度面板的信息密度更接近侧边对话栏。
+
+**验证结果：**
+- 前端测试：通过 `npm run test:unit -- src/components/chat/ToolCallCard.test.jsx`
+- 前端 lint：通过 `npm run lint`
+- 前端 build：通过 `npm run build`（仅保留既有 chunk size warning）
+- 后端 py_compile / pytest：未运行（前端样式专属修改）
+- Agent pytest：未运行（前端样式专属修改）
+
+**接口漂移：** 无。
+
+---
+
+### 2026-06-26 — 修复 AIChat 右侧代码块横向滚动条
+
+**涉及文件：**
+- `frontend/src/components/common/MarkdownViewer.jsx`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/index.css`
+
+**核心改动：**
+1. 为通用 `MarkdownViewer` 增加 `compact` 模式，右侧聊天可启用代码长行换行、较小字号和禁用横向滚动。
+2. 在 `ChatMessage` 的 AI 回复 markdown 中启用 compact 模式，并补充 `min-w-0` / `overflow-hidden`，防止代码块或长文本撑开右侧栏。
+3. 新增 `.chat-compact-markdown` CSS 兜底，限制聊天 markdown 内的 `pre`、`code`、表格和 token 行横向溢出。
+
+**验证结果：**
+- 前端测试：通过 `npm run test:unit -- src/components/chat/ToolCallCard.test.jsx src/utils/__tests__/chatContent.test.js`
+- 前端 lint：通过 `npm run lint`
+- 前端 build：通过 `npm run build`（仅保留既有 chunk size warning）
+- 后端 py_compile / pytest：未运行（前端样式专属修改）
+- Agent pytest：未运行（前端样式专属修改）
+
+**接口漂移：** 无。
+
 **遗留问题：**
 - 各子项目 AGENTS.md 中的分支引用（`refactor/v2-architecture`）需在后续更新为 v3
 - 各子项目 WORKFLOW.md 可在适当时机清理（历史内容已固化在 git log）

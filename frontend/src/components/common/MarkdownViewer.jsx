@@ -78,7 +78,7 @@ const handleCopy = (text) => {
   navigator.clipboard?.writeText(text).catch(console.error);
 };
 
-export default function MarkdownViewer({ content, className = '' }) {
+export default function MarkdownViewer({ content, className = '', compact = false }) {
   const components = useMemo(() => ({
     code({ inline, className: codeClassName, children, ...rest }) {
       const match = /language-(\w+)/.exec(codeClassName || '');
@@ -116,7 +116,19 @@ export default function MarkdownViewer({ content, className = '' }) {
               style={vscDarkPlus}
               language={match[1]}
               PreTag="div"
-              customStyle={{ margin: 0, padding: '1rem', borderTopLeftRadius: 0, borderTopRightRadius: 0, fontSize: '13px', lineHeight: '1.5' }}
+              wrapLongLines={compact}
+              customStyle={{
+                margin: 0,
+                padding: compact ? '0.75rem' : '1rem',
+                borderTopLeftRadius: 0,
+                borderTopRightRadius: 0,
+                fontSize: compact ? '11px' : '13px',
+                lineHeight: compact ? '1.45' : '1.5',
+                maxWidth: '100%',
+                overflowX: compact ? 'hidden' : 'auto',
+                whiteSpace: compact ? 'pre-wrap' : 'pre',
+                overflowWrap: compact ? 'anywhere' : 'normal'
+              }}
             />
           </div>
         );
@@ -128,10 +140,10 @@ export default function MarkdownViewer({ content, className = '' }) {
         </code>
       );
     }
-  }), []);
+  }), [compact]);
 
   return (
-    <div className={`markdown-body break-words leading-[1.7] ${className}`}>
+    <div className={`markdown-body break-words leading-[1.7] ${compact ? 'chat-compact-markdown' : ''} ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={components}

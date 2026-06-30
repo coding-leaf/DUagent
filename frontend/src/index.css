@@ -188,3 +188,30 @@ body {
     background-color: #f9fafb;
     font-weight: 600;
 }
+
+.chat-compact-markdown {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.chat-compact-markdown pre,
+.chat-compact-markdown code,
+.chat-compact-markdown table,
+.chat-compact-markdown .token-line {
+    max-width: 100%;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.chat-compact-markdown pre,
+.chat-compact-markdown div[class*="language-"] {
+    overflow-x: hidden !important;
+}
+
+.chat-compact-markdown table {
+    display: block;
+    width: 100%;
+    overflow-x: hidden;
+}

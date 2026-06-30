@@ -3,12 +3,12 @@
 ## Scope
 
 > **【作用域声明】**
-> 本约束文档为前端局部规范；凡涉及 `frontend/` 的前端范围工作，无论当前工作目录在哪里，都必须遵守本文档的前端局部规则。根目录 `Agents.md` 仍是全局协作约束和流程权威。
+> 本约束文档为前端局部规范；凡涉及 `frontend/` 的前端范围工作，无论当前工作目录在哪里，都必须遵守本文档的前端局部规则。根目录 `AGENTS.md` 仍是全局协作约束和流程权威。
 
-> 根目录 `Agents.md` 是全局协作约束；本文件只补充当前子模块的局部规则。
-> 若流程规则冲突，以根目录 `Agents.md` 为准；若模块边界细节冲突，以本文件为准。
+> 根目录 `AGENTS.md` 是全局协作约束；本文件只补充当前子模块的局部规则。
+> 若流程规则冲突，以根目录 `AGENTS.md` 为准；若模块边界细节冲突，以本文件为准。
 
-This file applies only to frontend-specific work scoped from `frontend/` and supplements the root `Agents.md`.
+This file applies only to frontend-specific work scoped from `frontend/` and supplements the root `AGENTS.md`.
 
 ---
 
@@ -108,7 +108,7 @@ OpenAPI 已过时，不以它为强约束。但改动接口时：
 
 - 要同时改前后端对应的调用点（不能只改一侧）
 - 接口漂移记录位置统一为 `WorkLine.md`。
-- 接口变更的确认与审批流程以根目录 `Agents.md` 为准；前端侧必须记录漂移点。
+- 接口变更的确认与审批流程以根目录 `AGENTS.md` 为准；前端侧必须记录漂移点。
 
 ---
 

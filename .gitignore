@@ -71,4 +71,4 @@ htmlcov/
 out/
 .codex
 #规范
-AGENTS.md
+!AGENTS.md

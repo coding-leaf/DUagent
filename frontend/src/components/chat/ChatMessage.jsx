@@ -3,12 +3,17 @@ import { extractModelText } from '../../utils/chatContent';
 import Icon from '../Icon';
 import MarkdownViewer from '../common/MarkdownViewer';
 
-export default function ChatMessage({ message, onSendMessage }) {
+export default function ChatMessage({ message, onSendMessage, onRegenerate, isLastAssistant = false }) {
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
+  const canUseAssistantActions = !isUser && !message.loading;
+
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(typeof message.content === 'string' ? message.content : '').catch(console.error);
+  };
   
   return (
-    <div className={`flex gap-4 max-w-[100%] group ${isUser ? 'ml-auto flex-row-reverse' : ''} ${isReviewFlagged ? 'opacity-60' : ''}`}>
+    <div className={`flex gap-3 max-w-[100%] min-w-0 group ${isUser ? 'ml-auto flex-row-reverse' : ''} ${isReviewFlagged ? 'opacity-60' : ''}`}>
       <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${isUser ? 'bg-cyan-600 text-white shadow-sm' : 'bg-sky-100 text-cyan-600'}`}>
         {isUser ? (
           <Icon name="person" className="material-symbols-outlined text-[18px]"/>
@@ -17,7 +22,7 @@ export default function ChatMessage({ message, onSendMessage }) {
         )}
       </div>
       
-      <div className={`w-full transition-all ${isUser ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none shadow-md p-4 max-w-[85%]' : 'text-slate-700 py-1'}`}>
+      <div className={`w-full min-w-0 overflow-hidden transition-all ${isUser ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none shadow-md p-3 max-w-[85%]' : 'text-slate-700 py-1'}`}>
         
         {/* Tool Calls */}
         {!isUser && message.toolCalls && message.toolCalls.map((tc, idx) => (
@@ -32,10 +37,11 @@ export default function ChatMessage({ message, onSendMessage }) {
         )}
 
         {/* Markdown Content */}
-        <div className={`markdown-body break-words leading-[1.7] ${isUser ? 'text-white' : 'text-slate-700 text-[15px]'}`}>
+        <div className={`markdown-body break-words leading-[1.65] ${isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'}`}>
           <MarkdownViewer 
             content={extractModelText(message.content)} 
-            className={isUser ? 'text-white' : 'text-slate-700 text-[15px]'} 
+            className={isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'} 
+            compact={!isUser}
           />
         </div>
 
@@ -53,6 +59,34 @@ export default function ChatMessage({ message, onSendMessage }) {
           <div className="mt-2 text-red-500 text-[13px] flex items-center gap-1 font-medium bg-red-50 p-2 rounded-lg w-fit">
             <Icon name="error" className="material-symbols-outlined text-[16px]"/>
             {message.content?.includes('发送失败') ? '' : '生成失败，请重试'}
+          </div>
+        )}
+
+        {canUseAssistantActions && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            {isLastAssistant && (
+              <button
+                onClick={onRegenerate}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-colors hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+              >
+                <Icon name="refresh" className="text-[14px]" />
+                重新生成
+              </button>
+            )}
+            <button
+              onClick={() => onSendMessage('请继续细化这次生成的内容。')}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-colors hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+            >
+              <Icon name="tune" className="text-[14px]" />
+              继续细化
+            </button>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-colors hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+            >
+              <Icon name="content_copy" className="text-[14px]" />
+              复制
+            </button>
           </div>
         )}
 

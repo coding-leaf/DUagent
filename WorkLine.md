@@ -536,3 +536,32 @@
 - Agent py_compile：通过 `cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/edu_events.py src/agent_service_v2/session/run_bus.py src/agent_service_v2/workspaces/workbench_workspace_manager.py src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/runtime/sse.py`
 
 **接口漂移：** 无。仅新增 `agent_service_v2` 内部模块和测试，未修改 HTTP API 或 SSE 对外入口。
+
+### 2026-07-01 — 打通 AIChat v2 WorkbenchSession 与最小 SSE API
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/api/workbench.py`
+- `agent_service_v2/src/agent_service_v2/main.py`
+- `agent_service_v2/src/agent_service_v2/schemas/workbench.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/tools/planning.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_placeholders.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/tests/test_workbench_api.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `agent_service_v2/tests/test_workbench_toolkit.py`
+- `WorkLine.md`
+
+**核心改动：**
+继续按方案 A 实现 AgentScope Agent Service-inspired 内核的最小闭环。新增 Workbench AgentFactory，构建包含 Plan ToolGroup、占位学习状态/Artifact/Review 工具、`ContextConfig`、`ReActConfig` 和 workspace offloader 的 AgentScope `Agent`；模型未配置时抛出明确 `model_not_configured`。新增 `WorkbenchSession`，负责创建 run、解析 workspace、创建 agent，并在模型缺失时通过 RunBus 发布 `workflow_failed`。新增 `/agent/v2/workbench/chat` FastAPI SSE 入口，当前可返回标准 EDU SSE v2 失败事件，不调用旧 `agent_service/`。
+
+**验证结果：**
+- 前端 lint / build：未运行（Agent v2 内部与 API 骨架实现）
+- 后端 py_compile / pytest：未运行（未改 Backend）
+- Agent pytest：通过 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_run_bus.py tests/test_workbench_workspace_manager.py tests/test_protocol_adapter.py tests/test_workbench_toolkit.py tests/test_workbench_factory.py tests/test_workbench_session.py tests/test_workbench_api.py -q`（14 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：通过 `cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/edu_events.py src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/runtime/sse.py src/agent_service_v2/session/run_bus.py src/agent_service_v2/session/workbench_session.py src/agent_service_v2/workspaces/workbench_workspace_manager.py src/agent_service_v2/tools/planning.py src/agent_service_v2/tools/workbench_placeholders.py src/agent_service_v2/tools/workbench_toolkit.py src/agent_service_v2/agents/prompts.py src/agent_service_v2/agents/workbench_factory.py src/agent_service_v2/schemas/workbench.py src/agent_service_v2/api/workbench.py src/agent_service_v2/main.py`
+
+**接口漂移：** 有。新增 Agent Service v2 内部 HTTP 入口 `POST /agent/v2/workbench/chat`，当前仅供后续 Backend 代理使用；未修改 Client API 或 Backend 对前端接口。

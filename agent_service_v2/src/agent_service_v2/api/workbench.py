@@ -23,9 +23,9 @@ async def workbench_chat(req: WorkbenchChatRequest) -> StreamingResponse:
     session = WorkbenchSession(
         run_bus=run_bus,
         workspace_manager=WorkbenchWorkspaceManager(root_dir=_workspace_root()),
-        agent_factory=WorkbenchAgentFactory(model_provider=lambda: None),
+        agent_factory=create_agent_factory(),
     )
-    run = session.start(
+    run = await session.start_async(
         user_id=req.user_id,
         course_id=req.course_id if req.scope == "course" else None,
         conversation_id=req.conversation_id,
@@ -42,3 +42,7 @@ async def workbench_chat(req: WorkbenchChatRequest) -> StreamingResponse:
 
 def _workspace_root() -> Path:
     return Path(__file__).resolve().parents[3] / "workspaces"
+
+
+def create_agent_factory() -> WorkbenchAgentFactory:
+    return WorkbenchAgentFactory(model_provider=lambda: None)

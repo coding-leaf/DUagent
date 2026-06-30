@@ -60,6 +60,23 @@ class WorkbenchRunBus:
         self._notify(state)
         return event
 
+    def publish_event(self, event: EduEvent) -> EduEvent:
+        state = self._get_run(event.run_id)
+        next_seq = len(state.events) + 1
+        if event.seq != next_seq:
+            event = EduEvent(
+                type=event.type,
+                run_id=event.run_id,
+                conversation_id=event.conversation_id,
+                seq=next_seq,
+                timestamp=event.timestamp,
+                agent=event.agent,
+                payload=event.payload,
+            )
+        state.events.append(event)
+        self._notify(state)
+        return event
+
     def complete(self, run_id: str) -> None:
         state = self._get_run(run_id)
         state.closed = True

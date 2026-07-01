@@ -1057,3 +1057,21 @@ AIChat AgentScope v2 运行时新增 `WorkbenchInputBuilder`，将 Backend 传�
 - Frontend build：`cd frontend && npm run build`（通过；仍有既有 Vite chunk-size warning）
 
 **接口漂移：** 无。仅调整 Agent 终态处理、tool 策略提示和前端显示。
+
+### 2026-07-01 — 规划 AIChat 工作区文件产物链路
+
+**涉及文件：**
+- `docs/superpowers/specs/2026-07-01-aichat-guarded-workspace-artifacts-design.md`
+- `docs/superpowers/plans/2026-07-01-aichat-guarded-workspace-artifacts.md`
+- `WorkLine.md`
+
+**核心改动：**
+完成方案 C 的正式设计与实施计划：让 AIChat saveable 内容通过受保护的 AgentScope workspace 文件工具写入 `runs/<run_id>/artifacts/`，再由 Agent Service 扫描文件、维护 `manifest.json`、发布既有 `artifact_created` 事件。计划明确第一阶段不暴露 unrestricted `Write/Edit/Bash/Grep/Glob`，只接入 `write_artifact_file` 领域工具，并把 scanner、manifest、toolkit、adapter、backend 透传、frontend Markdown title 支持拆成可 TDD 执行的任务。补充核验结论：AgentScope 2.0.3 以 `agent_service_v2/.venv` 为实现事实，根 `.venv` 的 AgentScope import surface 不可作为 v2 runtime 依据。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅文档和计划）
+- 后端 py_compile / pytest：未运行（仅文档和计划）
+- Agent pytest：未运行（仅文档和计划）
+- 文档自检：通过 `rg` 扫描计划禁用占位词；通过 `agent_service_v2/.venv` AgentScope introspection 确认版本和核心 API surface
+
+**接口漂移：** 无。计划复用既有 `artifact_created` SSE 类型和 `payload.artifact.{id,type,props}` 结构，未修改运行代码。

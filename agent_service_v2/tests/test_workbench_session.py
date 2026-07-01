@@ -1,7 +1,13 @@
 import asyncio
 from pathlib import Path
 
-from agentscope.event import ReplyEndEvent, ReplyStartEvent, TextBlockDeltaEvent
+from agentscope.event import (
+    ReplyEndEvent,
+    ReplyStartEvent,
+    RequireUserConfirmEvent,
+    TextBlockDeltaEvent,
+)
+from agentscope.message import ToolCallBlock
 
 from agent_service_v2.agents.workbench_factory import WorkbenchAgentFactory
 from agent_service_v2.runtime.edu_events import EduEventType
@@ -122,3 +128,48 @@ def test_workbench_session_start_async_returns_before_agent_finishes(tmp_path: P
         EduEventType.TEXT_DELTA,
         EduEventType.WORKFLOW_COMPLETED,
     ]
+
+
+def test_workbench_session_closes_run_when_tool_confirmation_is_required(tmp_path: Path):
+    class ConfirmingAgent:
+        async def reply_stream(self, _message):
+            yield RequireUserConfirmEvent(
+                reply_id="reply1",
+                tool_calls=[
+                    ToolCallBlock(
+                        id="tool-1",
+                        name="unsafe_tool",
+                        input="{}",
+                    )
+                ],
+            )
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return ConfirmingAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="run unsafe tool",
+        context={},
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+
+    assert [event.type for event in events] == [
+        EduEventType.DEBUG_LOG,
+        EduEventType.WORKFLOW_FAILED,
+    ]
+    assert events[0].payload["event"] == "permission.required"
+    assert events[0].payload["tool_calls"] == [
+        {"id": "tool-1", "name": "unsafe_tool"}
+    ]
+    assert events[1].payload == {"reason": "user_confirmation_required"}

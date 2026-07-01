@@ -5,41 +5,17 @@ import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
 import { normalizeMessages } from '../utils/chatContent';
 import { fetcherWrapper } from '../utils/fetcher';
+import { useRunLogs } from '../hooks/useRunLogs';
+import {
+  completeRunningToolCalls,
+  completionMessageId,
+  createEmptyAiMessage,
+  normalizeArtifact,
+  reduceAssistantMessageForEvent,
+  updateTargetMessage
+} from '../utils/chatStreamEvents';
 
 const ChatContext = createContext(null);
-
-// Pure Helper Functions
-const updateTargetMessage = (messages, targetId, updater) => {
-  return messages.map(m => m.id === targetId ? updater(m) : m);
-};
-
-const completeRunningToolCalls = (toolCalls = []) => {
-  return toolCalls.map(tc => tc.status === 'running' ? { ...tc, status: 'completed' } : tc);
-};
-
-const upsertToolCall = (toolCalls = [], update) => {
-  const id = update.id;
-  const existing = toolCalls.find(tc => tc.id === id);
-  if (!existing) return [...toolCalls, update];
-  return toolCalls.map(tc => tc.id === id ? { ...tc, ...update } : tc);
-};
-
-const normalizeArtifact = (event) => {
-  const artifact = event.payload?.artifact;
-  if (!artifact || !artifact.type) return null;
-  return {
-    id: artifact.id || `artifact-${crypto.randomUUID()}`,
-    type: artifact.type,
-    props: artifact.props || {},
-    timestamp: event.timestamp || new Date().toISOString()
-  };
-};
-
-const completionMessageId = (event) => event.message_id || event.payload?.message_id || `ai-${crypto.randomUUID()}`;
-
-const createEmptyAiMessage = (id = 'ai-placeholder') => ({
-  id, role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [], toolCalls: []
-});
 
 export const ChatProvider = ({ children }) => {
   const { activeCourseId } = useCourse();
@@ -56,6 +32,7 @@ export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [workspaceArtifacts, setWorkspaceArtifacts] = useState([]);
+  const { runLogs, appendRunLog, clearRunLogs } = useRunLogs();
 
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
@@ -74,6 +51,7 @@ export const ChatProvider = ({ children }) => {
       setIsDraftConversation(false);
       setMessages([]);
       setWorkspaceArtifacts([]);
+      clearRunLogs();
       return;
     }
 
@@ -87,8 +65,9 @@ export const ChatProvider = ({ children }) => {
       setIsDraftConversation(false);
       setMessages([]);
       setWorkspaceArtifacts([]);
+      clearRunLogs();
     }
-  }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation]);
+  }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation, clearRunLogs]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
@@ -127,6 +106,7 @@ export const ChatProvider = ({ children }) => {
     lastMessageIdRef.current = null;
     setMessages([]);
     setWorkspaceArtifacts([]);
+    clearRunLogs();
     setIsSending(false);
   };
 
@@ -184,6 +164,8 @@ export const ChatProvider = ({ children }) => {
 
     return {
       onMessage: (event) => {
+        appendRunLog(event);
+
         if (event.type === 'artifact_created') {
           const artifact = normalizeArtifact(event);
           if (artifact) setWorkspaceArtifacts(prev => [...prev, artifact]);
@@ -199,58 +181,22 @@ export const ChatProvider = ({ children }) => {
           return;
         }
 
-        setMessages(prev => updateTargetMessage(prev, targetId, m => {
-          switch (event.type) {
-            case 'workflow_started':
-              return { ...m, runId: event.run_id || m.runId };
-            case 'text_delta':
-              return { ...m, content: m.content + (event.payload?.delta || '') };
-            case 'tool_started':
-              return {
-                ...m,
-                toolCalls: upsertToolCall(m.toolCalls, {
-                  id: event.payload?.tool_call_id || `tool-${crypto.randomUUID()}`,
-                  name: event.payload?.tool_name || '工具调用',
-                  status: 'running'
-                })
-              };
-            case 'tool_completed':
-              return {
-                ...m,
-                toolCalls: upsertToolCall(m.toolCalls, {
-                  id: event.payload?.tool_call_id || 'unknown',
-                  status: event.payload?.state === 'error' ? 'error' : 'completed',
-                  outputSummary: event.payload?.summary
-                })
-              };
-            case 'tool_failed':
-              return {
-                ...m,
-                toolCalls: upsertToolCall(m.toolCalls, {
-                  id: event.payload?.tool_call_id || 'unknown',
-                  name: event.payload?.tool_name || '工具调用',
-                  status: 'error',
-                  outputSummary: event.payload?.reason || event.payload?.message
-                })
-              };
-            case 'source_refs':
-              return {
-                ...m,
-                sourceRefs: event.payload?.sources || []
-              };
-            case 'critic_completed':
-              return {
-                ...m,
-                reviewFlagged: event.payload?.passed === false,
-                reviewReason: event.payload?.reason || m.reviewReason
-              };
-            default:
-              return m;
-          }
-        }));
+        setMessages(prev => updateTargetMessage(
+          prev,
+          targetId,
+          message => reduceAssistantMessageForEvent(message, event)
+        ));
       },
       onError: (err) => {
         console.error('Chat stream error:', err);
+        appendRunLog({
+          type: 'workflow_failed',
+          payload: {
+            level: 'error',
+            source: 'frontend.chat_stream',
+            message: err.message || '网络连接故障'
+          }
+        });
         completeMessage(
           {
             type: 'workflow_failed',
@@ -264,6 +210,7 @@ export const ChatProvider = ({ children }) => {
 
   const startStream = (targetId, requestPayload) => {
     setIsSending(true);
+    clearRunLogs();
     cancelStream();
     const handlers = createStreamHandlers(targetId);
     abortControllerRef.current = chatService.streamChat(
@@ -318,7 +265,7 @@ export const ChatProvider = ({ children }) => {
     <ChatContext.Provider value={{
       sessions, activeSession, setActiveSession, messages, isSending,
       sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession,
-      workspaceArtifacts
+      workspaceArtifacts, runLogs, clearRunLogs
     }}>
       {children}
     </ChatContext.Provider>

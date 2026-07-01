@@ -20,6 +20,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CourseProvider } from './context/CourseContext';
 import { ChatProvider } from './context/ChatContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import DeveloperConsoleFloatingPanel from './components/dev/DeveloperConsoleFloatingPanel';
 
 function App() {
   return (
@@ -54,6 +55,7 @@ function App() {
               {/* Admin routes */}
               <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminConsole /></ProtectedRoute>} />
             </Routes>
+            <DeveloperConsoleFloatingPanel />
           </ChatProvider>
         </CourseProvider>
       </AuthProvider>

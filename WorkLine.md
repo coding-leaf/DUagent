@@ -740,3 +740,38 @@ Backend 对前端的 tutoring SSE event 类型从旧 `chunk/done` 切换为 EDU 
 - Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/protocol_adapter.py` 通过
 
 **接口漂移：** 无。仅修正 AgentScope runtime event 到 EDU v2 event 的内部适配，不改变对外 API 或 EDU v2 事件契约。
+
+### 2026-07-01 — AIChat 开发者浮窗与 AgentScope 中间件日志
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/runtime/edu_events.py`
+- `agent_service_v2/src/agent_service_v2/observability/logging.py`
+- `agent_service_v2/src/agent_service_v2/observability/agent_middleware.py`
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/tests/test_agent_logging_middleware.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `frontend/src/App.jsx`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/context/ChatContext.test.jsx`
+- `frontend/src/hooks/useRunLogs.js`
+- `frontend/src/hooks/__tests__/useRunLogs.test.js`
+- `frontend/src/utils/chatStreamEvents.js`
+- `frontend/src/components/dev/DeveloperConsoleFloatingPanel.jsx`
+- `frontend/src/components/dev/DeveloperConsoleFloatingPanel.test.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+新增 EDU v2 `debug_log` 事件，用于把 agent 运行期日志通过既有 SSE 链路送到前端。Agent v2 增加统一日志构造与 `AgentRunLoggingMiddleware`，挂入 AgentScope `Agent(middlewares=[...])`，记录 `reply/reasoning/model_call/acting` 的 start/end/error。Workbench agent 增加安全工具 allow rules，避免 `reset_tools/read_learning_state/TaskCreate` 等内部工具进入人工确认卡死；若仍出现 `RequireUserConfirmEvent`，session fail-fast 并输出 `permission.required` 调试日志。前端新增右下角独立浮窗 Dev Console，仅在 dev 或 `VITE_ENABLE_DEV_CONSOLE=true` 时显示，读取真实 SSE 事件日志，不影响 AIChat 页面布局，也不制造业务结果。
+
+**验证结果：**
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（26 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/edu_events.py src/agent_service_v2/agents/workbench_factory.py src/agent_service_v2/session/workbench_session.py src/agent_service_v2/observability/logging.py src/agent_service_v2/observability/agent_middleware.py src/agent_service_v2/agents/permissions.py` 通过
+- Frontend tests：`cd frontend && npm run test:unit -- src/context/ChatContext.test.jsx src/components/dev/DeveloperConsoleFloatingPanel.test.jsx src/hooks/__tests__/useRunLogs.test.js`（3 files passed，6 tests passed）
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+
+**接口漂移：**
+EDU v2 SSE 事件类型新增 `debug_log`，payload 为开发期观测日志。Backend 作为 SSE 代理无需改字段转换；前端已同步消费并仅用于 Dev Console。

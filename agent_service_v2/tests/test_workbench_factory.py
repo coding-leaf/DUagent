@@ -38,3 +38,27 @@ def test_factory_creates_agentscope_agent_with_model(tmp_path: Path):
     agent = factory.create_agent(user_id="u1", course_id="c1", workspace=workspace)
 
     assert isinstance(agent, Agent)
+
+
+def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+    )
+    factory = WorkbenchAgentFactory(model_provider=lambda: FakeModel())
+
+    agent = factory.create_agent(
+        user_id="u1",
+        course_id="c1",
+        workspace=workspace,
+    )
+
+    allow_rules = agent.state.permission_context.allow_rules
+
+    assert "reset_tools" in allow_rules
+    assert "read_learning_state" in allow_rules
+    assert "TaskCreate" in allow_rules

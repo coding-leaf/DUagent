@@ -4,10 +4,14 @@ from collections.abc import Callable
 from typing import Any
 
 from agentscope.agent import Agent, ContextConfig, ReActConfig
+from agentscope.state import AgentState
 from agentscope.tool import Toolkit
 from agentscope.workspace import LocalWorkspace
 
+from agent_service_v2.agents.permissions import build_workbench_permission_context
 from agent_service_v2.agents.prompts import WORKBENCH_SYSTEM_PROMPT
+from agent_service_v2.observability.agent_middleware import AgentRunLoggingMiddleware
+from agent_service_v2.observability.logging import LogSink
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
 
@@ -25,6 +29,9 @@ class WorkbenchAgentFactory:
         user_id: str,
         course_id: str | None,
         workspace: LocalWorkspace,
+        run_id: str | None = None,
+        conversation_id: str | None = None,
+        log_sink: LogSink | None = None,
     ) -> Agent:
         model = self._model_provider()
         if model is None:
@@ -36,11 +43,25 @@ class WorkbenchAgentFactory:
                 rag_tools=[],
             )
         )
+        middlewares = []
+        if run_id and log_sink:
+            middlewares.append(
+                AgentRunLoggingMiddleware(
+                    run_id=run_id,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    course_id=course_id,
+                    sink=log_sink,
+                )
+            )
+
         return Agent(
             name=_agent_name(course_id),
             system_prompt=_system_prompt(user_id=user_id, course_id=course_id),
             model=model,
             toolkit=toolkit,
+            middlewares=middlewares,
+            state=AgentState(permission_context=build_workbench_permission_context()),
             offloader=workspace,
             context_config=ContextConfig(tool_result_limit=20000),
             react_config=ReActConfig(max_iters=8),

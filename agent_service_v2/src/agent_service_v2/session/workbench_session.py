@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from agentscope.event import RequireUserConfirmEvent
 from agentscope.message import Msg, TextBlock
 
 from agent_service_v2.agents.workbench_factory import (
@@ -9,6 +10,7 @@ from agent_service_v2.agents.workbench_factory import (
     WorkbenchAgentFactory,
 )
 from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
+from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
 from agent_service_v2.workspaces.workbench_workspace_manager import (
     WorkbenchWorkspaceManager,
@@ -88,6 +90,13 @@ class WorkbenchSession:
                 user_id=user_id,
                 course_id=course_id,
                 workspace=workspace,
+                run_id=run.run_id,
+                conversation_id=run.conversation_id,
+                log_sink=lambda record: self._run_bus.publish(
+                    run.run_id,
+                    EduEventType.DEBUG_LOG,
+                    record,
+                ),
             )
         except MissingModelConfigError:
             self._run_bus.fail(run.run_id, reason="model_not_configured")
@@ -117,6 +126,28 @@ class WorkbenchSession:
         )
         try:
             async for agent_event in agent.reply_stream(user_message):
+                if isinstance(agent_event, RequireUserConfirmEvent):
+                    self._run_bus.publish(
+                        run.run_id,
+                        EduEventType.DEBUG_LOG,
+                        {
+                            "event": "permission.required",
+                            "level": "error",
+                            "message": "Tool call requires user confirmation",
+                            "tool_calls": [
+                                {
+                                    "id": tool_call.id,
+                                    "name": tool_call.name,
+                                }
+                                for tool_call in agent_event.tool_calls
+                            ],
+                        },
+                    )
+                    self._run_bus.fail(
+                        run.run_id,
+                        reason="user_confirmation_required",
+                    )
+                    return
                 edu_event = adapter.adapt(agent_event)
                 if edu_event is not None:
                     self._run_bus.publish_event(edu_event)

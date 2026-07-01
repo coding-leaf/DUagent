@@ -59,7 +59,7 @@ const renderWithProviders = (ui) => render(
 );
 
 const StreamConsumer = () => {
-  const { activeSession, messages, workspaceArtifacts, sendMessage, resetConversation, isSending } = useChat();
+  const { activeSession, messages, workspaceArtifacts, runLogs, clearRunLogs, sendMessage, resetConversation, isSending } = useChat();
   const assistant = messages.find(m => m.role === 'assistant');
   return (
     <div>
@@ -70,12 +70,17 @@ const StreamConsumer = () => {
       <div data-testid="assistant-error">{String(assistant?.isError ?? false)}</div>
       <div data-testid="tool-status">{assistant?.toolCalls?.[0]?.status || ''}</div>
       <div data-testid="artifact-count">{workspaceArtifacts.length}</div>
+      <div data-testid="log-count">{runLogs?.length || 0}</div>
+      <div data-testid="last-log-message">{runLogs?.at(-1)?.message || ''}</div>
       <div data-testid="sending">{String(isSending)}</div>
       <button data-testid="send" onClick={() => sendMessage('hello')}>
         Send
       </button>
       <button data-testid="new-chat" onClick={() => resetConversation()}>
         New Chat
+      </button>
+      <button data-testid="clear-logs" onClick={() => clearRunLogs()}>
+        Clear Logs
       </button>
     </div>
   );
@@ -187,4 +192,55 @@ test('ChatProvider handles workflow_failed as native EDU v2 error event', async 
   });
   expect(screen.getByTestId('assistant-error').textContent).toBe('true');
   expect(screen.getByTestId('assistant-content').textContent).toContain('模型未配置');
+});
+
+test('ChatProvider records native stream and debug events for developer console', async () => {
+  streamChatMock.mockImplementation((_payload, onMessage) => {
+    onMessage({
+      type: 'workflow_started',
+      run_id: 'run-1',
+      conversation_id: 'conv-1',
+      message_id: 'msg-1',
+      payload: { reply_id: 'reply-1' }
+    });
+    onMessage({
+      type: 'debug_log',
+      run_id: 'run-1',
+      conversation_id: 'conv-1',
+      message_id: 'msg-1',
+      payload: {
+        level: 'info',
+        source: 'agent.middleware',
+        message: 'tool started',
+        tool_name: 'read_learning_state'
+      }
+    });
+    onMessage({
+      type: 'workflow_completed',
+      run_id: 'run-1',
+      conversation_id: 'conv-1',
+      message_id: 'msg-1',
+      payload: { reply_id: 'reply-1' }
+    });
+    return vi.fn();
+  });
+
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+  await act(async () => {
+    screen.getByTestId('send').click();
+  });
+
+  await waitFor(() => {
+    expect(screen.getByTestId('log-count').textContent).toBe('3');
+  });
+  expect(screen.getByTestId('last-log-message').textContent).toBe('workflow_completed');
+
+  await act(async () => {
+    screen.getByTestId('clear-logs').click();
+  });
+  expect(screen.getByTestId('log-count').textContent).toBe('0');
 });

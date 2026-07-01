@@ -668,3 +668,31 @@
 - 文档检查：`git diff --check -- docs/superpowers/specs/2026-07-01-ai-chat-native-edu-v2-events-design.md WorkLine.md` 通过
 
 **接口漂移：** 无。仅设计文档修订。
+
+### 2026-07-01 — AIChat 原生消费 EDU v2 事件
+
+**涉及文件：**
+- `backend/app/services/tutoring_stream_adapter.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `frontend/src/api/services/chat.js`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/context/ChatContext.test.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+移除 Backend 的 `chunk/done` 兼容转换。Backend 现在仅作为 `/agent/v2/workbench/chat` 的 transport proxy 和最小 envelope wrapper，原样透传 EDU v2 事件并补 `conversation_id/message_id`，继续累积 `text_delta` 用于 assistant message 持久化。前端 `chatService` 改为 SSE JSON 透传，`ChatContext` 原生处理 `workflow_started/text_delta/tool_started/tool_completed/tool_failed/source_refs/artifact_created/critic_completed/workflow_completed/workflow_failed`。Agent v2 adapter 对正常增量事件补安全忽略，避免误报失败。
+
+**验证结果：**
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（21 passed，1 个 FastAPI TestClient deprecation warning）
+- Backend pytest：`cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_stream_adapter.py tests/test_tutoring_routes_refactored.py -q`（5 passed，1 skipped）
+- Backend py_compile：`cd backend && ../.venv/bin/python -m py_compile app/services/tutoring_stream_adapter.py` 通过
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/protocol_adapter.py` 通过
+- Frontend tests：`cd frontend && npm run test:unit -- src/context/ChatContext.test.jsx src/components/workspace/AgentWorkspace.test.jsx src/components/chat/ToolCallCard.test.jsx`（3 files passed，7 tests passed）
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+- 兼容层残留检查：`rg "type === 'chunk'|type === 'done'|onDone|text_delta.*chunk|workflow_completed.*done" frontend/src backend/app backend/tests frontend/src/context frontend/src/api` 无命中
+
+**接口漂移：**
+Backend 对前端的 tutoring SSE event 类型从旧 `chunk/done` 切换为 EDU v2 原生事件。前端已同步适配；Backend 到 Agent Service 仍为 `/agent/v2/workbench/chat`。

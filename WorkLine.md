@@ -898,3 +898,22 @@ AIChat 前端消息增加有序 `parts` 渲染模型，`text_delta` 与 `tool_st
 
 **接口漂移：**
 业务 HTTP/SSE 字段未变。前端内部 assistant message 增加 `parts` 渲染结构；Agent v2 断流时可能产生内部 `workflow_failed: {"reason": "cancelled"}` 事件用于关闭 run，但用户主动暂停时前端通常已断开，不作为新的业务响应要求。
+
+### 2026-07-01 — 本地化 AIChat 计划入口文案
+
+**涉及文件：**
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatArea.test.jsx`
+- `frontend/src/utils/__tests__/chatStreamEvents.test.js`
+
+**核心改动：**
+将 AIChat 快捷入口中的 `Plan` 改为中文 `计划模式`，并把 prompt 调整为“先制定简短计划，再按需调用工具”的自然语言意图。同步收敛前端测试，断言计划按钮不走固定 workflow，并覆盖工具完成事件与文本增量在 `parts` 中保持到达顺序。
+
+**验证结果：**
+- 前端测试：通过 `npm run test:unit -- src/context/ChatContext.test.jsx src/components/chat/ChatArea.test.jsx src/utils/__tests__/chatStreamEvents.test.js`
+- 前端 lint：通过 `npm run lint`
+- 前端 build：通过 `npm run build`；仍有 Vite chunk size warning，非本次改动引入
+- Agent pytest：通过 `./.venv/bin/pytest tests/test_workbench_session.py tests/test_workbench_factory.py tests/test_workbench_api.py -q`
+- 后端 py_compile / pytest：未运行（未改后端）
+
+**接口漂移：** 无

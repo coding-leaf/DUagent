@@ -634,3 +634,20 @@
 - Agent pytest：未运行（仅文档变更）
 
 **接口漂移：** 无。仅新增状态文档。
+
+### 2026-07-01 — 设计 AIChat 原生 EDU v2 事件协议
+
+**涉及文件：**
+- `docs/superpowers/specs/2026-07-01-ai-chat-native-edu-v2-events-design.md`
+- `WorkLine.md`
+
+**核心改动：**
+新增 AIChat 原生 EDU v2 事件协议设计文档。设计采用用户确认的方案 A：前端原生消费 `workflow_started/text_delta/tool_started/tool_completed/tool_failed/source_refs/artifact_created/critic_completed/workflow_completed/workflow_failed`，Backend 去除旧 `chunk/done` 兼容转换，仅保留鉴权、上下文组装、业务字段补齐、持久化和异常兜底职责。文档明确三端职责、事件契约、Backend pass-through adapter、Frontend EDU v2 reducer、Agent v2 adapter 扩展点、测试策略、迁移步骤和验收标准。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅设计文档）
+- 后端 py_compile / pytest：未运行（仅设计文档）
+- Agent pytest：未运行（仅设计文档）
+- 文档检查：`git diff --check -- docs/superpowers/specs/2026-07-01-ai-chat-native-edu-v2-events-design.md WorkLine.md` 通过
+
+**接口漂移：** 无。仅设计文档，尚未修改代码接口。

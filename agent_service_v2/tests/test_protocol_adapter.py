@@ -59,6 +59,62 @@ def test_protocol_adapter_maps_core_agentscope_events():
     assert events[3].payload == {"tool_call_id": "tool-1", "state": "success"}
 
 
+def test_protocol_adapter_emits_plan_updated_for_planning_tools():
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+
+    raw_events = [
+        ToolCallStartEvent(reply_id="reply-1", tool_call_id="tool-1", tool_call_name="TaskCreate"),
+        ToolCallDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            delta='{"subject":"查询学习状态","description":"读取薄弱点"}',
+        ),
+        ToolResultTextDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            delta="Task (id=1) created successfully: 查询学习状态",
+        ),
+        ToolResultEndEvent(reply_id="reply-1", tool_call_id="tool-1", state=ToolResultState.SUCCESS),
+        ToolCallStartEvent(reply_id="reply-1", tool_call_id="tool-2", tool_call_name="TaskUpdate"),
+        ToolCallDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-2",
+            delta='{"task_id":"1","status":"in_progress"}',
+        ),
+        ToolResultEndEvent(reply_id="reply-1", tool_call_id="tool-2", state=ToolResultState.SUCCESS),
+    ]
+
+    events = [
+        event
+        for raw_event in raw_events
+        for event in adapter.adapt_many(raw_event)
+    ]
+
+    assert [event.type for event in events] == [
+        EduEventType.TOOL_STARTED,
+        EduEventType.TOOL_COMPLETED,
+        EduEventType.PLAN_UPDATED,
+        EduEventType.TOOL_STARTED,
+        EduEventType.TOOL_COMPLETED,
+        EduEventType.PLAN_UPDATED,
+    ]
+    assert events[2].payload == {
+        "tasks": [
+            {
+                "id": "1",
+                "title": "查询学习状态",
+                "description": "读取薄弱点",
+                "status": "pending",
+            }
+        ]
+    }
+    assert events[5].payload["tasks"][0]["status"] == "in_progress"
+
+
 def test_format_sse_serializes_edu_event():
     adapter = EDUProtocolAdapter(
         run_id="run-1",

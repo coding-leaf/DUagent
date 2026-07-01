@@ -3,6 +3,42 @@ import { extractModelText } from '../../utils/chatContent';
 import Icon from '../Icon';
 import MarkdownViewer from '../common/MarkdownViewer';
 
+const PLAN_STATUS_META = {
+  pending: { label: '待执行', className: 'bg-slate-100 text-slate-600 border-slate-200' },
+  in_progress: { label: '进行中', className: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  completed: { label: '完成', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  deleted: { label: '已删除', className: 'bg-slate-100 text-slate-400 border-slate-200' }
+};
+
+function PlanTaskList({ tasks = [] }) {
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-[12px] text-slate-700 shadow-sm">
+      <div className="mb-2 flex items-center gap-2 font-semibold text-slate-800">
+        <Icon name="list_alt" className="text-[15px] text-indigo-600" />
+        <span>AI 计划</span>
+      </div>
+      <div className="space-y-2">
+        {tasks.map((task) => {
+          const meta = PLAN_STATUS_META[task.status] || PLAN_STATUS_META.pending;
+          return (
+            <div key={task.id} className="rounded-lg border border-white/70 bg-white/80 px-2.5 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-slate-800">{task.title}</span>
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.className}`}>
+                  {meta.label}
+                </span>
+              </div>
+              {task.description && (
+                <div className="mt-1 leading-relaxed text-slate-500">{task.description}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ChatMessage({ message, onSendMessage, onRegenerate, isLastAssistant = false }) {
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
@@ -41,6 +77,9 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
         {hasOrderedParts ? (
           <div className="space-y-3">
             {message.parts.map((part, idx) => {
+              if (part.type === 'plan') {
+                return <PlanTaskList key={`part-plan-${idx}`} tasks={part.tasks} />;
+              }
               if (part.type === 'tool') {
                 const toolCall = part.toolCall || {};
                 return (

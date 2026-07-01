@@ -6,7 +6,6 @@ import ChatEmptyState from './ChatEmptyState';
 import Icon from '../Icon';
 
 const QUICK_ACTIONS = [
-  { key: 'plan', label: '计划模式', icon: 'list_alt', prompt: '请先制定一个简短执行计划，再根据计划调用必要工具完成我的学习请求。' },
   { key: 'weak_plan', label: '补弱计划', icon: 'route', prompt: '帮我根据当前薄弱点生成补弱学习计划。' },
   { key: 'resources', label: '推荐资源', icon: 'library_books', prompt: '请根据我的薄弱点推荐一组资源。' },
   { key: 'lesson', label: '讲解页', icon: 'auto_stories', prompt: '生成一个二叉树遍历的讲解页。' },
@@ -22,6 +21,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   
   const [inputValue, setInputValue] = useState('');
   const [editingMsg, setEditingMsg] = useState(null);
+  const [planMode, setPlanMode] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -37,7 +37,11 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
     const textToSend = (overrideText || inputValue).trim();
     if (!textToSend || isSending || !activeCourseId) return;
     if (!overrideText) setInputValue('');
-    sendMessage(textToSend);
+    if (planMode) {
+      sendMessage(textToSend, { planMode: true });
+    } else {
+      sendMessage(textToSend);
+    }
   };
 
   const handleEditSubmit = (newContent) => {
@@ -149,6 +153,20 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
       <div className="p-4 lg:px-6 pb-5 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex-shrink-0">
         <div className="max-w-[760px] mx-auto">
           <div className="mb-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPlanMode(value => !value)}
+              disabled={!activeCourseId || isSending}
+              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                planMode
+                  ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700'
+              }`}
+              aria-pressed={planMode}
+            >
+              <Icon name="list_alt" className="text-[14px]" />
+              计划模式
+            </button>
             {QUICK_ACTIONS.map((action) => (
               <button
                 key={action.key}

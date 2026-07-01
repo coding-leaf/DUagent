@@ -11,6 +11,7 @@ class EduEventType(StrEnum):
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"
+    PLAN_UPDATED = "plan_updated"
     SOURCE_REFS = "source_refs"
     ARTIFACT_CREATED = "artifact_created"
     CRITIC_COMPLETED = "critic_completed"

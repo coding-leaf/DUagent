@@ -210,8 +210,7 @@ class WorkbenchSession:
                         reason="user_confirmation_required",
                     )
                     return
-                edu_event = adapter.adapt(agent_event)
-                if edu_event is not None:
+                for edu_event in adapter.adapt_many(agent_event):
                     self._run_bus.publish_event(edu_event)
             self._run_bus.complete(run.run_id)
         except asyncio.CancelledError:

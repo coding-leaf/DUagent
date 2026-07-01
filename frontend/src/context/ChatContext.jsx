@@ -17,6 +17,11 @@ import {
 } from '../utils/chatStreamEvents';
 
 const ChatContext = createContext(null);
+const PLAN_MODE_PREFIX = '请先制定一个简短执行计划，再根据计划调用必要工具完成请求。计划应简洁，并在执行过程中及时更新任务状态。\n\n用户请求：\n';
+
+const buildAgentMessage = (message, options = {}) => {
+  return options.planMode ? `${PLAN_MODE_PREFIX}${message}` : message;
+};
 
 export const ChatProvider = ({ children }) => {
   const { activeCourseId } = useCourse();
@@ -222,7 +227,7 @@ export const ChatProvider = ({ children }) => {
     );
   };
 
-  const sendMessage = (textToSend) => {
+  const sendMessage = (textToSend, options = {}) => {
     if (!textToSend || isSending || !activeCourseId) return;
     lastMessageIdRef.current = null;
 
@@ -232,7 +237,7 @@ export const ChatProvider = ({ children }) => {
       createEmptyAiMessage()
     ]);
     
-    startStream('ai-placeholder', { message: textToSend, action: 'chat' });
+    startStream('ai-placeholder', { message: buildAgentMessage(textToSend, options), action: 'chat' });
   };
 
   const regenerate = () => {

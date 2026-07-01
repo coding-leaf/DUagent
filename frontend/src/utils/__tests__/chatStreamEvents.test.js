@@ -41,4 +41,33 @@ describe('chatStreamEvents', () => {
     ]);
     expect(message.content).toBe('好的，我先查看你的学习状态。接下来我会生成补弱计划。');
   });
+
+  it('adds plan updates as ordered message parts', () => {
+    let message = createEmptyAiMessage();
+
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'text_delta',
+      payload: { delta: '我会先拆解任务。' }
+    });
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'plan_updated',
+      payload: {
+        tasks: [
+          { id: '1', title: '查询学习状态', description: '读取薄弱点', status: 'in_progress' },
+          { id: '2', title: '生成补弱计划', description: '输出计划', status: 'pending' }
+        ]
+      }
+    });
+
+    expect(message.parts).toEqual([
+      { type: 'text', content: '我会先拆解任务。' },
+      {
+        type: 'plan',
+        tasks: [
+          { id: '1', title: '查询学习状态', description: '读取薄弱点', status: 'in_progress' },
+          { id: '2', title: '生成补弱计划', description: '输出计划', status: 'pending' }
+        ]
+      }
+    ]);
+  });
 });

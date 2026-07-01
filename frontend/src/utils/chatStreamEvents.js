@@ -35,6 +35,15 @@ const upsertToolPart = (parts = [], update) => {
   return next;
 };
 
+const upsertPlanPart = (parts = [], tasks = []) => {
+  const next = [...parts];
+  const index = next.findIndex(part => part.type === 'plan');
+  const planPart = { type: 'plan', tasks };
+  if (index < 0) return [...next, planPart];
+  next[index] = planPart;
+  return next;
+};
+
 export const completeRunningParts = (parts = []) => {
   return parts.map(part => {
     if (part.type !== 'tool' || part.toolCall?.status !== 'running') return part;
@@ -119,6 +128,11 @@ export const reduceAssistantMessageForEvent = (message, event) => {
           parts: upsertToolPart(message.parts, toolCall)
         };
       }
+    case 'plan_updated':
+      return {
+        ...message,
+        parts: upsertPlanPart(message.parts, event.payload?.tasks || [])
+      };
     case 'source_refs':
       return {
         ...message,

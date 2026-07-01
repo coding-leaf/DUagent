@@ -52,8 +52,6 @@
 
 **接口漂移：** 无
 
----
-
 ### 2026-06-26 — 优化 AIChat 为 Artifact 工作区样子 v1
 
 **涉及文件：**
@@ -917,3 +915,36 @@ AIChat 前端消息增加有序 `parts` 渲染模型，`text_delta` 与 `tool_st
 - 后端 py_compile / pytest：未运行（未改后端）
 
 **接口漂移：** 无
+
+### 2026-07-01 — 显示 AIChat 计划任务流
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/runtime/edu_events.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `frontend/src/utils/chatStreamEvents.js`
+- `frontend/src/utils/__tests__/chatStreamEvents.test.js`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/context/ChatContext.test.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatArea.test.jsx`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/components/chat/ChatMessage.test.jsx`
+- `docs/10-client-api/API_前端接口规范.md`
+- `WorkLine.md`
+
+**核心改动：**
+新增 EDU v2 `plan_updated` 事件，AgentScope `TaskCreate/TaskUpdate/TaskList` 工具结果会被适配成结构化计划任务列表并随 SSE 发给前端。AIChat 前端将“计划模式”改为 toggle，开启后用户消息本地仍显示原文，发送给 Agent 的内容会拼接计划执行提示；收到 `plan_updated` 后在回答流中渲染“AI 计划”任务块，并继续保留普通工具调用渲染。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_protocol_adapter.py::test_protocol_adapter_emits_plan_updated_for_planning_tools -q` 先失败于缺少 `adapt_many/plan_updated`
+- RED：`cd frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/chat/ChatArea.test.jsx src/context/ChatContext.test.jsx` 先失败于缺少 plan part、toggle 和 plan hint 发送
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（30 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/edu_events.py src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/session/workbench_session.py` 通过
+- Frontend tests：`cd frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/chat/ChatArea.test.jsx src/components/chat/ChatMessage.test.jsx src/context/ChatContext.test.jsx`（4 files passed，10 tests passed）
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+
+**接口漂移：**
+新增 Backend 透传给前端的 EDU v2 SSE 事件 `plan_updated`。事件 payload 为 `tasks[]`，每项包含 `id/title/description/status`，用于前端渲染 AI 计划任务列表。

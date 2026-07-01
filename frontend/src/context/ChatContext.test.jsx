@@ -61,10 +61,12 @@ const renderWithProviders = (ui) => render(
 const StreamConsumer = () => {
   const { activeSession, messages, workspaceArtifacts, runLogs, clearRunLogs, sendMessage, resetConversation, isSending } = useChat();
   const assistant = messages.find(m => m.role === 'assistant');
+  const user = messages.find(m => m.role === 'user');
   return (
     <div>
       <div data-testid="active-session">{activeSession || ''}</div>
       <div data-testid="message-count">{messages.length}</div>
+      <div data-testid="user-content">{user?.content || ''}</div>
       <div data-testid="assistant-content">{assistant?.content || ''}</div>
       <div data-testid="assistant-loading">{String(assistant?.loading ?? false)}</div>
       <div data-testid="assistant-error">{String(assistant?.isError ?? false)}</div>
@@ -75,6 +77,9 @@ const StreamConsumer = () => {
       <div data-testid="sending">{String(isSending)}</div>
       <button data-testid="send" onClick={() => sendMessage('hello')}>
         Send
+      </button>
+      <button data-testid="send-plan" onClick={() => sendMessage('hello', { planMode: true })}>
+        Send Plan
       </button>
       <button data-testid="new-chat" onClick={() => resetConversation()}>
         New Chat
@@ -99,6 +104,32 @@ test('keeps a user-created draft conversation active when history exists', async
 
   expect(screen.getByTestId('active-session').textContent).toBe('');
   expect(screen.getByTestId('message-count').textContent).toBe('0');
+});
+
+test('ChatProvider keeps original user text while sending plan hint to agent', async () => {
+  streamChatMock.mockImplementation((_payload, onMessage) => {
+    onMessage({
+      type: 'workflow_completed',
+      run_id: 'run-1',
+      conversation_id: 'conv-1',
+      message_id: 'msg-1',
+      payload: { reply_id: 'reply-1' }
+    });
+    return vi.fn();
+  });
+
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+  await act(async () => {
+    screen.getByTestId('send-plan').click();
+  });
+
+  expect(screen.getByTestId('user-content').textContent).toBe('hello');
+  expect(streamChatMock.mock.calls[0][0].message).toContain('请先制定一个简短执行计划');
+  expect(streamChatMock.mock.calls[0][0].message).toContain('用户请求：\nhello');
 });
 
 test('ChatProvider reduces native EDU v2 stream events', async () => {

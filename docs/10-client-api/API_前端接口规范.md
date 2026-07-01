@@ -1527,12 +1527,18 @@ POST /api/v1/tutoring/chat
 
 | type | 说明 |
 |------|------|
-| chunk | 文本片段 |
-| diagram | 图解（Mermaid 语法或图表 JSON） |
-| knowledge_points | 引用的知识点列表 |
-| suggestion | 补充学习建议 + 相似例题推送 |
-| done | 本轮回答完成，携带 conversation_id |
-| review | （可选）在 done 之后异步发出；`{"type":"review","status":"flagged","reason":"<规则原因>"}` — status=flagged 表示该回答可能不准确，前端应标灰整条消息，原文保留。旧前端收到此事件可安全忽略。 |
+| workflow_started | 本轮 Agent 工作流开始 |
+| text_delta | 文本片段；`payload.delta` 为增量文本 |
+| tool_started | 工具调用开始；`payload.tool_call_id/tool_name` 标识工具 |
+| tool_completed | 工具调用完成；`payload.tool_call_id/state` 标识结果 |
+| tool_failed | 工具调用失败；携带失败原因 |
+| plan_updated | AI 计划任务列表更新；`payload.tasks[]` 含 `id/title/description/status` |
+| source_refs | 引用来源列表 |
+| artifact_created | Agent 工作区产物创建 |
+| critic_completed | 回答审查完成，可能标记不准确 |
+| debug_log | 开发观测日志，前端仅用于开发者浮窗 |
+| workflow_completed | 本轮回答完成，携带 conversation_id/message_id |
+| workflow_failed | 本轮回答失败 |
 
 **`done` 事件 `data`：**
 

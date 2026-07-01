@@ -2,6 +2,8 @@ import asyncio
 from pathlib import Path
 
 from agentscope.event import (
+    ModelCallEndEvent,
+    ModelCallStartEvent,
     ReplyEndEvent,
     ReplyStartEvent,
     RequireUserConfirmEvent,
@@ -170,6 +172,48 @@ def test_workbench_session_closes_run_when_tool_confirmation_is_required(tmp_pat
     ]
     assert events[0].payload["event"] == "permission.required"
     assert events[0].payload["tool_calls"] == [
-        {"id": "tool-1", "name": "unsafe_tool"}
+        {"id": "tool-1", "name": "unsafe_tool", "input_preview": "{}"}
     ]
     assert events[1].payload == {"reason": "user_confirmation_required"}
+
+
+def test_workbench_session_publishes_debug_logs_for_model_events(tmp_path: Path):
+    class ModelEventAgent:
+        async def reply_stream(self, _message):
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield ModelCallStartEvent(reply_id="reply1", model_name="deepseek-chat")
+            yield ModelCallEndEvent(reply_id="reply1", input_tokens=42, output_tokens=12)
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return ModelEventAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="hello",
+        context={},
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+    debug_payloads = [
+        event.payload
+        for event in events
+        if event.type == EduEventType.DEBUG_LOG
+    ]
+
+    assert [payload["event"] for payload in debug_payloads] == [
+        "agentscope.model.start",
+        "agentscope.model.end",
+    ]
+    assert debug_payloads[0]["model"] == "deepseek-chat"
+    assert debug_payloads[1]["input_tokens"] == 42
+    assert debug_payloads[1]["output_tokens"] == 12

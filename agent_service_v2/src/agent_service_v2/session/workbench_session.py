@@ -9,6 +9,10 @@ from agent_service_v2.agents.workbench_factory import (
     MissingModelConfigError,
     WorkbenchAgentFactory,
 )
+from agent_service_v2.observability.logging import (
+    build_agentscope_event_log,
+    input_preview,
+)
 from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
@@ -103,17 +107,37 @@ class WorkbenchSession:
             return run
 
         if not run_in_background:
-            await self._run_agent(run=run, agent=agent, message=message)
+            await self._run_agent(
+                run=run,
+                agent=agent,
+                message=message,
+                user_id=user_id,
+                course_id=course_id,
+            )
             return run
 
         task = asyncio.create_task(
-            self._run_agent(run=run, agent=agent, message=message)
+            self._run_agent(
+                run=run,
+                agent=agent,
+                message=message,
+                user_id=user_id,
+                course_id=course_id,
+            )
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return run
 
-    async def _run_agent(self, *, run: WorkbenchRun, agent, message: str) -> None:
+    async def _run_agent(
+        self,
+        *,
+        run: WorkbenchRun,
+        agent,
+        message: str,
+        user_id: str,
+        course_id: str | None,
+    ) -> None:
         adapter = EDUProtocolAdapter(
             run_id=run.run_id,
             conversation_id=run.conversation_id,
@@ -126,6 +150,20 @@ class WorkbenchSession:
         )
         try:
             async for agent_event in agent.reply_stream(user_message):
+                debug_record = build_agentscope_event_log(
+                    agent_event,
+                    run_id=run.run_id,
+                    conversation_id=run.conversation_id,
+                    user_id=user_id,
+                    course_id=course_id,
+                    agent=run.agent,
+                )
+                if debug_record is not None:
+                    self._run_bus.publish(
+                        run.run_id,
+                        EduEventType.DEBUG_LOG,
+                        debug_record,
+                    )
                 if isinstance(agent_event, RequireUserConfirmEvent):
                     self._run_bus.publish(
                         run.run_id,
@@ -138,6 +176,7 @@ class WorkbenchSession:
                                 {
                                     "id": tool_call.id,
                                     "name": tool_call.name,
+                                    "input_preview": input_preview(tool_call.input),
                                 }
                                 for tool_call in agent_event.tool_calls
                             ],

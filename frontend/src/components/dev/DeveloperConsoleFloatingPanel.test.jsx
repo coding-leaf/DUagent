@@ -12,7 +12,12 @@ vi.mock('../../context/ChatContext', () => ({
         message: 'tool completed',
         source: 'agent.middleware',
         runId: 'run-1',
-        payload: { tool_name: 'read_learning_state', event: 'acting.end' }
+        payload: {
+          tool_name: 'read_learning_state',
+          event: 'tool.call.end',
+          input_preview: '{"user_id":"u1"}',
+          output_preview: 'weak points: linked list'
+        }
       },
       {
         id: 'log-2',
@@ -45,4 +50,21 @@ test('renders floating developer console with logs', () => {
 
   expect(screen.queryByText('tool completed')).not.toBeInTheDocument();
   expect(screen.getByText('user_confirmation_required')).toBeInTheDocument();
+});
+
+test('searches logs and expands payload details', () => {
+  render(<DeveloperConsoleFloatingPanel />);
+
+  fireEvent.click(screen.getByRole('button', { name: /Dev/ }));
+  fireEvent.change(screen.getByPlaceholderText('搜索日志'), {
+    target: { value: 'linked list' }
+  });
+
+  expect(screen.getByText('tool completed')).toBeInTheDocument();
+  expect(screen.queryByText('user_confirmation_required')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /tool completed/ }));
+
+  expect(screen.getByText(/output_preview/)).toBeInTheDocument();
+  expect(screen.getByText(/weak points: linked list/)).toBeInTheDocument();
 });

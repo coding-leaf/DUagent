@@ -13,15 +13,23 @@ export default function DeveloperConsoleFloatingPanel() {
   const { runLogs = [], clearRunLogs } = useChat();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [expandedLogId, setExpandedLogId] = useState(null);
 
   const visible = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_CONSOLE === 'true';
   const filteredLogs = useMemo(() => {
-    if (filter === 'all') return runLogs;
-    if (filter === 'error') return runLogs.filter(log => log.level === 'error' || log.type === 'workflow_failed');
-    if (filter === 'tool') return runLogs.filter(log => log.type?.includes('tool') || log.message?.includes('tool') || log.payload?.tool_name);
-    if (filter === 'model') return runLogs.filter(log => log.message?.includes('model') || log.payload?.model);
-    return runLogs;
-  }, [filter, runLogs]);
+    const normalizedQuery = query.trim().toLowerCase();
+    return runLogs.filter(log => {
+      const matchesFilter =
+        filter === 'all'
+        || (filter === 'error' && (log.level === 'error' || log.type === 'workflow_failed'))
+        || (filter === 'tool' && (log.type?.includes('tool') || log.message?.includes('tool') || log.payload?.tool_name))
+        || (filter === 'model' && (log.message?.includes('model') || log.payload?.model));
+      if (!matchesFilter) return false;
+      if (!normalizedQuery) return true;
+      return JSON.stringify(log).toLowerCase().includes(normalizedQuery);
+    });
+  }, [filter, query, runLogs]);
 
   if (!visible) return null;
 
@@ -63,6 +71,14 @@ export default function DeveloperConsoleFloatingPanel() {
               </button>
             ))}
           </div>
+          <div className="px-3 py-2 border-b border-slate-800 bg-slate-950">
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="搜索日志"
+              className="w-full h-8 rounded bg-slate-900 border border-slate-800 px-2 text-xs text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500"
+            />
+          </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2 text-xs leading-relaxed">
             {filteredLogs.length === 0 ? (
@@ -71,19 +87,30 @@ export default function DeveloperConsoleFloatingPanel() {
               </div>
             ) : filteredLogs.map(log => (
               <article key={log.id} className="rounded-lg border border-slate-800 bg-slate-900/70 p-2">
-                <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                  className="w-full flex items-center justify-between gap-2 text-left"
+                >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`w-1.5 h-1.5 rounded-full ${log.level === 'error' ? 'bg-red-400' : 'bg-cyan-300'}`} />
                     <span className="font-mono text-slate-100 truncate">{log.message}</span>
                   </div>
                   <span className="font-mono text-[10px] text-slate-500">{log.type}</span>
-                </div>
+                </button>
                 <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-slate-400 font-mono">
                   <span className="truncate">run: {log.runId || '-'}</span>
                   <span className="truncate">source: {log.source || '-'}</span>
                   {log.payload?.tool_name && <span className="truncate">tool: {log.payload.tool_name}</span>}
                   {log.payload?.event && <span className="truncate">event: {log.payload.event}</span>}
+                  {log.payload?.duration_ms && <span className="truncate">ms: {log.payload.duration_ms}</span>}
+                  {log.payload?.state && <span className="truncate">state: {log.payload.state}</span>}
                 </div>
+                {expandedLogId === log.id && (
+                  <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-950 border border-slate-800 p-2 text-[10px] text-slate-300 whitespace-pre-wrap break-words">
+                    {JSON.stringify(log.payload, null, 2)}
+                  </pre>
+                )}
               </article>
             ))}
           </div>

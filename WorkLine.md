@@ -775,3 +775,31 @@ Backend 对前端的 tutoring SSE event 类型从旧 `chunk/done` 切换为 EDU 
 
 **接口漂移：**
 EDU v2 SSE 事件类型新增 `debug_log`，payload 为开发期观测日志。Backend 作为 SSE 代理无需改字段转换；前端已同步消费并仅用于 Dev Console。
+
+### 2026-07-01 — 增强 AIChat 开发者日志可排障信息
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/observability/logging.py`
+- `agent_service_v2/src/agent_service_v2/observability/agent_middleware.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/tests/test_agent_logging_middleware.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `frontend/src/components/dev/DeveloperConsoleFloatingPanel.jsx`
+- `frontend/src/components/dev/DeveloperConsoleFloatingPanel.test.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+将开发者日志从生命周期心跳增强为可排障日志。AgentScope middleware 现在输出 `tool.call.start/end/error`，包含 `tool_call_id/tool_name/input_preview/output_preview/state/duration_ms/error_message`，并对 `api_key/password/token/authorization/secret` 等敏感字段脱敏、对大文本截断。Workbench session 对 `ModelCallStartEvent/ModelCallEndEvent` 输出 `agentscope.model.start/end`，包含模型名和 token；权限确认日志补充工具输入预览。Dev Console 增加搜索和点击展开 payload JSON，方便直接定位卡在模型、权限还是工具执行阶段。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_agent_logging_middleware.py -q` 先失败于仍输出 `acting.start/end`
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_session.py -q` 先失败于权限日志缺 `input_preview`、模型事件无 `debug_log`
+- RED：`cd frontend && npm run test:unit -- src/components/dev/DeveloperConsoleFloatingPanel.test.jsx` 先失败于缺少 `搜索日志` 输入框
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（28 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/observability/logging.py src/agent_service_v2/observability/agent_middleware.py src/agent_service_v2/session/workbench_session.py` 通过
+- Frontend tests：`cd frontend && npm run test:unit -- src/components/dev/DeveloperConsoleFloatingPanel.test.jsx src/context/ChatContext.test.jsx src/hooks/__tests__/useRunLogs.test.js`（3 files passed，7 tests passed）
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+
+**接口漂移：**
+`debug_log` payload 扩展了开发调试字段，包括工具输入/输出预览、模型 token 和 AgentScope event metadata。业务事件契约不变。

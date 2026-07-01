@@ -7,7 +7,13 @@ from typing import Any
 
 from agentscope.middleware import MiddlewareBase
 
-from agent_service_v2.observability.logging import LogSink, build_log_record
+from agent_service_v2.observability.logging import (
+    LogSink,
+    build_log_record,
+    enum_value,
+    input_preview,
+    output_preview,
+)
 
 
 class AgentRunLoggingMiddleware(MiddlewareBase):
@@ -145,24 +151,36 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         next_handler: Callable[..., AsyncGenerator],
     ) -> AsyncGenerator:
         started_at = perf_counter()
-        self._emit("acting.start", agent=agent)
+        tool_call = input_kwargs.get("tool_call")
+        tool_extra = _tool_call_extra(tool_call)
+        self._emit("tool.call.start", agent=agent, extra=tool_extra)
+        last_item = None
         try:
             async for event in next_handler(**input_kwargs):
+                last_item = event
                 yield event
         except Exception as exc:
             self._emit(
-                "acting.error",
+                "tool.call.error",
                 agent=agent,
                 level="error",
                 duration_ms=_elapsed_ms(started_at),
                 error=exc.__class__.__name__,
+                extra={
+                    **tool_extra,
+                    "error_message": str(exc),
+                },
             )
             raise
         else:
             self._emit(
-                "acting.end",
+                "tool.call.end",
                 agent=agent,
                 duration_ms=_elapsed_ms(started_at),
+                extra={
+                    **tool_extra,
+                    **_tool_result_extra(last_item),
+                },
             )
 
     def _emit(
@@ -193,3 +211,22 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
 
 def _elapsed_ms(started_at: float) -> float:
     return (perf_counter() - started_at) * 1000
+
+
+def _tool_call_extra(tool_call: Any) -> dict[str, Any]:
+    if tool_call is None:
+        return {}
+    return {
+        "tool_call_id": getattr(tool_call, "id", None),
+        "tool_name": getattr(tool_call, "name", None),
+        "input_preview": input_preview(getattr(tool_call, "input", None)),
+    }
+
+
+def _tool_result_extra(result: Any) -> dict[str, Any]:
+    if result is None:
+        return {}
+    return {
+        "state": enum_value(getattr(result, "state", None)),
+        "output_preview": output_preview(result),
+    }

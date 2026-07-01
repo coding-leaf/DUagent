@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from agentscope.tool import FunctionTool, ToolBase, ToolGroup
+from agentscope.workspace import LocalWorkspace
 
+from agent_service_v2.tools.artifact_files import build_write_artifact_file
 from agent_service_v2.tools.planning import build_planning_group
 from agent_service_v2.tools.workbench_placeholders import (
-    draft_study_artifact,
     read_learning_state,
     review_grounding,
 )
@@ -14,6 +15,8 @@ def build_workbench_tool_groups(
     *,
     memory_tools: list[ToolBase] | None,
     rag_tools: list[ToolBase] | None,
+    workspace: LocalWorkspace,
+    run_id: str,
 ) -> list[ToolGroup]:
     groups = [build_planning_group()]
     if memory_tools:
@@ -41,8 +44,8 @@ def build_workbench_tool_groups(
             ),
             ToolGroup(
                 name="artifact",
-                description="Draft workbench artifacts for the middle panel.",
-                tools=[FunctionTool(draft_study_artifact)],
+                description="Write saveable learning artifacts into the run workspace.",
+                tools=[FunctionTool(build_write_artifact_file(workspace=workspace, run_id=run_id))],
             ),
             ToolGroup(
                 name="review",

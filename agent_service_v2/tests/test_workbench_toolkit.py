@@ -1,7 +1,7 @@
 from agentscope.tool import ToolGroup
+from agentscope.workspace import LocalWorkspace
 
 from agent_service_v2.tools.workbench_placeholders import (
-    draft_study_artifact,
     read_learning_state,
     review_grounding,
 )
@@ -31,13 +31,22 @@ def test_planning_group_is_optional_for_simple_replies():
 
 
 def test_workbench_tool_groups_include_expected_boundaries():
-    groups = build_workbench_tool_groups(memory_tools=[], rag_tools=[])
+    groups = build_workbench_tool_groups(
+        memory_tools=[],
+        rag_tools=[],
+        workspace=LocalWorkspace(workdir="/tmp/eduagent-test-workspace", workspace_id="ws"),
+        run_id="run-1",
+    )
 
     assert [group.name for group in groups] == [
         "planning",
         "learning_state",
         "artifact",
         "review",
+    ]
+    artifact_group = next(group for group in groups if group.name == "artifact")
+    assert [getattr(tool, "name", type(tool).__name__) for tool in artifact_group.tools] == [
+        "write_artifact_file"
     ]
 
 
@@ -47,11 +56,6 @@ def test_placeholder_tools_return_structured_observations():
         "tool": "read_learning_state",
         "user_id": "u1",
         "course_id": "c1",
-    }
-    assert draft_study_artifact(kind="study_plan") == {
-        "status": "placeholder",
-        "tool": "draft_study_artifact",
-        "kind": "study_plan",
     }
     assert review_grounding(summary="answer") == {
         "status": "placeholder",

@@ -36,11 +36,15 @@ class WorkbenchAgentFactory:
         model = self._model_provider()
         if model is None:
             raise MissingModelConfigError("model_not_configured")
+        if run_id is None:
+            raise ValueError("run_id is required for workbench artifact tools")
 
         toolkit = Toolkit(
             tool_groups=build_workbench_tool_groups(
                 memory_tools=[],
                 rag_tools=[],
+                workspace=workspace,
+                run_id=run_id,
             )
         )
         middlewares = []

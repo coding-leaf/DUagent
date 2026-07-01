@@ -9,7 +9,7 @@ SAFE_WORKBENCH_TOOLS = [
     "TaskList",
     "TaskUpdate",
     "read_learning_state",
-    "draft_study_artifact",
+    "write_artifact_file",
     "review_grounding",
 ]
 

@@ -19,7 +19,7 @@
 
 1. 前端 `/ai-chat` 原生消费 EDU v2 事件。
 2. Backend 保持前端到 Agent Service 的唯一 HTTP 边界，不让前端直连 Agent Service。
-3. Backend 不再把 v2 事件降级成旧协议，只补业务字段并负责持久化。
+3. Backend 不再把 v2 事件降级成旧协议，也不承担 Agent 语义转换；只做转发、最小 envelope 包装、鉴权上下文与持久化。
 4. Agent v2 继续使用 AgentScope 2.x `Agent.reply_stream()` 作为分块事件来源。
 5. 工具事件、产物事件、引用事件可以进入前端 `ToolCallCard` 和 `AgentWorkspace`。
 
@@ -44,6 +44,8 @@ flowchart LR
 ```
 
 Backend 仍是权限、会话、持久化和上下文组装边界。去除兼容层不等于前端直连 Agent Service。
+
+AgentScope event 到 EDU v2 event 的语义适配固定在 Agent Service v2 内部完成，具体边界是 `agent_service_v2/runtime/protocol_adapter.py`。Backend 不解释 AgentScope 内部事件，不推断工具语义，不生成工作台 artifact；Backend 只处理传输层和 Backend 自己拥有的业务 envelope。
 
 ## 事件契约
 
@@ -95,7 +97,7 @@ Backend 可补充或覆盖以下业务字段：
 
 ### 当前问题
 
-`TutoringStreamAdapter` 当前承担了旧协议转换：
+`TutoringStreamAdapter` 当前承担了不该继续保留的旧协议转换：
 
 - 解析 Agent v2 SSE。
 - 将 `text_delta` 转成 `chunk`。
@@ -105,7 +107,7 @@ Backend 可补充或覆盖以下业务字段：
 
 ### 新职责
 
-`TutoringStreamAdapter` 改为 EDU v2 pass-through adapter：
+`TutoringStreamAdapter` 改为 EDU v2 transport proxy，不再是语义 adapter：
 
 1. 继续请求 `/agent/v2/workbench/chat`。
 2. 继续构造 Workbench payload，把 Backend 上下文放入 `context`。
@@ -114,6 +116,16 @@ Backend 可补充或覆盖以下业务字段：
 5. 对每个合法 EDU v2 event 补顶层 `conversation_id` 和 `message_id`。
 6. 原样输出事件名，不再输出 `chunk/done`。
 7. Agent Service 不可用时输出 `workflow_failed`，而不是 `done(error)`。
+
+Backend 明确不做以下事情：
+
+- 不把 Agent v2 事件重新命名成 Client 专用事件。
+- 不把工具事件翻译成 UI 状态。
+- 不根据 payload 推断 artifact 类型。
+- 不读取或暴露 AgentScope 原始对象。
+- 不承担 `source_refs`、`artifact_created`、`critic_completed` 的生成职责。
+
+这些语义都属于 Agent Service v2 的 EDUProtocolAdapter、工具、middleware 或后续 Agent runtime 扩展。
 
 ### Backend 输出示例
 
@@ -210,7 +222,7 @@ Agent v2 继续作为 EDU v2 事件源。当前已支持：
 sequenceDiagram
   autonumber
   participant FE as Frontend ChatContext
-  participant BE as Backend TutoringStreamAdapter
+  participant BE as Backend Transport Proxy
   participant AS as Agent Service v2
   participant AG as AgentScope Agent
   participant DB as MySQL
@@ -221,15 +233,15 @@ sequenceDiagram
   AS->>AG: reply_stream(Msg)
   AG-->>AS: TextBlockDeltaEvent
   AS-->>BE: text_delta
-  BE-->>FE: text_delta + message_id
+  BE-->>FE: text_delta + message_id wrapper
   FE->>FE: append payload.delta
   AG-->>AS: ToolCallStartEvent
   AS-->>BE: tool_started
-  BE-->>FE: tool_started + message_id
+  BE-->>FE: tool_started + message_id wrapper
   FE->>FE: update ToolCallCard
   AG-->>AS: ReplyEndEvent
   AS-->>BE: workflow_completed
-  BE-->>FE: workflow_completed + message_id
+  BE-->>FE: workflow_completed + message_id wrapper
   FE->>FE: loading=false
   BE->>DB: persist accumulated text
 ```
@@ -254,6 +266,7 @@ sequenceDiagram
 - 期望 `tool_started/tool_completed/artifact_created/source_refs` 不被过滤。
 - 期望 AgentServiceError 输出 `workflow_failed`。
 - 继续验证文本累积持久化。
+- 明确断言 Backend 不重命名事件、不生成 artifact、不改写 Agent v2 `payload`。
 
 ### Frontend
 
@@ -275,8 +288,8 @@ sequenceDiagram
 
 ## 迁移步骤
 
-1. 先改 Backend tests 为 EDU v2 原生事件期望。
-2. 改 `TutoringStreamAdapter` 为 pass-through。
+1. 先改 Backend tests 为 EDU v2 原生事件期望，并断言 Backend 只做 transport proxy + envelope wrapper。
+2. 改 `TutoringStreamAdapter` 为 pass-through transport proxy。
 3. 改 Frontend tests 为 EDU v2 事件期望。
 4. 改 `chatService` 为 SSE JSON 透传。
 5. 改 `ChatContext` 为 EDU v2 reducer。
@@ -299,3 +312,4 @@ sequenceDiagram
 - 一次性切换会要求前后端测试同步更新，但能彻底移除旧兼容层。
 - 前端会更直接绑定 EDU v2 事件名；这是本阶段的目标，不再额外抽象成产品化 Client 事件名。
 - Artifact/RAG/Memory 的真实业务能力仍依赖后续 Agent tools 和 middleware 实现；本阶段先打通协议承载能力。
+- Backend 保持薄代理会让前端更依赖 EDU v2 event envelope；这是为了遵守 AgentScope runtime 边界，避免在 Backend 形成第二套伪 adapter。

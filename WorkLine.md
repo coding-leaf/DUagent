@@ -651,3 +651,20 @@
 - 文档检查：`git diff --check -- docs/superpowers/specs/2026-07-01-ai-chat-native-edu-v2-events-design.md WorkLine.md` 通过
 
 **接口漂移：** 无。仅设计文档，尚未修改代码接口。
+
+### 2026-07-01 — 修订 AIChat v2 事件协议后端边界
+
+**涉及文件：**
+- `docs/superpowers/specs/2026-07-01-ai-chat-native-edu-v2-events-design.md`
+- `WorkLine.md`
+
+**核心改动：**
+根据 AgentScope 2.x 边界要求和用户反馈，修订设计文档：Backend 仅作为 transport proxy 与最小 envelope wrapper，不承担 Agent 语义转换、不重命名事件、不推断工具状态、不生成 artifact、不改写 Agent v2 payload。AgentScope event 到 EDU v2 event 的语义适配固定在 `agent_service_v2/runtime/protocol_adapter.py`、Agent tools 和 middleware 中完成。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅设计文档）
+- 后端 py_compile / pytest：未运行（仅设计文档）
+- Agent pytest：未运行（仅设计文档）
+- 文档检查：`git diff --check -- docs/superpowers/specs/2026-07-01-ai-chat-native-edu-v2-events-design.md WorkLine.md` 通过
+
+**接口漂移：** 无。仅设计文档修订。

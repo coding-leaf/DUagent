@@ -3,7 +3,7 @@ import { createContext, useContext, useState, useEffect, useRef, useMemo } from 
 import useSWR from 'swr';
 import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
-import { normalizeTextList, normalizeMessages } from '../utils/chatContent';
+import { normalizeMessages } from '../utils/chatContent';
 import { fetcherWrapper } from '../utils/fetcher';
 import { MOCK_TOOL_DEMOS } from '../components/chat/mockToolDemos';
 
@@ -17,6 +17,26 @@ const updateTargetMessage = (messages, targetId, updater) => {
 const completeRunningToolCalls = (toolCalls = []) => {
   return toolCalls.map(tc => tc.status === 'running' ? { ...tc, status: 'completed' } : tc);
 };
+
+const upsertToolCall = (toolCalls = [], update) => {
+  const id = update.id;
+  const existing = toolCalls.find(tc => tc.id === id);
+  if (!existing) return [...toolCalls, update];
+  return toolCalls.map(tc => tc.id === id ? { ...tc, ...update } : tc);
+};
+
+const normalizeArtifact = (event) => {
+  const artifact = event.payload?.artifact;
+  if (!artifact || !artifact.type) return null;
+  return {
+    id: artifact.id || `artifact-${crypto.randomUUID()}`,
+    type: artifact.type,
+    props: artifact.props || {},
+    timestamp: event.timestamp || new Date().toISOString()
+  };
+};
+
+const completionMessageId = (event) => event.message_id || event.payload?.message_id || `ai-${crypto.randomUUID()}`;
 
 const createEmptyAiMessage = (id = 'ai-placeholder') => ({
   id, role: 'assistant', content: '', loading: true, diagrams: [], knowledge_points: [], suggestions: [], toolCalls: []
@@ -168,62 +188,104 @@ export const ChatProvider = ({ children }) => {
   };
 
   const createStreamHandlers = (targetId) => {
-    return {
-      onMessage: (msg) => {
-        setMessages(prev => {
-          if (msg.type === 'review') {
-            const fallbackId = [...prev].reverse().find(m => m.role === 'assistant')?.id;
-            const idToFlag = lastMessageIdRef.current || fallbackId;
-            if (!idToFlag) return prev;
-            return updateTargetMessage(prev, idToFlag, m => ({ ...m, reviewFlagged: true, reviewReason: msg.reason || 'off_topic' }));
-          }
+    const completeMessage = (event, failed = false) => {
+      const finalMessageId = completionMessageId(event);
+      lastMessageIdRef.current = finalMessageId;
+      setMessages(prev => updateTargetMessage(prev, targetId, m => ({
+        ...m,
+        id: targetId === 'ai-placeholder' ? finalMessageId : m.id,
+        content: failed
+          ? `${m.content || ''}\n\n[生成失败: ${event.payload?.message || event.payload?.reason || 'agent_failed'}]`
+          : m.content,
+        loading: false,
+        isError: failed || m.isError,
+        toolCalls: completeRunningToolCalls(m.toolCalls)
+      })));
+      setIsSending(false);
+      abortControllerRef.current = null;
 
-          return updateTargetMessage(prev, targetId, m => {
-            switch (msg.type) {
-              case 'status': {
-                if (msg.stage === 'generation') {
-                  const updatedToolCalls = (m.toolCalls || []).map(tc => tc.id === 'retrieval' ? { ...tc, status: 'completed' } : tc);
-                  return { ...m, toolCalls: updatedToolCalls };
-                } else if (msg.stage === 'retrieval') {
-                  return { ...m, toolCalls: [{ id: 'retrieval', name: '检索课程知识库', status: 'running' }] };
-                }
-                return { ...m, toolCalls: [{ id: 'generic', name: msg.message || msg.content || '正在处理...', status: 'running' }] };
-              }
-              case 'chunk':
-                return { ...m, content: m.content + (msg.content || ''), toolCalls: completeRunningToolCalls(m.toolCalls) };
-              case 'diagram':
-                return { ...m, diagrams: [...(m.diagrams || []), msg.data || msg.content] };
-              case 'knowledge_points':
-                return { ...m, knowledge_points: normalizeTextList(msg.knowledge_points || msg.points || msg.data || []) };
-              case 'suggestion':
-                return { ...m, suggestions: [...(m.suggestions || []), ...normalizeTextList(msg.data || msg.content || [])] };
-              default:
-                return m;
-            }
-          });
-        });
-      },
-      onDone: (doneData) => {
-        const finalMessageId = doneData.message_id || `ai-${crypto.randomUUID()}`;
-        lastMessageIdRef.current = finalMessageId;
-        setMessages(prev => updateTargetMessage(prev, targetId, m => ({
-          ...m, id: targetId === 'ai-placeholder' ? finalMessageId : m.id, loading: false, toolCalls: completeRunningToolCalls(m.toolCalls)
-        })));
-        setIsSending(false);
-        abortControllerRef.current = null;
-        
-        if (!activeSession && doneData.conversation_id) {
-          setActiveSession(doneData.conversation_id);
-          mutateSessions();
+      if (!activeSession && event.conversation_id) {
+        setActiveSession(event.conversation_id);
+        mutateSessions();
+      }
+    };
+
+    return {
+      onMessage: (event) => {
+        if (event.type === 'artifact_created') {
+          const artifact = normalizeArtifact(event);
+          if (artifact) setWorkspaceArtifacts(prev => [...prev, artifact]);
         }
+
+        if (event.type === 'workflow_completed') {
+          completeMessage(event, false);
+          return;
+        }
+
+        if (event.type === 'workflow_failed') {
+          completeMessage(event, true);
+          return;
+        }
+
+        setMessages(prev => updateTargetMessage(prev, targetId, m => {
+          switch (event.type) {
+            case 'workflow_started':
+              return { ...m, runId: event.run_id || m.runId };
+            case 'text_delta':
+              return { ...m, content: m.content + (event.payload?.delta || '') };
+            case 'tool_started':
+              return {
+                ...m,
+                toolCalls: upsertToolCall(m.toolCalls, {
+                  id: event.payload?.tool_call_id || `tool-${crypto.randomUUID()}`,
+                  name: event.payload?.tool_name || '工具调用',
+                  status: 'running'
+                })
+              };
+            case 'tool_completed':
+              return {
+                ...m,
+                toolCalls: upsertToolCall(m.toolCalls, {
+                  id: event.payload?.tool_call_id || 'unknown',
+                  status: event.payload?.state === 'error' ? 'error' : 'completed',
+                  outputSummary: event.payload?.summary
+                })
+              };
+            case 'tool_failed':
+              return {
+                ...m,
+                toolCalls: upsertToolCall(m.toolCalls, {
+                  id: event.payload?.tool_call_id || 'unknown',
+                  name: event.payload?.tool_name || '工具调用',
+                  status: 'error',
+                  outputSummary: event.payload?.reason || event.payload?.message
+                })
+              };
+            case 'source_refs':
+              return {
+                ...m,
+                sourceRefs: event.payload?.sources || []
+              };
+            case 'critic_completed':
+              return {
+                ...m,
+                reviewFlagged: event.payload?.passed === false,
+                reviewReason: event.payload?.reason || m.reviewReason
+              };
+            default:
+              return m;
+          }
+        }));
       },
       onError: (err) => {
         console.error('Chat stream error:', err);
-        setMessages(prev => updateTargetMessage(prev, targetId, m => ({
-          ...m, content: m.content + '\n\n[发送失败: ' + (err.message || '网络连接故障') + ']', loading: false, isError: true, toolCalls: completeRunningToolCalls(m.toolCalls)
-        })));
-        setIsSending(false);
-        abortControllerRef.current = null;
+        completeMessage(
+          {
+            type: 'workflow_failed',
+            payload: { message: err.message || '网络连接故障' }
+          },
+          true
+        );
       }
     };
   };
@@ -234,7 +296,8 @@ export const ChatProvider = ({ children }) => {
     const handlers = createStreamHandlers(targetId);
     abortControllerRef.current = chatService.streamChat(
       { ...requestPayload, scope: 'course', course_id: activeCourseId, conversation_id: activeSession },
-      handlers.onMessage, handlers.onDone, handlers.onError
+      handlers.onMessage,
+      handlers.onError
     );
   };
 

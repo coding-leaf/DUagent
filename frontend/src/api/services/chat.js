@@ -24,7 +24,7 @@ export const chatService = {
   },
 
   // 发送流式消息
-  streamChat: (params, onMessage, onDone, onError) => {
+  streamChat: (params, onMessage, onError) => {
     const { message, action = 'chat', scope = 'course', course_id, conversation_id } = params;
 
     if (isMockEnabled) {
@@ -38,8 +38,8 @@ export const chatService = {
         if (count < words.length) {
           const chunk = words[count];
           onMessage({
-            type: 'chunk',
-            content: chunk
+            type: 'text_delta',
+            payload: { delta: chunk }
           });
           count++;
         } else {
@@ -47,20 +47,30 @@ export const chatService = {
           // Send diagram if user asked for it or as demo
           if (message.includes('图') || message.includes('AVL') || message.includes('树')) {
             onMessage({
-              type: 'diagram',
-              data: {
-                type: 'mermaid',
-                code: 'graph TD\n    A[20] --> B(10)\n    A --> C(30)'
+              type: 'artifact_created',
+              payload: {
+                artifact: {
+                  id: `artifact-${dummyId}`,
+                  type: 'Mermaid',
+                  props: { chart: 'graph TD\n    A[20] --> B(10)\n    A --> C(30)' }
+                }
               }
             });
           }
           onMessage({
-            type: 'knowledge_points',
-            points: ['二叉查找树', '平衡二叉树']
+            type: 'source_refs',
+            payload: {
+              sources: [
+                { title: '二叉查找树' },
+                { title: '平衡二叉树' }
+              ]
+            }
           });
-          onDone({
+          onMessage({
+            type: 'workflow_completed',
             conversation_id: conversation_id || 'sess_mock_9527',
-            message_id: dummyId
+            message_id: dummyId,
+            payload: { reply_id: dummyId }
           });
         }
       }, 50);
@@ -118,20 +128,7 @@ export const chatService = {
 
           try {
             const parsed = JSON.parse(dataStr);
-            if (parsed.type === 'chunk') {
-              onMessage(parsed);
-            } else if (parsed.type === 'diagram') {
-              onMessage(parsed);
-            } else if (parsed.type === 'knowledge_points') {
-              onMessage(parsed);
-            } else if (parsed.type === 'done') {
-              onDone(parsed);
-            } else if (parsed.type === 'review') {
-              onMessage(parsed);
-            } else {
-              // Generic fallback
-              onMessage(parsed);
-            }
+            onMessage(parsed);
           } catch (e) {
             console.error('Failed to parse SSE line JSON:', dataStr, e);
           }

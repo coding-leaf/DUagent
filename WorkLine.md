@@ -965,3 +965,24 @@ AIChat 前端消息增加有序 `parts` 渲染模型，`text_delta` 与 `tool_st
 - Skill 测试：通过子 Agent (RED/GREEN 测试) 验证代码拦截率 100%
 
 **接口漂移：** 无
+
+### 2026-07-01 — 项目化 AgentScope 2.x Skill
+
+**涉及文件：**
+- `.agents/skills/agentscope-2x/SKILL.md`
+- `.agents/skills/agentscope-2x/references/agentscope-2x-guide.md`
+- `.agents/skills/agentscope-framework-audit/SKILL.md`
+- `.agents/skills/agentscope-v2-development/SKILL.md`
+- `.agents/skills/agentscope-v2-code-review/SKILL.md`
+- `WorkLine.md`
+
+**核心改动：**
+将全局 `agentscope-2x` 与 `agentscope-framework-audit` 的成熟规则项目化迁入 `.agents/skills/`，作为 EDUagent 的 AgentScope 2.x 架构开发主 skill 与深度框架真实性审计 skill。删除重复的项目旧 skill `agentscope-v2-development` 与 `agentscope-v2-code-review`，并在新 skill 中保留误报控制：普通 `json.loads`、常规文件读取、`reply_stream` 事件循环不再被误判为架构违规；具体 AgentScope API 名称必须按当前安装版本或官方文档核验后使用。
+
+**验证结果：**
+- Markdown/frontmatter 检查：通过 `sed` 人工复核与 `git diff --check`
+- 前端 lint / build：未运行（未改前端）
+- 后端 py_compile / pytest：未运行（未改后端）
+- Agent pytest：未运行（仅更新 skill 文档）
+
+**接口漂移：** 无

@@ -20,11 +20,13 @@ export default function DeveloperConsoleFloatingPanel() {
   const filteredLogs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return runLogs.filter(log => {
+      const payload = log.payload || {};
+      const attributes = payload.attributes || {};
       const matchesFilter =
         filter === 'all'
         || (filter === 'error' && (log.level === 'error' || log.type === 'workflow_failed'))
-        || (filter === 'tool' && (log.type?.includes('tool') || log.message?.includes('tool') || log.payload?.tool_name))
-        || (filter === 'model' && (log.message?.includes('model') || log.payload?.model));
+        || (filter === 'tool' && (payload.span_kind === 'tool' || log.type?.includes('tool') || log.message?.includes('tool') || attributes.tool_name || payload.tool_name))
+        || (filter === 'model' && (payload.span_kind === 'model' || log.message?.includes('model') || attributes.model || payload.model));
       if (!matchesFilter) return false;
       if (!normalizedQuery) return true;
       return JSON.stringify(log).toLowerCase().includes(normalizedQuery);
@@ -85,7 +87,14 @@ export default function DeveloperConsoleFloatingPanel() {
               <div className="h-full flex items-center justify-center text-slate-500">
                 暂无日志
               </div>
-            ) : filteredLogs.map(log => (
+            ) : filteredLogs.map(log => {
+              const payload = log.payload || {};
+              const attributes = payload.attributes || {};
+              const displayName = payload.name || log.message;
+              const spanLabel = payload.span_kind && payload.phase
+                ? `${payload.span_kind}/${payload.phase}`
+                : log.type;
+              return (
               <article key={log.id} className="rounded-lg border border-slate-800 bg-slate-900/70 p-2">
                 <button
                   type="button"
@@ -94,17 +103,19 @@ export default function DeveloperConsoleFloatingPanel() {
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`w-1.5 h-1.5 rounded-full ${log.level === 'error' ? 'bg-red-400' : 'bg-cyan-300'}`} />
-                    <span className="font-mono text-slate-100 truncate">{log.message}</span>
+                    <span className="font-mono text-slate-100 truncate">{displayName}</span>
                   </div>
-                  <span className="font-mono text-[10px] text-slate-500">{log.type}</span>
+                  <span className="font-mono text-[10px] text-slate-500">{spanLabel}</span>
                 </button>
                 <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-slate-400 font-mono">
                   <span className="truncate">run: {log.runId || '-'}</span>
                   <span className="truncate">source: {log.source || '-'}</span>
-                  {log.payload?.tool_name && <span className="truncate">tool: {log.payload.tool_name}</span>}
-                  {log.payload?.event && <span className="truncate">event: {log.payload.event}</span>}
-                  {log.payload?.duration_ms && <span className="truncate">ms: {log.payload.duration_ms}</span>}
-                  {log.payload?.state && <span className="truncate">state: {log.payload.state}</span>}
+                  {payload.span_id && <span className="truncate">span: {payload.span_id}</span>}
+                  {attributes.tool_name && <span className="truncate">tool: {attributes.tool_name}</span>}
+                  {attributes.model && <span className="truncate">model: {attributes.model}</span>}
+                  {payload.event && <span className="truncate">event: {payload.event}</span>}
+                  {payload.duration_ms && <span className="truncate">ms: {payload.duration_ms}</span>}
+                  {attributes.tool_state && <span className="truncate">state: {attributes.tool_state}</span>}
                 </div>
                 {expandedLogId === log.id && (
                   <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-950 border border-slate-800 p-2 text-[10px] text-slate-300 whitespace-pre-wrap break-words">
@@ -112,7 +123,8 @@ export default function DeveloperConsoleFloatingPanel() {
                   </pre>
                 )}
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

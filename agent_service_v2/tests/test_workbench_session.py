@@ -171,8 +171,10 @@ def test_workbench_session_closes_run_when_tool_confirmation_is_required(tmp_pat
         EduEventType.WORKFLOW_FAILED,
     ]
     assert events[0].payload["event"] == "permission.required"
-    assert events[0].payload["tool_calls"] == [
-        {"id": "tool-1", "name": "unsafe_tool", "input_preview": "{}"}
+    assert events[0].payload["span_kind"] == "permission"
+    assert events[0].payload["phase"] == "event"
+    assert events[0].payload["attributes"]["tool_calls"] == [
+        {"id": "tool-1", "name": "unsafe_tool", "tool_input_preview": "{}"}
     ]
     assert events[1].payload == {"reason": "user_confirmation_required"}
 
@@ -214,6 +216,10 @@ def test_workbench_session_publishes_debug_logs_for_model_events(tmp_path: Path)
         "agentscope.model.start",
         "agentscope.model.end",
     ]
-    assert debug_payloads[0]["model"] == "deepseek-chat"
-    assert debug_payloads[1]["input_tokens"] == 42
-    assert debug_payloads[1]["output_tokens"] == 12
+    assert debug_payloads[0]["trace_id"] == run.run_id
+    assert debug_payloads[0]["span_kind"] == "model"
+    assert debug_payloads[0]["phase"] == "start"
+    assert debug_payloads[1]["span_id"] == debug_payloads[0]["span_id"]
+    assert debug_payloads[0]["attributes"]["model"] == "deepseek-chat"
+    assert debug_payloads[1]["attributes"]["input_tokens"] == 42
+    assert debug_payloads[1]["attributes"]["output_tokens"] == 12

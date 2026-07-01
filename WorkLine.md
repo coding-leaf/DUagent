@@ -817,3 +817,34 @@ EDU v2 SSE 事件类型新增 `debug_log`，payload 为开发期观测日志。B
 - 文档差异检查：`git diff --check -- docs/90-review/2026-07-01-agent-logging-research.md WorkLine.md` 通过
 
 **接口漂移：** 无。仅新增调研文档。
+
+### 2026-07-01 — 将 AIChat debug_log 升级为 trace/span 结构
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/observability/logging.py`
+- `agent_service_v2/src/agent_service_v2/observability/agent_log_emitter.py`
+- `agent_service_v2/src/agent_service_v2/observability/agent_middleware.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/tests/test_agent_logging_middleware.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `frontend/src/components/dev/DeveloperConsoleFloatingPanel.jsx`
+- `frontend/src/components/dev/DeveloperConsoleFloatingPanel.test.jsx`
+- `frontend/src/hooks/useRunLogs.js`
+- `frontend/src/hooks/__tests__/useRunLogs.test.js`
+- `WorkLine.md`
+
+**核心改动：**
+参考日志可观测性调研报告，将 `debug_log` payload 从平铺字段升级为 trace/span/event 结构。新增 `trace_id/span_id/parent_span_id/span_kind/name/phase/attributes/error`，并将工具输入输出、模型 token、权限确认工具参数统一放入 `attributes`。Agent middleware 的 reply/reasoning/model/tool start/end/error 现在使用成对 span id；Dev Console 优先显示 span kind/phase/name，并从 attributes 读取工具、模型和状态字段。抽出 `AgentLogEmitter`，避免 middleware 文件继续膨胀。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_agent_logging_middleware.py -q` 先失败于缺少 `trace_id/span_kind/phase`
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_session.py -q` 先失败于权限和模型 debug log 缺少 span 结构
+- RED：`cd frontend && npm run test:unit -- src/components/dev/DeveloperConsoleFloatingPanel.test.jsx` 先失败于 Dev Console 仍显示旧 message
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（28 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/observability/logging.py src/agent_service_v2/observability/agent_log_emitter.py src/agent_service_v2/observability/agent_middleware.py src/agent_service_v2/session/workbench_session.py` 通过
+- Frontend tests：`cd frontend && npm run test:unit -- src/components/dev/DeveloperConsoleFloatingPanel.test.jsx src/hooks/__tests__/useRunLogs.test.js src/context/ChatContext.test.jsx`（3 files passed，7 tests passed）
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+
+**接口漂移：**
+`debug_log` 开发观测 payload 结构化升级。业务事件契约不变。

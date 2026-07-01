@@ -7,12 +7,15 @@ from typing import Any
 
 from agentscope.middleware import MiddlewareBase
 
+from agent_service_v2.observability.agent_log_emitter import (
+    AgentLogEmitter,
+    elapsed_ms,
+    tool_call_attributes,
+    tool_result_attributes,
+)
 from agent_service_v2.observability.logging import (
     LogSink,
-    build_log_record,
-    enum_value,
-    input_preview,
-    output_preview,
+    new_span_id,
 )
 
 
@@ -30,7 +33,15 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         self.conversation_id = conversation_id
         self.user_id = user_id
         self.course_id = course_id
-        self._sink = sink
+        self.trace_id = run_id
+        self.agent_span_id = f"span_{run_id}_agent_reply"
+        self._log = AgentLogEmitter(
+            run_id=run_id,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            course_id=course_id,
+            sink=sink,
+        )
 
     async def on_reply(
         self,
@@ -39,24 +50,40 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         next_handler: Callable[..., AsyncGenerator],
     ) -> AsyncGenerator:
         started_at = perf_counter()
-        self._emit("reply.start", agent=agent)
+        self._log.emit(
+            "reply.start",
+            agent=agent,
+            span_id=self.agent_span_id,
+            span_kind="agent",
+            name=f"agent.reply {getattr(agent, 'name', 'unknown')}",
+            phase="start",
+        )
         try:
             async for item in next_handler(**input_kwargs):
                 yield item
         except Exception as exc:
-            self._emit(
+            self._log.emit(
                 "reply.error",
                 agent=agent,
                 level="error",
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
                 error=exc.__class__.__name__,
+                error_message=str(exc),
+                span_id=self.agent_span_id,
+                span_kind="agent",
+                name=f"agent.reply {getattr(agent, 'name', 'unknown')}",
+                phase="error",
             )
             raise
         else:
-            self._emit(
+            self._log.emit(
                 "reply.end",
                 agent=agent,
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
+                span_id=self.agent_span_id,
+                span_kind="agent",
+                name=f"agent.reply {getattr(agent, 'name', 'unknown')}",
+                phase="end",
             )
 
     async def on_reasoning(
@@ -66,24 +93,44 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         next_handler: Callable[..., AsyncGenerator],
     ) -> AsyncGenerator:
         started_at = perf_counter()
-        self._emit("reasoning.start", agent=agent)
+        span_id = new_span_id(self.run_id, "reasoning")
+        self._log.emit(
+            "reasoning.start",
+            agent=agent,
+            span_id=span_id,
+            parent_span_id=self.agent_span_id,
+            span_kind="reasoning",
+            name="agent.reasoning",
+            phase="start",
+        )
         try:
             async for event in next_handler(**input_kwargs):
                 yield event
         except Exception as exc:
-            self._emit(
+            self._log.emit(
                 "reasoning.error",
                 agent=agent,
                 level="error",
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
                 error=exc.__class__.__name__,
+                error_message=str(exc),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="reasoning",
+                name="agent.reasoning",
+                phase="error",
             )
             raise
         else:
-            self._emit(
+            self._log.emit(
                 "reasoning.end",
                 agent=agent,
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="reasoning",
+                name="agent.reasoning",
+                phase="end",
             )
 
     async def on_model_call(
@@ -94,28 +141,53 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
     ) -> Any:
         started_at = perf_counter()
         current_model = input_kwargs.get("current_model")
-        self._emit(
+        model_name = getattr(current_model, "model_name", None) or getattr(current_model, "model", None)
+        span_id = new_span_id(self.run_id, "model_call")
+        self._log.emit(
             "model_call.start",
             agent=agent,
-            extra={"model": getattr(current_model, "model_name", None) or getattr(current_model, "model", None)},
+            span_id=span_id,
+            parent_span_id=self.agent_span_id,
+            span_kind="model",
+            name=f"model.call {model_name or 'unknown'}",
+            phase="start",
+            attributes={"model": model_name},
         )
         try:
             result = await next_handler(**input_kwargs)
         except Exception as exc:
-            self._emit(
+            self._log.emit(
                 "model_call.error",
                 agent=agent,
                 level="error",
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
                 error=exc.__class__.__name__,
+                error_message=str(exc),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="model",
+                name=f"model.call {model_name or 'unknown'}",
+                phase="error",
             )
             raise
         if isasyncgen(result):
-            return self._wrap_model_stream(result, agent, started_at)
-        self._emit(
+            return self._wrap_model_stream(
+                result,
+                agent,
+                started_at,
+                span_id=span_id,
+                model_name=model_name,
+            )
+        self._log.emit(
             "model_call.end",
             agent=agent,
-            duration_ms=_elapsed_ms(started_at),
+            duration_ms=elapsed_ms(started_at),
+            span_id=span_id,
+            parent_span_id=self.agent_span_id,
+            span_kind="model",
+            name=f"model.call {model_name or 'unknown'}",
+            phase="end",
+            attributes={"model": model_name},
         )
         return result
 
@@ -124,24 +196,39 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         stream: AsyncGenerator[Any],
         agent,
         started_at: float,
+        *,
+        span_id: str,
+        model_name: str | None,
     ) -> AsyncGenerator[Any]:
         try:
             async for item in stream:
                 yield item
         except Exception as exc:
-            self._emit(
+            self._log.emit(
                 "model_call.error",
                 agent=agent,
                 level="error",
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
                 error=exc.__class__.__name__,
+                error_message=str(exc),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="model",
+                name=f"model.call {model_name or 'unknown'}",
+                phase="error",
             )
             raise
         else:
-            self._emit(
+            self._log.emit(
                 "model_call.end",
                 agent=agent,
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="model",
+                name=f"model.call {model_name or 'unknown'}",
+                phase="end",
+                attributes={"model": model_name},
             )
 
     async def on_acting(
@@ -152,81 +239,56 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
     ) -> AsyncGenerator:
         started_at = perf_counter()
         tool_call = input_kwargs.get("tool_call")
-        tool_extra = _tool_call_extra(tool_call)
-        self._emit("tool.call.start", agent=agent, extra=tool_extra)
+        tool_extra = tool_call_attributes(tool_call)
+        tool_name = tool_extra.get("tool_name") or "unknown"
+        tool_call_id = tool_extra.get("tool_call_id") or new_span_id(self.run_id, "tool_call")
+        span_id = f"span_{self.run_id}_tool_{tool_call_id}"
+        self._log.emit(
+            "tool.call.start",
+            agent=agent,
+            span_id=span_id,
+            parent_span_id=self.agent_span_id,
+            span_kind="tool",
+            name=f"execute_tool {tool_name}",
+            phase="start",
+            attributes=tool_extra,
+        )
         last_item = None
         try:
             async for event in next_handler(**input_kwargs):
                 last_item = event
                 yield event
         except Exception as exc:
-            self._emit(
+            self._log.emit(
                 "tool.call.error",
                 agent=agent,
                 level="error",
-                duration_ms=_elapsed_ms(started_at),
+                duration_ms=elapsed_ms(started_at),
                 error=exc.__class__.__name__,
-                extra={
+                error_message=str(exc),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="tool",
+                name=f"execute_tool {tool_name}",
+                phase="error",
+                attributes={
                     **tool_extra,
                     "error_message": str(exc),
                 },
             )
             raise
         else:
-            self._emit(
+            self._log.emit(
                 "tool.call.end",
                 agent=agent,
-                duration_ms=_elapsed_ms(started_at),
-                extra={
+                duration_ms=elapsed_ms(started_at),
+                span_id=span_id,
+                parent_span_id=self.agent_span_id,
+                span_kind="tool",
+                name=f"execute_tool {tool_name}",
+                phase="end",
+                attributes={
                     **tool_extra,
-                    **_tool_result_extra(last_item),
+                    **tool_result_attributes(last_item),
                 },
             )
-
-    def _emit(
-        self,
-        event: str,
-        *,
-        agent,
-        level: str = "info",
-        duration_ms: float | None = None,
-        error: str | None = None,
-        extra: dict[str, Any] | None = None,
-    ) -> None:
-        self._sink(
-            build_log_record(
-                event=event,
-                level=level,
-                run_id=self.run_id,
-                conversation_id=self.conversation_id,
-                user_id=self.user_id,
-                course_id=self.course_id,
-                agent=getattr(agent, "name", "unknown"),
-                duration_ms=duration_ms,
-                error=error,
-                extra=extra,
-            )
-        )
-
-
-def _elapsed_ms(started_at: float) -> float:
-    return (perf_counter() - started_at) * 1000
-
-
-def _tool_call_extra(tool_call: Any) -> dict[str, Any]:
-    if tool_call is None:
-        return {}
-    return {
-        "tool_call_id": getattr(tool_call, "id", None),
-        "tool_name": getattr(tool_call, "name", None),
-        "input_preview": input_preview(getattr(tool_call, "input", None)),
-    }
-
-
-def _tool_result_extra(result: Any) -> dict[str, Any]:
-    if result is None:
-        return {}
-    return {
-        "state": enum_value(getattr(result, "state", None)),
-        "output_preview": output_preview(result),
-    }

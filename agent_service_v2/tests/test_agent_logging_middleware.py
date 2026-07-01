@@ -41,6 +41,11 @@ def test_agent_run_logging_middleware_emits_reply_lifecycle_records():
     ]
     assert records[0]["run_id"] == "run-1"
     assert records[0]["conversation_id"] == "conv-1"
+    assert records[0]["trace_id"] == "run-1"
+    assert records[0]["span_kind"] == "agent"
+    assert records[0]["phase"] == "start"
+    assert records[1]["span_id"] == records[0]["span_id"]
+    assert records[1]["phase"] == "end"
 
 
 def test_agent_run_logging_middleware_closes_streaming_model_call_after_consumption():
@@ -70,6 +75,8 @@ def test_agent_run_logging_middleware_closes_streaming_model_call_after_consumpt
             next_handler,
         )
         assert [record["event"] for record in records] == ["model_call.start"]
+        assert records[0]["span_kind"] == "model"
+        assert records[0]["phase"] == "start"
         return [item async for item in stream]
 
     seen = asyncio.run(run_middleware())
@@ -79,6 +86,8 @@ def test_agent_run_logging_middleware_closes_streaming_model_call_after_consumpt
         "model_call.start",
         "model_call.end",
     ]
+    assert records[1]["span_id"] == records[0]["span_id"]
+    assert records[1]["phase"] == "end"
 
 
 def test_agent_run_logging_middleware_emits_tool_arguments_and_result_preview():
@@ -120,9 +129,14 @@ def test_agent_run_logging_middleware_emits_tool_arguments_and_result_preview():
         "tool.call.start",
         "tool.call.end",
     ]
-    assert records[0]["tool_name"] == "read_learning_state"
-    assert records[0]["tool_call_id"] == "tool-1"
-    assert "should-not-leak" not in records[0]["input_preview"]
-    assert records[0]["input_preview"] == '{"user_id":"u1","api_key":"<redacted>"}'
-    assert records[1]["state"] == "success"
-    assert records[1]["output_preview"] == "weak points: linked list, recursion"
+    assert records[0]["span_kind"] == "tool"
+    assert records[0]["name"] == "execute_tool read_learning_state"
+    assert records[0]["phase"] == "start"
+    assert records[1]["span_id"] == records[0]["span_id"]
+    assert records[1]["phase"] == "end"
+    assert records[0]["attributes"]["tool_name"] == "read_learning_state"
+    assert records[0]["attributes"]["tool_call_id"] == "tool-1"
+    assert "should-not-leak" not in records[0]["attributes"]["tool_input_preview"]
+    assert records[0]["attributes"]["tool_input_preview"] == '{"user_id":"u1","api_key":"<redacted>"}'
+    assert records[1]["attributes"]["tool_state"] == "success"
+    assert records[1]["attributes"]["tool_output_preview"] == "weak points: linked list, recursion"

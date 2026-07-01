@@ -12,11 +12,20 @@ vi.mock('../../context/ChatContext', () => ({
         message: 'tool completed',
         source: 'agent.middleware',
         runId: 'run-1',
+        traceId: 'run-1',
+        spanId: 'span-tool-1',
         payload: {
-          tool_name: 'read_learning_state',
           event: 'tool.call.end',
-          input_preview: '{"user_id":"u1"}',
-          output_preview: 'weak points: linked list'
+          span_kind: 'tool',
+          name: 'execute_tool read_learning_state',
+          phase: 'end',
+          span_id: 'span-tool-1',
+          attributes: {
+            tool_name: 'read_learning_state',
+            tool_input_preview: '{"user_id":"u1"}',
+            tool_output_preview: 'weak points: linked list',
+            tool_state: 'success'
+          }
         }
       },
       {
@@ -43,12 +52,13 @@ test('renders floating developer console with logs', () => {
   fireEvent.click(screen.getByRole('button', { name: /Dev/ }));
 
   expect(screen.getByText('Dev Console')).toBeInTheDocument();
-  expect(screen.getByText('tool completed')).toBeInTheDocument();
+  expect(screen.getByText('execute_tool read_learning_state')).toBeInTheDocument();
+  expect(screen.getByText('tool/end')).toBeInTheDocument();
   expect(screen.getByText('user_confirmation_required')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: '错误' }));
 
-  expect(screen.queryByText('tool completed')).not.toBeInTheDocument();
+  expect(screen.queryByText('execute_tool read_learning_state')).not.toBeInTheDocument();
   expect(screen.getByText('user_confirmation_required')).toBeInTheDocument();
 });
 
@@ -60,11 +70,11 @@ test('searches logs and expands payload details', () => {
     target: { value: 'linked list' }
   });
 
-  expect(screen.getByText('tool completed')).toBeInTheDocument();
+  expect(screen.getByText('execute_tool read_learning_state')).toBeInTheDocument();
   expect(screen.queryByText('user_confirmation_required')).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: /tool completed/ }));
+  fireEvent.click(screen.getByRole('button', { name: /execute_tool read_learning_state/ }));
 
-  expect(screen.getByText(/output_preview/)).toBeInTheDocument();
+  expect(screen.getByText(/tool_output_preview/)).toBeInTheDocument();
   expect(screen.getByText(/weak points: linked list/)).toBeInTheDocument();
 });

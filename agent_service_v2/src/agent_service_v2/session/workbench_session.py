@@ -10,6 +10,7 @@ from agent_service_v2.agents.workbench_factory import (
     WorkbenchAgentFactory,
 )
 from agent_service_v2.observability.logging import (
+    build_log_record,
     build_agentscope_event_log,
     input_preview,
 )
@@ -168,19 +169,31 @@ class WorkbenchSession:
                     self._run_bus.publish(
                         run.run_id,
                         EduEventType.DEBUG_LOG,
-                        {
-                            "event": "permission.required",
-                            "level": "error",
-                            "message": "Tool call requires user confirmation",
-                            "tool_calls": [
-                                {
-                                    "id": tool_call.id,
-                                    "name": tool_call.name,
-                                    "input_preview": input_preview(tool_call.input),
-                                }
-                                for tool_call in agent_event.tool_calls
-                            ],
-                        },
+                        build_log_record(
+                            event="permission.required",
+                            level="error",
+                            message="Tool call requires user confirmation",
+                            run_id=run.run_id,
+                            conversation_id=run.conversation_id,
+                            user_id=user_id,
+                            course_id=course_id,
+                            agent=run.agent,
+                            span_id=f"span_{run.run_id}_permission_{agent_event.reply_id}",
+                            span_kind="permission",
+                            name="permission.required",
+                            phase="event",
+                            attributes={
+                                "reply_id": agent_event.reply_id,
+                                "tool_calls": [
+                                    {
+                                        "id": tool_call.id,
+                                        "name": tool_call.name,
+                                        "tool_input_preview": input_preview(tool_call.input),
+                                    }
+                                    for tool_call in agent_event.tool_calls
+                                ],
+                            },
+                        ),
                     )
                     self._run_bus.fail(
                         run.run_id,

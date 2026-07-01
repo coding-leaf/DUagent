@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 from agentscope.event import ModelCallEndEvent, ModelCallStartEvent
 
@@ -25,26 +26,57 @@ def build_log_record(
     message: str | None = None,
     duration_ms: float | None = None,
     error: str | None = None,
+    error_message: str | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+    parent_span_id: str | None = None,
+    span_kind: str = "event",
+    name: str | None = None,
+    phase: str | None = None,
+    attributes: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    merged_attributes = dict(attributes or {})
+    if extra:
+        merged_attributes.update(extra)
+
     record = {
         "event": event,
         "level": level,
-        "message": message or event,
+        "message": message or name or event,
         "run_id": run_id,
         "conversation_id": conversation_id,
         "user_id": user_id,
         "course_id": course_id,
         "agent": agent,
+        "trace_id": trace_id or run_id,
+        "span_id": span_id or new_span_id(run_id, event),
+        "parent_span_id": parent_span_id,
+        "span_kind": span_kind,
+        "name": name or event,
+        "phase": phase or _phase_from_event(event),
         "timestamp": utc_now_iso(),
+        "attributes": merged_attributes,
     }
     if duration_ms is not None:
         record["duration_ms"] = round(duration_ms, 2)
+        record["attributes"]["duration_ms"] = record["duration_ms"]
     if error:
-        record["error"] = error
+        record["error"] = {
+            "type": error,
+            "message": error_message or error,
+        }
+        record["error_type"] = error
+        record["attributes"]["error_type"] = error
+        record["attributes"]["error_message"] = error_message or error
     if extra:
         record.update(extra)
     return record
+
+
+def new_span_id(run_id: str, name: str) -> str:
+    safe_name = name.replace(" ", "_").replace(".", "_").replace(":", "_")
+    return f"span_{run_id}_{safe_name}_{uuid4().hex[:8]}"
 
 
 def input_preview(value: Any) -> str:
@@ -69,6 +101,7 @@ def build_agentscope_event_log(
     agent: str,
 ) -> dict[str, Any] | None:
     if isinstance(event, ModelCallStartEvent):
+        span_id = f"span_{run_id}_agentscope_model_{event.reply_id}"
         return build_log_record(
             event="agentscope.model.start",
             message=f"model start: {event.model_name}",
@@ -77,7 +110,11 @@ def build_agentscope_event_log(
             user_id=user_id,
             course_id=course_id,
             agent=agent,
-            extra={
+            span_id=span_id,
+            span_kind="model",
+            name=f"model.call {event.model_name}",
+            phase="start",
+            attributes={
                 "source": "agentscope.event",
                 "reply_id": event.reply_id,
                 "event_class": event.__class__.__name__,
@@ -85,6 +122,7 @@ def build_agentscope_event_log(
             },
         )
     if isinstance(event, ModelCallEndEvent):
+        span_id = f"span_{run_id}_agentscope_model_{event.reply_id}"
         return build_log_record(
             event="agentscope.model.end",
             message=f"model end: {event.input_tokens}/{event.output_tokens} tokens",
@@ -93,7 +131,11 @@ def build_agentscope_event_log(
             user_id=user_id,
             course_id=course_id,
             agent=agent,
-            extra={
+            span_id=span_id,
+            span_kind="model",
+            name="model.call",
+            phase="end",
+            attributes={
                 "source": "agentscope.event",
                 "reply_id": event.reply_id,
                 "event_class": event.__class__.__name__,
@@ -152,3 +194,10 @@ def _truncate(value: str) -> str:
     if len(value) <= MAX_PREVIEW_CHARS:
         return value
     return f"{value[:MAX_PREVIEW_CHARS]}...[truncated]"
+
+
+def _phase_from_event(event: str) -> str:
+    suffix = event.rsplit(".", maxsplit=1)[-1]
+    if suffix in {"start", "end", "error"}:
+        return suffix
+    return "event"

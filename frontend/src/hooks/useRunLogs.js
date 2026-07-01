@@ -12,6 +12,11 @@ const normalizeRunLog = (event) => {
     source: payload.source || event.agent || 'sse',
     runId: event.run_id || null,
     conversationId: event.conversation_id || null,
+    traceId: payload.trace_id || event.run_id || null,
+    spanId: payload.span_id || null,
+    parentSpanId: payload.parent_span_id || null,
+    spanKind: payload.span_kind || null,
+    phase: payload.phase || null,
     timestamp: event.timestamp || new Date().toISOString(),
     payload
   };

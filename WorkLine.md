@@ -803,3 +803,17 @@ EDU v2 SSE 事件类型新增 `debug_log`，payload 为开发期观测日志。B
 
 **接口漂移：**
 `debug_log` payload 扩展了开发调试字段，包括工具输入/输出预览、模型 token 和 AgentScope event metadata。业务事件契约不变。
+
+### 2026-07-01 — Agent 日志与可观测性网络调研
+
+**涉及文件：**
+- `docs/90-review/2026-07-01-agent-logging-research.md`
+- `WorkLine.md`
+
+**核心改动：**
+基于 AgentScope 2.0.3 官方 middleware/tracing 文档、OpenTelemetry GenAI semantic conventions、OpenAI Agents SDK tracing、LangSmith observability 文档，形成 AIChat/Agent 工具调用日志调研报告。报告建议将当前 `debug_log` 从平铺事件升级为 trace/span/event 结构，并明确 Backend proxy span、AgentScope model/tool span、Dev Console timeline 的落地顺序。
+
+**验证结果：**
+- 文档差异检查：`git diff --check -- docs/90-review/2026-07-01-agent-logging-research.md WorkLine.md` 通过
+
+**接口漂移：** 无。仅新增调研文档。

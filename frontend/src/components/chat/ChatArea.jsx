@@ -56,10 +56,10 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   };
 
   return (
-    <main className="w-full lg:w-[420px] 2xl:w-[460px] flex flex-col relative bg-slate-50 border-l border-slate-200 flex-shrink-0">
+    <main className="w-full lg:w-[480px] 2xl:w-[540px] flex flex-col relative bg-slate-50 border-l border-slate-200 flex-shrink-0">
       
       {/* Top Context Bar */}
-      <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10 flex-shrink-0">
+      <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-5 lg:px-7 z-10 flex-shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <button 
             onClick={onOpenLeftDrawer}
@@ -79,8 +79,8 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 lg:px-6 py-6">
-        <div className="max-w-[760px] mx-auto space-y-8 pb-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 lg:px-7 py-7">
+        <div className="max-w-[820px] mx-auto space-y-9 pb-5">
           
           {messages.length === 0 ? (
             <ChatEmptyState onCardClick={handleSendMessage} courseName={activeCourseName} />
@@ -150,8 +150,8 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
       </div>
 
       {/* Input Composer */}
-      <div className="p-4 lg:px-6 pb-5 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex-shrink-0">
-        <div className="max-w-[760px] mx-auto">
+      <div className="p-4 lg:px-7 pb-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent flex-shrink-0">
+        <div className="max-w-[820px] mx-auto">
           <div className="mb-3 flex flex-wrap gap-2">
             <button
               type="button"

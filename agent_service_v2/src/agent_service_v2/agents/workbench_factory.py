@@ -64,7 +64,7 @@ class WorkbenchAgentFactory:
             state=AgentState(permission_context=build_workbench_permission_context()),
             offloader=workspace,
             context_config=ContextConfig(tool_result_limit=20000),
-            react_config=ReActConfig(max_iters=8),
+            react_config=ReActConfig(max_iters=12),
         )
 
 

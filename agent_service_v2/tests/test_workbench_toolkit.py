@@ -22,6 +22,14 @@ def test_planning_group_contains_agentscope_plan_tools():
     }
 
 
+def test_planning_group_is_optional_for_simple_replies():
+    group = build_planning_group()
+
+    assert "complex" in group.instructions.lower()
+    assert "simple" in group.instructions.lower()
+    assert "before giving final learning advice" not in group.instructions
+
+
 def test_workbench_tool_groups_include_expected_boundaries():
     groups = build_workbench_tool_groups(memory_tools=[], rag_tools=[])
 

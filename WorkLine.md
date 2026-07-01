@@ -1028,3 +1028,32 @@ AIChat AgentScope v2 运行时新增 `WorkbenchInputBuilder`，将 Backend 传�
 
 **接口漂移：**
 新增 Agent v2 / Backend 透传给前端的 EDU SSE 事件 `content_safety_reviewed`。事件 payload 包含 `passed/risk_level/categories/reason/action/confidence/scope/knowledge_reviewed/reviewer`，其中 `scope=content_safety_only`、`knowledge_reviewed=false`，用于说明外审仅做内容安全分级，不做知识点正确性或幻觉审核。
+
+### 2026-07-01 — 修复 AIChat 工具轨迹失败终态与显示拥挤
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/tools/planning.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_toolkit.py`
+- `frontend/src/components/chat/ToolCallCard.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatMessage.test.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+修复 AgentScope `ExceedMaxItersEvent` 后仍继续映射 `ReplyEndEvent` 为 `workflow_completed` 并触发内容安全审核的问题；失败终态后 run 只写 `failed`，不再补发完成或外审事件。将 AIChat Agent `max_iters` 从 8 提高到 12，并把 planning 工具组说明改为仅复杂多步任务使用，避免简单整理/讲解请求被强制 TaskCreate/TaskUpdate 消耗步数。前端工具轨迹卡新增常见工具中文标题映射，避免 `TaskCreate TaskCreate` 这类重复显示；AIChat 右侧栏从 420/460px 调整到 480/540px，并增加消息区与输入区间距，缓解聊天区域拥挤。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/python -m pytest tests/test_workbench_session.py::test_workbench_session_does_not_complete_or_review_after_max_iters tests/test_workbench_factory.py::test_factory_allows_long_enough_workbench_tool_runs tests/test_workbench_toolkit.py::test_planning_group_is_optional_for_simple_replies -q` 先失败于 max_iters=8、planning 强制说明、失败后双终态。
+- RED：`cd frontend && npm run test:unit -- src/components/chat/ChatMessage.test.jsx` 先失败于 `TaskCreate` 未映射中文标题且重复展示。
+- Agent targeted：`cd agent_service_v2 && ./.venv/bin/python -m pytest tests/test_workbench_session.py tests/test_workbench_factory.py tests/test_workbench_toolkit.py tests/test_protocol_adapter.py -q`（23 passed）
+- Agent full：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（41 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/session/workbench_session.py src/agent_service_v2/agents/workbench_factory.py src/agent_service_v2/tools/planning.py`（通过）
+- Frontend targeted：`cd frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/chat/ChatMessage.test.jsx src/context/ChatContext.test.jsx`（3 files passed，11 tests passed）
+- Frontend lint：`cd frontend && npm run lint`（通过）
+- Frontend build：`cd frontend && npm run build`（通过；仍有既有 Vite chunk-size warning）
+
+**接口漂移：** 无。仅调整 Agent 终态处理、tool 策略提示和前端显示。

@@ -3,7 +3,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
-from agentscope.event import ReplyEndEvent, RequireUserConfirmEvent, TextBlockDeltaEvent
+from agentscope.event import (
+    ExceedMaxItersEvent,
+    ReplyEndEvent,
+    RequireUserConfirmEvent,
+    TextBlockDeltaEvent,
+)
 
 from agent_service_v2.agents.workbench_factory import (
     MissingModelConfigError,
@@ -170,6 +175,7 @@ class WorkbenchSession:
             context=context,
         )
         assistant_chunks: list[str] = []
+        failed = False
         try:
             async for agent_event in agent.reply_stream(agent_inputs):
                 if isinstance(agent_event, TextBlockDeltaEvent):
@@ -226,16 +232,28 @@ class WorkbenchSession:
                     )
                     run_store.append_event(run.run_id, failed_event.to_dict())
                     return
+                if failed and isinstance(agent_event, ReplyEndEvent):
+                    continue
                 for edu_event in adapter.adapt_many(agent_event):
                     published_event = self._run_bus.publish_event(edu_event)
                     run_store.append_event(run.run_id, published_event.to_dict())
-                if isinstance(agent_event, ReplyEndEvent):
+                    if published_event.type == EduEventType.WORKFLOW_FAILED:
+                        failed = True
+                if isinstance(agent_event, ExceedMaxItersEvent):
+                    run_store.write_state(
+                        run.run_id,
+                        {"status": "failed", "conversation_id": run.conversation_id},
+                    )
+                if isinstance(agent_event, ReplyEndEvent) and not failed:
                     await self._publish_content_safety_review(
                         run=run,
                         run_store=run_store,
                         content="".join(assistant_chunks),
                     )
-            run_store.write_state(run.run_id, {"status": "completed", "conversation_id": run.conversation_id})
+            if failed:
+                run_store.write_state(run.run_id, {"status": "failed", "conversation_id": run.conversation_id})
+            else:
+                run_store.write_state(run.run_id, {"status": "completed", "conversation_id": run.conversation_id})
             self._run_bus.complete(run.run_id)
         except asyncio.CancelledError:
             failed_event = self._run_bus.fail(run.run_id, reason="cancelled")

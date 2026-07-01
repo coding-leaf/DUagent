@@ -24,12 +24,26 @@ const STATUS_META = {
   }
 };
 
+const TOOL_TITLE_MAP = {
+  reset_tools: '整理工具状态',
+  TaskCreate: '创建计划任务',
+  TaskUpdate: '更新计划任务',
+  TaskList: '查看计划任务',
+  TaskGet: '读取计划任务',
+  draft_study_artifact: '生成学习资料',
+  read_learning_state: '读取学习状态',
+  review_grounding: '检查回答依据'
+};
+
 export default function ToolCallCard({ name, title, status, description, inputSummary, outputSummary }) {
   const isRunning = status === 'running';
   const meta = STATUS_META[status] || STATUS_META.running;
+  const mappedTitle = TOOL_TITLE_MAP[name];
+  const displayTitle = title || mappedTitle || name || '工具调用';
+  const shouldShowRawName = name && !mappedTitle && name !== displayTitle;
 
   return (
-    <div className={`mb-3 rounded-xl border p-2.5 text-[11px] shadow-sm ${meta.shell}`}>
+    <div className={`rounded-lg border p-3 text-[11px] shadow-sm ${meta.shell}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -38,9 +52,9 @@ export default function ToolCallCard({ name, title, status, description, inputSu
             ) : (
               <Icon name={meta.icon} className="text-[15px] flex-shrink-0" />
             )}
-            <span className="font-semibold text-slate-800 truncate text-[12px]">{title || name || '工具调用'}</span>
+            <span className="font-semibold text-slate-800 truncate text-[12px]">{displayTitle}</span>
           </div>
-          {name && (
+          {shouldShowRawName && (
             <div className="mt-1 font-mono text-[9px] text-slate-500 truncate">{name}</div>
           )}
         </div>

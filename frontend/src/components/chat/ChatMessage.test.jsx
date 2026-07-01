@@ -68,4 +68,32 @@ describe('ChatMessage', () => {
     expect(screen.queryByText('不应展示的原文')).toBeNull();
     expect(screen.getByText('明确违法指导')).toBeDefined();
   });
+
+  it('renders a tool call without duplicating the raw tool name', () => {
+    render(
+      <ChatMessage
+        message={{
+          id: 'ai-1',
+          role: 'assistant',
+          content: '',
+          loading: true,
+          parts: [
+            {
+              type: 'tool',
+              toolCall: {
+                id: 'tool-1',
+                name: 'TaskCreate',
+                status: 'completed'
+              }
+            }
+          ]
+        }}
+        onSendMessage={vi.fn()}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('创建计划任务')).toBeDefined();
+    expect(screen.queryByText('TaskCreate')).toBeNull();
+  });
 });

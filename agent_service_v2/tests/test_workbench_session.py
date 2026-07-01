@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 from agentscope.event import (
+    ExceedMaxItersEvent,
     ModelCallEndEvent,
     ModelCallStartEvent,
     ReplyEndEvent,
@@ -355,3 +356,39 @@ def test_workbench_session_emits_content_safety_review_after_reply(tmp_path: Pat
         "knowledge_reviewed": False,
         "reviewer": "skipped",
     }
+
+
+def test_workbench_session_does_not_complete_or_review_after_max_iters(tmp_path: Path):
+    class MaxIterAgent:
+        async def reply_stream(self, _inputs):
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="处理中")
+            yield ExceedMaxItersEvent(reply_id="reply1", name="workbench")
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return MaxIterAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="生成学习资料",
+        context={},
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+
+    assert [event.type for event in events] == [
+        EduEventType.WORKFLOW_STARTED,
+        EduEventType.TEXT_DELTA,
+        EduEventType.WORKFLOW_FAILED,
+    ]
+    assert events[-1].payload == {"reply_id": "reply1", "reason": "exceed_max_iters"}

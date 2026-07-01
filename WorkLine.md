@@ -618,3 +618,19 @@
 **接口漂移：**
 - Backend 到 Agent Service 的内部 HTTP 路径从 `/agent/v1/tutoring/chat` 改为 `/agent/v2/workbench/chat`。
 - Backend 对前端的 tutoring SSE 输出保持兼容，仍输出 `chunk` / `done` 等旧 Client API 事件。
+
+### 2026-07-01 — 存档 AIChat v2 三端当前状态文档
+
+**涉及文件：**
+- `docs/90-review/2026-07-01-ai-chat-v2-current-state.md`
+- `WorkLine.md`
+
+**核心改动：**
+新增 AIChat v2 当前状态存档文档，按 Frontend、Backend、Agent Service v2 三端说明当前实现样式、边界、事件协议、已完成能力和缺口。文档包含 Mermaid 总体架构图、请求时序图、前端页面结构图、Backend 事件转换图、Agent v2 内部结构图。明确当前已完成主聊天文本流接入，但工作台 artifact、工具事件、RAG source refs、Memory/RAG 中间件尚未完整接入。
+
+**验证结果：**
+- 前端 lint / build：未运行（仅文档变更）
+- 后端 py_compile / pytest：未运行（仅文档变更）
+- Agent pytest：未运行（仅文档变更）
+
+**接口漂移：** 无。仅新增状态文档。

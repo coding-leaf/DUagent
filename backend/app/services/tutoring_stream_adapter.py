@@ -77,78 +77,23 @@ class TutoringStreamAdapter:
             return data_str
 
         event_type = parsed.get("type", "")
-        if event_type == "chunk":
-            state.chunks.append(parsed.get("content", ""))
-        elif event_type == "diagram":
-            state.diagrams.append(parsed.get("data", parsed))
-        elif event_type == "knowledge_points":
-            candidate = (
-                parsed.get("points")
-                or parsed.get("knowledge_points")
-                or parsed.get("data")
-            )
-            if isinstance(candidate, list):
-                state.knowledge_points = candidate
-        elif event_type == "done":
-            state.done_sent = True
-            knowledge_points_used = parsed.get("knowledge_points_used")
-            if (
-                not state.knowledge_points
-                and isinstance(knowledge_points_used, list)
-            ):
-                state.knowledge_points = knowledge_points_used
-            parsed["conversation_id"] = state.conversation_id
-            parsed["message_id"] = state.assistant_message_id
-            return json.dumps(parsed, ensure_ascii=False)
-        elif event_type == "text_delta":
-            payload = (
-                parsed.get("payload")
-                if isinstance(parsed.get("payload"), dict)
-                else {}
-            )
+        payload = (
+            parsed.get("payload")
+            if isinstance(parsed.get("payload"), dict)
+            else {}
+        )
+
+        if event_type == "text_delta":
             content = payload.get("delta", "")
             state.chunks.append(content)
-            return json.dumps(
-                {"type": "chunk", "content": content},
-                ensure_ascii=False,
-            )
         elif event_type == "workflow_completed":
             state.done_sent = True
-            return json.dumps(
-                {
-                    "type": "done",
-                    "conversation_id": state.conversation_id,
-                    "message_id": state.assistant_message_id,
-                },
-                ensure_ascii=False,
-            )
         elif event_type == "workflow_failed":
             state.done_sent = True
-            payload = (
-                parsed.get("payload")
-                if isinstance(parsed.get("payload"), dict)
-                else {}
-            )
-            return json.dumps(
-                {
-                    "type": "done",
-                    "conversation_id": state.conversation_id,
-                    "message_id": state.assistant_message_id,
-                    "error": payload.get("reason", "agent_failed"),
-                },
-                ensure_ascii=False,
-            )
-        elif event_type in {
-            "workflow_started",
-            "tool_started",
-            "tool_completed",
-            "tool_failed",
-            "source_refs",
-            "artifact_created",
-            "critic_completed",
-        }:
-            return None
-        return data_str
+
+        parsed["conversation_id"] = state.conversation_id
+        parsed["message_id"] = state.assistant_message_id
+        return json.dumps(parsed, ensure_ascii=False)
 
     @classmethod
     def _adapt_line(cls, line: str, state: StreamState) -> dict | None:
@@ -211,13 +156,20 @@ class TutoringStreamAdapter:
         except AgentServiceError:
             if not state.done_sent:
                 yield {
-                    "event": "done",
+                    "event": "message",
                     "data": json.dumps(
                         {
-                            "type": "done",
+                            "type": "workflow_failed",
+                            "run_id": None,
                             "conversation_id": conversation_id,
                             "message_id": assistant_message_id,
-                            "error": "Agent 服务暂时不可用",
+                            "seq": None,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "agent": "backend_proxy",
+                            "payload": {
+                                "reason": "agent_service_unavailable",
+                                "message": "Agent 服务暂时不可用",
+                            },
                         },
                         ensure_ascii=False,
                     ),

@@ -948,3 +948,20 @@ AIChat 前端消息增加有序 `parts` 渲染模型，`text_delta` 与 `tool_st
 
 **接口漂移：**
 新增 Backend 透传给前端的 EDU v2 SSE 事件 `plan_updated`。事件 payload 为 `tasks[]`，每项包含 `id/title/description/status`，用于前端渲染 AI 计划任务列表。
+
+### 2026-07-01 — 建立 AgentScope v2 开发与审查 Skill
+
+**涉及文件：**
+- `.agents/skills/agentscope-v2-development/SKILL.md`
+- `.agents/skills/agentscope-v2-code-review/SKILL.md`
+- `docs/agentscope_v2_understanding.md`
+
+**核心改动：**
+使用 TDD 流程（RED-GREEN-REFACTOR）建立并验证了针对 AgentScope v2 的开发与审查规范。开发规范封杀了正则提取 JSON 与直接本地文件操作，强制使用 `msg.append_event()` 和 `LocalWorkspaceManager`。审查规范将不合规的绕过框架行为设为红线，强制要求重构。
+
+**验证结果：**
+- 前端 / 后端：未运行（Agent 辅助能力建设）
+- Agent pytest：未运行（Skill 建设）
+- Skill 测试：通过子 Agent (RED/GREEN 测试) 验证代码拦截率 100%
+
+**接口漂移：** 无

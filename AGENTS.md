@@ -139,7 +139,7 @@ cd agent_service && ./.venv/bin/pytest
 
 ## Git 规范
 
-- 当前分支：`refactor/v3-architecture`
+- 当前分支：ai-dev/agentscope-v2
 - 不在 `main` / `dev` 直接提交
 - 不运行 `git push --force` / `git reset --hard` / `git clean -fd`
 - 不运行 `git push`，除非用户明确要求

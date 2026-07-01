@@ -23,6 +23,14 @@ class WorkbenchRunStore:
     def write_review(self, run_id: str, payload: dict[str, Any]) -> None:
         self._write_json(run_id, "review.json", payload)
 
+    def run_dir(self, run_id: str) -> Path:
+        return self._run_dir(run_id)
+
+    def artifact_dir(self, run_id: str) -> Path:
+        artifact_dir = self._run_dir(run_id) / "artifacts"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        return artifact_dir
+
     def _write_json(self, run_id: str, filename: str, payload: dict[str, Any]) -> None:
         path = self._run_dir(run_id) / filename
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

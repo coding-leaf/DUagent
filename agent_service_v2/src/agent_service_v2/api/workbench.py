@@ -35,8 +35,11 @@ async def workbench_chat(req: WorkbenchChatRequest) -> StreamingResponse:
     )
 
     async def event_stream():
-        async for event in run_bus.subscribe(run.run_id):
-            yield format_sse(event)
+        try:
+            async for event in run_bus.subscribe(run.run_id):
+                yield format_sse(event)
+        finally:
+            await session.cancel_run(run.run_id)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

@@ -6,6 +6,7 @@ import ChatEmptyState from './ChatEmptyState';
 import Icon from '../Icon';
 
 const QUICK_ACTIONS = [
+  { key: 'plan', label: 'Plan', icon: 'list_alt', prompt: '请先制定本次回答计划，再按计划执行。' },
   { key: 'weak_plan', label: '补弱计划', icon: 'route', prompt: '帮我根据当前薄弱点生成补弱学习计划。' },
   { key: 'resources', label: '推荐资源', icon: 'library_books', prompt: '请根据我的薄弱点推荐一组资源。' },
   { key: 'lesson', label: '讲解页', icon: 'auto_stories', prompt: '生成一个二叉树遍历的讲解页。' },

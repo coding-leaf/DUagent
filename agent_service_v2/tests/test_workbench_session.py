@@ -132,6 +132,49 @@ def test_workbench_session_start_async_returns_before_agent_finishes(tmp_path: P
     ]
 
 
+def test_workbench_session_cancel_run_cancels_background_agent_task(tmp_path: Path):
+    agent_cancelled = asyncio.Event()
+
+    class SlowAgent:
+        async def reply_stream(self, _message):
+            try:
+                yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                agent_cancelled.set()
+                raise
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return SlowAgent()
+
+    async def run_session():
+        bus = WorkbenchRunBus()
+        session = WorkbenchSession(
+            run_bus=bus,
+            workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+            agent_factory=FakeFactory(),
+        )
+        run = await session.start_async(
+            user_id="u1",
+            course_id="c1",
+            conversation_id="conv1",
+            message="stop this run",
+            context={},
+        )
+        first_event = await anext(bus.subscribe(run.run_id))
+        await session.cancel_run(run.run_id)
+        await asyncio.wait_for(agent_cancelled.wait(), timeout=0.2)
+        events = await _collect(bus, run.run_id)
+        return first_event, events
+
+    first_event, events = asyncio.run(run_session())
+
+    assert first_event.type == EduEventType.WORKFLOW_STARTED
+    assert events[-1].type == EduEventType.WORKFLOW_FAILED
+    assert events[-1].payload == {"reason": "cancelled"}
+
+
 def test_workbench_session_closes_run_when_tool_confirmation_is_required(tmp_path: Path):
     class ConfirmingAgent:
         async def reply_stream(self, _message):

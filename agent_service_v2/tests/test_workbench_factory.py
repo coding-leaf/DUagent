@@ -63,3 +63,10 @@ def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
     assert "read_learning_state" in allow_rules
     assert "draft_study_artifact" in allow_rules
     assert "TaskCreate" in allow_rules
+
+    deny_rules = agent.state.permission_context.deny_rules
+
+    assert "Bash" in deny_rules
+    assert "bash" in deny_rules
+    assert "shell" in deny_rules
+    assert "exec" in deny_rules

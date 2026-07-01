@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 
 from agentscope.event import RequireUserConfirmEvent
 from agentscope.message import Msg, TextBlock
@@ -33,7 +34,7 @@ class WorkbenchSession:
         self._run_bus = run_bus
         self._workspace_manager = workspace_manager
         self._agent_factory = agent_factory
-        self._tasks: set[asyncio.Task] = set()
+        self._tasks: dict[str, asyncio.Task] = {}
 
     def start(
         self,
@@ -126,9 +127,18 @@ class WorkbenchSession:
                 course_id=course_id,
             )
         )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks[run.run_id] = task
+        task.add_done_callback(lambda _task, run_id=run.run_id: self._tasks.pop(run_id, None))
         return run
+
+    async def cancel_run(self, run_id: str) -> bool:
+        task = self._tasks.get(run_id)
+        if task is None or task.done():
+            return False
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        return True
 
     async def _run_agent(
         self,
@@ -204,5 +214,8 @@ class WorkbenchSession:
                 if edu_event is not None:
                     self._run_bus.publish_event(edu_event)
             self._run_bus.complete(run.run_id)
+        except asyncio.CancelledError:
+            self._run_bus.fail(run.run_id, reason="cancelled")
+            raise
         except Exception as exc:
             self._run_bus.fail(run.run_id, reason=exc.__class__.__name__)

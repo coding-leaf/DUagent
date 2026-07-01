@@ -8,6 +8,7 @@ import { fetcherWrapper } from '../utils/fetcher';
 import { useRunLogs } from '../hooks/useRunLogs';
 import {
   completeRunningToolCalls,
+  completeRunningParts,
   completionMessageId,
   createEmptyAiMessage,
   normalizeArtifact,
@@ -150,7 +151,8 @@ export const ChatProvider = ({ children }) => {
           : m.content,
         loading: false,
         isError: failed || m.isError,
-        toolCalls: completeRunningToolCalls(m.toolCalls)
+        toolCalls: completeRunningToolCalls(m.toolCalls),
+        parts: completeRunningParts(m.parts)
       })));
       setIsSending(false);
       abortControllerRef.current = null;

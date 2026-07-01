@@ -7,6 +7,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
   const canUseAssistantActions = !isUser && !message.loading;
+  const hasOrderedParts = !isUser && Array.isArray(message.parts) && message.parts.length > 0;
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(typeof message.content === 'string' ? message.content : '').catch(console.error);
@@ -25,7 +26,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
       <div className={`w-full min-w-0 overflow-hidden transition-all ${isUser ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none shadow-md p-3 max-w-[85%]' : 'text-slate-700 py-1'}`}>
         
         {/* Tool Calls */}
-        {!isUser && message.toolCalls && message.toolCalls.map((tc, idx) => (
+        {!isUser && !hasOrderedParts && message.toolCalls && message.toolCalls.map((tc, idx) => (
           <ToolCallCard key={idx} name={tc.name} status={tc.status} />
         ))}
 
@@ -37,16 +38,46 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
         )}
 
         {/* Markdown Content */}
-        <div className={`markdown-body break-words leading-[1.65] ${isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'}`}>
-          <MarkdownViewer 
-            content={extractModelText(message.content)} 
-            className={isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'} 
-            compact={!isUser}
-          />
-        </div>
+        {hasOrderedParts ? (
+          <div className="space-y-3">
+            {message.parts.map((part, idx) => {
+              if (part.type === 'tool') {
+                const toolCall = part.toolCall || {};
+                return (
+                  <ToolCallCard
+                    key={`part-tool-${toolCall.id || idx}`}
+                    name={toolCall.name}
+                    title={toolCall.title}
+                    status={toolCall.status}
+                    description={toolCall.description}
+                    inputSummary={toolCall.inputSummary}
+                    outputSummary={toolCall.outputSummary}
+                  />
+                );
+              }
+              return (
+                <div key={`part-text-${idx}`} className="markdown-body break-words leading-[1.65] text-slate-700 text-[13px]">
+                  <MarkdownViewer
+                    content={extractModelText(part.content || '')}
+                    className="text-slate-700 text-[13px]"
+                    compact
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className={`markdown-body break-words leading-[1.65] ${isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'}`}>
+            <MarkdownViewer
+              content={extractModelText(message.content)}
+              className={isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'}
+              compact={!isUser}
+            />
+          </div>
+        )}
 
         {/* Loading Indicator */}
-        {message.loading && message.content === '' && (
+        {message.loading && message.content === '' && !hasOrderedParts && (
           <div className="flex items-center gap-1.5 text-cyan-500 h-6 pl-1 mt-2">
             <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
             <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>

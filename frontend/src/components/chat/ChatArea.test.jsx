@@ -50,3 +50,11 @@ test('submits quick action prompts through sendMessage instead of mock demos', (
   expect(chatState.sendMessage).toHaveBeenCalledWith('帮我根据当前薄弱点生成补弱学习计划。');
   expect(chatState.runMockToolDemo).not.toHaveBeenCalled();
 });
+
+test('submits plan intent as a natural-language prompt', () => {
+  render(<ChatArea activeCourseName="Test Course" onOpenLeftDrawer={vi.fn()} />);
+
+  fireEvent.click(screen.getByRole('button', { name: /Plan/ }));
+
+  expect(chatState.sendMessage).toHaveBeenCalledWith('请先制定本次回答计划，再按计划执行。');
+});

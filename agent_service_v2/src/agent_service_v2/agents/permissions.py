@@ -13,6 +13,16 @@ SAFE_WORKBENCH_TOOLS = [
     "review_grounding",
 ]
 
+DANGEROUS_WORKBENCH_TOOLS = [
+    "Bash",
+    "bash",
+    "Shell",
+    "shell",
+    "exec",
+    "command",
+    "terminal",
+]
+
 
 def build_workbench_permission_context() -> PermissionContext:
     context = PermissionContext()
@@ -23,6 +33,15 @@ def build_workbench_permission_context() -> PermissionContext:
                 rule_content=None,
                 behavior=PermissionBehavior.ALLOW,
                 source="eduagent:workbench_safe_tools",
+            )
+        ]
+    for tool_name in DANGEROUS_WORKBENCH_TOOLS:
+        context.deny_rules[tool_name] = [
+            PermissionRule(
+                tool_name=tool_name,
+                rule_content=None,
+                behavior=PermissionBehavior.DENY,
+                source="eduagent:workbench_dangerous_tools",
             )
         ]
     return context

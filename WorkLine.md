@@ -865,3 +865,36 @@ EDU v2 SSE 事件类型新增 `debug_log`，payload 为开发期观测日志。B
 - Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/agents/permissions.py` 通过
 
 **接口漂移：** 无。仅修改 AgentScope 工具权限配置。
+
+### 2026-07-01 — 修复 AIChat 工具顺序渲染与暂停取消
+
+**涉及文件：**
+- `frontend/src/utils/chatStreamEvents.js`
+- `frontend/src/utils/__tests__/chatStreamEvents.test.js`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatArea.test.jsx`
+- `agent_service_v2/src/agent_service_v2/api/workbench.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `WorkLine.md`
+
+**核心改动：**
+AIChat 前端消息增加有序 `parts` 渲染模型，`text_delta` 与 `tool_started/tool_completed/tool_failed` 按 SSE 到达顺序展示，避免所有工具调用被固定堆到回答顶部。新增 `Plan` 快捷按钮，仅发送自然语言计划意图，不引入固定 workflow 分支。Agent Service v2 为每个 run 记录后台 task，`/agent/v2/workbench/chat` 的 SSE 生成器在断流 `finally` 中调用 `cancel_run`，使前端暂停/断连能取消后台 Agent 推理。权限配置新增 Bash/Shell/exec/terminal 等危险工具 deny rules，防止未来误注册后被 AIChat 调用。
+
+**验证结果：**
+- RED：`cd frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/chat/ChatArea.test.jsx` 先失败于缺少有序 `parts` 和 `Plan` 按钮
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_session.py::test_workbench_session_cancel_run_cancels_background_agent_task tests/test_workbench_factory.py::test_factory_configures_safe_tool_permission_allow_rules -q` 先失败于缺少 `cancel_run` 和 Bash deny rules
+- Frontend targeted tests：`cd frontend && npm run test:unit -- src/context/ChatContext.test.jsx src/components/chat/ChatArea.test.jsx src/components/chat/ToolCallCard.test.jsx src/utils/__tests__/chatStreamEvents.test.js`（4 files passed，8 tests passed）
+- Agent targeted tests：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_session.py tests/test_workbench_api.py tests/test_workbench_factory.py tests/test_workbench_toolkit.py tests/test_run_bus.py -q`（16 passed，1 个 FastAPI TestClient deprecation warning）
+- Backend py_compile：`cd backend && ../.venv/bin/python -m py_compile app/services/tutoring_stream_adapter.py` 通过
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/api/workbench.py src/agent_service_v2/session/workbench_session.py src/agent_service_v2/agents/permissions.py` 通过
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest -q`（29 passed，1 个 FastAPI TestClient deprecation warning）
+
+**接口漂移：**
+业务 HTTP/SSE 字段未变。前端内部 assistant message 增加 `parts` 渲染结构；Agent v2 断流时可能产生内部 `workflow_failed: {"reason": "cancelled"}` 事件用于关闭 run，但用户主动暂停时前端通常已断开，不作为新的业务响应要求。

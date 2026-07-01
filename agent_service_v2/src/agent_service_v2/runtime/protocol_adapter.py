@@ -9,10 +9,13 @@ from agentscope.event import (
     ModelCallStartEvent,
     ReplyEndEvent,
     ReplyStartEvent,
+    RequireUserConfirmEvent,
     TextBlockEndEvent,
     TextBlockDeltaEvent,
     TextBlockStartEvent,
+    ThinkingBlockEndEvent,
     ThinkingBlockDeltaEvent,
+    ThinkingBlockStartEvent,
     ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
@@ -20,6 +23,7 @@ from agentscope.event import (
     ToolResultEndEvent,
     ToolResultTextDeltaEvent,
     ToolResultStartEvent,
+    UserConfirmResultEvent,
 )
 
 from agent_service_v2.runtime.edu_events import EduEvent, EduEventType, utc_now_iso
@@ -87,12 +91,16 @@ class EDUProtocolAdapter:
                 DataBlockDeltaEvent,
                 TextBlockStartEvent,
                 TextBlockEndEvent,
+                ThinkingBlockStartEvent,
                 ThinkingBlockDeltaEvent,
+                ThinkingBlockEndEvent,
                 ToolCallDeltaEvent,
                 ToolCallEndEvent,
                 ToolResultDataDeltaEvent,
                 ToolResultStartEvent,
                 ToolResultTextDeltaEvent,
+                RequireUserConfirmEvent,
+                UserConfirmResultEvent,
             ),
         ):
             return None

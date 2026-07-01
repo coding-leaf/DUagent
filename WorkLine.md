@@ -721,3 +721,22 @@ Backend 对前端的 tutoring SSE event 类型从旧 `chunk/done` 切换为 EDU 
 - 生产代码残留检查：`rg -n "MOCK_TOOL_DEMOS|runMockToolDemo|sendMockArtifact|mockToolDemos" frontend/src -g "!*.test.*" -g "!node_modules"` 无命中
 
 **接口漂移：** 无。未修改 API path、字段、状态枚举或 EDU v2 事件形状。
+
+### 2026-07-01 — 修复 AgentScope 内部事件误报 workflow_failed
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `WorkLine.md`
+
+**核心改动：**
+修复 AIChat 快捷 prompt 走真实 Agent v2 链路后被提前判失败的问题。经直接探测 `/agent/v2/workbench/chat`，Agent v2 服务可用且返回 200 SSE，但 AgentScope 正常流中的 `ThinkingBlockStartEvent`、`ThinkingBlockEndEvent`、`RequireUserConfirmEvent` 被协议适配器默认映射为 `workflow_failed`，导致前端提前结束 assistant 消息。本次将这些 AgentScope 内部思考/确认控制事件（含 `UserConfirmResultEvent`）纳入正常结构事件忽略列表，继续保留 `ToolCallStartEvent -> tool_started`、`ToolResultEndEvent -> tool_completed`、`ExceedMaxItersEvent -> workflow_failed`。
+
+**验证结果：**
+- AgentScope 版本确认：`cd agent_service_v2 && ./.venv/bin/python -c "import agentscope; print(getattr(agentscope, '__version__', 'unknown')); print(agentscope.__file__)"` → `2.0.3`
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_protocol_adapter.py::test_protocol_adapter_ignores_agent_internal_thinking_and_confirmation_events -q` 先失败于 `ThinkingBlockStartEvent` 被映射成 `workflow_failed`
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_protocol_adapter.py -q`（5 passed）
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（22 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/runtime/protocol_adapter.py` 通过
+
+**接口漂移：** 无。仅修正 AgentScope runtime event 到 EDU v2 event 的内部适配，不改变对外 API 或 EDU v2 事件契约。

@@ -7,10 +7,13 @@ from agentscope.event import (
     ModelCallStartEvent,
     ReplyEndEvent,
     ReplyStartEvent,
+    RequireUserConfirmEvent,
     TextBlockEndEvent,
     TextBlockDeltaEvent,
     TextBlockStartEvent,
+    ThinkingBlockEndEvent,
     ThinkingBlockDeltaEvent,
+    ThinkingBlockStartEvent,
     ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
@@ -19,7 +22,7 @@ from agentscope.event import (
     ToolResultTextDeltaEvent,
     ToolResultStartEvent,
 )
-from agentscope.message import ToolResultState
+from agentscope.message import ToolCallBlock, ToolResultState
 
 from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
@@ -131,6 +134,35 @@ def test_protocol_adapter_ignores_additional_streaming_delta_events():
     assert [adapter.adapt(event) for event in events] == [
         None,
         None,
+        None,
+        None,
+        None,
+    ]
+
+
+def test_protocol_adapter_ignores_agent_internal_thinking_and_confirmation_events():
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+
+    events = [
+        ThinkingBlockStartEvent(reply_id="reply-1", block_id="think-1"),
+        ThinkingBlockEndEvent(reply_id="reply-1", block_id="think-1"),
+        RequireUserConfirmEvent(
+            reply_id="reply-1",
+            tool_calls=[
+                ToolCallBlock(
+                    id="tool-1",
+                    name="read_learning_state",
+                    input="{}",
+                )
+            ],
+        ),
+    ]
+
+    assert [adapter.adapt(event) for event in events] == [
         None,
         None,
         None,

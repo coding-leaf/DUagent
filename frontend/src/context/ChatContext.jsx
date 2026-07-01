@@ -5,7 +5,6 @@ import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
 import { normalizeMessages } from '../utils/chatContent';
 import { fetcherWrapper } from '../utils/fetcher';
-import { MOCK_TOOL_DEMOS } from '../components/chat/mockToolDemos';
 
 const ChatContext = createContext(null);
 
@@ -52,58 +51,27 @@ export const ChatProvider = ({ children }) => {
   const sessions = useMemo(() => {
     return sessionsRes?.data?.conversations || sessionsRes?.data || [];
   }, [sessionsRes]);
-  const [activeSession, setActiveSession] = useState(null);
+  const [activeSession, setActiveSessionState] = useState(null);
+  const [isDraftConversation, setIsDraftConversation] = useState(false);
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [workspaceArtifacts, setWorkspaceArtifacts] = useState([]);
 
-  const sendMockArtifact = (payload) => {
-    const newArtifact = {
-      id: `artifact-${crypto.randomUUID()}`,
-      type: payload.type,
-      props: payload.props || {},
-      timestamp: new Date().toISOString()
-    };
-    setWorkspaceArtifacts(prev => [...prev, newArtifact]);
-  };
-
-  const runMockToolDemo = (demoKey) => {
-    const demo = MOCK_TOOL_DEMOS[demoKey];
-    if (!demo || isSending) return;
-
-    const createdArtifacts = demo.artifacts.map((artifact) => ({
-      id: `artifact-${crypto.randomUUID()}`,
-      type: artifact.type,
-      props: artifact.props || {},
-      timestamp: new Date().toISOString()
-    }));
-
-    setMessages(prev => [
-      ...prev,
-      { id: `user-${crypto.randomUUID()}`, role: 'user', content: demo.prompt },
-      {
-        id: `ai-${crypto.randomUUID()}`,
-        role: 'assistant',
-        content: demo.answer,
-        loading: false,
-        diagrams: [],
-        knowledge_points: [],
-        suggestions: ['继续细化这份内容', '把结果保存为个性化资源'],
-        toolCalls: demo.toolCalls
-      }
-    ]);
-    setWorkspaceArtifacts(prev => [...prev, ...createdArtifacts]);
-  };
-  
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
   const prevCourseIdRef = useRef(activeCourseId);
+
+  const setActiveSession = (sessionId) => {
+    setIsDraftConversation(false);
+    setActiveSessionState(sessionId);
+  };
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (prevCourseIdRef.current !== activeCourseId) {
       prevCourseIdRef.current = activeCourseId;
-      setActiveSession(null);
+      setActiveSessionState(null);
+      setIsDraftConversation(false);
       setMessages([]);
       setWorkspaceArtifacts([]);
       return;
@@ -111,15 +79,16 @@ export const ChatProvider = ({ children }) => {
 
     if (activeCourseId && sessions.length > 0) {
       const activeSessionExists = sessions.some(s => s.id === activeSession);
-      if (!activeSession || !activeSessionExists) {
-        setActiveSession(sessions[0].id);
+      if (!isDraftConversation && (!activeSession || !activeSessionExists)) {
+        setActiveSessionState(sessions[0].id);
       }
     } else if (activeCourseId && sessionsRes) {
-      setActiveSession(null);
+      setActiveSessionState(null);
+      setIsDraftConversation(false);
       setMessages([]);
       setWorkspaceArtifacts([]);
     }
-  }, [sessions, activeCourseId, activeSession, sessionsRes]);
+  }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
@@ -153,7 +122,8 @@ export const ChatProvider = ({ children }) => {
 
   const resetConversation = () => {
     cancelStream();
-    setActiveSession(null);
+    setActiveSessionState(null);
+    setIsDraftConversation(true);
     lastMessageIdRef.current = null;
     setMessages([]);
     setWorkspaceArtifacts([]);
@@ -178,7 +148,8 @@ export const ChatProvider = ({ children }) => {
       if (activeSession === sessionId) {
         resetConversation();
         if (updatedSessions.length > 0) {
-          setActiveSession(updatedSessions[0].id);
+          setActiveSessionState(updatedSessions[0].id);
+          setIsDraftConversation(false);
         }
       }
     } catch (err) {
@@ -205,7 +176,8 @@ export const ChatProvider = ({ children }) => {
       abortControllerRef.current = null;
 
       if (!activeSession && event.conversation_id) {
-        setActiveSession(event.conversation_id);
+        setIsDraftConversation(false);
+        setActiveSessionState(event.conversation_id);
         mutateSessions();
       }
     };
@@ -346,7 +318,7 @@ export const ChatProvider = ({ children }) => {
     <ChatContext.Provider value={{
       sessions, activeSession, setActiveSession, messages, isSending,
       sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession,
-      workspaceArtifacts, sendMockArtifact, runMockToolDemo
+      workspaceArtifacts
     }}>
       {children}
     </ChatContext.Provider>

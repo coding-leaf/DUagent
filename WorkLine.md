@@ -696,3 +696,28 @@
 
 **接口漂移：**
 Backend 对前端的 tutoring SSE event 类型从旧 `chunk/done` 切换为 EDU v2 原生事件。前端已同步适配；Backend 到 Agent Service 仍为 `/agent/v2/workbench/chat`。
+
+### 2026-07-01 — 修复 AIChat 新对话草稿态与快捷按钮 mock 结果
+
+**涉及文件：**
+- `docs/superpowers/specs/2026-07-01-aichat-draft-and-tool-events-design.md`
+- `docs/superpowers/plans/2026-07-01-aichat-draft-and-tool-events.md`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/context/ChatContext.test.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatArea.test.jsx`
+- `frontend/src/components/chat/mockToolDemos.js`
+- `WorkLine.md`
+
+**核心改动：**
+修复 AIChat 点击新增对话后被历史会话自动抢回的问题：`ChatContext` 增加草稿态，用户主动新建空白对话后不再自动选择第一条历史会话，直到用户手动选择历史会话或新会话 SSE 返回真实 `conversation_id`。同时移除真实页面可达的前端工具 mock：补弱计划、推荐资源、讲解页、练习预览按钮改为快捷 prompt，统一走 `sendMessage -> /tutoring/chat -> EDU v2 SSE`，前端只渲染后端返回的 `tool_started/tool_completed/artifact_created` 等事件，不再本地制造 tool result 或 artifact。
+
+**验证结果：**
+- RED：`cd frontend && npm run test:unit -- src/context/ChatContext.test.jsx -t "keeps a user-created draft conversation active"` 先失败于收到 `conv-existing`
+- RED：`cd frontend && npm run test:unit -- src/components/chat/ChatArea.test.jsx -t "submits quick action prompts through sendMessage"` 先失败于 `sendMessage` 调用次数为 0
+- Frontend tests：`cd frontend && npm run test:unit -- src/context/ChatContext.test.jsx src/components/chat/ChatArea.test.jsx`（2 files passed，4 tests passed）
+- Frontend lint：`cd frontend && npm run lint` 通过
+- Frontend build：`cd frontend && npm run build` 通过；仍有 Vite chunk size warning，非本次改动引入
+- 生产代码残留检查：`rg -n "MOCK_TOOL_DEMOS|runMockToolDemo|sendMockArtifact|mockToolDemos" frontend/src -g "!*.test.*" -g "!node_modules"` 无命中
+
+**接口漂移：** 无。未修改 API path、字段、状态枚举或 EDU v2 事件形状。

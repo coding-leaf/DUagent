@@ -58,32 +58,8 @@ const renderWithProviders = (ui) => render(
   </SWRConfig>
 );
 
-const TestConsumer = () => {
-  const { workspaceArtifacts, sendMockArtifact } = useChat();
-  return (
-    <div>
-      <div data-testid="count">{workspaceArtifacts.length}</div>
-      <button data-testid="trigger" onClick={() => sendMockArtifact({ type: 'QuizCard', props: { question: 'Test?' } })}>
-        Trigger
-      </button>
-    </div>
-  );
-};
-
-test('workspaceArtifacts state manages active workspace plugin payloads', async () => {
-  renderWithProviders(<TestConsumer />);
-
-  expect(screen.getByTestId('count').textContent).toBe('0');
-  
-  await act(async () => {
-    screen.getByTestId('trigger').click();
-  });
-
-  expect(screen.getByTestId('count').textContent).toBe('1');
-});
-
 const StreamConsumer = () => {
-  const { activeSession, messages, workspaceArtifacts, sendMessage, isSending } = useChat();
+  const { activeSession, messages, workspaceArtifacts, sendMessage, resetConversation, isSending } = useChat();
   const assistant = messages.find(m => m.role === 'assistant');
   return (
     <div>
@@ -98,9 +74,27 @@ const StreamConsumer = () => {
       <button data-testid="send" onClick={() => sendMessage('hello')}>
         Send
       </button>
+      <button data-testid="new-chat" onClick={() => resetConversation()}>
+        New Chat
+      </button>
     </div>
   );
 };
+
+test('keeps a user-created draft conversation active when history exists', async () => {
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+
+  await act(async () => {
+    screen.getByTestId('new-chat').click();
+  });
+
+  expect(screen.getByTestId('active-session').textContent).toBe('');
+  expect(screen.getByTestId('message-count').textContent).toBe('0');
+});
 
 test('ChatProvider reduces native EDU v2 stream events', async () => {
   streamChatMock.mockImplementation((_payload, onMessage) => {

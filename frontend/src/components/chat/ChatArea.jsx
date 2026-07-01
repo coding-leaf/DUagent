@@ -6,17 +6,16 @@ import ChatEmptyState from './ChatEmptyState';
 import Icon from '../Icon';
 
 const QUICK_ACTIONS = [
-  { key: 'weak_plan', label: '补弱计划', icon: 'route' },
-  { key: 'resources', label: '推荐资源', icon: 'library_books' },
-  { key: 'lesson', label: '讲解页', icon: 'auto_stories' },
-  { key: 'quiz', label: '练习预览', icon: 'quiz' },
+  { key: 'weak_plan', label: '补弱计划', icon: 'route', prompt: '帮我根据当前薄弱点生成补弱学习计划。' },
+  { key: 'resources', label: '推荐资源', icon: 'library_books', prompt: '请根据我的薄弱点推荐一组资源。' },
+  { key: 'lesson', label: '讲解页', icon: 'auto_stories', prompt: '生成一个二叉树遍历的讲解页。' },
+  { key: 'quiz', label: '练习预览', icon: 'quiz', prompt: '生成一道二叉树遍历练习预览。' },
 ];
 
 export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   const { 
     sessions, activeSession, messages, isSending,
-    sendMessage, editMessage, cancelStream, regenerate,
-    runMockToolDemo
+    sendMessage, editMessage, cancelStream, regenerate
   } = useChat();
   const { activeCourseId } = useCourse();
   
@@ -153,7 +152,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
               <button
                 key={action.key}
                 type="button"
-                onClick={() => runMockToolDemo(action.key)}
+                onClick={() => handleSendMessage(action.prompt)}
                 disabled={!activeCourseId || isSending}
                 className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition-colors hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
               >

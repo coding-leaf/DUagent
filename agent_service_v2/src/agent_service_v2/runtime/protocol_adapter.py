@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentscope.event import (
+    DataBlockDeltaEvent,
     ExceedMaxItersEvent,
     ModelCallEndEvent,
     ModelCallStartEvent,
@@ -11,9 +12,13 @@ from agentscope.event import (
     TextBlockEndEvent,
     TextBlockDeltaEvent,
     TextBlockStartEvent,
+    ThinkingBlockDeltaEvent,
+    ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
+    ToolResultDataDeltaEvent,
     ToolResultEndEvent,
+    ToolResultTextDeltaEvent,
     ToolResultStartEvent,
 )
 
@@ -79,10 +84,15 @@ class EDUProtocolAdapter:
             (
                 ModelCallStartEvent,
                 ModelCallEndEvent,
+                DataBlockDeltaEvent,
                 TextBlockStartEvent,
                 TextBlockEndEvent,
+                ThinkingBlockDeltaEvent,
+                ToolCallDeltaEvent,
                 ToolCallEndEvent,
+                ToolResultDataDeltaEvent,
                 ToolResultStartEvent,
+                ToolResultTextDeltaEvent,
             ),
         ):
             return None

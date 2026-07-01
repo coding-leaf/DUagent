@@ -1,6 +1,7 @@
 import json
 
 from agentscope.event import (
+    DataBlockDeltaEvent,
     ExceedMaxItersEvent,
     ModelCallEndEvent,
     ModelCallStartEvent,
@@ -9,9 +10,13 @@ from agentscope.event import (
     TextBlockEndEvent,
     TextBlockDeltaEvent,
     TextBlockStartEvent,
+    ThinkingBlockDeltaEvent,
+    ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
+    ToolResultDataDeltaEvent,
     ToolResultEndEvent,
+    ToolResultTextDeltaEvent,
     ToolResultStartEvent,
 )
 from agentscope.message import ToolResultState
@@ -90,6 +95,40 @@ def test_protocol_adapter_ignores_normal_structural_events():
 
     assert [adapter.adapt(event) for event in structural_events] == [
         None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ]
+
+
+def test_protocol_adapter_ignores_additional_streaming_delta_events():
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+
+    events = [
+        ToolCallDeltaEvent(reply_id="reply-1", tool_call_id="tool-1", delta='{"kind"'),
+        ToolResultTextDeltaEvent(reply_id="reply-1", tool_call_id="tool-1", delta="partial result"),
+        ToolResultDataDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            media_type="application/json",
+            data='{"ok":true}',
+        ),
+        DataBlockDeltaEvent(
+            reply_id="reply-1",
+            block_id="data-1",
+            data='{"artifact":true}',
+            media_type="application/json",
+        ),
+        ThinkingBlockDeltaEvent(reply_id="reply-1", block_id="think-1", delta="internal"),
+    ]
+
+    assert [adapter.adapt(event) for event in events] == [
         None,
         None,
         None,

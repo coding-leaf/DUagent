@@ -848,3 +848,20 @@ EDU v2 SSE 事件类型新增 `debug_log`，payload 为开发期观测日志。B
 
 **接口漂移：**
 `debug_log` 开发观测 payload 结构化升级。业务事件契约不变。
+
+### 2026-07-01 — 放行 AIChat artifact 草稿工具权限
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `WorkLine.md`
+
+**核心改动：**
+将 `draft_study_artifact` 加入 Workbench 安全工具 allow rules。该工具由前端 AIChat 快捷按钮链路自然触发，用于补弱计划、讲解页、练习预览等 artifact 草稿生成；此前未在 allowlist 中会触发 AgentScope `RequireUserConfirmEvent`，当前产品没有 HITL 确认 UI，因此直接失败为 `user_confirmation_required`。
+
+**验证结果：**
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_factory.py -q`（3 passed）
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest tests -q`（28 passed，1 个 FastAPI TestClient deprecation warning）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/agents/permissions.py` 通过
+
+**接口漂移：** 无。仅修改 AgentScope 工具权限配置。

@@ -61,4 +61,5 @@ def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
 
     assert "reset_tools" in allow_rules
     assert "read_learning_state" in allow_rules
+    assert "draft_study_artifact" in allow_rules
     assert "TaskCreate" in allow_rules

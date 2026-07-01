@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 StreamSSE = Callable[[str, dict], AsyncIterator[bytes]]
 PersistResult = Callable[
-    [str, str, str, list, list],
+    [str, str, str, list, list, dict],
     Awaitable[None],
 ]
 
@@ -29,6 +29,7 @@ class StreamState:
     chunks: list[str] = field(default_factory=list)
     diagrams: list = field(default_factory=list)
     knowledge_points: list = field(default_factory=list)
+    meta: dict = field(default_factory=dict)
     done_sent: bool = False
 
 
@@ -38,9 +39,12 @@ async def persist_tutoring_result(
     content: str,
     diagrams: list,
     knowledge_points: list,
+    meta: dict,
 ) -> None:
     """Persist the accumulated stream through a short independent session."""
     async with async_session_factory() as db:
+        existing = await db.get(Message, assistant_message_id)
+        existing_meta = existing.meta_json if existing and isinstance(existing.meta_json, dict) else {}
         await db.execute(
             update(Message)
             .where(Message.id == assistant_message_id)
@@ -48,6 +52,7 @@ async def persist_tutoring_result(
                 content=content,
                 diagrams=diagrams or None,
                 knowledge_points=knowledge_points or None,
+                meta_json={**existing_meta, **(meta or {})},
             )
         )
         await db.execute(
@@ -90,6 +95,8 @@ class TutoringStreamAdapter:
             state.done_sent = True
         elif event_type == "workflow_failed":
             state.done_sent = True
+        elif event_type == "content_safety_reviewed":
+            state.meta["content_safety_review"] = payload
 
         parsed["conversation_id"] = state.conversation_id
         parsed["message_id"] = state.assistant_message_id
@@ -182,6 +189,7 @@ class TutoringStreamAdapter:
                     "".join(state.chunks),
                     state.diagrams,
                     state.knowledge_points,
+                    state.meta,
                 )
             except Exception:
                 logger.exception(

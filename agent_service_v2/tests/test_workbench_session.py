@@ -81,6 +81,7 @@ def test_workbench_session_streams_agent_events_to_run_bus(tmp_path: Path):
         EduEventType.WORKFLOW_STARTED,
         EduEventType.TEXT_DELTA,
         EduEventType.WORKFLOW_COMPLETED,
+        EduEventType.CONTENT_SAFETY_REVIEWED,
     ]
     assert events[1].payload == {"delta": "今天先复习链表。"}
 
@@ -129,6 +130,7 @@ def test_workbench_session_start_async_returns_before_agent_finishes(tmp_path: P
         EduEventType.WORKFLOW_STARTED,
         EduEventType.TEXT_DELTA,
         EduEventType.WORKFLOW_COMPLETED,
+        EduEventType.CONTENT_SAFETY_REVIEWED,
     ]
 
 
@@ -266,3 +268,90 @@ def test_workbench_session_publishes_debug_logs_for_model_events(tmp_path: Path)
     assert debug_payloads[0]["attributes"]["model"] == "deepseek-chat"
     assert debug_payloads[1]["attributes"]["input_tokens"] == 42
     assert debug_payloads[1]["attributes"]["output_tokens"] == 12
+
+
+def test_workbench_session_passes_context_messages_to_agent(tmp_path: Path):
+    captured_inputs = []
+
+    class CapturingAgent:
+        async def reply_stream(self, inputs):
+            captured_inputs.extend(inputs)
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return CapturingAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="刚才的问题是什么？",
+        context={
+            "conversation_summary": "用户正在学习链表。",
+            "recent_messages": [
+                {"role": "user", "content": "我刚才问了链表。"},
+                {"role": "assistant", "content": "你问了链表的插入。"},
+            ],
+        },
+    )
+    asyncio.run(_collect(bus, run.run_id))
+
+    assert [item.get_text_content() for item in captured_inputs] == [
+        "本轮可用上下文：\n对话摘要：用户正在学习链表。",
+        "我刚才问了链表。",
+        "你问了链表的插入。",
+        "刚才的问题是什么？",
+    ]
+
+
+def test_workbench_session_emits_content_safety_review_after_reply(tmp_path: Path):
+    class ReviewedAgent:
+        async def reply_stream(self, _inputs):
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="安全回答")
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return ReviewedAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="hello",
+        context={},
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+
+    review_events = [
+        event for event in events if event.type == EduEventType.CONTENT_SAFETY_REVIEWED
+    ]
+    assert len(review_events) == 1
+    assert review_events[0].payload == {
+        "passed": True,
+        "risk_level": "unknown",
+        "categories": [],
+        "reason": "review_model_not_configured",
+        "action": "allow",
+        "confidence": 0.0,
+        "scope": "content_safety_only",
+        "knowledge_reviewed": False,
+        "reviewer": "skipped",
+    }

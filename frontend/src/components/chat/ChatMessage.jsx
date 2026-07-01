@@ -10,6 +10,11 @@ const PLAN_STATUS_META = {
   deleted: { label: '已删除', className: 'bg-slate-100 text-slate-400 border-slate-200' }
 };
 
+const SAFETY_STATUS_META = {
+  flag: { label: '内容安全提示', className: 'border-amber-200 bg-amber-50 text-amber-700', icon: 'shield_alert' },
+  block: { label: '内容已隐藏', className: 'border-red-200 bg-red-50 text-red-700', icon: 'gpp_bad' }
+};
+
 function PlanTaskList({ tasks = [] }) {
   return (
     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-[12px] text-slate-700 shadow-sm">
@@ -39,9 +44,24 @@ function PlanTaskList({ tasks = [] }) {
   );
 }
 
+function ContentSafetyNotice({ review }) {
+  if (!review || review.action === 'allow') return null;
+  const meta = SAFETY_STATUS_META[review.action] || SAFETY_STATUS_META.flag;
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-[12px] leading-relaxed ${meta.className}`}>
+      <div className="flex items-center gap-1.5 font-semibold">
+        <Icon name={meta.icon} className="text-[15px]" />
+        <span>{meta.label}</span>
+      </div>
+      {review.reason && <div className="mt-1">{review.reason}</div>}
+    </div>
+  );
+}
+
 export default function ChatMessage({ message, onSendMessage, onRegenerate, isLastAssistant = false }) {
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
+  const isSafetyBlocked = !isUser && message.safetyBlocked;
   const canUseAssistantActions = !isUser && !message.loading;
   const hasOrderedParts = !isUser && Array.isArray(message.parts) && message.parts.length > 0;
 
@@ -74,11 +94,21 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
         )}
 
         {/* Markdown Content */}
-        {hasOrderedParts ? (
+        {isSafetyBlocked ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700">
+              该回复未通过内容安全审核，已隐藏。
+            </div>
+            <ContentSafetyNotice review={message.safetyReview} />
+          </div>
+        ) : hasOrderedParts ? (
           <div className="space-y-3">
             {message.parts.map((part, idx) => {
               if (part.type === 'plan') {
                 return <PlanTaskList key={`part-plan-${idx}`} tasks={part.tasks} />;
+              }
+              if (part.type === 'content_safety_review') {
+                return <ContentSafetyNotice key={`part-safety-${idx}`} review={part.review} />;
               }
               if (part.type === 'tool') {
                 const toolCall = part.toolCall || {};

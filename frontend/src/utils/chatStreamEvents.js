@@ -44,6 +44,21 @@ const upsertPlanPart = (parts = [], tasks = []) => {
   return next;
 };
 
+const appendSafetyReviewPart = (parts = [], review) => {
+  if (!review || review.action === 'allow') return parts;
+  return [...parts, { type: 'content_safety_review', review }];
+};
+
+const normalizeSafetyReview = (payload = {}) => ({
+  passed: payload.passed !== false,
+  riskLevel: payload.risk_level || payload.riskLevel || 'unknown',
+  categories: Array.isArray(payload.categories) ? payload.categories : [],
+  reason: payload.reason || '',
+  action: payload.action || 'allow',
+  scope: payload.scope || 'content_safety_only',
+  knowledgeReviewed: payload.knowledge_reviewed === true
+});
+
 export const completeRunningParts = (parts = []) => {
   return parts.map(part => {
     if (part.type !== 'tool' || part.toolCall?.status !== 'running') return part;
@@ -144,6 +159,17 @@ export const reduceAssistantMessageForEvent = (message, event) => {
         reviewFlagged: event.payload?.passed === false,
         reviewReason: event.payload?.reason || message.reviewReason
       };
+    case 'content_safety_reviewed':
+      {
+        const review = normalizeSafetyReview(event.payload || {});
+        return {
+          ...message,
+          safetyReview: review,
+          safetyBlocked: review.action === 'block',
+          safetyFlagged: review.action === 'flag',
+          parts: appendSafetyReviewPart(message.parts, review)
+        };
+      }
     default:
       return message;
   }

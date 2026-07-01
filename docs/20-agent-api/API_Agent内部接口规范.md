@@ -76,7 +76,7 @@ POST /agent/v1/tutoring/chat
 - `scope=course`：课程内智能辅导，使用课程知识库 RAG、用户画像、长期记忆。
 - `scope=global`：全局简单 AI Bot，不读取课程知识库，只使用通用能力和用户长期记忆。
 
-**SSE 事件类型：**
+**SSE 事件类型（v1 legacy）：**
 
 | type | 说明 |
 |------|------|
@@ -85,6 +85,45 @@ POST /agent/v1/tutoring/chat
 | knowledge_points | 引用的知识点 [{name, chapter, mastery}] |
 | suggestion | 补充学习建议 + 相似例题 |
 | done | 本轮回答完成 |
+
+### 1.2 AgentScope v2 Workbench 对话
+
+```
+POST /agent/v2/workbench/chat
+```
+
+Backend 会把 SQL 权威上下文放入 `context` 字段，Agent Service v2 将 `conversation_summary`、`recent_messages`、`user_profile`、`active_kg_nodes` 转换为 AgentScope `Msg` 列表后交给单 Agent 的 `reply_stream()`。Agent Service v2 不写 MySQL，运行状态和外审结果仅写入本地 workspace，最终业务落库仍由 Backend 完成。
+
+**SSE 事件类型：**
+
+| type | 说明 |
+|------|------|
+| workflow_started | 本轮 Agent 工作流开始 |
+| text_delta | 文本片段；`payload.delta` 为增量文本 |
+| tool_started | 工具调用开始 |
+| tool_completed | 工具调用完成 |
+| tool_failed | 工具调用失败 |
+| plan_updated | AgentScope Task 工具产生的计划任务列表 |
+| source_refs | 引用来源列表 |
+| artifact_created | Agent 工作区产物创建 |
+| content_safety_reviewed | 完整回复后的外审模型内容安全分级；仅审核违禁/违法/安全风险，不审核知识点正确性 |
+| debug_log | 开发观测日志 |
+| workflow_completed | 本轮回答完成 |
+| workflow_failed | 本轮回答失败 |
+
+**`content_safety_reviewed.payload`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| passed | boolean | 是否通过内容安全审核 |
+| risk_level | string | `none` / `low` / `medium` / `high` / `critical` / `unknown` |
+| categories | array | 内容安全类别 |
+| reason | string | 简短原因 |
+| action | string | `allow` / `flag` / `block`；只有 `critical` 映射为 `block` |
+| confidence | number | 外审置信度，0 到 1 |
+| scope | string | 固定 `content_safety_only` |
+| knowledge_reviewed | boolean | 固定 false |
+| reviewer | string | `external_model` 或 `skipped` |
 
 **`done` 事件 `data`：**
 

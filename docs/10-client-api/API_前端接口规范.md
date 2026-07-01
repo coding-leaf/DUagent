@@ -1536,9 +1536,22 @@ POST /api/v1/tutoring/chat
 | source_refs | 引用来源列表 |
 | artifact_created | Agent 工作区产物创建 |
 | critic_completed | 回答审查完成，可能标记不准确 |
+| content_safety_reviewed | 完整回复后的内容安全外审结果；仅审核违禁/违法/安全风险，不审核知识点正确性 |
 | debug_log | 开发观测日志，前端仅用于开发者浮窗 |
 | workflow_completed | 本轮回答完成，携带 conversation_id/message_id |
 | workflow_failed | 本轮回答失败 |
+
+**`content_safety_reviewed.payload` 字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| passed | boolean | 是否通过内容安全审核；`critical` 风险会置为 false |
+| risk_level | string | `none` / `low` / `medium` / `high` / `critical` / `unknown` |
+| categories | array | 命中的内容安全类别，如 `illegal_instruction` |
+| reason | string | 简短原因 |
+| action | string | 前端处理建议：`allow` / `flag` / `block`；仅 `block` 隐藏正文 |
+| scope | string | 固定为 `content_safety_only` |
+| knowledge_reviewed | boolean | 固定为 false，表示不审核知识点正确性 |
 
 **`done` 事件 `data`：**
 

@@ -50,7 +50,7 @@ async def test_stream_adapter_forwards_v2_events_with_backend_envelope():
     assert decoded[1]["conversation_id"] == "conv-1"
     assert decoded[1]["message_id"] == "msg-1"
     assert decoded[1]["run_id"] == "run-1"
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "hello", [], [])
+    persisted.assert_awaited_once_with("msg-1", "conv-1", "hello", [], [], {})
 
 
 @pytest.mark.asyncio
@@ -81,7 +81,7 @@ async def test_stream_adapter_does_not_filter_tool_source_or_artifact_events():
     ]
     assert decoded[0]["payload"]["tool_name"] == "TaskCreate"
     assert decoded[3]["payload"]["artifact"]["type"] == "Markdown"
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [])
+    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [], {})
 
 
 @pytest.mark.asyncio
@@ -103,7 +103,7 @@ async def test_stream_adapter_persists_partial_text_delta_when_closed():
     assert json.loads(first["data"])["payload"]["delta"] == "partial"
     await stream.aclose()
 
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "partial", [], [])
+    persisted.assert_awaited_once_with("msg-1", "conv-1", "partial", [], [], {})
 
 
 @pytest.mark.asyncio
@@ -140,7 +140,7 @@ async def test_stream_adapter_emits_workflow_failed_on_agent_service_error():
             },
         }
     ]
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [])
+    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [], {})
 
 
 @pytest.mark.asyncio
@@ -160,4 +160,50 @@ async def test_stream_adapter_forwards_invalid_json_without_accumulating_it():
     ]
 
     assert events == [{"event": "message", "data": "not-json"}]
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [])
+    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [], {})
+
+
+@pytest.mark.asyncio
+async def test_stream_adapter_persists_content_safety_review_meta():
+    async def source(path, payload):
+        yield b'data: {"type":"text_delta","run_id":"run-1","seq":1,"timestamp":"t1","agent":"workbench","payload":{"delta":"hello"}}\n\n'
+        yield b'data: {"type":"content_safety_reviewed","run_id":"run-1","seq":2,"timestamp":"t2","agent":"workbench","payload":{"passed":false,"risk_level":"high","categories":["illegal_instruction"],"reason":"risk","action":"flag","confidence":0.8,"scope":"content_safety_only","knowledge_reviewed":false,"reviewer":"external_model"}}\n\n'
+        yield b'data: {"type":"workflow_completed","run_id":"run-1","seq":3,"timestamp":"t3","agent":"workbench","payload":{"reply_id":"r1"}}\n\n'
+
+    persisted = AsyncMock()
+    adapter = TutoringStreamAdapter(stream_sse=source, persist_result=persisted)
+    events = [
+        event
+        async for event in adapter.stream(
+            payload={"message": "x"},
+            conversation_id="conv-1",
+            assistant_message_id="msg-1",
+        )
+    ]
+
+    decoded = [json.loads(event["data"]) for event in events]
+    assert [item["type"] for item in decoded] == [
+        "text_delta",
+        "content_safety_reviewed",
+        "workflow_completed",
+    ]
+    persisted.assert_awaited_once_with(
+        "msg-1",
+        "conv-1",
+        "hello",
+        [],
+        [],
+        {
+            "content_safety_review": {
+                "passed": False,
+                "risk_level": "high",
+                "categories": ["illegal_instruction"],
+                "reason": "risk",
+                "action": "flag",
+                "confidence": 0.8,
+                "scope": "content_safety_only",
+                "knowledge_reviewed": False,
+                "reviewer": "external_model",
+            }
+        },
+    )

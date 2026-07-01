@@ -16,6 +16,7 @@ class EduEventType(StrEnum):
     ARTIFACT_CREATED = "artifact_created"
     CRITIC_COMPLETED = "critic_completed"
     TEXT_DELTA = "text_delta"
+    CONTENT_SAFETY_REVIEWED = "content_safety_reviewed"
     DEBUG_LOG = "debug_log"
     WORKFLOW_COMPLETED = "workflow_completed"
     WORKFLOW_FAILED = "workflow_failed"

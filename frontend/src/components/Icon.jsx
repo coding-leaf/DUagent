@@ -23,6 +23,8 @@ const materialToLucide = {
     'arrow_forward': 'ArrowRight',
     'arrow_back': 'ArrowLeft',
     'warning': 'AlertTriangle',
+    'shield_alert': 'ShieldAlert',
+    'gpp_bad': 'ShieldX',
     'verified_user': 'ShieldCheck',
     'tune': 'Sliders',
     'play_arrow': 'Play',

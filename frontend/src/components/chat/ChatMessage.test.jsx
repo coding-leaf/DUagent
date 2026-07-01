@@ -32,4 +32,40 @@ describe('ChatMessage', () => {
     expect(screen.getByText('生成补弱计划')).toBeDefined();
     expect(screen.getByText('待执行')).toBeDefined();
   });
+
+  it('replaces blocked assistant content with safety notice', () => {
+    render(
+      <ChatMessage
+        message={{
+          id: 'ai-1',
+          role: 'assistant',
+          content: '不应展示的原文',
+          loading: false,
+          safetyBlocked: true,
+          safetyReview: {
+            action: 'block',
+            riskLevel: 'critical',
+            reason: '明确违法指导'
+          },
+          parts: [
+            { type: 'text', content: '不应展示的原文' },
+            {
+              type: 'content_safety_review',
+              review: {
+                action: 'block',
+                riskLevel: 'critical',
+                reason: '明确违法指导'
+              }
+            }
+          ]
+        }}
+        onSendMessage={vi.fn()}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('该回复未通过内容安全审核，已隐藏。')).toBeDefined();
+    expect(screen.queryByText('不应展示的原文')).toBeNull();
+    expect(screen.getByText('明确违法指导')).toBeDefined();
+  });
 });

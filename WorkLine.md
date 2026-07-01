@@ -986,3 +986,45 @@ AIChat 前端消息增加有序 `parts` 渲染模型，`text_delta` 与 `tool_st
 - Agent pytest：未运行（仅更新 skill 文档）
 
 **接口漂移：** 无
+
+### 2026-07-01 — 重构 AIChat AgentScope 运行时与内容安全外审
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/session/workbench_input.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/workspaces/run_store.py`
+- `agent_service_v2/src/agent_service_v2/safety/__init__.py`
+- `agent_service_v2/src/agent_service_v2/safety/schemas.py`
+- `agent_service_v2/src/agent_service_v2/safety/content_review_client.py`
+- `agent_service_v2/src/agent_service_v2/safety/content_review_middleware.py`
+- `agent_service_v2/src/agent_service_v2/runtime/edu_events.py`
+- `agent_service_v2/tests/test_workbench_input.py`
+- `agent_service_v2/tests/test_workbench_run_store.py`
+- `agent_service_v2/tests/test_content_review_middleware.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `agent_service_v2/tests/test_workbench_api.py`
+- `backend/app/services/tutoring_stream_adapter.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `frontend/src/utils/chatStreamEvents.js`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/components/Icon.jsx`
+- `frontend/src/utils/__tests__/chatStreamEvents.test.js`
+- `frontend/src/components/chat/ChatMessage.test.jsx`
+- `docs/10-client-api/API_前端接口规范.md`
+- `docs/20-agent-api/API_Agent内部接口规范.md`
+- `docs/superpowers/plans/2026-07-01-aichat-agentscope-runtime-safety.md`
+- `WorkLine.md`
+
+**核心改动：**
+AIChat AgentScope v2 运行时新增 `WorkbenchInputBuilder`，将 Backend 传入的 `conversation_summary/recent_messages/user_profile/active_kg_nodes` 转换为 AgentScope `Msg` 列表后交给单 Agent 的 `reply_stream()`，修复多轮对话不感知历史上下文的问题。新增 workspace run store，在 conversation workspace 下记录 run state/events/review。新增内容安全外审运行时：完整 assistant 回复结束后生成 `content_safety_reviewed` 事件，审核范围限定为违禁/违法/安全风险，不审核知识点正确性；`medium/high` 仅 flag，只有 `critical` block，外审不可用时 fail-open。Backend 透传并保存外审 meta，Frontend 渲染内容安全提示并在 block 时隐藏正文。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_input.py tests/test_workbench_run_store.py tests/test_content_review_middleware.py tests/test_workbench_session.py::test_workbench_session_passes_context_messages_to_agent tests/test_workbench_session.py::test_workbench_session_emits_content_safety_review_after_reply -q` 先失败于缺少输入组装、run store、safety 模块
+- RED：`cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_stream_adapter.py -q` 先失败于 persist 回调未保存 safety meta
+- RED：`cd frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/chat/ChatMessage.test.jsx` 先失败于不识别 `content_safety_reviewed`
+- Agent targeted：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_session.py tests/test_workbench_api.py tests/test_protocol_adapter.py tests/test_workbench_run_store.py tests/test_workbench_input.py tests/test_content_review_middleware.py -q`（22 passed，1 个 FastAPI TestClient deprecation warning）
+- Backend targeted：`cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_stream_adapter.py -q`（6 passed）
+- Frontend targeted：`cd frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/chat/ChatMessage.test.jsx src/context/ChatContext.test.jsx`（3 files passed，10 tests passed）
+
+**接口漂移：**
+新增 Agent v2 / Backend 透传给前端的 EDU SSE 事件 `content_safety_reviewed`。事件 payload 包含 `passed/risk_level/categories/reason/action/confidence/scope/knowledge_reviewed/reviewer`，其中 `scope=content_safety_only`、`knowledge_reviewed=false`，用于说明外审仅做内容安全分级，不做知识点正确性或幻觉审核。

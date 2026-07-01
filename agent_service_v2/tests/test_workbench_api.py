@@ -69,5 +69,6 @@ def test_workbench_chat_streams_agent_events(monkeypatch):
         "workflow_started",
         "text_delta",
         "workflow_completed",
+        "content_safety_reviewed",
     ]
     assert payloads[1]["payload"] == {"delta": "先复习链表。"}

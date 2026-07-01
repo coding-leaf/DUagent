@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 
-from agentscope.event import RequireUserConfirmEvent
-from agentscope.message import Msg, TextBlock
+from agentscope.event import ReplyEndEvent, RequireUserConfirmEvent, TextBlockDeltaEvent
 
 from agent_service_v2.agents.workbench_factory import (
     MissingModelConfigError,
@@ -17,10 +16,13 @@ from agent_service_v2.observability.logging import (
 )
 from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
+from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
+from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
 from agent_service_v2.workspaces.workbench_workspace_manager import (
     WorkbenchWorkspaceManager,
 )
+from agent_service_v2.workspaces.run_store import WorkbenchRunStore
 
 
 class WorkbenchSession:
@@ -30,10 +32,12 @@ class WorkbenchSession:
         run_bus: WorkbenchRunBus,
         workspace_manager: WorkbenchWorkspaceManager,
         agent_factory: WorkbenchAgentFactory,
+        content_reviewer: ContentSafetyReviewer | None = None,
     ) -> None:
         self._run_bus = run_bus
         self._workspace_manager = workspace_manager
         self._agent_factory = agent_factory
+        self._content_reviewer = content_reviewer or ContentSafetyReviewer()
         self._tasks: dict[str, asyncio.Task] = {}
 
     def start(
@@ -113,6 +117,8 @@ class WorkbenchSession:
                 run=run,
                 agent=agent,
                 message=message,
+                context=context,
+                run_store=WorkbenchRunStore(workspace=workspace),
                 user_id=user_id,
                 course_id=course_id,
             )
@@ -123,6 +129,8 @@ class WorkbenchSession:
                 run=run,
                 agent=agent,
                 message=message,
+                context=context,
+                run_store=WorkbenchRunStore(workspace=workspace),
                 user_id=user_id,
                 course_id=course_id,
             )
@@ -146,21 +154,26 @@ class WorkbenchSession:
         run: WorkbenchRun,
         agent,
         message: str,
+        context: dict,
+        run_store: WorkbenchRunStore,
         user_id: str,
         course_id: str | None,
     ) -> None:
+        run_store.write_state(run.run_id, {"status": "running", "conversation_id": run.conversation_id})
         adapter = EDUProtocolAdapter(
             run_id=run.run_id,
             conversation_id=run.conversation_id,
             agent=run.agent,
         )
-        user_message = Msg(
-            name="student",
-            role="user",
-            content=[TextBlock(text=message)],
+        agent_inputs = build_workbench_agent_input(
+            message=message,
+            context=context,
         )
+        assistant_chunks: list[str] = []
         try:
-            async for agent_event in agent.reply_stream(user_message):
+            async for agent_event in agent.reply_stream(agent_inputs):
+                if isinstance(agent_event, TextBlockDeltaEvent):
+                    assistant_chunks.append(agent_event.delta)
                 debug_record = build_agentscope_event_log(
                     agent_event,
                     run_id=run.run_id,
@@ -170,13 +183,14 @@ class WorkbenchSession:
                     agent=run.agent,
                 )
                 if debug_record is not None:
-                    self._run_bus.publish(
+                    debug_event = self._run_bus.publish(
                         run.run_id,
                         EduEventType.DEBUG_LOG,
                         debug_record,
                     )
+                    run_store.append_event(run.run_id, debug_event.to_dict())
                 if isinstance(agent_event, RequireUserConfirmEvent):
-                    self._run_bus.publish(
+                    permission_event = self._run_bus.publish(
                         run.run_id,
                         EduEventType.DEBUG_LOG,
                         build_log_record(
@@ -205,16 +219,47 @@ class WorkbenchSession:
                             },
                         ),
                     )
-                    self._run_bus.fail(
+                    run_store.append_event(run.run_id, permission_event.to_dict())
+                    failed_event = self._run_bus.fail(
                         run.run_id,
                         reason="user_confirmation_required",
                     )
+                    run_store.append_event(run.run_id, failed_event.to_dict())
                     return
                 for edu_event in adapter.adapt_many(agent_event):
-                    self._run_bus.publish_event(edu_event)
+                    published_event = self._run_bus.publish_event(edu_event)
+                    run_store.append_event(run.run_id, published_event.to_dict())
+                if isinstance(agent_event, ReplyEndEvent):
+                    await self._publish_content_safety_review(
+                        run=run,
+                        run_store=run_store,
+                        content="".join(assistant_chunks),
+                    )
+            run_store.write_state(run.run_id, {"status": "completed", "conversation_id": run.conversation_id})
             self._run_bus.complete(run.run_id)
         except asyncio.CancelledError:
-            self._run_bus.fail(run.run_id, reason="cancelled")
+            failed_event = self._run_bus.fail(run.run_id, reason="cancelled")
+            run_store.append_event(run.run_id, failed_event.to_dict())
+            run_store.write_state(run.run_id, {"status": "cancelled", "conversation_id": run.conversation_id})
             raise
         except Exception as exc:
-            self._run_bus.fail(run.run_id, reason=exc.__class__.__name__)
+            failed_event = self._run_bus.fail(run.run_id, reason=exc.__class__.__name__)
+            run_store.append_event(run.run_id, failed_event.to_dict())
+            run_store.write_state(run.run_id, {"status": "failed", "conversation_id": run.conversation_id})
+
+    async def _publish_content_safety_review(
+        self,
+        *,
+        run: WorkbenchRun,
+        run_store: WorkbenchRunStore,
+        content: str,
+    ) -> None:
+        review = await self._content_reviewer.review(content)
+        payload = review.to_payload()
+        run_store.write_review(run.run_id, payload)
+        event = self._run_bus.publish(
+            run.run_id,
+            EduEventType.CONTENT_SAFETY_REVIEWED,
+            payload,
+        )
+        run_store.append_event(run.run_id, event.to_dict())

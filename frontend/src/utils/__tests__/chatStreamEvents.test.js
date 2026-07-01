@@ -70,4 +70,43 @@ describe('chatStreamEvents', () => {
       }
     ]);
   });
+
+  it('adds content safety review as an ordered message part and blocks critical content', () => {
+    let message = createEmptyAiMessage();
+
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'text_delta',
+      payload: { delta: '原始回答' }
+    });
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'content_safety_reviewed',
+      payload: {
+        passed: false,
+        risk_level: 'critical',
+        categories: ['illegal_instruction'],
+        reason: '明确违法指导',
+        action: 'block',
+        scope: 'content_safety_only',
+        knowledge_reviewed: false
+      }
+    });
+
+    expect(message.safetyReview).toEqual({
+      passed: false,
+      riskLevel: 'critical',
+      categories: ['illegal_instruction'],
+      reason: '明确违法指导',
+      action: 'block',
+      scope: 'content_safety_only',
+      knowledgeReviewed: false
+    });
+    expect(message.safetyBlocked).toBe(true);
+    expect(message.parts).toEqual([
+      { type: 'text', content: '原始回答' },
+      {
+        type: 'content_safety_review',
+        review: message.safetyReview
+      }
+    ]);
+  });
 });

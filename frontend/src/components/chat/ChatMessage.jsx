@@ -79,7 +79,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
         )}
       </div>
       
-      <div className={`w-full min-w-0 overflow-hidden transition-all ${isUser ? 'bg-cyan-500 text-white rounded-3xl rounded-tr-sm shadow-md p-3.5 max-w-[85%]' : 'text-slate-700 py-2 px-1'}`}>
+      <div className={`w-full min-w-0 overflow-hidden transition-all ${isUser ? 'bg-cyan-500 text-white rounded-lg rounded-tr-sm shadow-md p-3.5 max-w-[85%]' : 'text-slate-700 py-2 px-1'}`}>
         
         {/* Tool Calls */}
         {!isUser && !hasOrderedParts && message.toolCalls && message.toolCalls.map((tc, idx) => (

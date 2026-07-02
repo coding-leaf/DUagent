@@ -25,7 +25,7 @@ export default function AgentWorkspace() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white/50 backdrop-blur-sm m-4 mt-0 rounded-2xl border shadow-sm p-6 pt-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white/50 backdrop-blur-sm m-4 mt-0 rounded-lg border shadow-sm p-6 pt-4">
         {workspaceArtifacts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
             <Icon name="dashboard_customize" className="material-symbols-outlined text-[48px] mb-3 text-slate-300" />

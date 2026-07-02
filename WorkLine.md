@@ -1142,3 +1142,18 @@ Backend 在透传 `artifact_created` SSE 时收集 artifact payload，并在流�
 - Agent pytest：未运行（未修改 Agent Service）
 
 **接口漂移：** 有。`GET /api/v1/tutoring/conversations/{conversation_id}` 返回的 `messages[].meta` 现在可能包含 `artifacts` 数组，前端用于恢复 AIChat 工作区产物；未新增 API 路径或 SSE 事件类型。
+
+### 2026-07-02 — 现代化 ChatMessage 气泡和头像样式
+
+**涉及文件：**
+- `frontend/src/components/chat/ChatMessage.jsx`
+
+**核心改动：**
+更新了 AI 消息的样式，去除了边框，营造无边框文档感；更新了用户和 AI 的头像容器样式，使整体对话体验更符合浮窗和工作台 UI 设计。
+
+**验证结果：**
+- 前端 lint / build / tests：通过 (`npm run lint && npm run test:unit -- ChatMessage.test.jsx`)
+- 后端 py_compile / pytest：未运行
+- Agent pytest：未运行
+
+**接口漂移：** 无

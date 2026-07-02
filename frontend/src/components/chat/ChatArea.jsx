@@ -56,7 +56,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   };
 
   return (
-    <main className="w-full h-full flex flex-col relative bg-white/80 backdrop-blur-xl border border-slate-200 shadow-2xl rounded-2xl overflow-hidden">
+    <main className="w-full h-full flex flex-col relative bg-white/80 backdrop-blur-xl border border-slate-200 shadow-2xl rounded-lg overflow-hidden">
       
       {/* Top Context Bar */}
       <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-5 lg:px-7 z-10 flex-shrink-0">
@@ -101,7 +101,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                     />
 
                   {isLastUser && editingMsg && editingMsg.msgId === msg.id ? (
-                    <div className="mt-2 bg-white border border-cyan-300 rounded-2xl p-3 shadow-sm">
+                    <div className="mt-2 bg-white border border-cyan-300 rounded-lg p-3 shadow-sm">
                       <textarea
                         className="w-full border-none focus:ring-0 px-2 py-1 text-[15px] text-slate-800 resize-none outline-none rounded-lg bg-slate-50 min-h-[60px]"
                         value={editingMsg.content}
@@ -181,9 +181,9 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
             ))}
           </div>
           
-          <div className="bg-white border border-slate-200 rounded-[28px] shadow-lg p-2.5 flex items-end gap-2 focus-within:border-cyan-400 focus-within:ring-4 focus-within:ring-cyan-500/10 transition-all">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-2.5 flex items-end gap-2 focus-within:border-cyan-400 focus-within:ring-4 focus-within:ring-cyan-500/10 transition-all">
             <div className="flex gap-1 text-slate-400 pb-1 pl-1">
-              <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-full transition-colors cursor-pointer flex items-center justify-center">
+              <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
                 <Icon name="attach_file" className="material-symbols-outlined text-[18px]"/>
               </button>
             </div>
@@ -206,7 +206,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
               {isSending ? (
                 <button
                   onClick={() => cancelStream()}
-                  className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center cursor-pointer hover:bg-red-600 active:scale-95 transition-all shadow-sm"
+                  className="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center cursor-pointer hover:bg-red-600 active:scale-95 transition-all shadow-sm"
                   title="停止生成"
                 >
                   <Icon name="close" className="material-symbols-outlined text-[16px]"/>
@@ -216,7 +216,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                   data-testid="send-message-button"
                   onClick={() => handleSendMessage()}
                   disabled={!inputValue.trim() || !activeCourseId}
-                  className="w-8 h-8 rounded-full bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"
+                  className="w-8 h-8 rounded-lg bg-cyan-500 text-white flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-600 active:scale-95 transition-all shadow-sm"
                 >
                   <Icon name="arrow_upward" className="material-symbols-outlined text-[16px]"/>
                 </button>

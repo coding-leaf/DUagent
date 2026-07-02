@@ -100,7 +100,9 @@ export const ChatProvider = ({ children }) => {
         if (res.code === 200 && res.data) {
           const historyMessages = normalizeMessages(res.data.messages);
           setMessages(historyMessages);
-          setWorkspaceArtifacts(artifactsFromMessages(historyMessages));
+          const artifacts = artifactsFromMessages(historyMessages);
+          setWorkspaceArtifacts(artifacts);
+          setActiveArtifactId(artifacts.length > 0 ? artifacts[artifacts.length - 1].id : null);
         }
       }).catch(console.error);
     } else {

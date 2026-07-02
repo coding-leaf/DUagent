@@ -62,7 +62,7 @@ const renderWithProviders = (ui) => render(
 );
 
 const StreamConsumer = () => {
-  const { activeSession, messages, workspaceArtifacts, runLogs, clearRunLogs, sendMessage, resetConversation, isSending } = useChat();
+  const { activeSession, messages, workspaceArtifacts, activeArtifactId, runLogs, clearRunLogs, sendMessage, resetConversation, isSending } = useChat();
   const assistant = messages.find(m => m.role === 'assistant');
   const user = messages.find(m => m.role === 'user');
   return (
@@ -75,6 +75,7 @@ const StreamConsumer = () => {
       <div data-testid="assistant-error">{String(assistant?.isError ?? false)}</div>
       <div data-testid="tool-status">{assistant?.toolCalls?.[0]?.status || ''}</div>
       <div data-testid="artifact-count">{workspaceArtifacts.length}</div>
+      <div data-testid="active-artifact-id">{activeArtifactId || ''}</div>
       <div data-testid="log-count">{runLogs?.length || 0}</div>
       <div data-testid="last-log-message">{runLogs?.at(-1)?.message || ''}</div>
       <div data-testid="sending">{String(isSending)}</div>
@@ -197,6 +198,7 @@ test('ChatProvider reduces native EDU v2 stream events', async () => {
   expect(screen.getByTestId('assistant-loading').textContent).toBe('false');
   expect(screen.getByTestId('tool-status').textContent).toBe('completed');
   expect(screen.getByTestId('artifact-count').textContent).toBe('1');
+  expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-1');
   expect(screen.getByTestId('sending').textContent).toBe('false');
 });
 
@@ -230,6 +232,7 @@ test('ChatProvider restores workspace artifacts from conversation history', asyn
   await waitFor(() => {
     expect(screen.getByTestId('artifact-count').textContent).toBe('1');
   });
+  expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-plan');
 });
 
 test('ChatProvider handles workflow_failed as native EDU v2 error event', async () => {

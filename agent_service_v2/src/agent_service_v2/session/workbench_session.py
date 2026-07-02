@@ -21,6 +21,7 @@ from agent_service_v2.observability.logging import (
 )
 from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
+from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
 from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
@@ -169,6 +170,10 @@ class WorkbenchSession:
             run_id=run.run_id,
             conversation_id=run.conversation_id,
             agent=run.agent,
+            artifact_publisher=ArtifactPublisher(
+                run_id=run.run_id,
+                artifact_dir=run_store.artifact_dir(run.run_id),
+            ),
         )
         agent_inputs = build_workbench_agent_input(
             message=message,

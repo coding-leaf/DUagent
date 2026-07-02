@@ -24,9 +24,31 @@ from agentscope.event import (
 )
 from agentscope.message import ToolCallBlock, ToolResultState
 
+from agent_service_v2.artifacts.schemas import PublishedArtifact
 from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.sse import format_sse
+
+
+class FakeArtifactPublisher:
+    def __init__(self):
+        self.calls = []
+
+    def publish_new(self, *, seq_start=None):
+        self.calls.append(seq_start)
+        if len(self.calls) == 1:
+            return [
+                PublishedArtifact(
+                    id="artifact_001_functions",
+                    file="001-functions.md",
+                    type="Markdown",
+                    title="函数资料",
+                    sha256="abc",
+                    props={"title": "函数资料", "content": "# 函数资料\n"},
+                    published_seq=seq_start,
+                )
+            ]
+        return []
 
 
 def test_protocol_adapter_maps_core_agentscope_events():
@@ -113,6 +135,53 @@ def test_protocol_adapter_emits_plan_updated_for_planning_tools():
         ]
     }
     assert events[5].payload["tasks"][0]["status"] == "in_progress"
+
+
+def test_protocol_adapter_emits_artifact_after_artifact_tool_success():
+    publisher = FakeArtifactPublisher()
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+        artifact_publisher=publisher,
+    )
+
+    raw_events = [
+        ToolCallStartEvent(reply_id="reply-1", tool_call_id="tool-1", tool_call_name="write_artifact_file"),
+        ToolResultEndEvent(reply_id="reply-1", tool_call_id="tool-1", state=ToolResultState.SUCCESS),
+    ]
+
+    events = [event for raw_event in raw_events for event in adapter.adapt_many(raw_event)]
+
+    assert [event.type for event in events] == [
+        EduEventType.TOOL_STARTED,
+        EduEventType.TOOL_COMPLETED,
+        EduEventType.ARTIFACT_CREATED,
+    ]
+    assert events[2].payload == {
+        "artifact": {
+            "id": "artifact_001_functions",
+            "type": "Markdown",
+            "props": {"title": "函数资料", "content": "# 函数资料\n"},
+        }
+    }
+
+
+def test_protocol_adapter_scans_before_workflow_completed():
+    publisher = FakeArtifactPublisher()
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+        artifact_publisher=publisher,
+    )
+
+    events = adapter.adapt_many(ReplyEndEvent(session_id="conv-1", reply_id="reply-1"))
+
+    assert [event.type for event in events] == [
+        EduEventType.ARTIFACT_CREATED,
+        EduEventType.WORKFLOW_COMPLETED,
+    ]
 
 
 def test_format_sse_serializes_edu_event():

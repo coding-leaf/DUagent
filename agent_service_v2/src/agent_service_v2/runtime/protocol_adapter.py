@@ -29,6 +29,7 @@ from agentscope.event import (
     UserConfirmResultEvent,
 )
 
+from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.runtime.edu_events import EduEvent, EduEventType, utc_now_iso
 
 
@@ -39,10 +40,12 @@ class EDUProtocolAdapter:
         run_id: str,
         conversation_id: str | None,
         agent: str = "edu_ai_chat_workbench",
+        artifact_publisher: ArtifactPublisher | None = None,
     ) -> None:
         self.run_id = run_id
         self.conversation_id = conversation_id
         self.agent = agent
+        self._artifact_publisher = artifact_publisher
         self._seq = 0
         self._tool_names: dict[str, str] = {}
         self._tool_inputs: dict[str, str] = {}
@@ -60,14 +63,18 @@ class EDUProtocolAdapter:
     def adapt_many(self, event: Any) -> list[EduEvent]:
         self._capture_event_context(event)
         mapped = self._map_event(event)
-        if mapped is None:
-            return []
-        event_type, payload = mapped
-        events = [self._build_event(event_type, payload)]
+        events: list[EduEvent] = []
+        if mapped is not None:
+            event_type, payload = mapped
+            if isinstance(event, ReplyEndEvent):
+                events.extend(self._build_artifact_events())
+            events.append(self._build_event(event_type, payload))
         if isinstance(event, ToolResultEndEvent):
             plan_payload = self._build_plan_payload_for_tool_result(event)
             if plan_payload is not None:
                 events.append(self._build_event(EduEventType.PLAN_UPDATED, plan_payload))
+            if self._is_successful_artifact_tool_result(event):
+                events.extend(self._build_artifact_events())
         return events
 
     def _build_event(self, event_type: EduEventType, payload: dict[str, Any]) -> EduEvent:
@@ -183,6 +190,19 @@ class EDUProtocolAdapter:
             self._merge_task_list_text(result_text)
 
         return {"tasks": deepcopy(list(self._plan_tasks.values()))}
+
+    def _is_successful_artifact_tool_result(self, event: ToolResultEndEvent) -> bool:
+        state = getattr(event.state, "value", event.state)
+        return state != "error" and self._tool_names.get(event.tool_call_id) == "write_artifact_file"
+
+    def _build_artifact_events(self) -> list[EduEvent]:
+        if self._artifact_publisher is None:
+            return []
+        seq_start = self._seq + 1
+        return [
+            self._build_event(EduEventType.ARTIFACT_CREATED, artifact.to_event_payload())
+            for artifact in self._artifact_publisher.publish_new(seq_start=seq_start)
+        ]
 
     def _merge_task_list_text(self, result_text: str) -> None:
         for line in result_text.splitlines():

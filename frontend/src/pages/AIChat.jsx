@@ -29,7 +29,7 @@ export default function AIChat() {
     <div className="font-body-md text-slate-800 bg-slate-50 h-screen flex flex-col overflow-hidden">
       <Navbar />
 
-      <div className="flex-1 flex overflow-hidden pt-16">
+      <div className="flex-1 flex overflow-hidden pt-16 relative">
         <SidebarHistory 
           leftCollapsed={leftCollapsed}
           leftDrawerOpen={leftDrawerOpen}
@@ -40,11 +40,15 @@ export default function AIChat() {
 
         <AgentWorkspace />
 
-        <ChatArea 
-          key={activeSession || 'empty'}
-          activeCourseName={activeCourseName}
-          onOpenLeftDrawer={handleOpenLeftDrawer}
-        />
+        <div className="absolute top-0 right-0 h-full p-4 pointer-events-none flex justify-end w-full lg:w-[480px] 2xl:w-[540px] z-10">
+          <div className="pointer-events-auto w-full h-full">
+            <ChatArea 
+              key={activeSession || 'empty'}
+              activeCourseName={activeCourseName}
+              onOpenLeftDrawer={handleOpenLeftDrawer}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

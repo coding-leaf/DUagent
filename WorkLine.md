@@ -1075,3 +1075,34 @@ AIChat AgentScope v2 运行时新增 `WorkbenchInputBuilder`，将 Backend 传�
 - 文档自检：通过 `rg` 扫描计划禁用占位词；通过 `agent_service_v2/.venv` AgentScope introspection 确认版本和核心 API surface
 
 **接口漂移：** 无。计划复用既有 `artifact_created` SSE 类型和 `payload.artifact.{id,type,props}` 结构，未修改运行代码。
+
+### 2026-07-02 — 实现 AIChat 工作区文件产物链路
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/artifacts/`
+- `agent_service_v2/src/agent_service_v2/tools/artifact_files.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/workspaces/run_store.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.test.jsx`
+- `frontend/src/components/workspace/AgentWorkspace.test.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+将 AIChat 的 saveable 内容从占位 `draft_study_artifact` 改为受保护的 `write_artifact_file` 工作区写入链路。Agent Service 在 run 级 `artifacts/` 目录扫描 Markdown、Mermaid 和 JSON plugin 文件，通过 `manifest.json` 去重并发布 `artifact_created`，让前端 Agent 工作区成为学习资料的展示位置。Backend 保持 SSE 透传和文本持久化边界，不直接持久化 artifact body。
+
+**验证结果：**
+- Agent focused：`cd agent_service_v2 && ./.venv/bin/python -m pytest tests/test_artifact_scanner.py tests/test_artifact_manifest.py tests/test_artifact_file_tool.py tests/test_workbench_toolkit.py tests/test_workbench_factory.py tests/test_protocol_adapter.py tests/test_workbench_session.py -q`（42 passed）
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/artifacts/schemas.py src/agent_service_v2/artifacts/scanner.py src/agent_service_v2/artifacts/manifest.py src/agent_service_v2/tools/artifact_files.py src/agent_service_v2/tools/workbench_toolkit.py src/agent_service_v2/runtime/protocol_adapter.py src/agent_service_v2/session/workbench_session.py`（通过）
+- Backend focused：`cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_stream_adapter.py -q`（6 passed）
+- Frontend focused：`cd frontend && npm run test:unit -- src/components/workspace/AgentWorkspace.test.jsx src/components/workspace/plugins/MarkdownViewer.test.jsx src/context/ChatContext.test.jsx`（3 files passed，10 tests passed）
+- Frontend lint：`cd frontend && npm run lint`（通过）
+- Frontend build：`cd frontend && npm run build`（通过；仍有既有 Vite chunk-size warning）
+
+**接口漂移：** 无。复用既有 `artifact_created` SSE 类型和 `payload.artifact.{id,type,props}` 结构。

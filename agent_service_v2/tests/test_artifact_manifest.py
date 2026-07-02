@@ -43,7 +43,7 @@ def test_publisher_emits_new_artifact_once_and_writes_manifest(tmp_path):
     assert manifest["artifacts"][0]["file"] == "001-functions.md"
 
 
-def test_publisher_reemits_changed_file_with_new_id(tmp_path):
+def test_publisher_reemits_changed_file_with_same_id(tmp_path):
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
     path = artifact_dir / "001-functions.md"
@@ -55,5 +55,5 @@ def test_publisher_reemits_changed_file_with_new_id(tmp_path):
     second = publisher.publish_new(seq_start=2)
 
     assert first[0].id == "artifact_001_functions"
-    assert second[0].id == "artifact_001_functions_2"
+    assert second[0].id == "artifact_001_functions"
     assert second[0].props["content"] == "# v2\n"

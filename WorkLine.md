@@ -1157,3 +1157,39 @@ Backend 在透传 `artifact_created` SSE 时收集 artifact payload，并在流�
 - Agent pytest：未运行
 
 **接口漂移：** 无
+
+### 2026-07-02 — 修复前端工作区同一工件生成多个标签且切换失灵的问题
+
+**涉及文件：**
+- `frontend/src/context/ChatContext.jsx`
+- `backend/app/services/tutoring_stream_adapter.py`
+
+**核心改动：**
+1. 修复了 SSE 数据流 `artifact_created` 导致前端重复 Append 同一个 ID 工件的问题。在 `ChatContext` 的事件流监听以及加载历史时，均补充了按 `artifact.id` 去重和更新逻辑，避免渲染相同的工件多个 Tab 且导致 `Array.find` 无法切换。
+2. 修复了后端代理 `tutoring_stream_adapter` 收集生成的 Artifact 时未按 ID 覆盖的问题，防止数据库中出现冗余重复的 `meta.artifacts` 列表。
+
+**验证结果：**
+- 前端 lint / build：通过
+- 后端 py_compile / pytest：通过（`pytest tests/test_tutoring_stream_adapter.py -v` 6 passed）
+- Agent pytest：未运行
+
+**接口漂移：** 无
+
+### 2026-07-02 — 修复 Agent 写入相同工件文件生成新 ID 导致前端多 Tab 与切换失灵问题
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/artifacts/manifest.py`
+- `agent_service_v2/tests/test_artifact_manifest.py`
+- `frontend/src/components/workspace/WorkspaceTabs.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. **后端工件 ID 稳定化**：修复了 `agent_service_v2` 中的 `ArtifactPublisher`。对于同名文件的更新写入（SHA256 改变），不再生成如 `_2`、`_3` 等新 ID，而是重用既有 ID 并原地更新记录。这确保了前后端在流式更新相同工件时能够命中既有的 ID 进行原地覆盖更新，不会产生重复的标签页。
+2. **前端工件标题解析修复**：修改了前端 `<WorkspaceTabs />` 中的标题取值逻辑，优先获取 `art.props.title`（大模型通过 frontmatter 等方式设置在 props 中的标题），使标签页能正常显示大模型生成的标题名称（如“函数资料”等），不再统一 fallback 显示为无差别的“Markdown”。
+3. **测试更新**：更新了 `agent_service_v2` 中对应的单元测试以断言该 ID 重用行为。
+
+**验证结果：**
+- 前端 build & lint：通过 (`npm run lint && npm run build` 在 `frontend/` 中测试通过)
+- Agent pytest：通过 (`./.venv/bin/pytest` 在 `agent_service_v2/` 运行，60 passed)
+
+**接口漂移：** 无。仅使生成的工件 ID 在同一工件的流式更新过程中保持稳定，未改动对外 HTTP 接口或 SSE 事件的 Schema。

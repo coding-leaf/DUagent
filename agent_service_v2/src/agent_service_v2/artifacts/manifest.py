@@ -19,24 +19,38 @@ class ArtifactPublisher:
 
     def publish_new(self, *, seq_start: int | None = None) -> list[PublishedArtifact]:
         manifest = self._read_manifest()
-        existing = {(item["file"], item["sha256"]) for item in manifest["artifacts"]}
+        file_to_idx = {item["file"]: i for i, item in enumerate(manifest["artifacts"])}
         published: list[PublishedArtifact] = []
         for scanned in ArtifactScanner(self._artifact_dir).scan():
-            if (scanned.file, scanned.sha256) in existing:
-                continue
-            artifact_id = self._next_artifact_id(scanned.file, manifest["artifacts"])
             published_seq = None if seq_start is None else seq_start + len(published)
-            record = {
-                "id": artifact_id,
-                "file": scanned.file,
-                "type": scanned.type,
-                "title": scanned.title,
-                "sha256": scanned.sha256,
-                "created_at": datetime.now(UTC).isoformat(),
-                "published_seq": published_seq,
-                "status": "published",
-            }
-            manifest["artifacts"].append(record)
+            
+            if scanned.file in file_to_idx:
+                idx = file_to_idx[scanned.file]
+                existing_record = manifest["artifacts"][idx]
+                if existing_record["sha256"] == scanned.sha256:
+                    continue  # skip if content is identical
+                
+                # Keep same ID, update content hash and seq
+                artifact_id = existing_record["id"]
+                existing_record.update({
+                    "sha256": scanned.sha256,
+                    "published_seq": published_seq,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                })
+            else:
+                artifact_id = self._next_artifact_id(scanned.file, manifest["artifacts"])
+                record = {
+                    "id": artifact_id,
+                    "file": scanned.file,
+                    "type": scanned.type,
+                    "title": scanned.title,
+                    "sha256": scanned.sha256,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "published_seq": published_seq,
+                    "status": "published",
+                }
+                manifest["artifacts"].append(record)
+
             published.append(
                 PublishedArtifact(
                     id=artifact_id,

@@ -15,7 +15,7 @@ export default function WorkspaceTabs({ artifacts, activeId, onSelect }) {
           }`}
         >
           <Icon name="insert_drive_file" className="text-[16px] inline-block mr-1 align-text-bottom" />
-          {art.title || art.type}
+          {art.props?.title || art.title || art.type}
         </button>
       ))}
     </div>

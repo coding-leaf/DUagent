@@ -52,7 +52,8 @@ test('renders markdown artifact title and content', () => {
   render(<AgentWorkspace />);
 
   expect(screen.getByTestId('markdown-artifact')).toBeDefined();
-  expect(screen.getByText('函数资料')).toBeDefined();
+  // Expect two occurrences: one in the tab button, one in the markdown content
+  expect(screen.getAllByText('函数资料')).toHaveLength(2);
   expect(screen.getByText('# 函数资料')).toBeDefined();
 });
 
@@ -79,7 +80,8 @@ test('renders tabs and handles tab click', () => {
 
   render(<AgentWorkspace />);
   
-  const tab2 = screen.getByText('Tab 2');
+  // Search for the button using 'T2' because props.title is now preferred
+  const tab2 = screen.getByText('T2');
   expect(tab2).toBeDefined();
 
   fireEvent.click(tab2);

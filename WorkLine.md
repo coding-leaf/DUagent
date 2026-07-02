@@ -1106,3 +1106,19 @@ AIChat AgentScope v2 运行时新增 `WorkbenchInputBuilder`，将 Backend 传�
 - Frontend build：`cd frontend && npm run build`（通过；仍有既有 Vite chunk-size warning）
 
 **接口漂移：** 无。复用既有 `artifact_created` SSE 类型和 `payload.artifact.{id,type,props}` 结构。
+
+### 2026-07-02 — 优化本地一键启动脚本
+
+**涉及文件：**
+- `start_all.sh`
+- `WorkLine.md`
+
+**核心改动：**
+增强本地联调启动脚本的失败可见性和进程管理：脚本现在使用严格模式、启动日志目录、Backend/Agent 端口占用检查、服务 PID 记录、启动超时检测、Backend `/health` 探测和失败日志尾部输出。脚本只清理自身启动的进程，不自动杀已有端口占用进程；Frontend 由 Vite 选择可用端口，并从日志中识别实际访问地址。
+
+**验证结果：**
+- `bash -n start_all.sh`（通过）
+- 沙箱内直接执行 `./start_all.sh`：Docker socket 权限不足，符合当前工具沙箱限制。
+- 提权执行 `./start_all.sh`：在当前已有 Agent Service `127.0.0.1:8002` 监听时，脚本明确报错 `Agent Service v2 cannot start: 127.0.0.1:8002 is already in use.` 并退出，没有继续启动其他服务。
+
+**接口漂移：** 无。仅调整本地启动脚本，不涉及 API 契约或业务代码。

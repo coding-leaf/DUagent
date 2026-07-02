@@ -81,9 +81,14 @@ const COMPONENTS = {
   pre: ({ children }) => <>{children}</> // Prevent double wrapping with pre
 };
 
-export default function MarkdownViewer({ content }) {
+export default function MarkdownViewer({ title, content }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm w-full">
+    <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm w-full">
+      {title ? (
+        <div className="mb-5 border-b border-slate-100 pb-3">
+          <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
+        </div>
+      ) : null}
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
         {content}
       </ReactMarkdown>

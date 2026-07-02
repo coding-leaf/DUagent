@@ -12,6 +12,12 @@ vi.mock('../../context/ChatContext', () => ({
 vi.mock('./PluginRegistry', () => ({
   PluginRegistry: {
     QuizCard: ({ question }) => <div data-testid="quiz-card">{question}</div>,
+    Markdown: ({ title, content }) => (
+      <article data-testid="markdown-artifact">
+        <h1>{title}</h1>
+        <div>{content}</div>
+      </article>
+    ),
   },
 }));
 
@@ -30,6 +36,24 @@ test('renders plugin components when artifacts exist', () => {
   render(<AgentWorkspace />);
   expect(screen.getByTestId('quiz-card')).toBeDefined();
   expect(screen.getByText('What is React?')).toBeDefined();
+});
+
+test('renders markdown artifact title and content', () => {
+  useChat.mockReturnValue({
+    workspaceArtifacts: [
+      {
+        id: 'artifact_001_functions',
+        type: 'Markdown',
+        props: { title: '函数资料', content: '# 函数资料' },
+      },
+    ],
+  });
+
+  render(<AgentWorkspace />);
+
+  expect(screen.getByTestId('markdown-artifact')).toBeDefined();
+  expect(screen.getByText('函数资料')).toBeDefined();
+  expect(screen.getByText('# 函数资料')).toBeDefined();
 });
 
 test('renders error message for unknown plugin type', () => {

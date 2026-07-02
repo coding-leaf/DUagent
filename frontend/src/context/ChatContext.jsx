@@ -53,6 +53,7 @@ export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [workspaceArtifacts, setWorkspaceArtifacts] = useState([]);
+  const [activeArtifactId, setActiveArtifactId] = useState(null);
   const { runLogs, appendRunLog, clearRunLogs } = useRunLogs();
 
   const abortControllerRef = useRef(null);
@@ -72,6 +73,7 @@ export const ChatProvider = ({ children }) => {
       setIsDraftConversation(false);
       setMessages([]);
       setWorkspaceArtifacts([]);
+      setActiveArtifactId(null);
       clearRunLogs();
       return;
     }
@@ -86,6 +88,7 @@ export const ChatProvider = ({ children }) => {
       setIsDraftConversation(false);
       setMessages([]);
       setWorkspaceArtifacts([]);
+      setActiveArtifactId(null);
       clearRunLogs();
     }
   }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation, clearRunLogs]);
@@ -104,6 +107,7 @@ export const ChatProvider = ({ children }) => {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([]);
       setWorkspaceArtifacts([]);
+      setActiveArtifactId(null);
     }
   }, [activeSession]);
 
@@ -128,6 +132,7 @@ export const ChatProvider = ({ children }) => {
     lastMessageIdRef.current = null;
     setMessages([]);
     setWorkspaceArtifacts([]);
+    setActiveArtifactId(null);
     clearRunLogs();
     setIsSending(false);
   };
@@ -191,7 +196,10 @@ export const ChatProvider = ({ children }) => {
 
         if (event.type === 'artifact_created') {
           const artifact = normalizeArtifact(event);
-          if (artifact) setWorkspaceArtifacts(prev => [...prev, artifact]);
+          if (artifact) {
+            setWorkspaceArtifacts(prev => [...prev, artifact]);
+            setActiveArtifactId(artifact.id);
+          }
         }
 
         if (event.type === 'workflow_completed') {
@@ -288,7 +296,7 @@ export const ChatProvider = ({ children }) => {
     <ChatContext.Provider value={{
       sessions, activeSession, setActiveSession, messages, isSending,
       sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession,
-      workspaceArtifacts, runLogs, clearRunLogs
+      workspaceArtifacts, activeArtifactId, setActiveArtifactId, runLogs, clearRunLogs
     }}>
       {children}
     </ChatContext.Provider>

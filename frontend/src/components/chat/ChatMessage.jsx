@@ -71,15 +71,15 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
   
   return (
     <div className={`flex gap-3 max-w-[100%] min-w-0 group ${isUser ? 'ml-auto flex-row-reverse' : ''} ${isReviewFlagged ? 'opacity-60' : ''}`}>
-      <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center mt-1 ${isUser ? 'bg-cyan-600 text-white shadow-sm' : 'bg-sky-100 text-cyan-600'}`}>
+      <div className={`w-8 h-8 flex-shrink-0 flex items-center justify-center mt-1 ${isUser ? 'bg-transparent text-slate-400' : 'rounded-full bg-gradient-to-tr from-cyan-400 to-indigo-400 text-white shadow-sm'}`}>
         {isUser ? (
-          <Icon name="person" className="material-symbols-outlined text-[18px]"/>
+          <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-slate-500"><Icon name="person" className="text-[14px]"/></div>
         ) : (
-          <span className="text-[12px] font-bold">AI</span>
+          <span className="text-[11px] font-bold tracking-wider">AI</span>
         )}
       </div>
       
-      <div className={`w-full min-w-0 overflow-hidden transition-all ${isUser ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none shadow-md p-3 max-w-[85%]' : 'text-slate-700 py-1'}`}>
+      <div className={`w-full min-w-0 overflow-hidden transition-all ${isUser ? 'bg-cyan-500 text-white rounded-3xl rounded-tr-sm shadow-md p-3.5 max-w-[85%]' : 'text-slate-700 py-2 px-1'}`}>
         
         {/* Tool Calls */}
         {!isUser && !hasOrderedParts && message.toolCalls && message.toolCalls.map((tc, idx) => (

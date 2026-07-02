@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import AgentWorkspace from './AgentWorkspace';
 import { useChat } from '../../context/ChatContext';
@@ -64,4 +64,24 @@ test('renders error message for unknown plugin type', () => {
   });
   render(<AgentWorkspace />);
   expect(screen.getByText(/未知插件类型: UnknownType/)).toBeDefined();
+});
+
+test('renders tabs and handles tab click', () => {
+  const setActiveArtifactIdMock = vi.fn();
+  useChat.mockReturnValue({
+    workspaceArtifacts: [
+      { id: 'art1', type: 'QuizCard', props: { question: 'Q1' }, title: 'Tab 1' },
+      { id: 'art2', type: 'Markdown', props: { title: 'T2', content: 'C2' }, title: 'Tab 2' },
+    ],
+    activeArtifactId: 'art1',
+    setActiveArtifactId: setActiveArtifactIdMock,
+  });
+
+  render(<AgentWorkspace />);
+  
+  const tab2 = screen.getByText('Tab 2');
+  expect(tab2).toBeDefined();
+
+  fireEvent.click(tab2);
+  expect(setActiveArtifactIdMock).toHaveBeenCalledWith('art2');
 });

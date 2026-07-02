@@ -27,6 +27,7 @@ vi.mock('../api/services/course', () => ({
 }));
 
 const streamChatMock = vi.hoisted(() => vi.fn());
+const getHistoryMock = vi.hoisted(() => vi.fn());
 
 // Mock chatService
 vi.mock('../api/services/chat', () => ({
@@ -35,16 +36,18 @@ vi.mock('../api/services/chat', () => ({
       code: 200,
       data: { conversations: [{ id: 'conv-existing', title: 'Existing chat' }] }
     }),
-    getHistory: vi.fn().mockResolvedValue({
-      code: 200,
-      data: { messages: [] }
-    }),
+    getHistory: (...args) => getHistoryMock(...args),
     streamChat: (...args) => streamChatMock(...args)
   }
 }));
 
 beforeEach(() => {
   streamChatMock.mockReset();
+  getHistoryMock.mockReset();
+  getHistoryMock.mockResolvedValue({
+    code: 200,
+    data: { messages: [] }
+  });
   localStorage.clear();
 });
 
@@ -195,6 +198,38 @@ test('ChatProvider reduces native EDU v2 stream events', async () => {
   expect(screen.getByTestId('tool-status').textContent).toBe('completed');
   expect(screen.getByTestId('artifact-count').textContent).toBe('1');
   expect(screen.getByTestId('sending').textContent).toBe('false');
+});
+
+test('ChatProvider restores workspace artifacts from conversation history', async () => {
+  getHistoryMock.mockResolvedValue({
+    code: 200,
+    data: {
+      messages: [
+        {
+          role: 'assistant',
+          content: '已生成补弱计划。',
+          meta: {
+            artifacts: [
+              {
+                id: 'artifact-plan',
+                type: 'Markdown',
+                props: { title: '补弱计划', content: '# 补弱计划' }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  });
+
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId('artifact-count').textContent).toBe('1');
+  });
 });
 
 test('ChatProvider handles workflow_failed as native EDU v2 error event', async () => {

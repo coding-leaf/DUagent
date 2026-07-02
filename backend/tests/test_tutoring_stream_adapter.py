@@ -84,7 +84,22 @@ async def test_stream_adapter_does_not_filter_tool_source_or_artifact_events():
     assert decoded[0]["payload"]["tool_name"] == "TaskCreate"
     assert decoded[3]["payload"]["artifact"]["type"] == "Markdown"
     assert decoded[3]["payload"]["artifact"]["props"]["title"] == "函数资料"
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "", [], [], {})
+    persisted.assert_awaited_once_with(
+        "msg-1",
+        "conv-1",
+        "",
+        [],
+        [],
+        {
+            "artifacts": [
+                {
+                    "id": "a1",
+                    "type": "Markdown",
+                    "props": {"title": "函数资料", "content": "# Plan"},
+                }
+            ]
+        },
+    )
 
 
 @pytest.mark.asyncio

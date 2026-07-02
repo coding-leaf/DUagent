@@ -1122,3 +1122,23 @@ AIChat AgentScope v2 运行时新增 `WorkbenchInputBuilder`，将 Backend 传�
 - 提权执行 `./start_all.sh`：在当前已有 Agent Service `127.0.0.1:8002` 监听时，脚本明确报错 `Agent Service v2 cannot start: 127.0.0.1:8002 is already in use.` 并退出，没有继续启动其他服务。
 
 **接口漂移：** 无。仅调整本地启动脚本，不涉及 API 契约或业务代码。
+
+### 2026-07-02 — 持久化 AIChat 工作区产物并支持历史恢复
+
+**涉及文件：**
+- `backend/app/services/tutoring_stream_adapter.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/context/ChatContext.test.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+Backend 在透传 `artifact_created` SSE 时收集 artifact payload，并在流结束持久化 assistant message 时写入 `Message.meta_json.artifacts`。前端加载历史会话后从 assistant messages 的 `meta.artifacts` 恢复 `workspaceArtifacts`，避免刷新页面或切换回旧会话后工作区产物消失。工作区展示仍以真实 `artifact_created`/落库 artifact 为事实来源，不根据 AI 文本承诺伪造产物。
+
+**验证结果：**
+- 前端 lint / build：通过 `cd frontend && npm run lint`；通过 `cd frontend && npm run build`（仅保留既有 chunk size warning）
+- 前端测试：通过 `cd frontend && npm run test:unit -- src/context/ChatContext.test.jsx`
+- 后端 py_compile / pytest：通过 `cd backend && ../.venv/bin/python -m py_compile app/services/tutoring_stream_adapter.py app/services/tutoring_presenters.py`；通过 `cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_stream_adapter.py -q`
+- Agent pytest：未运行（未修改 Agent Service）
+
+**接口漂移：** 有。`GET /api/v1/tutoring/conversations/{conversation_id}` 返回的 `messages[].meta` 现在可能包含 `artifacts` 数组，前端用于恢复 AIChat 工作区产物；未新增 API 路径或 SSE 事件类型。

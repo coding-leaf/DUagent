@@ -29,6 +29,7 @@ class StreamState:
     chunks: list[str] = field(default_factory=list)
     diagrams: list = field(default_factory=list)
     knowledge_points: list = field(default_factory=list)
+    artifacts: list[dict] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
     done_sent: bool = False
 
@@ -97,6 +98,11 @@ class TutoringStreamAdapter:
             state.done_sent = True
         elif event_type == "content_safety_reviewed":
             state.meta["content_safety_review"] = payload
+        elif event_type == "artifact_created":
+            artifact = payload.get("artifact")
+            if isinstance(artifact, dict):
+                state.artifacts.append(artifact)
+                state.meta["artifacts"] = state.artifacts
 
         parsed["conversation_id"] = state.conversation_id
         parsed["message_id"] = state.assistant_message_id

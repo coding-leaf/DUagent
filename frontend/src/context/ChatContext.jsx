@@ -23,6 +23,21 @@ const buildAgentMessage = (message, options = {}) => {
   return options.planMode ? `${PLAN_MODE_PREFIX}${message}` : message;
 };
 
+const artifactsFromMessages = (messages = []) => {
+  return messages.flatMap(message => {
+    const artifacts = message?.meta?.artifacts;
+    if (!Array.isArray(artifacts)) return [];
+    return artifacts
+      .filter(artifact => artifact && artifact.type)
+      .map(artifact => ({
+        id: artifact.id || `artifact-${crypto.randomUUID()}`,
+        type: artifact.type,
+        props: artifact.props || {},
+        timestamp: artifact.timestamp || message.timestamp || new Date().toISOString()
+      }));
+  });
+};
+
 export const ChatProvider = ({ children }) => {
   const { activeCourseId } = useCourse();
   const { data: sessionsRes, mutate: mutateSessions } = useSWR(
@@ -80,8 +95,9 @@ export const ChatProvider = ({ children }) => {
     if (activeSession) {
       chatService.getHistory(activeSession).then(res => {
         if (res.code === 200 && res.data) {
-          setMessages(normalizeMessages(res.data.messages));
-          setWorkspaceArtifacts([]);
+          const historyMessages = normalizeMessages(res.data.messages);
+          setMessages(historyMessages);
+          setWorkspaceArtifacts(artifactsFromMessages(historyMessages));
         }
       }).catch(console.error);
     } else {

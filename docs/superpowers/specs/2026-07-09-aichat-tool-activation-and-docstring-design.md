@@ -1,31 +1,34 @@
-# Design Spec: AIChat Tool Activation and Docstring Optimization
+# 设计规范：AIChat 工具激活与 Docstring 优化
 
-This document specifies the design for solving tool activation failures and parameter schema mismatches in the AIChat AgentScope 2.x runtime.
+本文档详细说明了如何解决 AIChat AgentScope 2.x 运行期工具激活失效以及大模型工具参数 Schema 不匹配的问题。
 
-## 1. Problem Statement
+## 1. 问题背景
 
-1. **Tool Reset Failures**: In the current implementation, every user turn (HTTP POST to `/agent/v2/workbench/chat`) instantiates a new Agent object. By default, the `activated_groups` list in `AgentState` starts empty. If the Agent directly invokes a tool (such as `read_recent_answers`) without first invoking the meta-tool `reset_tools` (which maps to "整理工具状态" in the frontend) to activate the tool group, the invocation fails with a "Tool not available" status (`state="error"`).
-2. **Schema Mismatches**: The Python functions for the learning progress tools lack docstrings. Because AgentScope generates the JSON schema for LLMs based on these docstrings, the LLM receives no parameter descriptions. This causes the LLM to pass invalid arguments (such as passing a list of knowledge points instead of a single string, or passing natural language names instead of 32-character node ID hashes), causing validation crashes.
+1. **工具激活重置失效**：在当前的设计中，每次用户发送消息（POST `/agent/v2/workbench/chat`）都会重新实例化 Agent 对象。默认情况下，`AgentState` 中的 `activated_groups` 列表为空。若 Agent 在本轮对话中直接调用如 `read_recent_answers` 的具体工具，而未首先调用 `reset_tools`（前端对应“整理工具状态”）来激活该工具组，就会导致调用失败（状态为 `error`）。
+2. **工具参数 Schema 缺失**：`agent_service_v2` 中已注册的进度和答题工具缺少 Python Docstring 描述。因为 AgentScope 是基于 Docstring 自动提取并生成大模型工具的 JSON Schema，这导致大模型无法获取参数 `node_id` 和 `knowledge_point` 的描述与约束，从而大模型可能会传入错误的参数类型（如合并查询传入了 List，或者将中文节点名当作 `node_id` 传入），导致参数校验崩溃。
 
-## 2. Proposed Solution
+## 2. 优化方案
 
-We will implement a two-part optimization:
-1. **Default Tool Activation**: We will modify the workbench agent factory to automatically activate all safe/authorized tool groups on agent initialization. This removes the need for the model to issue a redundant `reset_tools` call at the start of a turn, allowing immediate execution of progressive queries.
-2. **Docstring Definitions**: We will add clear, standard Python docstrings to all tool functions under `agent_service_v2`. This ensures that the generated schema contains explicit typing, format constraints, and instructions for parameter usage.
+我们将实施以下两项优化：
+1. **默认激活安全工具组**：修改工作台 Agent 工厂，在 Agent 初始化时默认激活所有已授权的安全工具组。这避免了模型在每一轮对话开始时都必须浪费一轮交互去调用 `reset_tools`，实现了即开即用。
+2. **补全 Docstring 描述**：在 `learning_progress.py` 中为关键工具函数补充清晰的 Google 风格文档注释，定义入参的具体含义和格式限制。
 
 ---
 
-## 3. Implementation Details
+## 3. 实现细节
 
-### 3.1. Default Tool Activation in `workbench_factory.py`
+### 3.1. 默认工具激活（修改 `workbench_factory.py`）
 
-In [workbench_factory.py](file:///home/yezisama/workspace/workflow/EDUagent/agent_service_v2/src/agent_service_v2/agents/workbench_factory.py):
-1. Import `ToolContext` from `agentscope.state._state`.
-2. Extract the names of all non-basic tool groups registered on the toolkit:
+在 [workbench_factory.py](file:///home/yezisama/workspace/workflow/EDUagent/agent_service_v2/src/agent_service_v2/agents/workbench_factory.py) 中：
+1. 导入 `ToolContext` 依赖：
+   ```python
+   from agentscope.state._state import ToolContext
+   ```
+2. 动态扫描 `toolkit.tool_groups` 中除了 `basic` 之外的所有已注册安全工具组：
    ```python
    activated_groups = [g.name for g in toolkit.tool_groups if g.name != "basic"]
    ```
-3. Initialize `AgentState` with this pre-populated `tool_context`:
+3. 在初始化 `Agent` 时，将这些工具组作为初值注入到 `AgentState` 中：
    ```python
    state=AgentState(
        permission_context=build_workbench_permission_context(),
@@ -33,9 +36,9 @@ In [workbench_factory.py](file:///home/yezisama/workspace/workflow/EDUagent/agen
    )
    ```
 
-### 3.2. Detailed Docstrings in `learning_progress.py`
+### 3.2. 详细 Docstring 补全（修改 `learning_progress.py`）
 
-In [learning_progress.py](file:///home/yezisama/workspace/workflow/EDUagent/agent_service_v2/src/agent_service_v2/tools/learning_progress.py), document `read_learning_progress` and `read_recent_answers`:
+在 [learning_progress.py](file:///home/yezisama/workspace/workflow/EDUagent/agent_service_v2/src/agent_service_v2/tools/learning_progress.py) 中，补全 `read_learning_progress` 和 `read_recent_answers` 的文档描述：
 
 ```python
 async def read_learning_progress(limit_nodes: int = 50, **_ignored: Any) -> dict[str, Any]:
@@ -66,14 +69,14 @@ async def read_recent_answers(
 
 ---
 
-## 4. Verification and Test Strategy
+## 4. 测试与验证策略
 
-### 4.1. Unit Tests
-We will add a new test case in [test_workbench_factory.py](file:///home/yezisama/workspace/workflow/EDUagent/agent_service_v2/tests/test_workbench_factory.py) to assert:
-- `agent.state.tool_context.activated_groups` is pre-populated on instantiation.
-- The list of default activated groups contains at least `planning` and `learning_progress`.
+### 4.1. 单元测试
+我们将在 [test_workbench_factory.py](file:///home/yezisama/workspace/workflow/EDUagent/agent_service_v2/tests/test_workbench_factory.py) 中新增一个测试用例，断言：
+- `agent.state.tool_context.activated_groups` 在实例化时已被预装载。
+- 默认激活的工具组列表至少包含 `planning` 和 `learning_progress`。
 
-We will run the existing test suite using pytest to ensure zero regressions:
+运行整个测试套件以确保无 Regression：
 ```bash
 cd agent_service_v2 && ./.venv/bin/pytest
 ```

@@ -173,3 +173,56 @@ def test_scanner_accepts_valid_code_sandbox_card(tmp_path):
         "language": "c",
         "default_stdin": "",
     }
+
+
+def test_scanner_normalizes_top_level_code_sandbox_card(tmp_path):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "code-card.json").write_text(
+        json.dumps(
+            {
+                "type": "CodeSandboxCard",
+                "title": "函数+循环综合练习：统计与筛选",
+                "question_text": "补全函数和循环",
+                "code": "#include<stdio.h>\\nint main(){return 0;}",
+                "language": "c",
+                "default_stdin": "1 10\\n-1 0",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    artifacts = ArtifactScanner(artifact_dir).scan()
+
+    assert artifacts[0].type == "CodeSandboxCard"
+    assert artifacts[0].title == "函数+循环综合练习：统计与筛选"
+    assert artifacts[0].props == {
+        "question_text": "补全函数和循环",
+        "code": "#include<stdio.h>\\nint main(){return 0;}",
+        "language": "c",
+        "default_stdin": "1 10\\n-1 0",
+    }
+
+
+def test_scanner_infers_code_sandbox_card_from_top_level_required_fields(tmp_path):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "code-card.json").write_text(
+        json.dumps(
+            {
+                "question_text": "补全函数和循环",
+                "code": "#include<stdio.h>\\nint main(){return 0;}",
+                "language": "c",
+                "default_stdin": "1 10\\n-1 0",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    artifacts = ArtifactScanner(artifact_dir).scan()
+
+    assert artifacts[0].type == "CodeSandboxCard"
+    assert artifacts[0].props["language"] == "c"
+    assert artifacts[0].props["question_text"] == "补全函数和循环"

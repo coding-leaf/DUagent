@@ -91,6 +91,7 @@ def _parse_json_artifact(raw: str, filename: str) -> tuple[str, str | None, dict
         raise ArtifactValidationError(f"invalid json artifact: {filename}") from exc
     if not isinstance(parsed, dict):
         raise ArtifactValidationError(f"json artifact must be an object: {filename}")
+    parsed = validate_json_artifact_payload(parsed, filename)
     artifact_type = parsed.get("type")
     if not isinstance(artifact_type, str):
         raise ArtifactValidationError(f"json artifact type is required: {filename}")
@@ -100,5 +101,4 @@ def _parse_json_artifact(raw: str, filename: str) -> tuple[str, str | None, dict
     title = parsed.get("title")
     if title is not None and not isinstance(title, str):
         raise ArtifactValidationError(f"json artifact title must be a string: {filename}")
-    validate_json_artifact_payload(parsed, filename)
     return artifact_type, title, props

@@ -133,4 +133,50 @@ def test_write_artifact_file_accepts_valid_code_sandbox_card(tmp_path):
     path = tmp_path / "runs" / "run-1" / "artifacts" / "code-card.json"
     assert result["status"] == "ok"
     assert result["artifact_type"] == "CodeSandboxCard"
-    assert path.read_text(encoding="utf-8") == content
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "type": "CodeSandboxCard",
+        "title": "代码练习",
+        "props": {
+            "question_text": "修复这段 C 代码",
+            "code": "#include<stdio.h>\\nint main(){return 0;}",
+            "language": "c",
+            "default_stdin": "",
+        },
+    }
+
+
+def test_write_artifact_file_normalizes_top_level_code_sandbox_card(tmp_path):
+    tool = build_write_artifact_file(
+        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
+        run_id="run-1",
+    )
+    content = json.dumps(
+        {
+            "question_text": "补全函数和循环",
+            "code": "#include<stdio.h>\\nint main(){return 0;}",
+            "language": "c",
+            "default_stdin": "1 10\\n-1 0",
+        },
+        ensure_ascii=False,
+    )
+
+    result = tool(
+        filename="code-card.json",
+        content=content,
+        artifact_type="CodeSandboxCard",
+        title="函数+循环综合练习：统计与筛选",
+    )
+
+    path = tmp_path / "runs" / "run-1" / "artifacts" / "code-card.json"
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert result["status"] == "ok"
+    assert written == {
+        "type": "CodeSandboxCard",
+        "title": "函数+循环综合练习：统计与筛选",
+        "props": {
+            "question_text": "补全函数和循环",
+            "code": "#include<stdio.h>\\nint main(){return 0;}",
+            "language": "c",
+            "default_stdin": "1 10\\n-1 0",
+        },
+    }

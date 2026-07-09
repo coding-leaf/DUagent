@@ -30,13 +30,15 @@ def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Call
         safe_filename = _validate_filename(filename)
         if artifact_type not in SUPPORTED_ARTIFACT_TYPES:
             raise ArtifactValidationError(f"unsupported artifact type: {artifact_type}")
+        content = _normalize_json_content_for_write(
+            filename=safe_filename,
+            content=content,
+            artifact_type=artifact_type,
+            title=title,
+        )
         encoded_body = content.encode("utf-8")
         if len(encoded_body) > MAX_ARTIFACT_BYTES:
             raise ArtifactValidationError(f"artifact content exceeds {MAX_ARTIFACT_BYTES} bytes")
-        _validate_json_content_for_write(
-            filename=safe_filename,
-            content=content,
-        )
         existing_files = [path for path in artifact_dir.iterdir() if path.is_file() and path.name != "manifest.json"]
         if len(existing_files) >= MAX_ARTIFACTS_PER_RUN and not (artifact_dir / safe_filename).exists():
             raise ArtifactValidationError("artifact count limit exceeded")
@@ -64,16 +66,30 @@ def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Call
     return write_artifact_file
 
 
-def _validate_json_content_for_write(*, filename: str, content: str) -> None:
+def _normalize_json_content_for_write(
+    *,
+    filename: str,
+    content: str,
+    artifact_type: str,
+    title: str,
+) -> str:
     if Path(filename).suffix != ".json":
-        return
+        return content
     try:
         payload = json.loads(content)
     except json.JSONDecodeError as exc:
         raise ArtifactValidationError(f"invalid json artifact: {filename}") from exc
     if not isinstance(payload, dict):
         raise ArtifactValidationError(f"json artifact must be an object: {filename}")
-    validate_json_artifact_payload(payload, filename)
+    normalized = validate_json_artifact_payload(
+        payload,
+        filename,
+        artifact_type_hint=artifact_type,
+        title_hint=title or None,
+    )
+    if normalized.get("type") == "CodeSandboxCard":
+        return json.dumps(normalized, ensure_ascii=False)
+    return content
 
 
 def _validate_filename(filename: str) -> str:

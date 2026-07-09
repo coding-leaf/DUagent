@@ -1388,6 +1388,27 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **遗留问题：**
 后续如继续增强代码练习产物，可新增专用 `write_code_sandbox_card` 工具，把卡片字段从自由 JSON 字符串升级为 typed tool 参数。
 
+
+### 2026-07-10 — 修复 CodeSandboxCard top-level artifact 兼容回归
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/artifacts/validation.py`
+- `agent_service_v2/src/agent_service_v2/artifacts/scanner.py`
+- `agent_service_v2/src/agent_service_v2/tools/artifact_files.py`
+- `agent_service_v2/tests/test_artifact_scanner.py`
+- `agent_service_v2/tests/test_artifact_file_tool.py`
+
+**核心改动：**
+修复上一轮强校验过严导致真实 `CodeSandboxCard` 产物被拒绝的问题。Artifact 写入和扫描现在同时兼容历史/模型常用的 top-level 字段形状与 `props` 包裹形状，并在发布前统一规范化为前端期望的 `artifact.props`，避免坏卡片退化成 Markdown raw JSON。
+
+**验证结果：**
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/python -m pytest tests/test_artifact_file_tool.py tests/test_artifact_scanner.py -q` 通过，22 passed。
+- 真实样本验证：`exercise_statistics.json` 可被 `ArtifactScanner` 识别为 `CodeSandboxCard`，且 props 包含 `question_text` / `code` / `language` / `default_stdin`。
+- Agent py_compile：`python3 -m py_compile agent_service_v2/src/agent_service_v2/artifacts/validation.py agent_service_v2/src/agent_service_v2/artifacts/scanner.py agent_service_v2/src/agent_service_v2/tools/artifact_files.py` 通过。
+
+**接口漂移：**
+无。未修改 HTTP API、SSE 事件类型或前端消费形状；仅兼容 artifact 文件输入形状并统一发布 payload。
+
 ---
 
 ### 2026-07-10 — 个性化资源与学习路径规划页面 UI 布局与数量优化

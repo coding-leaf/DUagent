@@ -97,3 +97,79 @@ def test_scanner_ignores_manifest_and_rejects_hidden_or_nested_files(tmp_path):
 
     with pytest.raises(ArtifactValidationError, match="hidden artifact file"):
         ArtifactScanner(artifact_dir).scan()
+
+
+def test_scanner_rejects_code_sandbox_card_missing_language(tmp_path):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "bad-code-card.json").write_text(
+        json.dumps(
+            {
+                "type": "CodeSandboxCard",
+                "props": {
+                    "question_text": "修复这段 C 代码",
+                    "code": "#include<stdio.h>\\nint main(){return 0;}",
+                    "default_stdin": "",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ArtifactValidationError, match="language"):
+        ArtifactScanner(artifact_dir).scan()
+
+
+def test_scanner_rejects_code_sandbox_card_unsupported_language(tmp_path):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "bad-code-card.json").write_text(
+        json.dumps(
+            {
+                "type": "CodeSandboxCard",
+                "props": {
+                    "question_text": "运行 Python 代码",
+                    "code": "print('hello')",
+                    "language": "python3",
+                    "default_stdin": "",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ArtifactValidationError, match="unsupported CodeSandboxCard language"):
+        ArtifactScanner(artifact_dir).scan()
+
+
+def test_scanner_accepts_valid_code_sandbox_card(tmp_path):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "code-card.json").write_text(
+        json.dumps(
+            {
+                "type": "CodeSandboxCard",
+                "props": {
+                    "question_text": "修复这段 C 代码",
+                    "code": "#include<stdio.h>\\nint main(){return 0;}",
+                    "language": "c",
+                    "default_stdin": "",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    artifacts = ArtifactScanner(artifact_dir).scan()
+
+    assert len(artifacts) == 1
+    assert artifacts[0].type == "CodeSandboxCard"
+    assert artifacts[0].props == {
+        "question_text": "修复这段 C 代码",
+        "code": "#include<stdio.h>\\nint main(){return 0;}",
+        "language": "c",
+        "default_stdin": "",
+    }

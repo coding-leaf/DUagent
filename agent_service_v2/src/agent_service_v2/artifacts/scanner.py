@@ -13,6 +13,7 @@ from agent_service_v2.artifacts.schemas import (
     ArtifactValidationError,
     ScannedArtifact,
 )
+from agent_service_v2.artifacts.validation import validate_json_artifact_payload
 
 
 class ArtifactScanner:
@@ -99,4 +100,5 @@ def _parse_json_artifact(raw: str, filename: str) -> tuple[str, str | None, dict
     title = parsed.get("title")
     if title is not None and not isinstance(title, str):
         raise ArtifactValidationError(f"json artifact title must be a string: {filename}")
+    validate_json_artifact_payload(parsed, filename)
     return artifact_type, title, props

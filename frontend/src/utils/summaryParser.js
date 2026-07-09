@@ -37,7 +37,7 @@ export function parseSummaryText(text) {
     const content = text.substring(startPos, endPos).trim();
 
     if (current.key === 'suggestions') {
-      const itemRegex = /(?:\d+[\)\）\、\.])\s*/g;
+      const itemRegex = /(?:\d+[)）、.])\s*/g;
       const parts = content.split(itemRegex);
       
       const items = [];
@@ -49,8 +49,8 @@ export function parseSummaryText(text) {
       for (let j = 1; j < parts.length; j++) {
         const itemContent = parts[j].trim();
         if (itemContent) {
-          let title = '';
-          let desc = itemContent;
+          let title;
+          let desc;
           
           // Check first for custom colons
           const colonIdx = itemContent.indexOf('：');

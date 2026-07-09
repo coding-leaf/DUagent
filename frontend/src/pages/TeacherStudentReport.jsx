@@ -6,6 +6,7 @@ import FeedbackStatus from '../components/FeedbackStatus';
 import Icon from '../components/Icon';
 
 import ReportHeader from '../components/report/ReportHeader';
+import { parseSummaryText } from '../utils/summaryParser';
 import ProfileBanner from '../components/report/ProfileBanner';
 import QuizStatsMetrics from '../components/report/QuizStatsMetrics';
 import PathProgressCard from '../components/report/PathProgressCard';
@@ -85,12 +86,69 @@ export default function TeacherStudentReport() {
           <div className="space-y-8">
             <ProfileBanner report={report} classId={classId} />
 
-            {report.evaluation_summary?.summary_text && (
-              <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <p className="text-xs text-slate-500 font-bold uppercase mb-1">AI 分析</p>
-                <p className="text-sm text-slate-600 leading-relaxed">{report.evaluation_summary.summary_text}</p>
-              </div>
-            )}
+            {report.evaluation_summary?.summary_text && (() => {
+              const parsed = parseSummaryText(report.evaluation_summary.summary_text);
+              return (
+                <div className="bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
+                  <div className="font-bold text-sm text-cyan-600 flex items-center mb-3">
+                    <Icon name="psychology" className="material-symbols-outlined mr-1.5" />
+                    AI 深度学情诊断与教学建议
+                  </div>
+                  
+                  {parsed ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Left Column: Diagnostics Summary */}
+                      <div className="space-y-3">
+                        {parsed.scope && (
+                          <div className="p-3 bg-slate-50/50 border border-slate-100 rounded-lg text-xs">
+                            <div className="font-bold text-slate-700 flex items-center mb-1">
+                              <Icon name="school" className="material-symbols-outlined text-sm mr-1" />
+                              学生学习状态
+                            </div>
+                            <p className="text-slate-600 leading-relaxed">{parsed.scope}</p>
+                          </div>
+                        )}
+                        
+                        {parsed.mastery && (
+                          <div className="p-3 bg-red-50/50 border border-red-100 rounded-lg text-xs">
+                            <div className="font-bold text-red-800 flex items-center mb-1">
+                              <Icon name="error_outline" className="material-symbols-outlined text-sm mr-1" />
+                              关键薄弱环节 (优先介入)
+                            </div>
+                            <p className="text-slate-600 leading-relaxed">{parsed.mastery}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Column: Teaching recommendations Checklist */}
+                      {parsed.suggestions && parsed.suggestions.length > 0 && (
+                        <div className="p-3 bg-emerald-50/30 border border-emerald-100 rounded-lg">
+                          <div className="font-bold text-xs text-emerald-800 flex items-center mb-2">
+                            <Icon name="check_circle_outline" className="material-symbols-outlined text-sm mr-1" />
+                            针对性教学引导建议
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            {parsed.suggestions.map((item, idx) => (
+                              <div key={idx} className="bg-white border border-slate-100 rounded p-2 flex gap-2">
+                                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[9px] flex-shrink-0 mt-0.5">
+                                  {idx + 1}
+                                </div>
+                                <div>
+                                  <span className="font-bold text-slate-800">{item.title}：</span>
+                                  <span className="text-slate-500">{item.desc || '结合相关要点展开。'}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">{report.evaluation_summary.summary_text}</p>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <QuizStatsMetrics stats={report.quiz_stats} />

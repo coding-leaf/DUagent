@@ -19,6 +19,9 @@ class AgentModelSettings(BaseSettings):
     LLM_MODEL: str | None = None
     LLM_TIMEOUT: float = 60.0
     LLM_FORMATTER: str = "deepseek"
+    BACKEND_INTERNAL_BASE_URL: str | None = None
+    BACKEND_INTERNAL_AGENT_TOKEN: str | None = None
+    BACKEND_INTERNAL_TIMEOUT: float = 10.0
 
 
 def build_chat_model_from_settings(settings: AgentModelSettings | None = None):

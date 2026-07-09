@@ -1364,3 +1364,26 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。
+
+
+### 2026-07-10 — CodeSandboxCard artifact contract validation
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/artifacts/validation.py`
+- `agent_service_v2/src/agent_service_v2/artifacts/scanner.py`
+- `agent_service_v2/src/agent_service_v2/tools/artifact_files.py`
+- `agent_service_v2/tests/test_artifact_scanner.py`
+- `agent_service_v2/tests/test_artifact_file_tool.py`
+
+**核心改动：**
+在 Agent Service v2 artifact 写入和扫描边界增加 `CodeSandboxCard` 强契约校验，缺少 `question_text` / `code` / `language` / `default_stdin` 或语言枚举非法的 JSON 工件会被拒绝。`write_artifact_file` 在写盘前校验，避免坏工件污染 run workspace；`ArtifactScanner` 在发布 `artifact_created` 前二次校验，防止历史文件或绕过写入工具的文件进入前端画布。
+
+**验证结果：**
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/python -m pytest tests/test_artifact_file_tool.py tests/test_artifact_scanner.py -q` 通过，19 passed。
+- Agent py_compile：`python3 -m py_compile agent_service_v2/src/agent_service_v2/artifacts/validation.py agent_service_v2/src/agent_service_v2/artifacts/scanner.py agent_service_v2/src/agent_service_v2/tools/artifact_files.py` 通过。
+
+**接口漂移：**
+无。未修改 Client API、Agent API 路径、SSE 事件类型或 artifact payload 形状，仅强制执行既有 `CodeSandboxCard` 工件契约。
+
+**遗留问题：**
+后续如继续增强代码练习产物，可新增专用 `write_code_sandbox_card` 工具，把卡片字段从自由 JSON 字符串升级为 typed tool 参数。

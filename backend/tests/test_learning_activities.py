@@ -93,7 +93,11 @@ async def _seed_course_resource():
         edges=[],
     )
     async with async_session_factory() as db:
-        db.add_all([teacher, course, resource, kg])
+        db.add(teacher)
+        await db.flush()
+        db.add(course)
+        await db.flush()
+        db.add_all([resource, kg])
         await db.commit()
     return teacher, course, resource
 

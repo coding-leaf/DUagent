@@ -1193,3 +1193,41 @@ Backend 在透传 `artifact_created` SSE 时收集 artifact payload，并在流�
 - Agent pytest：通过 (`./.venv/bin/pytest` 在 `agent_service_v2/` 运行，60 passed)
 
 **接口漂移：** 无。仅使生成的工件 ID 在同一工件的流式更新过程中保持稳定，未改动对外 HTTP 接口或 SSE 事件的 Schema。
+
+### 2026-07-09 — AIChat 接入学习进度与最近答题查询工具
+
+**涉及文件：**
+- `backend/app/core/config.py`
+- `backend/app/schemas/internal_ai_chat.py`
+- `backend/app/services/ai_chat_learning_context.py`
+- `backend/app/api/v1/internal_ai_chat.py`
+- `backend/app/main.py`
+- `backend/tests/test_ai_chat_learning_context.py`
+- `backend/tests/test_internal_ai_chat.py`
+- `backend/tests/test_learning_activities.py`
+- `agent_service_v2/src/agent_service_v2/tools/backend_learning_client.py`
+- `agent_service_v2/src/agent_service_v2/tools/learning_progress.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/tests/test_backend_learning_client.py`
+- `agent_service_v2/tests/test_learning_progress_tools.py`
+- `agent_service_v2/tests/test_workbench_toolkit.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+
+**核心改动：**
+Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支持读取课程学习进度总览和按节点/知识点查询最近最多 10 条答题记录。Agent Service v2 新增 `read_learning_progress` 与 `read_recent_answers` 只读 AgentScope tools，通过 Backend internal API 真查询学习事实，Workbench prompt 要求给出下一步建议前先查询进度、分析错因前先查询最近答题，查不到数据时不得编造错因。`tool_completed.payload` 继续使用既有 SSE 事件类型，但会透传 tool 名称、状态和返回记录数摘要。额外修复 `backend/tests/test_learning_activities.py` 在 MySQL 外键环境下的 seed flush 顺序，确保最终回归可重复。
+
+**验证结果：**
+- Backend targeted：通过 `cd backend && ../.venv/bin/python -m pytest tests/test_ai_chat_learning_context.py tests/test_internal_ai_chat.py tests/test_learning_activities.py tests/test_learning_path_realtime.py -q`（24 passed, 1 warning）
+- Backend py_compile：通过 `cd backend && ../.venv/bin/python -m py_compile app/services/ai_chat_learning_context.py app/api/v1/internal_ai_chat.py app/schemas/internal_ai_chat.py app/core/config.py app/main.py`
+- Agent targeted：通过 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_backend_learning_client.py tests/test_learning_progress_tools.py tests/test_workbench_toolkit.py tests/test_workbench_factory.py tests/test_protocol_adapter.py -q`（25 passed）
+- Agent py_compile：通过 `cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/tools/backend_learning_client.py src/agent_service_v2/tools/learning_progress.py src/agent_service_v2/tools/workbench_toolkit.py src/agent_service_v2/agents/workbench_factory.py src/agent_service_v2/agents/permissions.py src/agent_service_v2/agents/prompts.py src/agent_service_v2/runtime/protocol_adapter.py`
+- AIChat regressions：通过 `cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_stream_adapter.py -q`（6 passed）；通过 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_session.py tests/test_workbench_api.py -q`（11 passed, 1 warning）
+
+**接口漂移：**
+有。新增 Backend internal API：`POST /internal/ai-chat/learning-progress`、`POST /internal/ai-chat/recent-answers`，仅供 Agent Service 通过 `X-Internal-Agent-Token` 调用；新增 Agent v2 只读工具 `read_learning_progress` 与 `read_recent_answers`。Client API 无漂移；SSE event type 无漂移，既有 `tool_completed.payload` 增加可选摘要字段。

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
-    admin, auth, catalogs, courses, evaluation, learning_path,
+    admin, auth, catalogs, courses, evaluation, internal_ai_chat, learning_path,
     learning_activities, personalized_resources, profile, quiz, resources,
     tasks, teaching, tutoring, users, webhooks,
 )
@@ -104,6 +104,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(catalogs.router)
+app.include_router(internal_ai_chat.router)
 app.include_router(courses.router)
 app.include_router(teaching.router)
 app.include_router(admin.router)

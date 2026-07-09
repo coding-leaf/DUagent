@@ -1,47 +1,42 @@
-# Personalized Resources Page UI Layout & Typography Optimization Implementation Plan
+# Unified UI Layout, Contrast & UX Optimization Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign the Personalized Resources page layout to a responsive 2-column grid, fix low color contrast accessibility issues, map missing chevron and file icons in Icon.jsx, and apply pointer-events mouse filtering to prevent accidental card deletions.
+**Goal:** Optimize UI layouts, correct color contrast ratios, map missing icon variables, implement pointer-events filters, and implement efficient backend count and limit queries for the Personalized Resources and Learning Path pages.
 
-**Architecture:** We will register missing Material-to-Lucide mappings in Icon.jsx, convert list container elements in PersonalizedResources.jsx to Tailwind grid layouts, standardize internal spacing, apply theme primary-color combinations, and disable delete button clicks when transparent.
+**Architecture:** We will register missing mappings in Icon.jsx (including the new explore compass mapping), convert PersonalizedResources.jsx list styles to 2-column responsive grids, update royal blue styles in PathVisualizer.jsx/NodeResourcePanel.jsx to cyan brand accents, prune double borders, and optimize NodeResourceService.py queries.
 
-**Tech Stack:** React 19, Tailwind CSS v4, Lucide React, Vitest, Playwright.
+**Tech Stack:** React 19, Tailwind CSS v4, Lucide React, FastAPI, SQLAlchemy, SQLite, Vitest, Pytest.
 
 ---
 
 ### Task 1: Update Icon Component Mappings
 
 **Files:**
-- Modify: `frontend/src/components/Icon.jsx:3-110`
+- Modify: `frontend/src/components/Icon.jsx`
 
-- [ ] **Step 1: Map expand_less, expand_more, description, and play_circle in Icon.jsx**
+- [ ] **Step 1: Map expand_less, expand_more, description, play_circle, and explore in Icon.jsx**
 
 Modify the `materialToLucide` dictionary in `frontend/src/components/Icon.jsx` to map missing icons:
-```javascript
-const materialToLucide = {
-    // ... (lines 4-20)
-    'chevron_right': 'ChevronRight',
-    'expand_less': 'ChevronUp',
-    'expand_more': 'ChevronDown',
-    // ... (lines 22-89)
-    'arrow_upward': 'ArrowUp',
-    'description': 'FileText',
-    'play_circle': 'PlayCircle',
-    // ...
-```
-
-Here is the exact code block mapping update:
 ```diff
+@@ -19,6 +19,8 @@
+     'lock': 'Lock',
      'error': 'AlertCircle',
      'chevron_right': 'ChevronRight',
 +    'expand_less': 'ChevronUp',
 +    'expand_more': 'ChevronDown',
      'check_circle': 'CheckCircle2',
-```
-and:
-```diff
-     'auto_stories': 'BookOpen',
+     'arrow_forward': 'ArrowRight',
+     'arrow_back': 'ArrowLeft',
+@@ -77,6 +77,7 @@
+     'do_not_disturb_off': 'Ban',
+     'check': 'Check',
+     'chat_bubble': 'MessageCircle',
++    'explore': 'Compass',
+     'bookmark': 'Bookmark',
+     'block': 'Ban',
+     'badge': 'Badge',
+@@ -83,6 +84,8 @@
      'attach_file': 'Paperclip',
      'assignment': 'ClipboardList',
      'arrow_upward': 'ArrowUp',
@@ -51,15 +46,13 @@ and:
 ```
 
 - [ ] **Step 2: Verify frontend compilation**
-
 Run: `npm run build` inside `frontend/` directory.
-Expected: Build passes with no compilation errors related to Icon.jsx or missing imports.
+Expected: Build passes with no compilation errors.
 
 - [ ] **Step 3: Commit**
-
 ```bash
 git add frontend/src/components/Icon.jsx
-git commit -m "style(fe): map expand arrows and file/video icons in Icon.jsx"
+git commit -m "style(fe): map expand arrows, compass, and file/video icons in Icon.jsx"
 ```
 
 ---
@@ -70,152 +63,136 @@ git commit -m "style(fe): map expand arrows and file/video icons in Icon.jsx"
 - Modify: `frontend/src/pages/PersonalizedResources.jsx`
 
 - [ ] **Step 1: Refactor QuizGroupCard in PersonalizedResources.jsx**
-
-Modify `QuizGroupCard` (lines 37-159) to use standard margins, correct theme button styles, map the updated expand chevron, and prevent accidental deletion clicks:
-```diff
-@@ -71,28 +71,28 @@
-   return (
--    <div className="bg-white border border-outline-variant rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
-+    <div className="bg-white border border-outline-variant rounded-xl overflow-hidden hover:shadow-md hover:border-cyan-300 hover:bg-cyan-50/5 transition-all duration-200">
-       {/* Header */}
-       <div 
--        className="p-4 flex items-center justify-between gap-4 bg-slate-50 cursor-pointer"
-+        className="p-5 flex items-center justify-between gap-4 bg-slate-50 cursor-pointer"
-         onClick={() => setIsExpanded(!isExpanded)}
-       >
--        <div className="flex items-center gap-3 min-w-0">
-+        <div className="flex items-center gap-4 min-w-0">
-           <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container flex-shrink-0">
-             <Icon name="quiz" className="material-symbols-outlined"/>
-           </div>
-           <div className="min-w-0">
-             <h3 className="text-body-md font-bold text-slate-800">{kp}</h3>
-             <p className="text-label-sm text-slate-500 mt-1">共 {count} 道个性化题目</p>
-           </div>
-         </div>
--        <div className="flex items-center gap-3 flex-shrink-0">
-+        <div className="flex items-center gap-4 flex-shrink-0">
-           <button
-             onClick={handleStartPractice}
--            className="flex items-center gap-1.5 px-4 py-2 bg-primary-container text-white rounded-xl text-label-sm font-bold hover:brightness-110 active:scale-95 transition-all"
-+            className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 text-white rounded-xl text-label-sm font-bold hover:bg-cyan-700 active:scale-95 transition-all cursor-pointer shadow-sm"
-           >
-             <Icon name="play_arrow" className="material-symbols-outlined text-[16px]"/>
-             开始练习 {selectedIds.length > 0 ? `(已选 ${selectedIds.length})` : ''}
-           </button>
-           <Icon name={isExpanded ? 'expand_less' : 'expand_more'} className="material-symbols-outlined text-slate-400"/>
-         </div>
-       </div>
-```
-
-Modify the delete button in `QuizGroupCard` list item to add pointer-events classes:
-```diff
-@@ -144,3 +144,3 @@
-                   <button 
--                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-+                    className="p-1.5 text-slate-400 opacity-0 group-hover/session:opacity-100 pointer-events-none group-hover/session:pointer-events-auto hover:text-red-500 hover:bg-red-50 rounded transition-all"
-                     onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+Make headers use `p-5`, replace low-contrast buttons, map the updated expand chevron, and prevent accidental deletion clicks:
+```javascript
+// ... (Make container hover style shadow-md hover:border-cyan-300 hover:bg-cyan-50/5)
+// ... (Make header p-5, gap-4)
+// ... (Make play button bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm)
+// ... (Make delete button opacity-0 group-hover/item:opacity-100 pointer-events-none group-hover/item:pointer-events-auto)
 ```
 
 - [ ] **Step 2: Refactor ResourceCard in PersonalizedResources.jsx**
-
-Modify `ResourceCard` (lines 161-234) to use standard padding, standard margins, color-coded rounded-md tag badges, and add pointer-events classes to the delete button:
-```diff
-@@ -201,31 +201,31 @@
-   if (item.resource) {
-     const r = item.resource;
-+    const sourceLabel = SOURCE_LABEL[item.source_type] || item.source_type;
-+    const sourceBg = item.source_type === 'quiz_wrong_answer' ? 'bg-red-50 text-red-600' : 'bg-cyan-50 text-cyan-600';
-     return (
-       <div className="relative group">
--        <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
--        <div className="flex items-start gap-md">
--          <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-secondary flex-shrink-0">
-+        <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-5 hover:shadow-md hover:border-cyan-300 hover:bg-cyan-50/5 transition-all duration-200">
-+        <div className="flex items-start gap-4">
-+          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
-             <Icon name={TYPE_ICON[r.type] || 'article'} className="material-symbols-outlined"/>
-           </div>
-           <div className="flex-1 min-w-0">
--            <div className="flex items-center gap-sm mb-xs flex-wrap">
--              <span className="text-label-sm text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full">{r.knowledge_point}</span>
--              <span className="text-label-sm text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{SOURCE_LABEL[item.source_type]}</span>
-+            <div className="flex items-center gap-2 mb-2 flex-wrap">
-+              <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{r.knowledge_point}</span>
-+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${sourceBg}`}>{sourceLabel}</span>
-             </div>
-             <h4 className="text-body-md font-medium text-on-surface truncate">{r.title}</h4>
-             {r.description && <p className="text-label-sm text-secondary mt-1 line-clamp-1">{r.description}</p>}
-           </div>
-         </div>
-       </Link>
-       {onDelete && (
-         <button 
--          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 rounded transition-all"
-+          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto hover:text-red-500 hover:bg-red-50 rounded transition-all"
-           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); }}
-           title="删除"
-         >
-           <Icon name="delete" className="material-symbols-outlined text-[20px]"/>
-         </button>
-       )}
+Standardize card layout to `p-5 gap-4` and add pointer-events classes to the absolute positioned delete button:
+```javascript
+// ... (Make link container p-5, gap-4)
+// ... (Color-code tag badges: wrong answers are bg-red-50 text-red-600; manual is bg-cyan-50 text-cyan-600)
+// ... (Make delete button pointer-events-none group-hover:pointer-events-auto)
 ```
 
 - [ ] **Step 3: Refactor Main Containers to Responsive Grid Layout**
-
-Modify the main content area in `PersonalizedResources` (lines 304-422) to update the "+ 生成资源" button style, active filter tabs style, and card lists to double-column grids:
-```diff
-@@ -315,5 +315,5 @@
-             <button
-               onClick={() => setShowGenerateModal(true)}
--              className="flex items-center gap-2 px-4 py-2 bg-primary-container text-white rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm"
-+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 active:scale-95 transition-all shadow-sm cursor-pointer"
-             >
-               <Icon name="add" className="material-symbols-outlined"/>
-@@ -342,5 +342,5 @@
-                 className={`px-3 py-1.5 rounded-full text-label-sm font-medium transition-colors ${
-                   filterSource === opt.value
--                    ? 'bg-primary-container text-white'
--                    : 'bg-surface-container text-secondary hover:bg-surface-container-high'
-+                    ? 'bg-cyan-600 text-white shadow-sm'
-+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                 }`}
-```
-
-And update the list wraps from `space-y-3` to `grid grid-cols-1 md:grid-cols-2 gap-4`:
-```diff
-@@ -377,5 +377,5 @@
-               {groupQuestionsByKp(items).length > 0 && (
-                 <div>
-                   <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化练习题</h3>
--                  <div className="space-y-3">
-+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {groupQuestionsByKp(items).map(({ knowledge_point: kp, items: kpItems }) => (
-```
-and:
-```diff
-@@ -396,5 +396,5 @@
-               {items.filter(i => i.resource).length > 0 && (
-                 <div>
-                   <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化学习资源</h3>
--                  <div className="space-y-3">
-+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {items.filter(i => i.resource).map(item => (
-```
+Update active filter tabs to use cyan brand colors, and replace list containers from `space-y-3` to `grid grid-cols-1 md:grid-cols-2 gap-4`.
 
 - [ ] **Step 4: Run unit tests**
-
 Run: `npm run test:unit` inside `frontend/` directory.
-Expected: PASS (all 110 tests pass, including CodeSandboxCard and PluginRegistry).
+Expected: PASS.
 
 - [ ] **Step 5: Verify build compilation**
-
 Run: `npm run build` inside `frontend/` directory.
-Expected: Build passes with no compilation errors.
+Expected: Build passes cleanly.
 
 - [ ] **Step 6: Commit**
-
 ```bash
 git add frontend/src/pages/PersonalizedResources.jsx
 git commit -m "style(fe): convert personalized resources to 2-column grid and enhance contrast/UX"
+```
+
+---
+
+### Task 3: Backend Exercise Count and Limit Optimizations
+
+**Files:**
+- Modify: `backend/app/services/node_resource_service.py`
+
+- [ ] **Step 1: Implement _full_exercise_count in node_resource_service.py**
+
+Add the helper method `_full_exercise_count` to fetch total active quiz question count in the database:
+```python
+    async def _full_exercise_count(self, course_id: str) -> int:
+        result = await self.db.execute(
+            select(func.count(QuizQuestion.id)).where(
+                QuizQuestion.course_id == course_id,
+                QuizQuestion.is_deleted == False,
+            )
+        )
+        return result.scalar() or 0
+```
+
+- [ ] **Step 2: Update _full_exercise_set limit and get_node_resources response**
+
+Modify `_full_exercise_set` to query with a limit of 10 items instead of 50:
+```python
+    async def _full_exercise_set(self, course_id: str) -> list[dict]:
+        result = await self.db.execute(
+            select(QuizQuestion)
+            .where(
+                QuizQuestion.course_id == course_id,
+                QuizQuestion.is_deleted == False,
+            )
+            .limit(10)
+        )
+        return [
+            {"id": question.id, "type": question.type, "content": question.content}
+            for question in result.scalars().all()
+        ]
+```
+Add `"full_exercise_count": await self._full_exercise_count(course_id)` to the dictionary returned by `get_node_resources`.
+
+- [ ] **Step 3: Run backend unit tests**
+
+Run: `pytest tests/test_node_resources.py -v` in `backend` directory.
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+```bash
+git add backend/app/services/node_resource_service.py
+git commit -m "perf(be): implement full_exercise_count query and reduce exercise set query size to 10"
+```
+
+---
+
+### Task 4: Polish PathVisualizer and NodeResourcePanel in Frontend
+
+**Files:**
+- Modify: `frontend/src/components/learning/PathVisualizer.jsx`
+- Modify: `frontend/src/components/learning/NodeResourcePanel.jsx`
+
+- [ ] **Step 1: Replace all royal blue styling with brand cyan styling in PathVisualizer.jsx**
+
+Edit `frontend/src/components/learning/PathVisualizer.jsx`:
+- Update selected ring class to: `node.id === selectedNodeId ? 'scale-[1.01] transition-all' : ''` (removing the double outer border ring).
+- For `node.status === 'in_progress'`, update the card header and details colors:
+  - Play button background: `bg-cyan-600`
+  - Inner card border: `node.id === selectedNodeId ? 'border-cyan-500 ring-2 ring-cyan-500 ring-offset-1 shadow-lg' : 'border-slate-200'`
+  - Progress bar background: `bg-cyan-600`
+  - "进行中" badge: `bg-cyan-600`
+  - "继续学习" button styles: `bg-cyan-600 hover:bg-cyan-700 text-white border-transparent hover:scale-[1.01] transition-all`
+- For `node.status === 'pending'` (unstarted nodes), update the label text to:
+  `尚未学习，点击查看资源`
+- Add scrollbar-none to the node timeline wrapper: `className="relative flex items-center py-xl overflow-x-auto scrollbar-none min-h-[300px]"`
+
+- [ ] **Step 2: Refactor NodeResourcePanel.jsx colors and count logic**
+
+Edit `frontend/src/components/learning/NodeResourcePanel.jsx`:
+- Update "节点练习" card header icon background to `bg-cyan-50 text-cyan-600`.
+- Update the choice type badges in the exercise list to `bg-cyan-100 text-cyan-700`.
+- Update the "进入练习" action button inside the exercise panel to use `bg-cyan-600 hover:bg-cyan-700 text-white font-bold transition-colors`.
+- Change the total count of the collapsed exercises block:
+  `共 {nodeResources.full_exercise_count || nodeResources.full_exercise_set?.length || 0} 题`
+- Update the empty exercises state (line 107) to render a placeholder button for visual symmetry:
+  ```jsx
+  <div className="w-full text-center py-4 border border-dashed border-slate-200 text-slate-400 rounded-lg text-sm font-medium bg-slate-50/50">该节点暂无练习</div>
+  ```
+
+- [ ] **Step 3: Run frontend unit tests and production build**
+
+Run:
+```bash
+cd frontend && npm run test:unit && npm run build
+```
+Expected: All tests pass, production compilation succeeds.
+
+- [ ] **Step 4: Commit**
+```bash
+git add frontend/src/components/learning/PathVisualizer.jsx frontend/src/components/learning/NodeResourcePanel.jsx
+git commit -m "style(fe): integrate cyan branding and optimize scrollbars, counts, and locked card guides in PathVisualizer"
 ```

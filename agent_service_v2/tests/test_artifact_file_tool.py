@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from agentscope.workspace import LocalWorkspace
 
@@ -72,3 +74,63 @@ def test_write_artifact_file_rejects_more_than_ten_artifacts(tmp_path):
 
     with pytest.raises(ValueError, match="artifact count limit"):
         tool(filename="overflow.md", content="# x\n", artifact_type="Markdown", title="x")
+
+
+def test_write_artifact_file_rejects_code_sandbox_card_missing_language_before_write(tmp_path):
+    tool = build_write_artifact_file(
+        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
+        run_id="run-1",
+    )
+    content = json.dumps(
+        {
+            "type": "CodeSandboxCard",
+            "props": {
+                "question_text": "修复这段 C 代码",
+                "code": "#include<stdio.h>\\nint main(){return 0;}",
+                "default_stdin": "",
+            },
+        },
+        ensure_ascii=False,
+    )
+
+    with pytest.raises(ValueError, match="language"):
+        tool(
+            filename="code-card.json",
+            content=content,
+            artifact_type="CodeSandboxCard",
+            title="代码练习",
+        )
+
+    path = tmp_path / "runs" / "run-1" / "artifacts" / "code-card.json"
+    assert not path.exists()
+
+
+def test_write_artifact_file_accepts_valid_code_sandbox_card(tmp_path):
+    tool = build_write_artifact_file(
+        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
+        run_id="run-1",
+    )
+    content = json.dumps(
+        {
+            "type": "CodeSandboxCard",
+            "props": {
+                "question_text": "修复这段 C 代码",
+                "code": "#include<stdio.h>\\nint main(){return 0;}",
+                "language": "c",
+                "default_stdin": "",
+            },
+        },
+        ensure_ascii=False,
+    )
+
+    result = tool(
+        filename="code-card.json",
+        content=content,
+        artifact_type="CodeSandboxCard",
+        title="代码练习",
+    )
+
+    path = tmp_path / "runs" / "run-1" / "artifacts" / "code-card.json"
+    assert result["status"] == "ok"
+    assert result["artifact_type"] == "CodeSandboxCard"
+    assert path.read_text(encoding="utf-8") == content

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from agent_service_v2.artifacts.schemas import (
     SUPPORTED_EXTENSIONS,
     ArtifactValidationError,
 )
+from agent_service_v2.artifacts.validation import validate_json_artifact_payload
 from agent_service_v2.workspaces.run_store import WorkbenchRunStore
 
 
@@ -31,6 +33,10 @@ def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Call
         encoded_body = content.encode("utf-8")
         if len(encoded_body) > MAX_ARTIFACT_BYTES:
             raise ArtifactValidationError(f"artifact content exceeds {MAX_ARTIFACT_BYTES} bytes")
+        _validate_json_content_for_write(
+            filename=safe_filename,
+            content=content,
+        )
         existing_files = [path for path in artifact_dir.iterdir() if path.is_file() and path.name != "manifest.json"]
         if len(existing_files) >= MAX_ARTIFACTS_PER_RUN and not (artifact_dir / safe_filename).exists():
             raise ArtifactValidationError("artifact count limit exceeded")
@@ -56,6 +62,18 @@ def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Call
         }
 
     return write_artifact_file
+
+
+def _validate_json_content_for_write(*, filename: str, content: str) -> None:
+    if Path(filename).suffix != ".json":
+        return
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ArtifactValidationError(f"invalid json artifact: {filename}") from exc
+    if not isinstance(payload, dict):
+        raise ArtifactValidationError(f"json artifact must be an object: {filename}")
+    validate_json_artifact_payload(payload, filename)
 
 
 def _validate_filename(filename: str) -> str:

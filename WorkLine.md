@@ -1231,3 +1231,113 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 有。新增 Backend internal API：`POST /internal/ai-chat/learning-progress`、`POST /internal/ai-chat/recent-answers`，仅供 Agent Service 通过 `X-Internal-Agent-Token` 调用；新增 Agent v2 只读工具 `read_learning_progress` 与 `read_recent_answers`。Client API 无漂移；SSE event type 无漂移，既有 `tool_completed.payload` 增加可选摘要字段。
+
+
+### 2026-07-10 — 在线 OJ 评测沙箱集成与交互式 CodeSandboxCard 画布组件
+
+**涉及文件：**
+- `backend/app/core/config.py`
+- `backend/app/services/oj_execution_service.py`
+- `backend/app/api/v1/sandbox.py`
+- `backend/app/api/v1/internal_ai_chat.py`
+- `backend/app/main.py`
+- `backend/tests/test_oj_sandbox.py`
+- `agent_service_v2/src/agent_service_v2/tools/oj_execution.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/artifacts/schemas.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/tests/test_oj_execution_tools.py`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.jsx`
+- `frontend/src/components/workspace/PluginRegistry.js`
+- `frontend/src/components/workspace/PluginRegistry.test.js`
+- `start_all.sh`
+
+**核心改动：**
+1. **Backend**：新增中转服务 `oj_execution_service.py` 对接外部 Judge0 API，具备同步阻塞等待（超时 5s）与网络连接故障容错。实现学生端 `POST /api/v1/sandbox/execute` 和智能体端 `POST /internal/ai-chat/oj/evaluate` 双重代理路由，并在外部服务不可用时降级返回 `degraded` 标识。
+2. **Agent Service v2**：实现 `run_code_in_oj` 只读工具，打通与 Backend internal API 的通信，并注册至 Workbench 运行时；系统提示词新增 OJ 工具使用限制与 `degraded` 静态代码走查退回判定指令；工件验证中注册 `"CodeSandboxCard"` 支持发布 JSON 代码卡片。
+3. **Frontend**：开发交互式 `CodeSandboxCard.jsx` 代码卡片组件，支持学生在线编写代码、传入 stdin 并执行，同时配备一键“Ask AI”协同答题求助功能；在 `PluginRegistry` 注册对应组件。
+
+**验证结果：**
+- Backend Pytest：通过 `cd backend && python3 -m pytest tests/test_oj_sandbox.py -v` (5 passed)
+- Agent Pytest：通过 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_oj_execution_tools.py -v` (3 passed)
+- Agent All Pytest：通过 `cd agent_service_v2 && ./.venv/bin/pytest -v` (72 passed)
+- Frontend Build & Unit Tests：通过 `npm run test:unit` (106 passed) 且 `npm run build` 构建编译成功，`npm run lint` 语法检查通过。
+
+**接口漂移：**
+有。新增 Backend 公开 API：`POST /api/v1/sandbox/execute`、Backend 内部 API：`POST /internal/ai-chat/oj/evaluate`，新增 Agent v2 工具：`run_code_in_oj`，新增工件类型：`CodeSandboxCard`。
+
+
+### 2026-07-10 — OJ 沙箱审查问题修复：状态映射、安全配置与契约补齐
+
+**涉及文件：**
+- `backend/app/services/oj_execution_service.py`
+- `backend/tests/test_oj_sandbox.py`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.jsx`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.test.jsx`
+- `judge0-v1.13.0/docker-compose.yml`
+- `judge0-v1.13.0/judge0.conf`
+- `docs/10-client-api/Client-API.openapi.json`
+- `docs/10-client-api/API_前端接口规范.md`
+- `docs/20-agent-api/API_Agent内部接口规范.md`
+
+**核心改动：**
+1. 修复 Judge0 状态误判：Backend 不再把除编译错误外的所有状态都返回为 `success`，新增基于 Judge0 `status.id` 的标准状态映射，覆盖 `runtime_error`、`time_limit_exceeded`、`wrong_answer`、`internal_error` 等，并在 `execution.status_id` 保留原始状态 ID。
+2. 修复前端显示误导：`CodeSandboxCard` 对 `status !== "success"` 的非降级结果显示为运行失败，不再仅凭 `compile_status=OK` 显示“运行完毕”。
+3. 收紧 Judge0 本地配置：compose 端口绑定调整为 `127.0.0.1:2358:2358`，并在 `judge0.conf` 设置队列、CPU、墙钟时间、内存和进程数限制。按用户确认，`start_all.sh` 仍保持全局自动启动 Judge0，不拆生命周期。
+4. 补齐契约文档：Client OpenAPI 和前端接口规范新增 `POST /api/v1/sandbox/execute`；Agent 内部接口规范补充 `run_code_in_oj`、`CodeSandboxCard` 与 Backend internal OJ 代理接口约定。
+
+**验证结果：**
+- RED：`cd backend && ../.venv/bin/python -m pytest tests/test_oj_sandbox.py -q -p no:cacheprovider` 曾确认 Runtime Error / Time Limit 两个新增用例在旧实现下失败。
+- RED：`cd frontend && npm run test:unit -- CodeSandboxCard.test.jsx` 曾确认 runtime error 在旧组件下显示为“运行完毕”。
+- GREEN：`cd backend && ../.venv/bin/python -m pytest tests/test_oj_sandbox.py -q -p no:cacheprovider` 通过，7 passed。
+- GREEN：`cd frontend && npm run test:unit -- CodeSandboxCard.test.jsx PluginRegistry.test.js` 通过，2 files / 2 tests passed。
+- GREEN：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_oj_execution_tools.py -q -p no:cacheprovider` 通过，3 passed。
+- 语法/契约：`cd backend && ../.venv/bin/python -m py_compile app/services/oj_execution_service.py app/api/v1/sandbox.py app/api/v1/internal_ai_chat.py app/main.py` 通过；`python3 -m json.tool docs/10-client-api/Client-API.openapi.json` 通过。
+
+**接口漂移：**
+已补齐前一次 OJ 沙箱集成产生的契约漂移：公开 Client API `POST /api/v1/sandbox/execute` 已写入 Client OpenAPI 与前端接口规范；Backend internal API `POST /internal/ai-chat/oj/evaluate`、Agent v2 工具 `run_code_in_oj`、工件类型 `CodeSandboxCard` 已写入 Agent 内部接口规范。
+
+
+### 2026-07-10 — CodeSandboxCard 前端插件分层拆分
+
+**涉及文件：**
+- `frontend/src/api/services/sandbox.js`
+- `frontend/src/components/workspace/PluginRegistry.js`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.test.jsx`
+- `frontend/src/components/workspace/plugins/codeSandbox/CodeSandboxCard.jsx`
+- `frontend/src/components/workspace/plugins/codeSandbox/CodeSandboxConsole.jsx`
+- `frontend/src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.js`
+- `frontend/src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.test.js`
+- `frontend/src/components/workspace/plugins/codeSandbox/useCodeSandboxExecution.js`
+
+**核心改动：**
+1. 将 `CodeSandboxCard` 从单文件胖组件拆为插件内聚目录：主组件只负责渲染结构和事件串联，控制台输出拆到 `CodeSandboxConsole`，状态文案、badge 和 Ask AI prompt 组装拆到 `codeSandboxViewModel`。
+2. 新增 `useCodeSandboxExecution` 管理运行状态、stdin/code 状态、toast 和执行结果，避免组件直接持有 API 调用细节。
+3. 新增 `api/services/sandbox.js` 封装 `/sandbox/execute` 调用，组件不再直接使用 `apiClient`。
+4. 保留运行时错误显示为“运行失败”的行为，并新增 view-model 单测覆盖。
+
+**验证结果：**
+- RED：`cd frontend && npm run test:unit -- codeSandboxViewModel.test.js` 曾确认目标 view-model 模块不存在时失败。
+- GREEN：`cd frontend && npm run test:unit -- codeSandboxViewModel.test.js CodeSandboxCard.test.jsx PluginRegistry.test.js` 通过，3 files / 5 tests passed。
+
+**接口漂移：**
+无。本次仅拆分前端内部结构，不改变 `/api/v1/sandbox/execute` 请求或响应契约。
+
+
+### 2026-07-10 — 将 run_code_in_oj 工具加入安全权限白名单
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+
+**核心改动：**
+1. 将 `run_code_in_oj` 工具加入 `SAFE_WORKBENCH_TOOLS` 安全工具白名单，使其在被 Workbench 智能体调用时默认授权（`ALLOW`），不再向学生提示人工确认弹窗（避免触发 `permission.required`）。
+2. 在 `test_factory_configures_safe_tool_permission_allow_rules` 测试中增加对 `run_code_in_oj` 在 `allow_rules` 中存在的断言。
+
+**验证结果：**
+- py_compile 语法检查：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/agents/permissions.py` 通过。
+- pytest 测试套件：`cd agent_service_v2 && ./.venv/bin/pytest` 通过，所有 72 个测试项全部 PASSED（包含 `test_workbench_factory.py`）。
+
+**接口漂移：**
+- 无。仅调整了内部 Agent 的权限过滤机制，未修改任何 HTTP 接口的输入输出格式或契约。

@@ -13,6 +13,7 @@ SAFE_WORKBENCH_TOOLS = [
     "read_recent_answers",
     "write_artifact_file",
     "review_grounding",
+    "run_code_in_oj",
 ]
 
 DANGEROUS_WORKBENCH_TOOLS = [

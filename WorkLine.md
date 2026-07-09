@@ -1387,3 +1387,34 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **遗留问题：**
 后续如继续增强代码练习产物，可新增专用 `write_code_sandbox_card` 工具，把卡片字段从自由 JSON 字符串升级为 typed tool 参数。
+
+---
+
+### 2026-07-10 — 个性化资源与学习路径规划页面 UI 布局与数量优化
+
+**涉及文件：**
+- `frontend/src/components/Icon.jsx`
+- `frontend/src/pages/PersonalizedResources.jsx`
+- `frontend/src/components/learning/PathVisualizer.jsx`
+- `frontend/src/components/learning/NodeResourcePanel.jsx`
+- `backend/app/services/node_resource_service.py`
+- `docs/superpowers/specs/2026-07-10-personalized-resources-ui-layout-design.md`
+- `docs/superpowers/plans/2026-07-10-personalized-resources-ui-layout-plan.md`
+
+**核心改动：**
+1. **全局图标及降级问号纠偏**：在 `Icon.jsx` 中补充折叠把手（`expand_less`/`expand_more`）、资源类型（`description`/`play_circle`）和未学状态（`explore`）的 Lucide 图标映射，消除了不规范的降级问号。
+2. **个性化资源网格化与无障碍对比度升级**：将单栏长卡片升级为双栏响应式网格布局，消除大宽屏下的多余空白；将所有刺眼的亮青按钮配色升级为标准高对比度品牌深青色（`bg-cyan-600` / `text-white`）；精细化卡片圆角和间距。
+3. **学习路径交互引导与双重边框修复**：将路径节点的硬编码皇家蓝配色变更为品牌深青色，修复选中节点的双重边框视觉问题，并将 unstarted 节点提示优化为“尚未学习，点击查看资源”以增强解锁引导。
+4. **练习题总量获取与限流传输**：重构后端服务，新增 `_full_exercise_count` 方法返回数据库中的真实题库总量（解决之前写死 50 题的问题）；将 `_full_exercise_set` 单次传输上限缩减为 10 条，避免不必要的带宽浪费。
+
+**验证结果：**
+- 前端测试：`cd frontend && npm run test:unit` 全部 110 passed。
+- 前端 build：`cd frontend && npm run build` 构建成功。
+- 后端 py_compile：`python3 -m py_compile backend/app/services/node_resource_service.py` 成功。
+- 后端测试：`cd backend && python3 -m pytest tests/test_node_resources.py -v` 成功。
+
+**接口漂移：**
+- 有。在 `NodeResourceService.get_node_resources` 的 API 响应结果字典中新增了 `"full_exercise_count"` 字段，用于回传该节点下真实的练习题库总量。
+
+**遗留问题：**
+- 无。

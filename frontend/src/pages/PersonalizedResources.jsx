@@ -69,14 +69,14 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
   };
 
   return (
-    <div className="bg-white border border-outline-variant rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
+    <div className="bg-white border border-outline-variant rounded-xl overflow-hidden hover:shadow-md hover:border-cyan-300 hover:bg-cyan-50/5 transition-all duration-200">
       {/* Header */}
       <div 
-        className="p-4 flex items-center justify-between gap-4 bg-slate-50 cursor-pointer"
+        className="p-5 flex items-center justify-between gap-4 bg-slate-50 cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container flex-shrink-0">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-10 h-10 rounded-full bg-cyan-50 text-cyan-600 flex items-center justify-center flex-shrink-0">
             <Icon name="quiz" className="material-symbols-outlined"/>
           </div>
           <div className="min-w-0">
@@ -84,10 +84,10 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
             <p className="text-label-sm text-slate-500 mt-1">共 {count} 道个性化题目</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <button
             onClick={handleStartPractice}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary-container text-white rounded-xl text-label-sm font-bold hover:brightness-110 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 text-white rounded-xl text-label-sm font-bold hover:bg-cyan-700 active:scale-95 transition-all cursor-pointer shadow-sm"
           >
             <Icon name="play_arrow" className="material-symbols-outlined text-[16px]"/>
             开始练习 {selectedIds.length > 0 ? `(已选 ${selectedIds.length})` : ''}
@@ -126,7 +126,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
               return (
                 <div 
                   key={q.id} 
-                  className={`p-3 border-b border-slate-100 flex items-start gap-3 transition-colors ${isSelected ? 'bg-sky-50/50' : 'hover:bg-slate-50'}`}
+                  className={`p-3 border-b border-slate-100 flex items-start gap-3 transition-colors group/item ${isSelected ? 'bg-sky-50/50' : 'hover:bg-slate-50'}`}
                 >
                   <input 
                     type="checkbox" 
@@ -142,7 +142,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
                     <p className="text-sm font-medium text-slate-800 break-words">{summary}</p>
                   </div>
                   <button 
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    className="p-1.5 text-slate-400 opacity-0 group-hover/item:opacity-100 pointer-events-none group-hover/item:pointer-events-auto hover:text-red-500 hover:bg-red-50 rounded transition-all"
                     onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
                     title="删除"
                   >
@@ -161,7 +161,7 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
 function ResourceCard({ item, onDelete }) {
   if (item.task_status === 'processing') {
     return (
-      <div className="bg-white border border-dashed border-cyan-300 rounded-xl p-md flex items-center gap-md animate-pulse">
+      <div className="bg-white border border-dashed border-cyan-300 rounded-xl p-5 flex items-center gap-4 animate-pulse">
         <div className="w-10 h-10 rounded-full bg-cyan-100 flex items-center justify-center">
           <Icon name="progress_activity" className="material-symbols-outlined text-cyan-400 animate-spin"/>
         </div>
@@ -175,8 +175,8 @@ function ResourceCard({ item, onDelete }) {
 
   if (item.task_status === 'failed') {
     return (
-      <div className="bg-white border border-error/20 rounded-xl p-md flex justify-between items-center gap-md">
-        <div className="flex items-center gap-md">
+      <div className="bg-white border border-error/20 rounded-xl p-5 flex justify-between items-center gap-4">
+        <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
             <Icon name="error" className="material-symbols-outlined"/>
           </div>
@@ -200,17 +200,19 @@ function ResourceCard({ item, onDelete }) {
 
   if (item.resource) {
     const r = item.resource;
+    const sourceLabel = SOURCE_LABEL[item.source_type] || item.source_type;
+    const sourceBg = item.source_type === 'quiz_wrong_answer' ? 'bg-red-50 text-red-600' : 'bg-cyan-50 text-cyan-600';
     return (
       <div className="relative group">
-        <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-md hover:shadow-sm transition-shadow">
-        <div className="flex items-start gap-md">
-          <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-secondary flex-shrink-0">
+        <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-5 hover:shadow-md hover:border-cyan-300 hover:bg-cyan-50/5 transition-all duration-200">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
             <Icon name={TYPE_ICON[r.type] || 'article'} className="material-symbols-outlined"/>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-sm mb-xs flex-wrap">
-              <span className="text-label-sm text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full">{r.knowledge_point}</span>
-              <span className="text-label-sm text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{SOURCE_LABEL[item.source_type]}</span>
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{r.knowledge_point}</span>
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${sourceBg}`}>{sourceLabel}</span>
             </div>
             <h4 className="text-body-md font-medium text-on-surface truncate">{r.title}</h4>
             {r.description && <p className="text-label-sm text-secondary mt-1 line-clamp-1">{r.description}</p>}
@@ -219,7 +221,7 @@ function ResourceCard({ item, onDelete }) {
       </Link>
       {onDelete && (
         <button 
-          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto hover:text-red-500 hover:bg-red-50 rounded transition-all"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); }}
           title="删除"
         >
@@ -314,7 +316,7 @@ export default function PersonalizedResources() {
             </div>
             <button
               onClick={() => setShowGenerateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-container text-white rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 active:scale-95 transition-all shadow-sm cursor-pointer"
             >
               <Icon name="add" className="material-symbols-outlined"/>
               生成资源
@@ -339,10 +341,10 @@ export default function PersonalizedResources() {
               <button
                 key={opt.value}
                 onClick={() => setFilterSource(opt.value)}
-                className={`px-3 py-1.5 rounded-full text-label-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-label-sm font-medium transition-colors cursor-pointer ${
                   filterSource === opt.value
-                    ? 'bg-primary-container text-white'
-                    : 'bg-surface-container text-secondary hover:bg-surface-container-high'
+                    ? 'bg-cyan-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 {opt.label}
@@ -365,7 +367,7 @@ export default function PersonalizedResources() {
             <div className="space-y-6">
               {/* 生成中/失败的任务卡片 */}
               {items.filter(i => !i.question && !i.resource).length > 0 && (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {items.filter(i => !i.question && !i.resource).map(item => (
                     <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
                   ))}
@@ -376,7 +378,7 @@ export default function PersonalizedResources() {
               {groupQuestionsByKp(items).length > 0 && (
                 <div>
                   <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化练习题</h3>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {groupQuestionsByKp(items).map(({ knowledge_point: kp, items: kpItems }) => (
                       <QuizGroupCard
                         key={kp}
@@ -395,7 +397,7 @@ export default function PersonalizedResources() {
               {items.filter(i => i.resource).length > 0 && (
                 <div>
                   <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化学习资源</h3>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {items.filter(i => i.resource).map(item => (
                       <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
                     ))}

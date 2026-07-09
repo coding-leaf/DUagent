@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import CourseCatalog, CourseOffering
@@ -55,6 +55,7 @@ class NodeResourceService:
                 resource_scope.catalog_id,
                 chapter,
             ),
+            "full_exercise_count": await self._full_exercise_count(course_id),
             "full_exercise_set": await self._full_exercise_set(course_id),
         }
 
@@ -135,6 +136,15 @@ class NodeResourceService:
             for resource in result.scalars().all()
         ]
 
+    async def _full_exercise_count(self, course_id: str) -> int:
+        result = await self.db.execute(
+            select(func.count(QuizQuestion.id)).where(
+                QuizQuestion.course_id == course_id,
+                QuizQuestion.is_deleted == False,
+            )
+        )
+        return result.scalar() or 0
+
     async def _full_exercise_set(self, course_id: str) -> list[dict]:
         result = await self.db.execute(
             select(QuizQuestion)
@@ -142,7 +152,7 @@ class NodeResourceService:
                 QuizQuestion.course_id == course_id,
                 QuizQuestion.is_deleted == False,
             )
-            .limit(50)
+            .limit(10)
         )
         return [
             {"id": question.id, "type": question.type, "content": question.content}

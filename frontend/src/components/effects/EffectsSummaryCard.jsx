@@ -14,16 +14,16 @@ export default function EffectsSummaryCard({ summaryText, loading }) {
       {loading ? (
         <p className="font-body-md text-slate-500 leading-relaxed">正在加载学习效果...</p>
       ) : parsed ? (
-        <div className="flex flex-col md:flex-row gap-6 w-full">
-          {/* Left Column: Diagnostics */}
-          <div className="flex-1 md:flex-[1.4] space-y-4">
+        <div className="flex flex-col lg:flex-row gap-6 w-full">
+          {/* Left Column: Diagnostics (Responsive sub-grid) */}
+          <div className="flex-1 lg:flex-[1.6] grid grid-cols-1 sm:grid-cols-2 gap-4 content-start">
             {parsed.scope && (
               <div className="p-4 bg-cyan-50/50 border border-cyan-100 rounded-lg">
                 <h4 className="font-bold text-sm text-cyan-800 flex items-center mb-1">
                   <Icon name="menu_book" className="material-symbols-outlined text-base mr-1.5" />
                   学习范围
                 </h4>
-                <p className="text-sm text-slate-600 leading-relaxed">{parsed.scope}</p>
+                <p className="text-xs text-slate-600 leading-relaxed">{parsed.scope}</p>
               </div>
             )}
 
@@ -33,17 +33,17 @@ export default function EffectsSummaryCard({ summaryText, loading }) {
                   <Icon name="analytics" className="material-symbols-outlined text-base mr-1.5" />
                   当前掌握
                 </h4>
-                <p className="text-sm text-slate-600 leading-relaxed">{parsed.mastery}</p>
+                <p className="text-xs text-slate-600 leading-relaxed">{parsed.mastery}</p>
               </div>
             )}
 
             {parsed.behavior && (
-              <div className="p-4 bg-slate-50/80 border border-slate-100 rounded-lg">
+              <div className="p-4 bg-slate-50/80 border border-slate-100 rounded-lg sm:col-span-2">
                 <h4 className="font-bold text-sm text-slate-700 flex items-center mb-1">
                   <Icon name="insights" className="material-symbols-outlined text-base mr-1.5" />
                   学习行为
                 </h4>
-                <p className="text-sm text-slate-600 leading-relaxed">{parsed.behavior}</p>
+                <p className="text-xs text-slate-600 leading-relaxed">{parsed.behavior}</p>
               </div>
             )}
           </div>

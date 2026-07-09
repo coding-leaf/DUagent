@@ -78,7 +78,11 @@ def test_protocol_adapter_maps_core_agentscope_events():
     assert [event.seq for event in events] == [1, 2, 3, 4, 5, 6]
     assert events[1].payload == {"delta": "你好"}
     assert events[2].payload == {"tool_call_id": "tool-1", "tool_name": "TaskCreate"}
-    assert events[3].payload == {"tool_call_id": "tool-1", "state": "success"}
+    assert events[3].payload == {
+        "tool_call_id": "tool-1",
+        "tool_name": "TaskCreate",
+        "state": "success",
+    }
 
 
 def test_protocol_adapter_emits_plan_updated_for_planning_tools():
@@ -135,6 +139,41 @@ def test_protocol_adapter_emits_plan_updated_for_planning_tools():
         ]
     }
     assert events[5].payload["tasks"][0]["status"] == "in_progress"
+
+
+def test_protocol_adapter_passes_learning_tool_result_summary():
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    start = ToolCallStartEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        tool_call_name="read_recent_answers",
+    )
+    result_text = json.dumps(
+        {
+            "status": "available",
+            "summary": {"returned_count": 3, "has_more": False},
+        }
+    )
+    delta = ToolResultTextDeltaEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        delta=result_text,
+    )
+    end = ToolResultEndEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        state=ToolResultState.SUCCESS,
+    )
+
+    assert adapter.adapt(start).type.value == "tool_started"
+    assert adapter.adapt(delta) is None
+    event = adapter.adapt(end)
+
+    assert event.type.value == "tool_completed"
+    assert event.payload["tool_name"] == "read_recent_answers"
+    assert event.payload["status"] == "available"
+    assert event.payload["returned_count"] == 3
+    assert "3" in event.payload["output_summary"]
 
 
 def test_protocol_adapter_emits_artifact_after_artifact_tool_success():

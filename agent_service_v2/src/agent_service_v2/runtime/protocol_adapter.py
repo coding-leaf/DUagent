@@ -117,10 +117,25 @@ class EDUProtocolAdapter:
                 "tool_name": event.tool_call_name,
             }
         if isinstance(event, ToolResultEndEvent):
-            return EduEventType.TOOL_COMPLETED, {
+            payload: dict[str, Any] = {
                 "tool_call_id": event.tool_call_id,
+                "tool_name": self._tool_names.get(event.tool_call_id),
                 "state": getattr(event.state, "value", event.state),
             }
+            parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
+            if parsed:
+                if "status" in parsed:
+                    payload["status"] = parsed["status"]
+                if "reason" in parsed:
+                    payload["reason"] = parsed["reason"]
+                summary = parsed.get("summary") if isinstance(parsed.get("summary"), dict) else {}
+                returned_count = summary.get("returned_count")
+                if returned_count is not None:
+                    payload["returned_count"] = returned_count
+                    payload["output_summary"] = f"返回 {returned_count} 条学习记录"
+                elif parsed.get("status"):
+                    payload["output_summary"] = f"工具状态：{parsed['status']}"
+            return EduEventType.TOOL_COMPLETED, payload
         if isinstance(event, ReplyEndEvent):
             return EduEventType.WORKFLOW_COMPLETED, {"reply_id": event.reply_id}
         if isinstance(event, ExceedMaxItersEvent):

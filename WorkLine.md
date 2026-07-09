@@ -1459,3 +1459,30 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。仅修复本地 Judge0 运行配置，未修改前后端 API 契约。
+
+---
+
+### 2026-07-10 — 学习效果总结 UI 布局优化与横向网格化
+
+**涉及文件：**
+- `frontend/src/utils/summaryParser.js` (新建)
+- `frontend/src/utils/__tests__/summaryParser.test.js` (新建)
+- `frontend/src/components/effects/EffectsSummaryCard.jsx`
+- `frontend/src/pages/TeacherStudentReport.jsx`
+- `docs/superpowers/specs/2026-07-10-learning-effects-summary-optimization-design.md` (新建)
+- `docs/superpowers/plans/2026-07-10-learning-effects-summary-optimization.md` (新建)
+
+**核心改动：**
+1. **新建客户端 AI 文本解析器 (`summaryParser.js`)**：编写了针对 AI 评估报告字符串的解析工具，利用 `学习范围：`、`当前掌握：`、`学习行为：`、`下一步建议：` 标题锚点动态提取各诊断章节文本，并支持正则识别列表序号自动生成 structured 建议清单。
+2. **学生端总结卡片横向网格化 (`EffectsSummaryCard.jsx`)**：将原纵向堆叠过高的诊断大文本块改为双栏响应式网格布局。左侧将“学习范围”与“当前掌握”左右 50% 并排展出，“学习行为”通栏占 100% 展出。右侧渲染建议清单。该优化使卡片整体垂直高度缩短了近一半，完美与右侧的“下一步学习建议”以及同行的“掌握度分布”对齐，消除了空余留白。
+3. **教师端诊断界面对齐 (`TeacherStudentReport.jsx`)**：教师端同步复用 `summaryParser` 解析逻辑，将原来的灰色文本段落升级为分栏紧凑面板，方便老师快速查阅学情和建议。
+4. **AI 答疑上下文兼容**：后台数据存储依然保持纯文本 string，不做复杂对象拆分，确保 ai-chat 和提示词能够直接以自然语言消费。
+
+**验证结果：**
+- 前端测试：`cd frontend && npm run test:unit` 全部 113 个测试通过。
+- 前端 lint / build：`npm run lint && npm run build` 构建编译成功，零 ESLint 警告或报错。
+- 自动化测试：已创建并运行了 `summaryParser.test.js`。
+
+**接口漂移：**
+- 无。后端与数据库仍存储 `summary_text` 字符串，没有任何字段形状或 API 接口变动。
+

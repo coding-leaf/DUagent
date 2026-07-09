@@ -419,6 +419,14 @@ ToolGroup name="learning_progress"
   - read_recent_answers
 ```
 
+AgentScope 注册方式：
+
+- 使用当前已验证的 `agentscope.tool.FunctionTool` 包装 Python 函数。
+- 两个工具都必须设置 `is_read_only=True`。
+- 使用当前已验证的 `ToolGroup` 加入 Workbench `Toolkit`，分组名固定为 `learning_progress`。
+- `user_id` 与 `course_id` 不暴露为模型可填写参数，由 `WorkbenchAgentFactory.create_agent()` 在构造工具闭包时注入当前 run 的用户和课程上下文。
+- LLM 只能提供 `node_id`、`knowledge_point`、`limit`、`only_wrong` 等查询意图参数。
+
 Tool 行为：
 
 ### 8.1 `read_learning_progress`

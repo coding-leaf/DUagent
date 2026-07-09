@@ -28,12 +28,18 @@ export default function PathVisualizer({ learningPath, loading, selectedNodeId, 
           <Icon name="insights" className="material-symbols-outlined text-cyan-600"/>
           <span>闯关节点规划</span>
         </h3>
-        <div className="flex space-x-base">
+        <div className="flex gap-4">
           <div className="flex items-center text-label-sm text-gray-400">
-            <span className="w-3 h-3 rounded-full bg-cyan-500 mr-xs"></span> 已完成
+            <span className="w-3 h-3 rounded-full bg-emerald-500 mr-1.5"></span> 已完成
           </div>
           <div className="flex items-center text-label-sm text-gray-400">
-            <span className="w-3 h-3 rounded-full bg-surface-container-highest mr-xs"></span> 进行中
+            <span className="w-3 h-3 rounded-full bg-cyan-600 mr-1.5"></span> 进行中
+          </div>
+          <div className="flex items-center text-label-sm text-gray-400">
+            <span className="w-3 h-3 rounded-full bg-indigo-400 mr-1.5"></span> 推荐预习
+          </div>
+          <div className="flex items-center text-label-sm text-gray-400">
+            <span className="w-3 h-3 rounded-full bg-slate-300 mr-1.5"></span> 尚未学习
           </div>
         </div>
       </div>
@@ -50,11 +56,11 @@ export default function PathVisualizer({ learningPath, loading, selectedNodeId, 
                 return (
                   <div key={node.id}
                     onClick={() => onSelectNode(node.id)}
-                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-emerald-500 ring-offset-2 rounded-xl' : ''}`}>
+                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'scale-[1.01] transition-all' : ''}`}>
                     <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3 border border-emerald-100 transition-colors group-hover:bg-emerald-100">
                       <Icon name="check" className="text-xl"/>
                     </div>
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm w-full transition-all duration-200 group-hover:shadow-md">
+                    <div className={`bg-white p-5 rounded-xl border w-full transition-all duration-200 group-hover:shadow-md ${node.id === selectedNodeId ? 'border-emerald-500 ring-2 ring-emerald-500 ring-offset-1 shadow-lg' : 'border-slate-200 shadow-sm'}`}>
                       <span className="text-[11px] font-semibold text-emerald-600 tracking-wider mb-1 block">阶段 {node.order}</span>
                       <p className="text-base font-medium text-slate-800 mb-4">{node.name}</p>
                       <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -67,13 +73,13 @@ export default function PathVisualizer({ learningPath, loading, selectedNodeId, 
                 return (
                   <div key={node.id}
                     onClick={() => onSelectNode(node.id)}
-                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-blue-500 ring-offset-2 rounded-xl' : ''}`}>
-                    <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center mb-3 shadow-md">
+                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'scale-[1.01] transition-all' : ''}`}>
+                    <div className="w-10 h-10 rounded-lg bg-cyan-600 text-white flex items-center justify-center mb-3 shadow-md">
                       <Icon name="play_arrow" className="text-xl"/>
                     </div>
-                    <div className="bg-white p-5 rounded-xl border border-blue-600 shadow-md w-full relative transition-all duration-200 group-hover:shadow-lg">
-                      <div className="absolute -top-2.5 left-5 bg-blue-600 text-white text-[10px] font-bold tracking-wide px-2 py-0.5 rounded shadow-sm">进行中</div>
-                      <span className="text-[11px] font-semibold text-blue-600 tracking-wider mb-1 block">阶段 {node.order}</span>
+                    <div className={`bg-white p-5 rounded-xl border shadow-md w-full relative transition-all duration-200 group-hover:shadow-lg ${node.id === selectedNodeId ? 'border-cyan-500 ring-2 ring-cyan-500 ring-offset-1 shadow-lg' : 'border-cyan-600'}`}>
+                      <div className="absolute -top-2.5 left-5 bg-cyan-600 text-white text-[10px] font-bold tracking-wide px-2 py-0.5 rounded shadow-sm">进行中</div>
+                      <span className="text-[11px] font-semibold text-cyan-600 tracking-wider mb-1 block">阶段 {node.order}</span>
                       <p className="text-base font-medium text-slate-900 mb-4">{node.name}</p>
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-[11px] font-medium text-slate-500">
@@ -81,11 +87,11 @@ export default function PathVisualizer({ learningPath, loading, selectedNodeId, 
                           <span>{node.mastery}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${node.mastery}%` }}></div>
+                          <div className="h-full bg-cyan-600 transition-all duration-500" style={{ width: `${node.mastery}%` }}></div>
                         </div>
                       </div>
                       <div className="mt-4">
-                        <Link to="/dashboard" state={{ search: node.name }} className="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-blue-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-colors border border-slate-200">
+                        <Link to="/dashboard" state={{ search: node.name }} className="w-full py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer hover:scale-[1.02]">
                           <Icon name="auto_stories" className="text-sm"/> 继续学习
                         </Link>
                       </div>
@@ -96,11 +102,11 @@ export default function PathVisualizer({ learningPath, loading, selectedNodeId, 
                 return (
                   <div key={node.id}
                     onClick={() => onSelectNode(node.id)}
-                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'ring-2 ring-indigo-400 ring-offset-2 rounded-xl' : ''}`}>
+                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer ${node.id === selectedNodeId ? 'scale-[1.01] transition-all' : ''}`}>
                     <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 border border-indigo-100 transition-colors group-hover:bg-indigo-100">
                       <Icon name="auto_awesome" className="text-xl"/>
                     </div>
-                    <div className="bg-white p-5 rounded-xl border border-indigo-200 shadow-sm w-full transition-all duration-200 group-hover:shadow-md">
+                    <div className={`bg-white p-5 rounded-xl border w-full transition-all duration-200 group-hover:shadow-md ${node.id === selectedNodeId ? 'border-indigo-400 ring-2 ring-indigo-400 ring-offset-1 shadow-lg' : 'border-indigo-200 shadow-sm'}`}>
                       <span className="text-[11px] font-semibold text-indigo-600 tracking-wider mb-1 block">阶段 {node.order}</span>
                       <p className="text-base font-medium text-slate-800 mb-4">{node.name}</p>
                       <div className="h-1.5 w-full bg-indigo-50 rounded-full overflow-hidden mb-3">
@@ -116,16 +122,16 @@ export default function PathVisualizer({ learningPath, loading, selectedNodeId, 
                 return (
                   <div key={node.id}
                     onClick={() => onSelectNode(node.id)}
-                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer opacity-80 hover:opacity-100 transition-opacity ${node.id === selectedNodeId ? 'ring-2 ring-slate-300 ring-offset-2 rounded-xl' : ''}`}>
+                    className={`relative z-10 flex-shrink-0 px-4 flex flex-col items-center group w-72 cursor-pointer opacity-80 hover:opacity-100 transition-opacity ${node.id === selectedNodeId ? 'scale-[1.01] transition-all' : ''}`}>
                     <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center mb-3 transition-colors group-hover:bg-slate-200 group-hover:text-slate-500">
                       <Icon name="explore" className="text-xl"/>
                     </div>
-                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 w-full transition-all duration-200 group-hover:border-slate-300">
+                    <div className={`bg-slate-50 p-5 rounded-xl w-full transition-all duration-200 group-hover:border-slate-300 border ${node.id === selectedNodeId ? 'border-slate-400 ring-2 ring-slate-400 ring-offset-1 shadow-md' : 'border-slate-200'}`}>
                       <span className="text-[11px] font-semibold text-slate-400 tracking-wider mb-1 block transition-colors group-hover:text-slate-500">阶段 {node.order}</span>
                       <p className="text-base font-medium text-slate-500 mb-4 transition-colors group-hover:text-slate-700">{node.name}</p>
                       <div className="h-1 w-full bg-slate-200 rounded-full"></div>
                       <div className="mt-3 text-[11px] font-medium text-slate-400 flex items-center gap-1 transition-colors group-hover:text-slate-500">
-                        <Icon name="arrow_forward" className="text-[14px]"/> 尚未学习
+                        <Icon name="arrow_forward" className="text-[14px]"/> 尚未学习，点击查看资源
                       </div>
                     </div>
                   </div>

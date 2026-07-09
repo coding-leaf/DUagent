@@ -76,7 +76,7 @@ export default function NodeResourcePanel({ activeCourseId, selectedNodeId, node
           {/* 2. 节点练习 */}
           <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+              <div className="p-2 bg-cyan-50 rounded-lg text-cyan-600">
                 <Icon name="quiz" className="material-symbols-outlined"/>
               </div>
               <h4 className="font-bold text-on-surface">节点练习</h4>
@@ -86,7 +86,7 @@ export default function NodeResourcePanel({ activeCourseId, selectedNodeId, node
                 {(showAllExercises ? nodeResources.exercises : nodeResources.exercises.slice(0, 5)).map((item, i) => (
                   <div key={i} className="p-3 bg-slate-50 rounded-lg border border-gray-100">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
+                      <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-700 text-[10px] rounded font-bold">
                         {item.type === 'single_choice' ? '单选' : item.type === 'multi_choice' ? '多选' : item.type}
                       </span>
                     </div>
@@ -99,12 +99,14 @@ export default function NodeResourcePanel({ activeCourseId, selectedNodeId, node
                     {showAllExercises ? '收起' : `展开全部 (${nodeResources.exercises.length} 条)`}
                   </button>
                 )}
-                <Link to={`/quiz?course_id=${activeCourseId}&node_id=${selectedNodeId}`} className="w-full block text-center py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
+                <Link to={`/quiz?course_id=${activeCourseId}&node_id=${selectedNodeId}`} className="w-full block text-center py-2 bg-cyan-600 text-white rounded-lg text-sm font-bold hover:bg-cyan-700 transition-colors cursor-pointer">
                   进入练习
                 </Link>
               </div>
             ) : (
-              <p className="text-xs text-gray-400 py-4 text-center">该节点暂无练习</p>
+              <div className="flex flex-col items-center justify-center h-48 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-4">
+                <p className="text-xs text-slate-400 text-center">该节点暂无练习</p>
+              </div>
             )}
           </div>
 
@@ -166,7 +168,7 @@ export default function NodeResourcePanel({ activeCourseId, selectedNodeId, node
               </div>
               <h4 className="font-bold text-on-surface text-left">
                 全部练习集
-                <span className="text-xs text-secondary font-normal ml-2">共 {nodeResources.full_exercise_set.length} 题</span>
+                <span className="text-xs text-secondary font-normal ml-2">共 {nodeResources.full_exercise_count || nodeResources.full_exercise_set?.length || 0} 题</span>
               </h4>
             </div>
             <Icon name="expand_more" className={`material-symbols-outlined text-gray-400 transition-transform ${showFullExercises ? 'rotate-180' : ''}`}/>

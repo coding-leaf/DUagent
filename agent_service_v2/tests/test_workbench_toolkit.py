@@ -34,6 +34,7 @@ def test_workbench_tool_groups_include_expected_boundaries():
     groups = build_workbench_tool_groups(
         memory_tools=[],
         rag_tools=[],
+        learning_progress_tools=[],
         workspace=LocalWorkspace(workdir="/tmp/eduagent-test-workspace", workspace_id="ws"),
         run_id="run-1",
     )
@@ -47,6 +48,27 @@ def test_workbench_tool_groups_include_expected_boundaries():
     artifact_group = next(group for group in groups if group.name == "artifact")
     assert [getattr(tool, "name", type(tool).__name__) for tool in artifact_group.tools] == [
         "write_artifact_file"
+    ]
+
+
+def test_workbench_tool_groups_include_learning_progress_group_when_tools_exist():
+    class FakeTool:
+        name = "read_learning_progress"
+
+    groups = build_workbench_tool_groups(
+        memory_tools=[],
+        rag_tools=[],
+        learning_progress_tools=[FakeTool()],
+        workspace=LocalWorkspace(workdir="/tmp/eduagent-test-workspace", workspace_id="ws"),
+        run_id="run-1",
+    )
+
+    assert [group.name for group in groups] == [
+        "planning",
+        "learning_progress",
+        "learning_state",
+        "artifact",
+        "review",
     ]
 
 

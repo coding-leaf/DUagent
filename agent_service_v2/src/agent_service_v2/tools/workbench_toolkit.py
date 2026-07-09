@@ -15,6 +15,7 @@ def build_workbench_tool_groups(
     *,
     memory_tools: list[ToolBase] | None,
     rag_tools: list[ToolBase] | None,
+    learning_progress_tools: list[ToolBase] | None,
     workspace: LocalWorkspace,
     run_id: str,
 ) -> list[ToolGroup]:
@@ -33,6 +34,19 @@ def build_workbench_tool_groups(
                 name="rag",
                 description="Retrieve course-grounded learning context.",
                 tools=rag_tools,
+            )
+        )
+    if learning_progress_tools:
+        groups.append(
+            ToolGroup(
+                name="learning_progress",
+                description="Read real learner progress and recent answer evidence from Backend.",
+                instructions=(
+                    "Use read_learning_progress before giving overall next-step learning advice. "
+                    "Use read_recent_answers before explaining specific mistakes. "
+                    "If the tools return empty or unavailable data, say evidence is insufficient."
+                ),
+                tools=learning_progress_tools,
             )
         )
     groups.extend(

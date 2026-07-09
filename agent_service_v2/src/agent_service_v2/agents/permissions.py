@@ -9,6 +9,8 @@ SAFE_WORKBENCH_TOOLS = [
     "TaskList",
     "TaskUpdate",
     "read_learning_state",
+    "read_learning_progress",
+    "read_recent_answers",
     "write_artifact_file",
     "review_grounding",
 ]

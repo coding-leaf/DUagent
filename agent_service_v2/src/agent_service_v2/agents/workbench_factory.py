@@ -12,6 +12,8 @@ from agent_service_v2.agents.permissions import build_workbench_permission_conte
 from agent_service_v2.agents.prompts import WORKBENCH_SYSTEM_PROMPT
 from agent_service_v2.observability.agent_middleware import AgentRunLoggingMiddleware
 from agent_service_v2.observability.logging import LogSink
+from agent_service_v2.tools.backend_learning_client import build_backend_learning_client_from_settings
+from agent_service_v2.tools.learning_progress import build_learning_progress_tools
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
 
@@ -39,10 +41,17 @@ class WorkbenchAgentFactory:
         if run_id is None:
             raise ValueError("run_id is required for workbench artifact tools")
 
+        learning_client = build_backend_learning_client_from_settings()
+        learning_progress_tools = build_learning_progress_tools(
+            client=learning_client,
+            user_id=user_id,
+            course_id=course_id,
+        )
         toolkit = Toolkit(
             tool_groups=build_workbench_tool_groups(
                 memory_tools=[],
                 rag_tools=[],
+                learning_progress_tools=learning_progress_tools,
                 workspace=workspace,
                 run_id=run_id,
             )

@@ -13,70 +13,73 @@ export default function SidebarHistory({ leftCollapsed, leftDrawerOpen, onToggle
         />
       )}
       <aside className={`
-        bg-white flex flex-col z-30 transition-all duration-300 ease-in-out relative flex-shrink-0 overflow-hidden
+        bg-white flex flex-col z-30 transition-all duration-300 ease-in-out relative flex-shrink-0
         /* Mobile Drawer Style */
         fixed top-0 left-0 h-full w-64 shadow-2xl lg:shadow-none lg:static lg:h-full
         ${leftDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         /* Desktop Collapse Style */
         ${leftCollapsed ? 'lg:w-16 lg:border-r lg:border-slate-200' : 'lg:w-64 lg:opacity-100 lg:border-r lg:border-slate-200'}
       `}>
-        <div className="w-64 h-full flex flex-col transition-opacity duration-300">
-          <div className="flex-1 flex flex-col w-64 h-full">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
-                智能学习助手
-              </div>
-              <button 
-                onClick={onNewChat}
-                className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
-                title="新对话"
-              >
-                <Icon name="add" className="material-symbols-outlined text-[18px]"/>
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1 px-3 mb-3 mt-3">
-              {['全部', '数据结构', '算法', '计网'].map((tag) => (
-                <span key={tag} className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded-full hover:bg-cyan-50 hover:text-cyan-600 cursor-pointer">
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-              <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
-              {sessions.map(session => (
-                <div key={session.id} className="group/session flex items-center">
-                  <div
-                    onClick={() => {
-                      setActiveSession(session.id);
-                      onCloseDrawer();
-                    }}
-                    className={`flex-1 px-3 py-2 rounded-lg cursor-pointer text-[13px] transition-colors flex items-center gap-2 ${
-                      activeSession === session.id
-                        ? 'bg-slate-100 text-slate-800 font-semibold'
-                        : 'text-slate-500 hover:bg-slate-50'
-                    }`}
-                    title={session.title}
-                  >
-                    <Icon name="chat_bubble_outline" className="material-symbols-outlined text-[16px] flex-shrink-0"/>
-                    <span className="truncate">{session.title}</span>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!window.confirm('确定删除该对话？删除后不可恢复。')) return;
-                      deleteSession(session.id);
-                    }}
-                    className="opacity-0 group-hover/session:opacity-100 px-2 py-1 text-slate-400 hover:text-red-500 cursor-pointer transition-all"
-                    title="删除对话"
-                  >
-                    <Icon name="delete" className="material-symbols-outlined text-[16px]"/>
-                  </button>
+        {/* Inner wrapper to handle overflow clipping during transition without cutting the handle */}
+        <div className="w-full h-full overflow-hidden flex flex-col">
+          <div className="w-64 h-full flex flex-col transition-opacity duration-300">
+            <div className="flex-1 flex flex-col w-64 h-full">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold text-slate-800">
+                  <div className="w-6 h-6 bg-cyan-500 rounded text-white flex items-center justify-center text-[10px]">AI</div>
+                  智能学习助手
                 </div>
-              ))}
-              {sessions.length === 0 && (
-                <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
-              )}
+                <button 
+                  onClick={onNewChat}
+                  className="text-cyan-600 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                  title="新对话"
+                >
+                  <Icon name="add" className="material-symbols-outlined text-[18px]"/>
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1 px-3 mb-3 mt-3">
+                {['全部', '数据结构', '算法', '计网'].map((tag) => (
+                  <span key={tag} className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded-full hover:bg-cyan-50 hover:text-cyan-600 cursor-pointer">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
+                <div className="px-3 py-2 text-xs font-bold text-slate-400 mb-1">历史记录</div>
+                {sessions.map(session => (
+                  <div key={session.id} className="group/session flex items-center">
+                    <div
+                      onClick={() => {
+                        setActiveSession(session.id);
+                        onCloseDrawer();
+                      }}
+                      className={`flex-1 min-w-0 px-3 py-2 rounded-lg cursor-pointer text-[13px] transition-colors flex items-center gap-2 ${
+                        activeSession === session.id
+                          ? 'bg-slate-100 text-slate-800 font-semibold'
+                          : 'text-slate-500 hover:bg-slate-50'
+                      }`}
+                      title={session.title}
+                    >
+                      <Icon name="chat_bubble_outline" className="material-symbols-outlined text-[16px] flex-shrink-0"/>
+                      <span className="truncate">{session.title}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!window.confirm('确定删除该对话？删除后不可恢复。')) return;
+                        deleteSession(session.id);
+                      }}
+                      className="opacity-0 group-hover/session:opacity-100 pointer-events-none group-hover/session:pointer-events-auto px-2 py-1 text-slate-400 hover:text-red-500 cursor-pointer transition-all"
+                      title="删除对话"
+                    >
+                      <Icon name="delete" className="material-symbols-outlined text-[16px]"/>
+                    </button>
+                  </div>
+                ))}
+                {sessions.length === 0 && (
+                  <p className="text-xs text-slate-400 px-3 py-4">无历史对话</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

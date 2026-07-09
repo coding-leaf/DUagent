@@ -9,7 +9,7 @@ export default function AgentWorkspace() {
   const activeArtifact = workspaceArtifacts.find(a => a.id === activeArtifactId) || workspaceArtifacts[0];
 
   return (
-    <div className="relative h-full flex-grow flex flex-col bg-slate-50 border-r border-slate-200 overflow-hidden">
+    <div className="relative h-full flex-grow flex flex-col bg-slate-50 overflow-hidden">
       <div className="flex items-center gap-2 p-6 pb-2 flex-shrink-0">
         <Icon name="design_services" className="material-symbols-outlined text-slate-600 text-[20px]" />
         <h2 className="text-base font-semibold text-slate-800">Agent 画布</h2>

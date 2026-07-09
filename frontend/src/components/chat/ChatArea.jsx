@@ -56,7 +56,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   };
 
   return (
-    <main className="w-full h-full flex flex-col relative bg-white/80 backdrop-blur-xl border border-slate-200 shadow-2xl rounded-lg overflow-hidden">
+    <main className="w-full h-full flex flex-col relative bg-white border-l border-slate-200 overflow-hidden">
       
       {/* Top Context Bar */}
       <div className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-5 lg:px-7 z-10 flex-shrink-0">

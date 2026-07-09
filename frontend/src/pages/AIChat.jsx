@@ -40,14 +40,12 @@ export default function AIChat() {
 
         <AgentWorkspace />
 
-        <div className="absolute lg:static top-0 right-0 h-full p-4 pointer-events-none lg:pointer-events-auto flex justify-end w-full lg:w-[480px] 2xl:w-[540px] z-10 flex-shrink-0">
-          <div className="pointer-events-auto w-full h-full">
-            <ChatArea 
-              key={activeSession || 'empty'}
-              activeCourseName={activeCourseName}
-              onOpenLeftDrawer={handleOpenLeftDrawer}
-            />
-          </div>
+        <div className="absolute lg:static top-0 right-0 h-full flex justify-end w-full lg:w-[480px] 2xl:w-[540px] z-10 flex-shrink-0">
+          <ChatArea 
+            key={activeSession || 'empty'}
+            activeCourseName={activeCourseName}
+            onOpenLeftDrawer={handleOpenLeftDrawer}
+          />
         </div>
       </div>
     </div>

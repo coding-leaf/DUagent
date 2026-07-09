@@ -1341,3 +1341,26 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。仅调整了内部 Agent 的权限过滤机制，未修改任何 HTTP 接口的输入输出格式或契约。
+
+
+### 2026-07-10 — AIChat 页面 UI 布局优化：平铺通高右栏与左栏文字截断/折叠按钮修复
+
+**涉及文件：**
+- `frontend/src/pages/AIChat.jsx`
+- `frontend/src/components/workspace/AgentWorkspace.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/SidebarHistory.jsx`
+- `frontend/src/components/chat/SidebarResources.jsx`
+
+**核心改动：**
+1. **右侧聊天栏平铺通高**：移除 `AIChat.jsx` 中 `ChatArea` 容器的 `p-4` 外边距及无用层级，使其填满右侧。去除 `ChatArea.jsx` 最外层的圆角、悬浮阴影、全边框与背景模糊，改为贴合通高的 `border-l` 与 `bg-white` 布局，提升大屏对称性。
+2. **清除残留双边框**：移除 `AgentWorkspace.jsx` 外层的 `border-r border-slate-200`，避免与 `ChatArea` 的左边框形成双重垂直线。
+3. **修复折叠把手裁切**：移除 `SidebarHistory.jsx` 和 `SidebarResources.jsx` 的 `<aside>` 容器上的 `overflow-hidden`，在子级包裹 `w-full h-full overflow-hidden flex flex-col` 作为遮罩容器。将绝对定位的折叠按钮（`right-[-12px]` / `left-[-12px]`）移出遮罩容器，恢复为完整圆形悬浮状态。
+4. **修复长文本截断与点击误触**：在历史记录链接上增加 `min-w-0` 从而解决 CSS `truncate` 失效而顶到滚动条的 bug；对删除按钮增加 `pointer-events-none group-hover/session:pointer-events-auto`，避免完全透明时误触。
+
+**验证结果：**
+- Unit Tests: `cd frontend && npm run test:unit` 110 个测试全部 PASSED。
+- Production Build: `cd frontend && npm run build` 成功构建生产包，无任何打包/语法异常。
+
+**接口漂移：**
+- 无。

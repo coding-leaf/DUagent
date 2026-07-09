@@ -1439,3 +1439,23 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **遗留问题：**
 - 无。
+
+---
+
+### 2026-07-10 — 修复 Judge0 OJ 沙箱 IP 白名单误拦截
+
+**涉及文件：**
+- `judge0-v1.13.0/judge0.conf`
+
+**核心改动：**
+将 Judge0 的 `ALLOW_IP` 从 `127.0.0.1` 调整为空值，避免 Docker 端口映射后宿主机请求在容器内显示为 `172.19.0.1` 而被 `verify_ip_address` 拦截。服务暴露范围仍由 `docker-compose.yml` 的 `127.0.0.1:2358:2358` 约束。
+
+**验证结果：**
+- `docker compose up -d --force-recreate server workers` 已重新创建 Judge0 server/workers。
+- `docker ps` 显示 Judge0 server 端口已从 `0.0.0.0:2358` 收敛为 `127.0.0.1:2358->2358/tcp`。
+- `curl http://127.0.0.1:2358/about` 返回 200。
+- Judge0 `/submissions?base64_encoded=false&wait=true` 返回 201，C 代码执行结果为 `Accepted`，stdout 为 `hi\n`。
+- Backend OJ service 直接调用 `execute_code_in_oj(..., "c", "")` 返回 `status=success`、`compile_status=OK`、stdout 为 `hi\n`。
+
+**接口漂移：**
+- 无。仅修复本地 Judge0 运行配置，未修改前后端 API 契约。

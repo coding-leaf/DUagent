@@ -1365,6 +1365,37 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+---
+
+### 2026-07-11 — AIChat 私有代码题固定用例异步判题闭环
+
+**涉及文件：**
+- `backend/app/models/code_problem.py`
+- `backend/app/services/code_problem_service.py`
+- `backend/app/services/code_problem_submission_service.py`
+- `backend/app/api/v1/code_problems.py`
+- `backend/app/api/v1/internal_ai_chat.py`
+- `agent_service_v2/src/agent_service_v2/tools/personal_code_problem.py`
+- `agent_service_v2/src/agent_service_v2/observability/logging.py`
+- `frontend/src/components/workspace/plugins/codeSandbox/`
+- `frontend/src/api/services/codeProblems.js`
+
+**核心改动：**
+1. AIChat 生成的代码题归学生私有。Backend 校验会话归属和课程加入关系，使用参考解运行公开/隐藏固定输入后才持久化题目与期望输出。
+2. 学生提交代码使用 Judge0 批量提交与轮询，接口立即返回 `202 + task_id`；任务结果只返回判题结论、通过数和安全化失败信息，绝不返回隐藏输入、期望输出或参考解。
+3. Agent v2 通过 `create_validated_personal_code_problem` 受控工具调用 Backend，不直接写 MySQL 或连接 Judge0；工具日志对参考解和测试输入脱敏。
+4. `CodeSandboxCard` 新增 `problem_id + language` 持久化题模式：加载题目公开信息、移除学生自定义 stdin、提交后用 SWR 轮询判题任务；历史自由沙箱卡片保持兼容。
+
+**验证结果：**
+- Backend：`cd backend && ../.venv/bin/python -m pytest tests/test_code_problem_service.py tests/test_oj_sandbox.py -q -s`，23 passed。
+- Agent v2：`cd agent_service_v2 && .venv/bin/pytest tests/test_personal_code_problem_tools.py tests/test_artifact_scanner.py tests/test_agent_logging_middleware.py tests/test_workbench_toolkit.py -q -s`，22 passed。
+- Frontend：`TMPDIR=/tmp npm run test:unit -- --run src/components/workspace/plugins/CodeSandboxCard.test.jsx src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.test.js`，6 passed；`npm run lint`、`npm run build` 通过。
+
+**接口漂移：**
+- 新增公开接口：`GET /api/v1/code-problems/{problem_id}`、`POST /api/v1/code-problems/{problem_id}/submissions`。
+- 新增 Backend 内部接口：`POST /internal/ai-chat/code-problems`。
+- `CodeSandboxCard` 兼容新增工件 props：`{ "problem_id": string, "language": string }`。
+
 
 ### 2026-07-10 — CodeSandboxCard artifact contract validation
 
@@ -1462,27 +1493,47 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 ---
 
-### 2026-07-10 — 学习效果总结 UI 布局优化与横向网格化
+### 2026-07-10 — 优化学习效果页面的统计口径、总结排版、跳转联动和图表动效
 
 **涉及文件：**
-- `frontend/src/utils/summaryParser.js` (新建)
-- `frontend/src/utils/__tests__/summaryParser.test.js` (新建)
+- `frontend/src/hooks/useLearningEffects.js`
+- `frontend/src/components/effects/EffectsOverviewCards.jsx`
 - `frontend/src/components/effects/EffectsSummaryCard.jsx`
-- `frontend/src/pages/TeacherStudentReport.jsx`
-- `docs/superpowers/specs/2026-07-10-learning-effects-summary-optimization-design.md` (新建)
-- `docs/superpowers/plans/2026-07-10-learning-effects-summary-optimization.md` (新建)
+- `frontend/src/components/effects/MasteryDistributionCard.jsx`
+- `frontend/src/components/effects/KnowledgeProgressTable.jsx`
+- `frontend/src/pages/LearningEffects.jsx`
+- `frontend/src/pages/LearningPath.jsx`
 
 **核心改动：**
-1. **新建客户端 AI 文本解析器 (`summaryParser.js`)**：编写了针对 AI 评估报告字符串的解析工具，利用 `学习范围：`、`当前掌握：`、`学习行为：`、`下一步建议：` 标题锚点动态提取各诊断章节文本，并支持正则识别列表序号自动生成 structured 建议清单。
-2. **学生端总结卡片横向网格化 (`EffectsSummaryCard.jsx`)**：将原纵向堆叠过高的诊断大文本块改为双栏响应式网格布局。左侧将“学习范围”与“当前掌握”左右 50% 并排展出，“学习行为”通栏占 100% 展出。右侧渲染建议清单。该优化使卡片整体垂直高度缩短了近一半，完美与右侧的“下一步学习建议”以及同行的“掌握度分布”对齐，消除了空余留白。
-3. **教师端诊断界面对齐 (`TeacherStudentReport.jsx`)**：教师端同步复用 `summaryParser` 解析逻辑，将原来的灰色文本段落升级为分栏紧凑面板，方便老师快速查阅学情和建议。
-4. **AI 答疑上下文兼容**：后台数据存储依然保持纯文本 string，不做复杂对象拆分，确保 ai-chat 和提示词能够直接以自然语言消费。
+1. **数据一致性修复**：重构 `useLearningEffects.js` 的 `overview` 卡片指标为 MECE 口径，包含已掌握、薄弱、学习中、待练习、未开始/默认通过共 5 个互斥维度，并对 `EffectsOverviewCards.jsx` 升级为 6 列网格布局，确保指标相加严格等于 KG 节点总数。
+2. **AI 总结 Markdown 渲染**：将 `EffectsSummaryCard.jsx` 中的单段纯文本 `<p>` 替换为项目已有的通用 `MarkdownViewer`，支持列表与粗体排版。
+3. **“查看资源”跨页面跳转精准联动**：在 `KnowledgeProgressTable.jsx` 的“查看资源”链接中追加 `?node_id=${node_id}` 参数，并在 `LearningPath.jsx` 页面初始化时解析 URL query 参数，实现精准定位选中对应的知识点资源。
+4. **图表动效与渐变视觉提升**：在 `MasteryDistributionCard.jsx` 中利用 `animated` 挂载状态和 `transition-all duration-500` 类实现进度条载入动画；将 `useLearningEffects.js` 的各类掌握度标签改用丰富的 Tailwind 渐变背景类（`bg-gradient-to-r`）。
+5. **最近评估时间微调**：将“最近评估时间”卡片从 Overview 分类卡片中抽离，作为 Badge 徽章精致地展示在页头副标题位置，利用已有的 `formatDateTime` 统一日期输出风格。
 
 **验证结果：**
-- 前端测试：`cd frontend && npm run test:unit` 全部 113 个测试通过。
-- 前端 lint / build：`npm run lint && npm run build` 构建编译成功，零 ESLint 警告或报错。
-- 自动化测试：已创建并运行了 `summaryParser.test.js`。
+- 前端测试：`cd frontend && npm run test:unit` 全部 110 passed。
+- 前端 lint / build：`cd frontend && npm run lint && npm run build` 构建成功，无任何打包/语法异常。
 
 **接口漂移：**
-- 无。后端与数据库仍存储 `summary_text` 字符串，没有任何字段形状或 API 接口变动。
+- 无。
 
+---
+
+### 2026-07-11 — 放行 AIChat 编程练习生成工具权限
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 将编程题生成工具 `create_validated_personal_code_problem` 加入安全工具白名单列表（`SAFE_WORKBENCH_TOOLS`）。这避免了在生成编程练习卡片时触发 `permission.required` (RequireUserConfirmEvent)，使得智能体可以自动直接运行，而无需前端/用户手动授权。
+2. 更新了单元测试 `test_workbench_factory.py` 中的 `test_factory_configures_safe_tool_permission_allow_rules`，补充断言以确保工厂类创建 of Agent 默认将此工具加入放行规则。
+
+**验证结果：**
+- 编译检查：`cd agent_service_v2 && ./.venv/bin/python3 -m py_compile src/agent_service_v2/agents/permissions.py` 编译通过。
+- 单元测试：`cd agent_service_v2 && ./.venv/bin/pytest` 运行所有 84 个测试用例，全部通过（84 passed, 1 warning）。
+
+**接口漂移：**
+- 无。仅修改了 Agent 内部的安全工具白名单配置，未改变任何 API 的数据契约。

@@ -14,6 +14,7 @@ SAFE_WORKBENCH_TOOLS = [
     "write_artifact_file",
     "review_grounding",
     "run_code_in_oj",
+    "create_validated_personal_code_problem",
 ]
 
 DANGEROUS_WORKBENCH_TOOLS = [

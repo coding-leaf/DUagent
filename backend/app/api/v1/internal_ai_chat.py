@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -122,6 +123,14 @@ async def create_personal_code_problem(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": 40001, "message": "代码题草案验证失败", "data": None},
+        )
+    try:
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": 50000, "message": "代码题保存失败", "data": None},
         )
     return {
         "code": 200,

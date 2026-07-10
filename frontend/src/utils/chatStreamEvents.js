@@ -2,6 +2,12 @@ export const updateTargetMessage = (messages, targetId, updater) => {
   return messages.map(m => m.id === targetId ? updater(m) : m);
 };
 
+const FAILED_TOOL_STATUSES = new Set(['rejected', 'degraded', 'unavailable']);
+
+const isFailedToolResult = (payload = {}) => {
+  return payload.state === 'error' || FAILED_TOOL_STATUSES.has(payload.status);
+};
+
 export const completeRunningToolCalls = (toolCalls = []) => {
   return toolCalls.map(tc => tc.status === 'running' ? { ...tc, status: 'completed' } : tc);
 };
@@ -120,8 +126,8 @@ export const reduceAssistantMessageForEvent = (message, event) => {
       {
         const toolCall = {
           id: event.payload?.tool_call_id || 'unknown',
-          status: event.payload?.state === 'error' ? 'error' : 'completed',
-          outputSummary: event.payload?.summary
+          status: isFailedToolResult(event.payload) ? 'error' : 'completed',
+          outputSummary: event.payload?.output_summary || event.payload?.summary || event.payload?.reason
         };
         return {
           ...message,

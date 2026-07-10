@@ -71,6 +71,29 @@ describe('chatStreamEvents', () => {
     ]);
   });
 
+  it('marks rejected tool results as errors even when AgentScope completed the call', () => {
+    let message = createEmptyAiMessage();
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'tool_started',
+      payload: { tool_call_id: 'tool-1', tool_name: 'create_validated_personal_code_problem' }
+    });
+
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'tool_completed',
+      payload: {
+        tool_call_id: 'tool-1',
+        state: 'success',
+        status: 'rejected',
+        reason: 'backend_validation_error'
+      }
+    });
+
+    expect(message.toolCalls[0]).toMatchObject({
+      status: 'error',
+      outputSummary: 'backend_validation_error'
+    });
+  });
+
   it('adds content safety review as an ordered message part and blocks critical content', () => {
     let message = createEmptyAiMessage();
 

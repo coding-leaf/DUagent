@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   buildAskAIPrompt,
+  getSourceFilename,
   getResultBadge,
   getRunToastMessage,
   isExecutionFailure
@@ -64,5 +65,14 @@ describe('codeSandboxViewModel', () => {
     expect(prompt).toContain('print(1 / 0)');
     expect(prompt).toContain('ZeroDivisionError');
     expect(prompt).toContain('Exit Code 1');
+  });
+
+  test('uses conventional file names for every supported language', () => {
+    expect(getSourceFilename('c')).toBe('main.c');
+    expect(getSourceFilename('cpp')).toBe('main.cpp');
+    expect(getSourceFilename('python')).toBe('main.py');
+    expect(getSourceFilename('java')).toBe('Main.java');
+    expect(getSourceFilename('go')).toBe('main.go');
+    expect(getSourceFilename('javascript')).toBe('main.js');
   });
 });

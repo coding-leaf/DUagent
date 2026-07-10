@@ -56,6 +56,9 @@ export const getSourceFilename = (language) => {
   if (language === 'c') return 'main.c';
   if (language === 'cpp') return 'main.cpp';
   if (language === 'python') return 'main.py';
+  if (language === 'java') return 'Main.java';
+  if (language === 'go') return 'main.go';
+  if (language === 'javascript') return 'main.js';
   return `main.${language || 'txt'}`;
 };
 

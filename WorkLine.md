@@ -1570,3 +1570,23 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 有限扩展：内部代码题草案 `language` 从三种规范值扩展为六种；常见别名只在输入层归一化，持久化和工件仍使用规范值。未新增或修改 HTTP 路径、SSE 事件类型或数据库结构。
+
+---
+
+### 2026-07-11 — 多语言代码题后端与 AgentScope 代码质量审计
+
+**涉及文件：**
+- `docs/90-review/2026-07-11-multilang-code-problem-backend-agent-audit.md`
+- `WorkLine.md`
+
+**审计结论：**
+1. AgentScope v2 的 Agent、Toolkit、ToolGroup、FunctionTool、LocalWorkspace 和 `reply_stream()` 均由框架实际驱动；EDU 协议适配是必要的产品边界层，不是伪框架。
+2. Backend 的多语言代码题已采用单一语言注册表、边界别名归一和 Judge0 适配器，避免语言枚举在多层漂移。
+3. 发现个性化资源页仍不展示已保存代码题，以及 `personalized_resources` 胖路由等问题；前者涉及新增前端可见响应字段和页面导航，等待单独的 Client API 契约确认后实施。
+
+**验证结果：**
+- 静态审计覆盖 `backend/app/` 与 `agent_service_v2/src/agent_service_v2/` 的大文件、长函数、框架调用点和边界依赖。
+- 审计文档保留了问题证据、优先级、建议拆分顺序和外部参考资料。
+
+**接口漂移：**
+- 无。本条仅记录审计结论，未修改运行接口。

@@ -58,6 +58,51 @@ def build_submission_result(
     }
 
 
+def build_code_problem_submission_result(
+    *,
+    test_cases: list[dict[str, Any]],
+    execution_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if len(test_cases) != len(execution_results):
+        raise ValueError("test case and execution result counts must match")
+
+    passed_cases = 0
+    for test_case, execution_result in zip(test_cases, execution_results):
+        execution = execution_result.get("execution") or {}
+        actual_output = normalize_code_problem_output(str(execution.get("stdout") or ""))
+        is_accepted = (
+            execution_result.get("status") == "success"
+            and execution_result.get("compile_status") == "OK"
+            and actual_output == normalize_code_problem_output(test_case["expected_output"])
+        )
+        if is_accepted:
+            passed_cases += 1
+            continue
+
+        result = build_submission_result(
+            total_cases=len(test_cases),
+            passed_cases=passed_cases,
+            failed_case={
+                "is_public": test_case["is_public"],
+                "stdin": test_case["stdin"],
+                "expected_output": test_case["expected_output"],
+                "actual_output": actual_output,
+            },
+        )
+        execution_status = execution_result.get("status")
+        if execution_status and execution_status != "success":
+            result["status"] = execution_status
+            if execution_status == "compilation_error":
+                result["compile_output"] = execution_result.get("compile_output") or ""
+        return result
+
+    return build_submission_result(
+        total_cases=len(test_cases),
+        passed_cases=passed_cases,
+        failed_case=None,
+    )
+
+
 async def validate_code_problem_draft(
     draft: CodeProblemDraft,
     *,

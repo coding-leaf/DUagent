@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 import httpx
 from app.core.config import settings
 
@@ -38,6 +40,20 @@ class OJExecutionError(Exception):
         self.message = message
 
 
+def _judge0_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if not settings.JUDGE0_API_KEY:
+        return headers
+    if "rapidapi.com" in settings.JUDGE0_API_URL.lower():
+        headers["X-RapidAPI-Key"] = settings.JUDGE0_API_KEY
+        url_parts = settings.JUDGE0_API_URL.split("/")
+        if len(url_parts) > 2:
+            headers["X-RapidAPI-Host"] = url_parts[2]
+        return headers
+    headers["X-Auth-Token"] = settings.JUDGE0_API_KEY
+    return headers
+
+
 async def execute_code_in_oj(code: str, language: str, stdin: str = "") -> dict:
     """
     Submits code to Judge0 for compilation and execution.
@@ -49,16 +65,7 @@ async def execute_code_in_oj(code: str, language: str, stdin: str = "") -> dict:
         raise OJExecutionError("unsupported_language", f"Language '{language}' is not supported.")
 
     # Prepare Headers
-    headers = {"Content-Type": "application/json"}
-    if settings.JUDGE0_API_KEY:
-        if "rapidapi.com" in settings.JUDGE0_API_URL.lower():
-            headers["X-RapidAPI-Key"] = settings.JUDGE0_API_KEY
-            # Deduce host if needed from RapidAPI url
-            url_parts = settings.JUDGE0_API_URL.split("/")
-            if len(url_parts) > 2:
-                headers["X-RapidAPI-Host"] = url_parts[2]
-        else:
-            headers["X-Auth-Token"] = settings.JUDGE0_API_KEY
+    headers = _judge0_headers()
 
     payload = {
         "source_code": code,
@@ -147,9 +154,7 @@ async def execute_code_batch_in_oj(
     if not stdins:
         raise OJExecutionError("empty_batch", "At least one test input is required.")
 
-    headers = {"Content-Type": "application/json"}
-    if settings.JUDGE0_API_KEY:
-        headers["X-Auth-Token"] = settings.JUDGE0_API_KEY
+    headers = _judge0_headers()
     payload = {
         "submissions": [
             {"source_code": code, "language_id": lang_id, "stdin": stdin}
@@ -184,9 +189,7 @@ async def read_code_batch_results_in_oj(
 ) -> list[dict]:
     if not tokens:
         return []
-    headers = {"Content-Type": "application/json"}
-    if settings.JUDGE0_API_KEY:
-        headers["X-Auth-Token"] = settings.JUDGE0_API_KEY
+    headers = _judge0_headers()
     url = f"{settings.JUDGE0_API_URL.rstrip('/')}/submissions/batch"
     try:
         async with client_factory(timeout=8.0) as client:
@@ -221,3 +224,22 @@ def _map_judge0_submission(data: dict) -> dict:
             "status_description": status_obj.get("description", "Unknown"),
         },
     }
+
+
+async def poll_code_batch_results_in_oj(
+    *,
+    tokens: list[str],
+    max_attempts: int = 20,
+    interval_seconds: float = 0.5,
+    read_results: Callable[..., Awaitable[list[dict]]] = read_code_batch_results_in_oj,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> list[dict]:
+    if not tokens:
+        return []
+    for attempt in range(max_attempts):
+        results = await read_results(tokens=tokens)
+        if all(item.get("status") not in {"queued", "processing"} for item in results):
+            return results
+        if attempt < max_attempts - 1:
+            await sleep(interval_seconds)
+    raise OJExecutionError("oj_batch_timeout", "Judge0 did not finish the batch in time.")

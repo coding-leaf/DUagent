@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
     admin, auth, catalogs, courses, evaluation, internal_ai_chat, learning_path,
-    learning_activities, personalized_resources, profile, quiz, resources,
-    tasks, teaching, tutoring, users, webhooks,
+    code_problems, learning_activities, personalized_resources, profile, quiz, resources,
+    sandbox, tasks, teaching, tutoring, users, webhooks,
 )
 from app.core.config import settings
 from app.db.session import init_db
@@ -36,6 +36,7 @@ async def _recover_orphaned_background_tasks() -> None:
         "evaluation_refresh",
         "learning_path_refresh",
         "kg_generation",
+        "code_problem_judging",
     ]
 
     async with async_session_factory() as db:
@@ -105,6 +106,8 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(catalogs.router)
 app.include_router(internal_ai_chat.router)
+app.include_router(sandbox.router)
+app.include_router(code_problems.router)
 app.include_router(courses.router)
 app.include_router(teaching.router)
 app.include_router(admin.router)

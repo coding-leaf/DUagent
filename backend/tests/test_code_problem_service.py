@@ -31,6 +31,49 @@ def test_build_submission_result_hides_hidden_case_values():
     assert "123" not in str(result)
 
 
+def test_build_code_problem_submission_result_accepts_all_fixed_cases():
+    from app.services.code_problem_service import build_code_problem_submission_result
+
+    result = build_code_problem_submission_result(
+        test_cases=[
+            {"stdin": "1\n", "expected_output": "1", "is_public": True},
+            {"stdin": "2\n", "expected_output": "2", "is_public": False},
+        ],
+        execution_results=[
+            {"status": "success", "compile_status": "OK", "execution": {"stdout": "1\n"}},
+            {"status": "success", "compile_status": "OK", "execution": {"stdout": "2\n"}},
+        ],
+    )
+
+    assert result == {
+        "status": "accepted",
+        "passed_cases": 2,
+        "total_cases": 2,
+        "failed_case": None,
+    }
+
+
+def test_build_code_problem_submission_result_never_exposes_hidden_case_data():
+    from app.services.code_problem_service import build_code_problem_submission_result
+
+    result = build_code_problem_submission_result(
+        test_cases=[
+            {"stdin": "1\n", "expected_output": "1", "is_public": True},
+            {"stdin": "987 654\n", "expected_output": "secret-value", "is_public": False},
+        ],
+        execution_results=[
+            {"status": "success", "compile_status": "OK", "execution": {"stdout": "1\n"}},
+            {"status": "success", "compile_status": "OK", "execution": {"stdout": "wrong\n"}},
+        ],
+    )
+
+    assert result["status"] == "wrong_answer"
+    assert result["passed_cases"] == 1
+    assert result["failed_case"] == {"visibility": "hidden", "message": "隐藏用例未通过"}
+    assert "987" not in str(result)
+    assert "secret-value" not in str(result)
+
+
 @pytest.mark.asyncio
 async def test_create_validated_problem_rejects_duplicate_test_inputs_before_persisting():
     from app.schemas.code_problem import CodeProblemDraft, CodeProblemTestInput

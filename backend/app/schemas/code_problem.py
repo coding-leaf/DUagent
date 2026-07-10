@@ -15,3 +15,7 @@ class CodeProblemDraft(BaseModel):
     starter_code: str = Field(max_length=20000)
     reference_solution: str = Field(min_length=1, max_length=30000)
     test_inputs: list[CodeProblemTestInput] = Field(min_length=2, max_length=8)
+
+
+class CodeProblemSubmissionRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=20000)

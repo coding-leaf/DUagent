@@ -98,6 +98,107 @@ async def test_public_sandbox_execute_requires_auth():
 
 
 @pytest.mark.asyncio
+async def test_private_code_problem_detail_requires_authentication():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/code-problems/problem-1")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_private_code_problem_detail_excludes_reference_solution_and_hidden_cases():
+    from app.api.deps import get_current_user, get_db
+    from app.models.code_problem import CodeProblem, CodeProblemTestCase
+    from app.models.user import User
+
+    class FakeResult:
+        def __init__(self, item):
+            self.item = item
+
+        def scalar_one_or_none(self):
+            return self.item
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.item
+
+    class FakeDB:
+        async def execute(self, _statement):
+            return FakeResult(results.pop(0))
+
+    problem = CodeProblem(
+        id="problem-1",
+        owner_user_id="student-1",
+        course_id="course-1",
+        title="回显",
+        statement="读取并输出输入。",
+        language="python",
+        starter_code="print(input())",
+        reference_solution="print(input())  # private",
+        validation_report={},
+    )
+    public_case = CodeProblemTestCase(
+        stdin="visible\n",
+        expected_output="visible",
+        is_public=True,
+    )
+    results = [problem, [public_case]]
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="student-1", username="student", is_active=True
+    )
+
+    async def override_db():
+        yield FakeDB()
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/v1/code-problems/problem-1")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["public_cases"] == [{"stdin": "visible\n", "expected_output": "visible"}]
+    assert "reference_solution" not in str(response.json())
+    assert "private" not in str(response.json())
+
+
+@pytest.mark.asyncio
+async def test_private_code_problem_submission_returns_async_task_id():
+    from app.api.deps import get_current_user, get_db
+    from app.models.user import User
+
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="student-1", username="student", is_active=True
+    )
+
+    async def override_db():
+        yield object()
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        with patch(
+            "app.api.v1.code_problems.start_code_problem_submission",
+            new_callable=AsyncMock,
+        ) as start_submission:
+            start_submission.return_value = "task-1"
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/code-problems/problem-1/submissions",
+                    json={"code": "print(input())"},
+                )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 202
+    assert response.json()["data"] == {"task_id": "task-1"}
+
+
+@pytest.mark.asyncio
 async def test_public_sandbox_execute_success():
     from app.api.deps import get_current_user
     from app.models.user import User
@@ -210,6 +311,21 @@ async def test_execute_code_in_oj_maps_time_limit_status():
     assert result["execution"]["status_id"] == 5
 
 
+def test_judge0_headers_preserve_rapidapi_authentication_mode():
+    from app.services.oj_execution_service import _judge0_headers
+
+    with patch("app.services.oj_execution_service.settings.JUDGE0_API_KEY", "rapid-key"):
+        with patch(
+            "app.services.oj_execution_service.settings.JUDGE0_API_URL",
+            "https://judge0-ce.p.rapidapi.com",
+        ):
+            headers = _judge0_headers()
+
+    assert headers["X-RapidAPI-Key"] == "rapid-key"
+    assert headers["X-RapidAPI-Host"] == "judge0-ce.p.rapidapi.com"
+    assert "X-Auth-Token" not in headers
+
+
 @pytest.mark.asyncio
 async def test_execute_code_batch_in_oj_submits_all_fixed_inputs_without_waiting():
     from app.services.oj_execution_service import execute_code_batch_in_oj
@@ -281,3 +397,32 @@ async def test_read_code_batch_results_maps_each_judge0_submission():
     assert results[0]["status"] == "success"
     assert results[0]["execution"]["stdout"] == "3\n"
     assert results[1]["status"] == "runtime_error"
+
+
+@pytest.mark.asyncio
+async def test_poll_code_batch_results_waits_until_every_submission_is_terminal():
+    from app.services.oj_execution_service import poll_code_batch_results_in_oj
+
+    responses = iter(
+        [
+            [{"status": "queued"}, {"status": "processing"}],
+            [{"status": "success"}, {"status": "wrong_answer"}],
+        ]
+    )
+    sleep_calls = []
+
+    async def read_results(**_kwargs):
+        return next(responses)
+
+    async def sleep(delay):
+        sleep_calls.append(delay)
+
+    results = await poll_code_batch_results_in_oj(
+        tokens=["token-1", "token-2"],
+        read_results=read_results,
+        sleep=sleep,
+        interval_seconds=0.1,
+    )
+
+    assert [item["status"] for item in results] == ["success", "wrong_answer"]
+    assert sleep_calls == [0.1]

@@ -4,7 +4,7 @@
 
 **Goal:** 让学生通过 AIChat 生成、经 Judge0 验证并持久化的私有代码题，使用服务端公开/隐藏固定用例完成安全判题。
 
-**Architecture:** Backend 新增私有代码题、测试用例和验证报告的领域模型；它是题目归属、验证与判题的唯一事实源。Agent Service v2 以一个受限 typed tool 发起“验证并创建私有题”事务，之后写入只引用 `problem_id` 的工作区 artifact；Frontend 按题目详情 API 渲染卡片并提交判题。
+**Architecture:** Backend 新增私有代码题、测试用例和验证报告的领域模型；它是题目归属、验证与判题的唯一事实源。学生提交创建 `AsyncTask` 并通过 Judge0 batch 后台判题，Frontend 轮询既有 tasks API；Agent Service v2 以一个受限 typed tool 发起“验证并创建私有题”事务，之后写入只引用 `problem_id` 的工作区 artifact。
 
 **Tech Stack:** FastAPI、SQLAlchemy async、MySQL、httpx/Judge0、AgentScope 2.0.3、React、SWR、Vitest、pytest。
 
@@ -16,6 +16,9 @@
 - 学生私有题必须由 `owner_user_id` 隔离；隐藏用例与参考解不得进入 Client API、SSE 摘要、AI 答疑 prompt 或日志。
 - 使用 AgentScope 2.0.3 已验证的 `FunctionTool`、`ToolGroup`、`Toolkit` 与 `reply_stream()`；不公开 AgentScope 对象。
 - 维持既有 `/api/v1/sandbox/execute` 和 `/internal/ai-chat/oj/evaluate` 的自由 stdin 调试语义。
+- 学生判题返回 `202 + task_id`，使用既有 `GET /api/v1/tasks/{task_id}` 轮询；不得让浏览器执行 Judge0 或持有隐藏用例。
+- Judge0 判题使用 `/submissions/batch` 创建和批量查询，限制 batch 大小、同用户在途任务数和总等待时间；不得以 `wait=true` 作为判题主路径。
+- 参考解、隐藏输入、期望输出不得出现在 Agent tool raw log、`debug_log` SSE、workspace event 文件或 tool result summary。
 - 新增 Client API 与 Backend internal API 必须同步更新 OpenAPI、接口规范和 `WorkLine.md`。
 - 本计划只实现学生私有题闭环，不迁移 Agent v1 的管理员通用资源生成。
 
@@ -24,9 +27,11 @@
 ## 文件结构
 
 - `backend/app/models/code_problem.py`：私有/未来通用代码题与服务端测试用例 ORM。
+- `backend/migrations/2026-07-10-add-personal-code-problems.sql`：对已有 MySQL 增加代码题表和关联列。
 - `backend/app/db/session.py`：在 `Base.metadata.create_all()` 前导入新 ORM 模型。
 - `backend/app/schemas/code_problem.py`：Client 与 Agent internal API 的 request/response Pydantic schema。
 - `backend/app/services/code_problem_service.py`：验证参考解、原子保存、公开详情投影和固定用例判题。
+- `backend/app/services/oj_execution_service.py`：Judge0 batch 创建、批量查询与受限轮询。
 - `backend/app/api/v1/code_problems.py`：学生详情与提交 Router。
 - `backend/app/api/v1/internal_code_problems.py`：Agent service-token 创建 Router。
 - `agent_service_v2/src/agent_service_v2/tools/personal_code_problems.py`：有副作用的 AgentScope typed tool。
@@ -41,6 +46,7 @@
 - Modify: `backend/app/db/session.py`
 - Modify: `backend/app/models/others.py`
 - Modify: `backend/schema.sql`
+- Create: `backend/migrations/2026-07-10-add-personal-code-problems.sql`
 - Create: `backend/tests/test_code_problem_models.py`
 
 **Interfaces:**
@@ -73,8 +79,9 @@ class CodeProblem(Base):
     owner_user_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
-    starter_templates: Mapped[dict] = mapped_column(JSON, nullable=False)
-    reference_solutions: Mapped[dict] = mapped_column(JSON, nullable=False)
+    language: Mapped[str] = mapped_column(String(20), nullable=False)
+    starter_code: Mapped[str] = mapped_column(Text, nullable=False)
+    reference_solution: Mapped[str] = mapped_column(Text, nullable=False)
     validation_report: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="validated")
 
@@ -86,7 +93,7 @@ class CodeProblemTestCase(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 ```
 
-Add equivalent `CREATE TABLE` definitions and `user_personalized_resources.code_problem_id` foreign key to `backend/schema.sql`; retain existing `resource_id` and `question_id` columns.
+Add equivalent `CREATE TABLE` definitions and `user_personalized_resources.code_problem_id` foreign key to `backend/schema.sql`; retain existing `resource_id` and `question_id` columns. The migration must use `CREATE TABLE IF NOT EXISTS` for the two new tables and an idempotent column/foreign-key guard suitable for the project's MySQL version; it is the required deployment path for existing databases.
 Add `import app.models.code_problem  # noqa: E402` after the existing model imports in
 `backend/app/db/session.py`, so `init_db()` registers the tables in test and local startup.
 
@@ -99,7 +106,7 @@ Expected: PASS。
 - [ ] **Step 5: 提交模型批次**
 
 ```bash
-git add backend/app/models/code_problem.py backend/app/db/session.py backend/app/models/others.py backend/schema.sql backend/tests/test_code_problem_models.py
+git add backend/app/models/code_problem.py backend/app/db/session.py backend/app/models/others.py backend/schema.sql backend/migrations/2026-07-10-add-personal-code-problems.sql backend/tests/test_code_problem_models.py
 git commit -m "feat: 增加私有代码题数据模型"
 ```
 
@@ -108,11 +115,13 @@ git commit -m "feat: 增加私有代码题数据模型"
 **Files:**
 - Create: `backend/app/schemas/code_problem.py`
 - Create: `backend/app/services/code_problem_service.py`
+- Modify: `backend/app/services/oj_execution_service.py`
+- Modify: `backend/app/main.py`
 - Create: `backend/tests/test_code_problem_service.py`
 
 **Interfaces:**
 - Consumes `CodeProblemDraft`, `CodeProblem`, `CodeProblemTestCase` 和 `execute_code_in_oj(code, language, stdin)`。
-- Produces `create_validated_personal_problem(db, *, owner_user_id, course_id, conversation_id, run_id, draft)`、`get_private_problem_detail(...)`、`submit_private_problem(...)`。
+- Produces `create_validated_personal_problem(db, *, owner_user_id, course_id, conversation_id, run_id, draft)`、`get_private_problem_detail(db, *, owner_user_id, problem_id)`、`start_private_problem_submission(db, *, owner_user_id, problem_id, language, code)` 和 `run_private_problem_submission(task_id)`。
 
 - [ ] **Step 1: 写服务层失败测试**
 
@@ -122,7 +131,7 @@ async def test_create_validated_problem_uses_reference_stdout_and_creates_person
     mock_oj.side_effect = [ok(stdout="3\\n"), ok(stdout="42\\n")]
     created = await create_validated_personal_problem(
         db, owner_user_id="student-1", course_id="course-1", conversation_id="conv-1", run_id="run-1",
-        draft=CodeProblemDraft(title="求和", statement="...", language="python", starter_code="", reference_solution="...", test_inputs=[...]),
+        draft=CodeProblemDraft(title="两个整数求和", statement="读取两个整数并输出它们的和。", language="python", starter_code="a, b = map(int, input().split())\nprint(a + b)\n", reference_solution="a, b = map(int, input().split())\nprint(a + b)\n", test_inputs=[CodeProblemTestInput(stdin="1 2\n", is_public=True), CodeProblemTestInput(stdin="20 22\n", is_public=False)]),
     )
     assert created.problem.owner_user_id == "student-1"
     assert created.public_case_count == 1
@@ -130,9 +139,10 @@ async def test_create_validated_problem_uses_reference_stdout_and_creates_person
     assert created.problem.validation_report["status"] == "validated"
 
 @pytest.mark.asyncio
-async def test_hidden_case_failure_does_not_return_input_or_expected_output(db, saved_problem, mock_oj):
-    result = await submit_private_problem(db, owner_user_id="student-1", problem_id=saved_problem.id, language="python", code="...")
-    assert result.failed_case == {"visibility": "hidden", "message": "隐藏用例未通过"}
+async def test_submission_task_hides_hidden_case_data(db, saved_problem, mock_judge_batch):
+    task = await start_private_problem_submission(db, owner_user_id="student-1", problem_id=saved_problem.id, language="python", code="a, b = map(int, input().split())\nprint(a * b)\n")
+    await run_private_problem_submission(task.id)
+    assert task.result["failed_case"] == {"visibility": "hidden", "message": "隐藏用例未通过"}
 ```
 
 - [ ] **Step 2: 运行服务测试确认失败**
@@ -152,10 +162,10 @@ class CodeProblemDraft(BaseModel):
     reference_solution: str = Field(min_length=1, max_length=30000)
     test_inputs: list[CodeProblemTestInput] = Field(min_length=2, max_length=8)
 
-async def create_validated_personal_problem(...):
+async def create_validated_personal_problem(db: AsyncSession, *, owner_user_id: str, course_id: str, conversation_id: str, run_id: str, draft: CodeProblemDraft) -> CreatedCodeProblem:
     _validate_draft_shape(draft)
     executed_cases = await _execute_reference_cases(draft)
-    return await _persist_problem_transaction(..., executed_cases)
+    return await _persist_problem_transaction(db, owner_user_id, course_id, conversation_id, run_id, draft, executed_cases)
 ```
 
 Implement `_normalize_output()` with CRLF normalization, trailing whitespace removal per line, and trailing blank-line removal. Validate at least one public and one hidden input; reject duplicate inputs and any reference compile/runtime/timeout failure. Store stdout returned by Judge0 as `expected_output`; never accept an expected output from the Agent draft.
@@ -163,8 +173,11 @@ Implement `_normalize_output()` with CRLF normalization, trailing whitespace rem
 - [ ] **Step 4: 实现 detail/submit 安全投影**
 
 ```python
-async def get_private_problem_detail(db, *, owner_user_id: str, problem_id: str) -> CodeProblemDetail: ...
-async def submit_private_problem(db, *, owner_user_id: str, problem_id: str, language: str, code: str) -> CodeSubmissionResult: ...
+async def get_private_problem_detail(db: AsyncSession, *, owner_user_id: str, problem_id: str) -> CodeProblemDetail:
+    return await _load_owned_problem_detail(db, owner_user_id, problem_id)
+
+async def start_private_problem_submission(db: AsyncSession, *, owner_user_id: str, problem_id: str, language: str, code: str) -> AsyncTask:
+    return await _create_owned_submission_task(db, owner_user_id, problem_id, language, code)
 ```
 
 Require `problem.owner_user_id == owner_user_id` in both paths. On a public failure return the exact public input, expected and actual output; on a hidden failure return only the fixed anonymous object used in the failing test.
@@ -181,6 +194,8 @@ Expected: PASS。
 git add backend/app/schemas/code_problem.py backend/app/services/code_problem_service.py backend/tests/test_code_problem_service.py
 git commit -m "feat: 验证并保存学生私有代码题"
 ```
+
+Implement `start_private_problem_submission()` to create `AsyncTask(task_type="code_problem_judging", status="processing")`, reject another processing judgement for the same user/problem, and schedule `run_private_problem_submission()` through the service boundary. Implement `run_private_problem_submission()` with `submit_judge0_batch()` and `poll_judge0_batch()`; persist only the safe result, set progress from 0 to 100, and mark total-timeout or restart-interrupted tasks as failed. Add `code_problem_judging` to the recoverable task types in `backend/app/main.py`.
 
 ## Task 3: Client 与 internal API 路由、权限和契约文档
 
@@ -202,7 +217,7 @@ git commit -m "feat: 验证并保存学生私有代码题"
 ```python
 @pytest.mark.asyncio
 async def test_student_submit_rejects_other_users_and_hides_private_cases(client, saved_problem):
-    response = await client.post(f"/api/v1/sandbox/problems/{saved_problem.id}/submit", json={"language": "python", "code": "..."})
+    response = await client.post(f"/api/v1/sandbox/problems/{saved_problem.id}/submit", json={"language": "python", "code": "print('forbidden')"})
     assert response.status_code == 404
 
 @pytest.mark.asyncio
@@ -220,16 +235,17 @@ Expected: FAIL，新增路径尚未注册。
 - [ ] **Step 3: 实现薄 Router 与 response schemas**
 
 ```python
-@router.post("/sandbox/problems/{problem_id}/submit")
+@router.post("/sandbox/problems/{problem_id}/submit", status_code=status.HTTP_202_ACCEPTED)
 async def submit_problem(problem_id: str, req: CodeSubmissionRequest, current_user=Depends(get_current_user), db=Depends(get_db)):
-    return success(await submit_private_problem(db, owner_user_id=current_user.id, problem_id=problem_id, **req.model_dump()))
+    task = await start_private_problem_submission(db, owner_user_id=current_user.id, problem_id=problem_id, **req.model_dump())
+    return JSONResponse(status_code=202, content={"code": 202, "message": "accepted", "data": {"task_id": task.id}})
 
 @router.post("/code-problems/create-validated")
 async def create_validated(req: InternalCreateCodeProblemRequest, _auth=Depends(verify_internal_agent_token), db=Depends(get_db)):
     return success(await create_validated_personal_problem(db, **req.model_dump()))
 ```
 
-Mount both routers in `app/main.py`. Document all request/response fields, error status semantics and the explicit ban on hidden-case projection. Do not alter `/sandbox/execute` or `/internal/ai-chat/oj/evaluate`.
+Mount both routers in `app/main.py`. Document the `202/task_id` response, reuse of `GET /tasks/{task_id}`, batch timeout/error semantics and the explicit ban on hidden-case projection. The internal create endpoint must query conversation ownership and course membership before saving. Do not alter `/sandbox/execute` or `/internal/ai-chat/oj/evaluate`.
 
 - [ ] **Step 4: 运行 API 与 OpenAPI 回归**
 
@@ -252,9 +268,12 @@ git commit -m "feat: 提供私有代码题详情与判题接口"
 - Modify: `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
 - Modify: `agent_service_v2/src/agent_service_v2/agents/permissions.py`
 - Modify: `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- Modify: `agent_service_v2/src/agent_service_v2/observability/agent_log_emitter.py`
+- Modify: `agent_service_v2/src/agent_service_v2/observability/logging.py`
 - Modify: `agent_service_v2/tests/test_workbench_toolkit.py`
 - Modify: `agent_service_v2/tests/test_workbench_factory.py`
 - Create: `agent_service_v2/tests/test_personal_code_problem_tools.py`
+- Create: `agent_service_v2/tests/test_agent_log_emitter.py`
 
 **Interfaces:**
 - Consumes Backend internal API and closure-bound `user_id`, `course_id`, `conversation_id`, `run_id`.
@@ -265,9 +284,16 @@ git commit -m "feat: 提供私有代码题详情与判题接口"
 ```python
 def test_create_personal_problem_tool_never_accepts_model_supplied_owner_or_course():
     tool = build_personal_code_problem_tools(client=FakeClient(), user_id="u1", course_id="c1", conversation_id="conv1", run_id="run1")[0]
-    asyncio.run(tool.call(title="题", statement="...", language="python", starter_code="", reference_solution="...", test_inputs=[...], owner_user_id="other"))
+    asyncio.run(tool.call(title="整数求和", statement="读取两个整数并输出和。", language="python", starter_code="a, b = map(int, input().split())\n", reference_solution="a, b = map(int, input().split())\nprint(a + b)\n", test_inputs=[{"stdin": "1 2\n", "is_public": True}, {"stdin": "7 8\n", "is_public": False}], owner_user_id="other"))
     assert client.calls[0][1]["user_id"] == "u1"
     assert "owner_user_id" not in client.calls[0][1]
+
+def test_personal_problem_tool_log_projection_never_contains_secret_fields():
+    attrs = safe_tool_attributes("create_validated_personal_code_problem", {
+        "reference_solution": "print(42)", "test_inputs": [{"stdin": "42\\n", "is_public": False}],
+        "language": "python", "title": "整数求和",
+    })
+    assert attrs == {"tool_name": "create_validated_personal_code_problem", "language": "python", "title_length": 4, "public_case_count": 0, "hidden_case_count": 1}
 ```
 
 - [ ] **Step 2: 运行测试确认失败**
@@ -288,7 +314,7 @@ def build_personal_code_problem_tools(*, client, user_id, course_id, conversatio
         })
 ```
 
-Register a `personal_code_problems` `ToolGroup`. Permit the tool only for the active student chat context; it is a user-requested persistence action, not a general unrestricted write tool. Update the prompt: call it only for a request to create a coding exercise; write `CodeSandboxCard` only after it returns `problem_id`; never include a reference solution or tests in the artifact.
+Register a `personal_code_problems` `ToolGroup`. Permit the tool only for the active student chat context; it is a user-requested persistence action, not a general unrestricted write tool. Add a tool-name-specific `safe_tool_attributes()` projection before all logging so this tool emits only language, title length, public/hidden case counts and final status. Update the prompt: call it only for a request to create a coding exercise; write `CodeSandboxCard` only after it returns `problem_id`; never include a reference solution or tests in the artifact.
 
 - [ ] **Step 4: 运行 Agent 回归**
 
@@ -317,7 +343,7 @@ git commit -m "feat: AIChat 验证并保存私有代码题工具"
 
 **Interfaces:**
 - `getCodeProblem(problemId)` returns public title, statement, templates and public cases only.
-- `submitCodeProblem(problemId, { language, code })` returns `CodeSubmissionResult` without hidden data.
+- `submitCodeProblem(problemId, { language, code })` returns `{ task_id }`; `taskService.getTaskStatus(taskId)` returns the eventual safe `CodeSubmissionResult`.
 - New card props are `{ problem_id, language }`; legacy `{ question_text, code, language, default_stdin }` remains a free-run compatibility path.
 
 - [ ] **Step 1: 写前端失败测试**
@@ -350,7 +376,7 @@ export const useCodeProblem = (problemId) => useSWR(
 );
 ```
 
-Render public sample input/output from the detail response. Remove editable stdin only for `problem_id` cards; button text is `提交判题`. Render `passed_cases/total_cases`; reveal exact values only when `failed_case.visibility === 'public'`. Keep the existing legacy run branch intact. `buildAskAIPrompt` must accept only `statement`, student code and the safe result summary.
+Render public sample input/output from the detail response. Remove editable stdin only for `problem_id` cards; button text is `提交判题`. Start SWR polling of `taskService.getTaskStatus(taskId)` only while the returned task status is `processing`; render `判题中`, then `passed_cases/total_cases`; reveal exact values only when `failed_case.visibility === 'public'`. Keep the existing legacy run branch intact. `buildAskAIPrompt` must accept only `statement`, student code and the safe result summary.
 
 - [ ] **Step 4: 运行前端回归**
 
@@ -434,7 +460,7 @@ git commit -m "feat: 个性化资源展示私有代码题"
 
 Run: `rg -n "reference_solution|expected_output|stdin" backend/app/api/v1 frontend/src agent_service_v2/src`
 
-Expected: student detail/submit response builders、SSE summaries和 AI prompt 中不出现 reference solution；隐藏 `expected_output` 只在 Backend service persistence/comparison paths 出现。
+Expected: student detail/submit response builders、SSE summaries、AI prompt 与 Agent observability 中不出现 reference solution；隐藏 `expected_output` 只在 Backend service persistence/comparison paths 出现.
 
 - [ ] **Step 2: 运行完整相关验证**
 

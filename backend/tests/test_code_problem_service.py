@@ -50,3 +50,32 @@ async def test_create_validated_problem_rejects_duplicate_test_inputs_before_per
 
     with pytest.raises(CodeProblemValidationError, match="duplicate"):
         await validate_code_problem_draft(draft, execute_case=None)
+
+
+@pytest.mark.asyncio
+async def test_validate_code_problem_runs_reference_solution_for_every_fixed_input():
+    from app.schemas.code_problem import CodeProblemDraft, CodeProblemTestInput
+    from app.services.code_problem_service import validate_code_problem_draft
+
+    calls = []
+
+    async def execute_case(code, language, stdin):
+        calls.append((code, language, stdin))
+        return {"status": "success", "compile_status": "OK", "execution": {"stdout": stdin}}
+
+    draft = CodeProblemDraft(
+        title="回显",
+        statement="读取并输出输入。",
+        language="python",
+        starter_code="print(input())\n",
+        reference_solution="print(input())\n",
+        test_inputs=[
+            CodeProblemTestInput(stdin="first\n", is_public=True),
+            CodeProblemTestInput(stdin="second\n", is_public=False),
+        ],
+    )
+
+    outputs = await validate_code_problem_draft(draft, execute_case=execute_case)
+
+    assert calls == [(draft.reference_solution, "python", "first\n"), (draft.reference_solution, "python", "second\n")]
+    assert outputs == ["first", "second"]

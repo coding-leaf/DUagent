@@ -50,7 +50,7 @@ async def validate_code_problem_draft(
     draft: CodeProblemDraft,
     *,
     execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]] | None,
-) -> None:
+) -> list[str]:
     seen_inputs: set[str] = set()
     public_count = 0
     hidden_count = 0
@@ -63,4 +63,12 @@ async def validate_code_problem_draft(
     if public_count == 0 or hidden_count == 0:
         raise CodeProblemValidationError("at least one public and one hidden test input are required")
     if execute_case is None:
-        return
+        return []
+    outputs: list[str] = []
+    for test_case in draft.test_inputs:
+        result = await execute_case(draft.reference_solution, draft.language, test_case.stdin)
+        execution = result.get("execution") or {}
+        if result.get("status") != "success" or result.get("compile_status") != "OK":
+            raise CodeProblemValidationError("reference solution execution failed")
+        outputs.append(normalize_code_problem_output(str(execution.get("stdout") or "")))
+    return outputs

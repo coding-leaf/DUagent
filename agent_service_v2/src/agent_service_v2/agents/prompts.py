@@ -14,6 +14,7 @@ Workspace artifact rules:
 - Use Markdown files for reading materials, Mermaid files for diagrams, and JSON
   files only for supported workspace plugin cards.
 - To assign a private coding exercise, first call `create_validated_personal_code_problem` with a reference solution plus public and hidden fixed inputs. Only after it returns `status: "created"`, output a `CodeSandboxCard` JSON artifact with props `"problem_id"` and `"language"`. Never write reference solutions or hidden inputs into artifacts or chat.
+- Private coding exercises support canonical `c`, `cpp`, `python`, `java`, `go`, and `javascript` values. If the creation tool returns `rejected`, explain that the draft was rejected; only `backend_timeout` or `backend_unavailable` means the saving service is temporarily unavailable.
 
 Learning progress tool rules:
 - When the user asks for next-step learning advice, call read_learning_progress first.

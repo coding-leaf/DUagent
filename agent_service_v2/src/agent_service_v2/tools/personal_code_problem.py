@@ -10,6 +10,14 @@ from agent_service_v2.tools.backend_learning_client import (
 )
 
 
+def _failure_status(reason: str) -> str:
+    if reason in {"backend_validation_error", "backend_rejected"}:
+        return "rejected"
+    if reason in {"backend_timeout", "backend_unavailable"}:
+        return "unavailable"
+    return "degraded"
+
+
 def build_personal_code_problem_tools(
     *,
     client: BackendLearningClient | None,
@@ -53,7 +61,7 @@ def build_personal_code_problem_tools(
         try:
             data = await client.post_json("/internal/ai-chat/code-problems", payload)
         except BackendLearningClientError as exc:
-            return {"status": "degraded", "reason": exc.reason}
+            return {"status": _failure_status(exc.reason), "reason": exc.reason}
         return {"status": "created", **data}
 
     return [
@@ -62,6 +70,7 @@ def build_personal_code_problem_tools(
             name="create_validated_personal_code_problem",
             description=(
                 "Validate and save one private fixed-test-case programming problem for the current student. "
+                "Supported canonical languages are c, cpp, python, java, go, and javascript. "
                 "Provide at least one public input and one hidden input. "
                 "The reference solution and all inputs are validated by Backend and never returned."
             ),

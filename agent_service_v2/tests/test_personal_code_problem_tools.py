@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+from agent_service_v2.tools.backend_learning_client import BackendLearningClientError
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 
 
@@ -16,6 +17,11 @@ class FakeClient:
             "public_case_count": 1,
             "hidden_case_count": 1,
         }
+
+
+class RejectingClient:
+    async def post_json(self, _path, _payload):
+        raise BackendLearningClientError("backend_validation_error", status_code=422)
 
 
 def _text(chunk) -> str:
@@ -74,3 +80,30 @@ def test_personal_code_problem_tool_delegates_validation_and_storage_to_backend(
             },
         )
     ]
+
+
+def test_personal_code_problem_tool_reports_backend_validation_as_rejected():
+    tool = build_personal_code_problem_tools(
+        client=RejectingClient(),
+        user_id="student-1",
+        course_id="course-1",
+        conversation_id="conversation-1",
+        run_id="run-1",
+    )[0]
+
+    response = asyncio.run(
+        tool.call(
+            title="Echo",
+            statement="Read and write input.",
+            language="C++",
+            starter_code="int main() { return 0; }",
+            reference_solution="int main() { return 0; }",
+            public_inputs=["shown\n"],
+            hidden_inputs=["hidden\n"],
+        )
+    )
+
+    assert json.loads(_text(response)) == {
+        "status": "rejected",
+        "reason": "backend_validation_error",
+    }

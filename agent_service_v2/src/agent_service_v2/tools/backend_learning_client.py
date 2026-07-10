@@ -14,6 +14,14 @@ class BackendLearningClientError(RuntimeError):
         self.status_code = status_code
 
 
+def _http_error_reason(status_code: int) -> str:
+    if status_code == 422:
+        return "backend_validation_error"
+    if 400 <= status_code < 500:
+        return "backend_rejected"
+    return "backend_server_error"
+
+
 class BackendLearningClient:
     def __init__(
         self,
@@ -40,7 +48,10 @@ class BackendLearningClient:
             raise BackendLearningClientError("backend_unavailable") from exc
 
         if response.status_code >= 400:
-            raise BackendLearningClientError("backend_http_error", status_code=response.status_code)
+            raise BackendLearningClientError(
+                _http_error_reason(response.status_code),
+                status_code=response.status_code,
+            )
 
         body = response.json()
         data = body.get("data") if isinstance(body, dict) else None

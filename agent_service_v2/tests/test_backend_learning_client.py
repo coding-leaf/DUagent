@@ -41,9 +41,17 @@ def test_backend_learning_client_posts_token_and_returns_data():
     assert str(request.url) == "http://backend/internal/ai-chat/learning-progress"
 
 
-def test_backend_learning_client_raises_structured_error_on_http_error():
+@pytest.mark.parametrize(
+    ("status_code", "expected_reason"),
+    [
+        (422, "backend_validation_error"),
+        (403, "backend_rejected"),
+        (500, "backend_server_error"),
+    ],
+)
+def test_backend_learning_client_classifies_http_errors(status_code, expected_reason):
     async def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(403, json={"message": "forbidden"}, request=request)
+        return httpx.Response(status_code, json={"message": "rejected"}, request=request)
 
     client = BackendLearningClient(
         base_url="http://backend",
@@ -55,8 +63,8 @@ def test_backend_learning_client_raises_structured_error_on_http_error():
     with pytest.raises(BackendLearningClientError) as exc:
         asyncio.run(client.post_json("/internal/ai-chat/learning-progress", {}))
 
-    assert exc.value.reason == "backend_http_error"
-    assert exc.value.status_code == 403
+    assert exc.value.reason == expected_reason
+    assert exc.value.status_code == status_code
 
 
 def test_build_backend_learning_client_from_settings_requires_base_url_and_token():

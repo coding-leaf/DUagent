@@ -1,11 +1,23 @@
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.code_problem import CodeProblem, CodeProblemTestCase
+from app.models.others import UserPersonalizedResource
 from app.schemas.code_problem import CodeProblemDraft
 
 
 class CodeProblemValidationError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class CreatedCodeProblem:
+    problem: CodeProblem
+    public_case_count: int
+    hidden_case_count: int
 
 
 def normalize_code_problem_output(value: str) -> str:
@@ -72,3 +84,61 @@ async def validate_code_problem_draft(
             raise CodeProblemValidationError("reference solution execution failed")
         outputs.append(normalize_code_problem_output(str(execution.get("stdout") or "")))
     return outputs
+
+
+async def create_validated_personal_problem(
+    db: AsyncSession,
+    *,
+    owner_user_id: str,
+    course_id: str,
+    conversation_id: str,
+    run_id: str,
+    draft: CodeProblemDraft,
+    execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
+) -> CreatedCodeProblem:
+    outputs = await validate_code_problem_draft(draft, execute_case=execute_case)
+    public_case_count = sum(case.is_public for case in draft.test_inputs)
+    hidden_case_count = len(draft.test_inputs) - public_case_count
+    problem = CodeProblem(
+        course_id=course_id,
+        owner_user_id=owner_user_id,
+        origin="ai_chat",
+        conversation_id=conversation_id,
+        run_id=run_id,
+        title=draft.title,
+        statement=draft.statement,
+        language=draft.language,
+        starter_code=draft.starter_code,
+        reference_solution=draft.reference_solution,
+        validation_report={
+            "status": "validated",
+            "public_case_count": public_case_count,
+            "hidden_case_count": hidden_case_count,
+        },
+        create_by=owner_user_id,
+    )
+    db.add(problem)
+    await db.flush()
+    for ordinal, (test_case, output) in enumerate(zip(draft.test_inputs, outputs), start=1):
+        db.add(
+            CodeProblemTestCase(
+                problem_id=problem.id,
+                ordinal=ordinal,
+                stdin=test_case.stdin,
+                expected_output=output,
+                is_public=test_case.is_public,
+            )
+        )
+    db.add(
+        UserPersonalizedResource(
+            user_id=owner_user_id,
+            course_id=course_id,
+            code_problem_id=problem.id,
+            source_type="ai_chat",
+        )
+    )
+    return CreatedCodeProblem(
+        problem=problem,
+        public_case_count=public_case_count,
+        hidden_case_count=hidden_case_count,
+    )

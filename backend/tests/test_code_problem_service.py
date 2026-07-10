@@ -79,3 +79,50 @@ async def test_validate_code_problem_runs_reference_solution_for_every_fixed_inp
 
     assert calls == [(draft.reference_solution, "python", "first\n"), (draft.reference_solution, "python", "second\n")]
     assert outputs == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_create_validated_problem_adds_problem_cases_and_personal_resource_link():
+    from app.schemas.code_problem import CodeProblemDraft, CodeProblemTestInput
+    from app.services.code_problem_service import create_validated_personal_problem
+
+    class FakeSession:
+        def __init__(self):
+            self.added = []
+
+        def add(self, item):
+            self.added.append(item)
+
+        async def flush(self):
+            return None
+
+    async def execute_case(_code, _language, stdin):
+        return {"status": "success", "compile_status": "OK", "execution": {"stdout": stdin}}
+
+    draft = CodeProblemDraft(
+        title="回显",
+        statement="读取并输出输入。",
+        language="python",
+        starter_code="print(input())\n",
+        reference_solution="print(input())\n",
+        test_inputs=[
+            CodeProblemTestInput(stdin="first\n", is_public=True),
+            CodeProblemTestInput(stdin="second\n", is_public=False),
+        ],
+    )
+
+    session = FakeSession()
+    created = await create_validated_personal_problem(
+        session,
+        owner_user_id="student-1",
+        course_id="course-1",
+        conversation_id="conversation-1",
+        run_id="run-1",
+        draft=draft,
+        execute_case=execute_case,
+    )
+
+    assert created.problem.owner_user_id == "student-1"
+    assert created.public_case_count == 1
+    assert created.hidden_case_count == 1
+    assert len(session.added) == 4

@@ -3,18 +3,12 @@ import logging
 from collections.abc import Awaitable, Callable
 import httpx
 from app.core.config import settings
+from app.services.code_language import (
+    UnsupportedCodeLanguageError,
+    judge0_language_id,
+)
 
 logger = logging.getLogger(__name__)
-
-# Map supported user-facing language keywords to Judge0 standard Compiler IDs
-LANGUAGE_MAP = {
-    "c": 50,          # C (GCC 9.2.0)
-    "cpp": 54,        # C++ (GCC 9.2.0)
-    "python": 71,     # Python (3.8.1)
-    "java": 62,       # Java (OpenJDK 13.0.1)
-    "go": 60,         # Go (1.13.5)
-    "javascript": 63, # JavaScript (Node.js 12.14.0)
-}
 
 JUDGE0_STATUS_MAP = {
     1: "queued",
@@ -40,6 +34,13 @@ class OJExecutionError(Exception):
         self.message = message
 
 
+def _resolve_judge0_language_id(language: str) -> int:
+    try:
+        return judge0_language_id(language)
+    except UnsupportedCodeLanguageError as exc:
+        raise OJExecutionError("unsupported_language", str(exc)) from exc
+
+
 def _judge0_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     if not settings.JUDGE0_API_KEY:
@@ -59,10 +60,7 @@ async def execute_code_in_oj(code: str, language: str, stdin: str = "") -> dict:
     Submits code to Judge0 for compilation and execution.
     Handles language mapping, auth headers, timeouts, and graceful degradation logic.
     """
-    normalized_lang = language.strip().lower()
-    lang_id = LANGUAGE_MAP.get(normalized_lang)
-    if not lang_id:
-        raise OJExecutionError("unsupported_language", f"Language '{language}' is not supported.")
+    lang_id = _resolve_judge0_language_id(language)
 
     # Prepare Headers
     headers = _judge0_headers()
@@ -147,10 +145,7 @@ async def execute_code_batch_in_oj(
     stdins: list[str],
     client_factory=httpx.AsyncClient,
 ) -> list[str]:
-    normalized_lang = language.strip().lower()
-    lang_id = LANGUAGE_MAP.get(normalized_lang)
-    if not lang_id:
-        raise OJExecutionError("unsupported_language", f"Language '{language}' is not supported.")
+    lang_id = _resolve_judge0_language_id(language)
     if not stdins:
         raise OJExecutionError("empty_batch", "At least one test input is required.")
 

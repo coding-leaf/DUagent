@@ -175,6 +175,25 @@ def test_scanner_accepts_valid_code_sandbox_card(tmp_path):
     }
 
 
+def test_scanner_accepts_persisted_code_problem_card_without_test_inputs(tmp_path):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "code-card.json").write_text(
+        json.dumps(
+            {
+                "type": "CodeSandboxCard",
+                "props": {"problem_id": "problem-1", "language": "python"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    artifacts = ArtifactScanner(artifact_dir).scan()
+
+    assert artifacts[0].props == {"problem_id": "problem-1", "language": "python"}
+
+
 def test_scanner_normalizes_top_level_code_sandbox_card(tmp_path):
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()

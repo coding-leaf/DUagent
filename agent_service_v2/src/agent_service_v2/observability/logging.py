@@ -11,7 +11,17 @@ from agent_service_v2.runtime.edu_events import utc_now_iso
 
 LogSink = Callable[[dict[str, Any]], None]
 MAX_PREVIEW_CHARS = 2048
-SENSITIVE_KEYS = {"api_key", "authorization", "password", "secret", "token"}
+SENSITIVE_KEYS = {
+    "api_key",
+    "authorization",
+    "password",
+    "secret",
+    "token",
+    "reference_solution",
+    "test_inputs",
+    "hidden_inputs",
+    "expected_output",
+}
 
 
 def build_log_record(

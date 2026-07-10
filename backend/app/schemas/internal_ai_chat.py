@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.code_problem import CodeProblemDraft
+
 
 class LearningProgressRequest(BaseModel):
     user_id: str
@@ -19,3 +21,17 @@ class RecentAnswersRequest(BaseModel):
     @classmethod
     def cap_limit(cls, value: int) -> int:
         return min(int(value), 10)
+
+
+class OJEvaluationRequest(BaseModel):
+    code: str
+    language: str
+    stdin: str = ""
+
+
+class PersonalCodeProblemCreateRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=32)
+    course_id: str = Field(min_length=1, max_length=32)
+    conversation_id: str = Field(min_length=1, max_length=32)
+    run_id: str = Field(min_length=1, max_length=80)
+    draft: CodeProblemDraft

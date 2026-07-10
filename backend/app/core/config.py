@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     WEBHOOK_SECRET: str = ""
     INTERNAL_AGENT_TOKEN: str = ""
 
+    # Judge0 Online Judge sandbox
+    JUDGE0_API_URL: str = "http://localhost:2358"
+    JUDGE0_API_KEY: str = ""
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 

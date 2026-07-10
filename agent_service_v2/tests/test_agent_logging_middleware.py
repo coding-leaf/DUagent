@@ -140,3 +140,17 @@ def test_agent_run_logging_middleware_emits_tool_arguments_and_result_preview():
     assert records[0]["attributes"]["tool_input_preview"] == '{"user_id":"u1","api_key":"<redacted>"}'
     assert records[1]["attributes"]["tool_state"] == "success"
     assert records[1]["attributes"]["tool_output_preview"] == "weak points: linked list, recursion"
+
+
+def test_tool_log_preview_redacts_code_problem_reference_solution_and_hidden_cases():
+    from agent_service_v2.observability.logging import input_preview
+
+    preview = input_preview(
+        '{"title":"sum","reference_solution":"print(secret)",'
+        '"test_inputs":[{"stdin":"123 456","expected_output":"579"}]}'
+    )
+
+    assert '"reference_solution":"<redacted>"' in preview
+    assert '"test_inputs":"<redacted>"' in preview
+    assert "print(secret)" not in preview
+    assert "123 456" not in preview

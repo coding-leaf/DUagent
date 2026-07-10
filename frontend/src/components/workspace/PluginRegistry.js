@@ -4,6 +4,7 @@ import MarkdownViewer from './plugins/MarkdownViewer';
 import StudyPlanCard from './plugins/StudyPlanCard';
 import WeakPointsCard from './plugins/WeakPointsCard';
 import PathRecommendationCard from './plugins/PathRecommendationCard';
+import CodeSandboxCard from './plugins/codeSandbox/CodeSandboxCard';
 
 export const PluginRegistry = {
   QuizCard,
@@ -11,5 +12,6 @@ export const PluginRegistry = {
   Markdown: MarkdownViewer,
   StudyPlanCard,
   WeakPointsCard,
-  PathRecommendationCard
+  PathRecommendationCard,
+  CodeSandboxCard
 };

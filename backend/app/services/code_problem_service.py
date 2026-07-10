@@ -2,9 +2,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.code_problem import CodeProblem, CodeProblemTestCase
+from app.models.conversation import Conversation
+from app.models.course import CourseEnrollment
 from app.models.others import UserPersonalizedResource
 from app.schemas.code_problem import CodeProblemDraft
 
@@ -186,4 +189,44 @@ async def create_validated_personal_problem(
         problem=problem,
         public_case_count=public_case_count,
         hidden_case_count=hidden_case_count,
+    )
+
+
+async def create_validated_personal_problem_from_ai_chat(
+    db: AsyncSession,
+    *,
+    owner_user_id: str,
+    course_id: str,
+    conversation_id: str,
+    run_id: str,
+    draft: CodeProblemDraft,
+    execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
+) -> CreatedCodeProblem:
+    conversation_result = await db.execute(
+        select(Conversation.id).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == owner_user_id,
+            Conversation.course_id == course_id,
+            Conversation.is_deleted == False,
+        )
+    )
+    if conversation_result.scalar_one_or_none() is None:
+        raise CodeProblemValidationError("conversation ownership check failed")
+    enrollment_result = await db.execute(
+        select(CourseEnrollment.id).where(
+            CourseEnrollment.student_id == owner_user_id,
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.is_deleted == False,
+        )
+    )
+    if enrollment_result.scalar_one_or_none() is None:
+        raise CodeProblemValidationError("course enrollment check failed")
+    return await create_validated_personal_problem(
+        db,
+        owner_user_id=owner_user_id,
+        course_id=course_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        draft=draft,
+        execute_case=execute_case,
     )

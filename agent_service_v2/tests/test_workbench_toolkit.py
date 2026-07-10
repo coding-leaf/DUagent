@@ -72,6 +72,22 @@ def test_workbench_tool_groups_include_learning_progress_group_when_tools_exist(
     ]
 
 
+def test_workbench_tool_groups_include_personal_code_problem_group_when_tools_exist():
+    class FakeTool:
+        name = "create_validated_personal_code_problem"
+
+    groups = build_workbench_tool_groups(
+        memory_tools=[],
+        rag_tools=[],
+        learning_progress_tools=[],
+        personal_code_problem_tools=[FakeTool()],
+        workspace=LocalWorkspace(workdir="/tmp/eduagent-test-workspace", workspace_id="ws"),
+        run_id="run-1",
+    )
+
+    assert "personal_code_problem" in [group.name for group in groups]
+
+
 def test_placeholder_tools_return_structured_observations():
     assert read_learning_state(user_id="u1", course_id="c1") == {
         "status": "placeholder",

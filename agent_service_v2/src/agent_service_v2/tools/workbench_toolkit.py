@@ -16,6 +16,8 @@ def build_workbench_tool_groups(
     memory_tools: list[ToolBase] | None,
     rag_tools: list[ToolBase] | None,
     learning_progress_tools: list[ToolBase] | None,
+    oj_execution_tools: list[ToolBase] | None = None,
+    personal_code_problem_tools: list[ToolBase] | None = None,
     workspace: LocalWorkspace,
     run_id: str,
 ) -> list[ToolGroup]:
@@ -47,6 +49,22 @@ def build_workbench_tool_groups(
                     "If the tools return empty or unavailable data, say evidence is insufficient."
                 ),
                 tools=learning_progress_tools,
+            )
+        )
+    if oj_execution_tools:
+        groups.append(
+            ToolGroup(
+                name="oj_execution",
+                description="Compile and run source code in an isolated online sandbox.",
+                tools=oj_execution_tools,
+            )
+        )
+    if personal_code_problem_tools:
+        groups.append(
+            ToolGroup(
+                name="personal_code_problem",
+                description="Create validated private fixed-test-case programming problems.",
+                tools=personal_code_problem_tools,
             )
         )
     groups.extend(

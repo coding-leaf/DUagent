@@ -7,6 +7,7 @@ from agent_service_v2.artifacts.schemas import ArtifactValidationError
 
 CODE_SANDBOX_LANGUAGES = {"c", "cpp", "python", "java", "go", "javascript"}
 CODE_SANDBOX_REQUIRED_PROPS = ("question_text", "code", "language", "default_stdin")
+CODE_PROBLEM_REQUIRED_PROPS = ("problem_id", "language")
 
 
 def validate_json_artifact_payload(
@@ -38,6 +39,9 @@ def _normalize_code_sandbox_card(
     else:
         source = payload
 
+    if all(key in source for key in CODE_PROBLEM_REQUIRED_PROPS):
+        return _normalize_persisted_code_problem_card(payload, source, filename, title_hint)
+
     props: dict[str, str] = {}
     for key in CODE_SANDBOX_REQUIRED_PROPS:
         value = source.get(key)
@@ -56,6 +60,30 @@ def _normalize_code_sandbox_card(
     normalized: dict[str, Any] = {
         "type": "CodeSandboxCard",
         "props": props,
+    }
+    title = payload.get("title") or title_hint
+    if title is not None:
+        if not isinstance(title, str):
+            raise ArtifactValidationError(f"json artifact title must be a string: {filename}")
+        normalized["title"] = title
+    return normalized
+
+
+def _normalize_persisted_code_problem_card(
+    payload: dict[str, Any],
+    source: dict[str, Any],
+    filename: str,
+    title_hint: str | None,
+) -> dict[str, Any]:
+    problem_id = source.get("problem_id")
+    language = source.get("language")
+    if not isinstance(problem_id, str) or not problem_id:
+        raise ArtifactValidationError(f"CodeSandboxCard props.problem_id must be a string: {filename}")
+    if language not in CODE_SANDBOX_LANGUAGES:
+        raise ArtifactValidationError(f"unsupported CodeSandboxCard language: {language}")
+    normalized: dict[str, Any] = {
+        "type": "CodeSandboxCard",
+        "props": {"problem_id": problem_id, "language": language},
     }
     title = payload.get("title") or title_hint
     if title is not None:

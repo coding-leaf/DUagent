@@ -8,4 +8,5 @@ test('PluginRegistry resolves standard component types correctly', () => {
   expect(PluginRegistry.StudyPlanCard).toBeDefined();
   expect(PluginRegistry.WeakPointsCard).toBeDefined();
   expect(PluginRegistry.PathRecommendationCard).toBeDefined();
+  expect(PluginRegistry.CodeSandboxCard).toBeDefined();
 });

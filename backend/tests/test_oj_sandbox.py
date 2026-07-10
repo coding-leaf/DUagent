@@ -120,6 +120,59 @@ async def test_internal_code_problem_creation_returns_safe_metadata_only():
 
 
 @pytest.mark.asyncio
+async def test_internal_code_problem_creation_normalizes_language_alias_before_service_call():
+    from app.models.code_problem import CodeProblem
+    from app.services.code_problem_service import CreatedCodeProblem
+
+    created = CreatedCodeProblem(
+        problem=CodeProblem(
+            id="problem-1",
+            course_id="course-1",
+            owner_user_id="student-1",
+            title="Echo",
+            statement="Read and write input.",
+            language="cpp",
+            starter_code="int main() { return 0; }",
+            reference_solution="int main() { return 0; }",
+            validation_report={},
+        ),
+        public_case_count=1,
+        hidden_case_count=1,
+    )
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        with patch(
+            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            new_callable=AsyncMock,
+        ) as create_problem:
+            create_problem.return_value = created
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/internal/ai-chat/code-problems",
+                    headers={"X-Internal-Agent-Token": "secret"},
+                    json={
+                        "user_id": "student-1",
+                        "course_id": "course-1",
+                        "conversation_id": "conversation-1",
+                        "run_id": "run-1",
+                        "draft": {
+                            "title": "Echo",
+                            "statement": "Read and write input.",
+                            "language": "C++",
+                            "starter_code": "int main() { return 0; }",
+                            "reference_solution": "int main() { return 0; }",
+                            "test_inputs": [
+                                {"stdin": "shown\\n", "is_public": True},
+                                {"stdin": "hidden\\n", "is_public": False},
+                            ],
+                        },
+                    },
+                )
+
+    assert response.status_code == 200
+    assert create_problem.await_args.kwargs["draft"].language == "cpp"
+
+
+@pytest.mark.asyncio
 async def test_internal_code_problem_creation_does_not_report_success_when_commit_fails():
     from sqlalchemy.exc import OperationalError
 

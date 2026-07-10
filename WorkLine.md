@@ -1537,3 +1537,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。仅修改了 Agent 内部的安全工具白名单配置，未改变任何 API 的数据契约。
+
+---
+
+### 2026-07-11 — 修复 AIChat 多语言代码题与失败状态误报
+
+**涉及文件：**
+- `backend/app/services/code_language.py`
+- `backend/app/schemas/code_problem.py`
+- `backend/app/services/oj_execution_service.py`
+- `backend/tests/test_code_language.py`
+- `backend/tests/test_oj_sandbox.py`
+- `agent_service_v2/src/agent_service_v2/tools/backend_learning_client.py`
+- `agent_service_v2/src/agent_service_v2/tools/personal_code_problem.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/tests/test_backend_learning_client.py`
+- `agent_service_v2/tests/test_personal_code_problem_tools.py`
+- `frontend/src/utils/chatStreamEvents.js`
+- `frontend/src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.js`
+
+**核心改动：**
+1. 新增 Backend 内部语言注册表，统一 `c`、`cpp`、`python`、`java`、`go`、`javascript` 的规范值、常见别名和本地 Judge0 ID；代码题 schema 与 Judge0 单条/批量执行复用该边界。
+2. `C++`、`Python3`、`Node.js` 等别名在 Backend schema 层归一化后持久化为规范值；未知语言明确拒绝，不再绕过验证或被表述为服务不可用。
+3. Agent Backend 客户端将 HTTP 422、其他 4xx、5xx、超时和连接失败分别分类；私有代码题工具把参数拒绝返回为 `rejected`，仅超时/不可连接才返回 `unavailable`。
+4. 前端将 AgentScope 生命周期成功但业务状态为 `rejected`、`degraded`、`unavailable` 的工具卡显示为失败，并优先展示安全的失败原因；沙箱文件名补齐 Java、Go 和 JavaScript。
+
+**验证结果：**
+- Backend：`36 passed, 1 warning`，并通过修改文件的 `py_compile`。
+- Agent Service v2：`21 passed`，并通过修改文件的 `py_compile`。
+- Frontend：目标 Vitest `9 passed`；`npm run lint` 和 `npm run build` 成功。
+- 本地开发 MySQL 已应用既有 `2026-07-10-add-personal-code-problems.sql`，确认 `user_personalized_resources.code_problem_id` 及索引存在，个性化资源真实查询返回 200。
+
+**接口漂移：**
+- 有限扩展：内部代码题草案 `language` 从三种规范值扩展为六种；常见别名只在输入层归一化，持久化和工件仍使用规范值。未新增或修改 HTTP 路径、SSE 事件类型或数据库结构。

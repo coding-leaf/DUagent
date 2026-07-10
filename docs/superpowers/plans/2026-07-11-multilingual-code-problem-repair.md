@@ -225,16 +225,14 @@ git commit -m "fix: 显示代码题工具的真实失败状态"
 ### Task 4: 契约记录、完整验证与运行时回归
 
 **Files:**
-- Modify: `docs/20-agent-api/API_Agent内部接口规范.md`
-- Modify: `docs/10-client-api/API_前端接口规范.md`
 - Modify: `WorkLine.md`
 
 **Interfaces:**
-- Documents canonical language values, accepted aliases, and `rejected` versus unavailable semantics without changing public paths.
+- Records canonical language values, accepted aliases, and `rejected` versus unavailable semantics without changing public paths.
 
-- [ ] **Step 1: Add contract regression notes**
+- [ ] **Step 1: Add WorkLine contract regression notes**
 
-Document six canonical stored values and that aliases are input normalization only. Document that `backend_validation_error` is a request rejection, while only timeout/unavailable represents service reachability.
+Document six canonical stored values and that aliases are input normalization only. Document that `backend_validation_error` is a request rejection, while only timeout/unavailable represents service reachability. Do not rewrite the unrelated legacy v1 API documents in this branch.
 
 - [ ] **Step 2: Run the full applicable verification suite**
 
@@ -243,7 +241,7 @@ Run:
 ```bash
 cd backend && ../.venv/bin/pytest tests/test_code_language.py tests/test_code_problem_service.py tests/test_oj_sandbox.py -q
 cd ../agent_service_v2 && ./.venv/bin/pytest -s tests/test_backend_learning_client.py tests/test_personal_code_problem_tools.py tests/test_protocol_adapter.py tests/test_workbench_factory.py -q
-cd ../frontend && npm run test -- --run src/utils/__tests__/chatStreamEvents.test.js src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.test.js
+cd ../frontend && npm run test:unit -- src/utils/__tests__/chatStreamEvents.test.js src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.test.js
 npm run lint
 npm run build
 ```
@@ -257,7 +255,7 @@ Use the running Backend's existing internal auth configuration only through a lo
 - [ ] **Step 4: Commit documentation and verification record**
 
 ```bash
-git add docs/10-client-api docs/20-agent-api WorkLine.md
+git add WorkLine.md docs/superpowers/plans/2026-07-11-multilingual-code-problem-repair.md
 git commit -m "docs: 记录多语言代码题契约"
 ```
 

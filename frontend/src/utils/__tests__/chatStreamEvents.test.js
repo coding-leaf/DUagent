@@ -84,7 +84,8 @@ describe('chatStreamEvents', () => {
         tool_call_id: 'tool-1',
         state: 'success',
         status: 'rejected',
-        reason: 'backend_validation_error'
+        reason: 'backend_validation_error',
+        output_summary: '工具状态：rejected'
       }
     });
 

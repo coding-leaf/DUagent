@@ -8,6 +8,11 @@ const isFailedToolResult = (payload = {}) => {
   return payload.state === 'error' || FAILED_TOOL_STATUSES.has(payload.status);
 };
 
+const toolOutputSummary = (payload = {}, isFailed = false) => {
+  if (isFailed && payload.reason) return payload.reason;
+  return payload.output_summary || payload.summary || payload.reason;
+};
+
 export const completeRunningToolCalls = (toolCalls = []) => {
   return toolCalls.map(tc => tc.status === 'running' ? { ...tc, status: 'completed' } : tc);
 };
@@ -124,10 +129,11 @@ export const reduceAssistantMessageForEvent = (message, event) => {
       }
     case 'tool_completed':
       {
+        const isFailed = isFailedToolResult(event.payload);
         const toolCall = {
           id: event.payload?.tool_call_id || 'unknown',
-          status: isFailedToolResult(event.payload) ? 'error' : 'completed',
-          outputSummary: event.payload?.output_summary || event.payload?.summary || event.payload?.reason
+          status: isFailed ? 'error' : 'completed',
+          outputSummary: toolOutputSummary(event.payload, isFailed)
         };
         return {
           ...message,

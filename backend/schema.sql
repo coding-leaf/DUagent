@@ -464,12 +464,56 @@ CREATE TABLE IF NOT EXISTS `learning_activities` (
 -- ============================================================
 -- 个性化资源/题目（AI 生成分发）
 -- ============================================================
+CREATE TABLE IF NOT EXISTS `code_problems` (
+  `id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `owner_user_id` VARCHAR(32) DEFAULT NULL,
+  `origin` VARCHAR(30) NOT NULL DEFAULT 'ai_chat',
+  `conversation_id` VARCHAR(32) DEFAULT NULL,
+  `run_id` VARCHAR(80) DEFAULT NULL,
+  `title` VARCHAR(200) NOT NULL,
+  `statement` TEXT NOT NULL,
+  `chapter` VARCHAR(100) NOT NULL DEFAULT '',
+  `knowledge_point` VARCHAR(100) NOT NULL DEFAULT '',
+  `difficulty` VARCHAR(10) NOT NULL DEFAULT 'medium',
+  `language` VARCHAR(20) NOT NULL,
+  `starter_code` TEXT NOT NULL,
+  `reference_solution` TEXT NOT NULL,
+  `validation_report` JSON NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'validated',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_by` VARCHAR(32) DEFAULT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_by` VARCHAR(32) DEFAULT NULL,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_code_problems_owner_course` (`owner_user_id`, `course_id`, `is_deleted`),
+  KEY `idx_code_problems_conversation` (`conversation_id`, `is_deleted`),
+  CONSTRAINT `code_problems_course_fk` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
+  CONSTRAINT `code_problems_owner_fk` FOREIGN KEY (`owner_user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `code_problems_conversation_fk` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS `code_problem_test_cases` (
+  `id` VARCHAR(32) NOT NULL,
+  `problem_id` VARCHAR(32) NOT NULL,
+  `ordinal` INT NOT NULL,
+  `stdin` TEXT NOT NULL,
+  `expected_output` TEXT NOT NULL,
+  `is_public` TINYINT(1) NOT NULL DEFAULT 0,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_code_problem_cases_problem_order` (`problem_id`, `ordinal`),
+  CONSTRAINT `code_problem_test_cases_problem_fk` FOREIGN KEY (`problem_id`) REFERENCES `code_problems` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS `user_personalized_resources` (
   `id` VARCHAR(32) NOT NULL,
   `user_id` VARCHAR(32) NOT NULL,
   `course_id` VARCHAR(32) NOT NULL,
   `resource_id` VARCHAR(32) DEFAULT NULL,
   `question_id` VARCHAR(32) DEFAULT NULL,
+  `code_problem_id` VARCHAR(32) DEFAULT NULL,
   `source_type` VARCHAR(30) NOT NULL,
   `task_id` VARCHAR(32) DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -478,12 +522,14 @@ CREATE TABLE IF NOT EXISTS `user_personalized_resources` (
   KEY `course_id` (`course_id`),
   KEY `resource_id` (`resource_id`),
   KEY `question_id` (`question_id`),
+  KEY `code_problem_id` (`code_problem_id`),
   KEY `idx_upr_user_course` (`user_id`, `course_id`, `is_deleted`),
   KEY `idx_upr_task` (`task_id`),
   CONSTRAINT `user_personalized_resources_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
   CONSTRAINT `user_personalized_resources_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
   CONSTRAINT `user_personalized_resources_ibfk_3` FOREIGN KEY (`resource_id`) REFERENCES `resources` (`id`),
   CONSTRAINT `user_personalized_resources_ibfk_4` FOREIGN KEY (`question_id`) REFERENCES `quiz_questions` (`id`),
+  CONSTRAINT `user_personalized_resources_code_problem_fk` FOREIGN KEY (`code_problem_id`) REFERENCES `code_problems` (`id`),
   CONSTRAINT `user_personalized_resources_ibfk_5` FOREIGN KEY (`task_id`) REFERENCES `async_tasks` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

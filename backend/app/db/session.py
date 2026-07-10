@@ -33,3 +33,4 @@ import app.models.catalog  # noqa: E402
 import app.models.quiz  # noqa: E402
 import app.models.conversation  # noqa: E402
 import app.models.others  # noqa: E402
+import app.models.code_problem  # noqa: E402

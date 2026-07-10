@@ -245,3 +245,39 @@ async def test_execute_code_batch_in_oj_submits_all_fixed_inputs_without_waiting
     assert calls[0][0].endswith("/submissions/batch")
     assert calls[0][1]["json"]["submissions"][0]["stdin"] == "first\n"
     assert "wait" not in calls[0][1].get("params", {})
+
+
+@pytest.mark.asyncio
+async def test_read_code_batch_results_maps_each_judge0_submission():
+    from app.services.oj_execution_service import read_code_batch_results_in_oj
+
+    class BatchResponse:
+        status_code = 200
+        text = "[]"
+
+        def json(self):
+            return {
+                "submissions": [
+                    {"status": {"id": 3, "description": "Accepted"}, "stdout": "3\n", "stderr": ""},
+                    {"status": {"id": 7, "description": "Runtime Error"}, "stdout": "", "stderr": "boom"},
+                ]
+            }
+
+    class BatchClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return BatchResponse()
+
+    results = await read_code_batch_results_in_oj(
+        tokens=["token-1", "token-2"],
+        client_factory=lambda **_kwargs: BatchClient(),
+    )
+
+    assert results[0]["status"] == "success"
+    assert results[0]["execution"]["stdout"] == "3\n"
+    assert results[1]["status"] == "runtime_error"

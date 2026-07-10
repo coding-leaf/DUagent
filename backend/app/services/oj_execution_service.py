@@ -175,3 +175,49 @@ async def execute_code_batch_in_oj(
     if not isinstance(data, list) or any(not isinstance(item, dict) or not item.get("token") for item in data):
         raise OJExecutionError("oj_batch_rejected", "Judge0 rejected one or more batch submissions.")
     return [str(item["token"]) for item in data]
+
+
+async def read_code_batch_results_in_oj(
+    *,
+    tokens: list[str],
+    client_factory=httpx.AsyncClient,
+) -> list[dict]:
+    if not tokens:
+        return []
+    headers = {"Content-Type": "application/json"}
+    if settings.JUDGE0_API_KEY:
+        headers["X-Auth-Token"] = settings.JUDGE0_API_KEY
+    url = f"{settings.JUDGE0_API_URL.rstrip('/')}/submissions/batch"
+    try:
+        async with client_factory(timeout=8.0) as client:
+            response = await client.get(
+                url,
+                params={"tokens": ",".join(tokens), "base64_encoded": "false"},
+                headers=headers,
+            )
+    except httpx.TimeoutException as exc:
+        raise OJExecutionError("oj_timeout", "Connection to Judge0 timed out.") from exc
+    except httpx.RequestError as exc:
+        raise OJExecutionError("oj_unavailable", "Cannot connect to Judge0 service.") from exc
+    if response.status_code >= 400:
+        raise OJExecutionError("oj_http_error", f"OJ Service returned HTTP {response.status_code}")
+    submissions = response.json().get("submissions", [])
+    if len(submissions) != len(tokens):
+        raise OJExecutionError("oj_batch_incomplete", "Judge0 returned an incomplete batch.")
+    return [_map_judge0_submission(item) for item in submissions]
+
+
+def _map_judge0_submission(data: dict) -> dict:
+    status_obj = data.get("status", {})
+    status_id = status_obj.get("id")
+    return {
+        "status": JUDGE0_STATUS_MAP.get(status_id, "unknown"),
+        "compile_status": "Compilation Error" if status_id == 6 else "OK",
+        "compile_output": data.get("compile_output") or "",
+        "execution": {
+            "status_id": status_id,
+            "stdout": data.get("stdout") or "",
+            "stderr": data.get("stderr") or "",
+            "status_description": status_obj.get("description", "Unknown"),
+        },
+    }

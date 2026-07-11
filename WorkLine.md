@@ -2348,3 +2348,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 运行态：Backend `127.0.0.1:8001` 与 Agent Service v2 `127.0.0.1:8002` 已启动；Agent OpenAPI 已包含 `catalog_id`。
 
 **接口漂移：** 有。`POST /agent/v2/workbench/chat` 新增可选 `catalog_id`，并恢复 `course_id` 为 Course Offering ID；`POST /internal/ai-chat/code-problems` 的 400 错误 `detail.data` 新增稳定 `reason`。均为 Backend 与 Agent Service 间内部契约，Client API 未变化。
+
+---
+
+### 2026-07-12 — 修复 AI Chat Markdown 目录链接新开网页
+
+**涉及文件：**
+- `frontend/src/components/common/MarkdownViewer.jsx`
+- `frontend/src/components/common/MarkdownViewer.test.jsx`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.test.jsx`
+- `frontend/src/utils/markdownAnchors.js`
+- `WorkLine.md`
+
+**核心改动：**
+1. Markdown 标题生成稳定的中文、数字页内锚点 ID，使目录链接可定位到对应章节。
+2. `#...` 目录链接保留在当前页面，不再按外部链接使用新标签页打开；外部链接和会话文件下载行为保持不变。
+3. 为聊天正文与工作区 Markdown 文档补充目录锚点回归测试。
+
+**验证结果：**
+- RED：新增回归测试初次运行 2 failed，确认两套渲染器均错误添加 `target="_blank"`。
+- 定向测试：3 passed。
+- 前端 lint：0 errors；存在 1 个与本次无关的 `ChatContext.jsx` 既有 unused eslint-disable warning。
+- 前端 build：通过；存在既有的大 chunk 体积提示。
+
+**接口漂移：** 无。
+### 2026-07-12 — 建立个性化资源生成发布状态机
+
+- 新增 `personalized_resource_generations` 持久化模型与迁移，记录生成来源、学习目标、草案、确定性验证报告、审核结论和最终发布资源。
+- 明确状态流转：`drafted -> validated -> approved/approved_with_advice -> published`；验证失败、拒绝和非法跨状态发布均不可落入学生资源库。
+- 新增 Backend service，将审核通过的普通个性化草案统一发布为 `resources` 与 `user_personalized_resources` 关联记录。
+- 已确认当前数据库表存在且 17 个字段与模型一致。
+- 验证：`python3 -m pytest tests/test_personalized_resource_generation_service.py -v`（4 passed）；相关模型与 service 通过 `py_compile`。
+- 接口漂移：无。本批仅建立内部持久化与 service，尚未开放新 HTTP API。

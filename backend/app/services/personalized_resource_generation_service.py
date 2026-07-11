@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.others import Resource, UserPersonalizedResource
+from app.models.personalized_resource_generation import PersonalizedResourceGeneration
+
+
+_ALLOWED_TRANSITIONS = {
+    "drafted": {"validated", "failed"},
+    "validated": {"approved", "approved_with_advice", "rejected", "failed"},
+    "approved": {"published", "failed"},
+    "approved_with_advice": {"published", "failed"},
+    "rejected": set(),
+    "published": set(),
+    "failed": set(),
+}
+
+
+class ResourcePublicationError(ValueError):
+    pass
+
+
+def validate_generation_transition(current: str, target: str) -> None:
+    if target not in _ALLOWED_TRANSITIONS.get(current, set()):
+        raise ResourcePublicationError(f"invalid_transition:{current}->{target}")
+
+
+class PersonalizedResourceGenerationService:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def create_draft(
+        self,
+        *,
+        user_id: str,
+        course_id: str,
+        source_type: str,
+        goal: str,
+        resource_type: str,
+        draft: dict,
+        conversation_id: str | None = None,
+        run_id: str | None = None,
+    ) -> PersonalizedResourceGeneration:
+        generation = PersonalizedResourceGeneration(
+            user_id=user_id,
+            course_id=course_id,
+            source_type=source_type,
+            goal=goal,
+            resource_type=resource_type,
+            draft=draft,
+            conversation_id=conversation_id,
+            run_id=run_id,
+            status="drafted",
+        )
+        self.db.add(generation)
+        await self.db.flush()
+        await self.db.refresh(generation)
+        return generation
+
+    async def record_validation(self, generation_id: str, report: dict):
+        generation = await self._get(generation_id)
+        target = "validated" if report.get("status") == "passed" else "failed"
+        validate_generation_transition(generation.status, target)
+        generation.validation_report = report
+        generation.status = target
+        await self.db.flush()
+        return generation
+
+    async def record_review(self, generation_id: str, report: dict):
+        generation = await self._get(generation_id)
+        decision = str(report.get("decision") or "")
+        validate_generation_transition(generation.status, decision)
+        generation.review_decision = decision
+        generation.review_report = report
+        generation.status = decision
+        await self.db.flush()
+        return generation
+
+    async def publish(self, generation_id: str) -> Resource:
+        generation = await self._get(generation_id, for_update=True)
+        if (generation.validation_report or {}).get("status") != "passed":
+            raise ResourcePublicationError("validation_required")
+        if generation.review_decision not in {"approved", "approved_with_advice"}:
+            raise ResourcePublicationError("review_required")
+        validate_generation_transition(generation.status, "published")
+
+        draft = generation.draft
+        resource = Resource(
+            course_id=generation.course_id,
+            title=str(draft.get("title") or "个性化学习资料"),
+            type=generation.resource_type,
+            description=str(draft.get("description") or ""),
+            content=str(draft.get("content") or ""),
+            chapter=str(draft.get("chapter") or ""),
+            knowledge_point=str(draft.get("knowledge_point") or ""),
+            tags=draft.get("tags") or [],
+            url="",
+            create_by=generation.user_id,
+        )
+        self.db.add(resource)
+        await self.db.flush()
+        self.db.add(
+            UserPersonalizedResource(
+                user_id=generation.user_id,
+                course_id=generation.course_id,
+                resource_id=resource.id,
+                source_type=generation.source_type,
+            )
+        )
+        generation.published_resource_id = resource.id
+        generation.status = "published"
+        await self.db.flush()
+        return resource
+
+    async def _get(self, generation_id: str, *, for_update: bool = False):
+        query = select(PersonalizedResourceGeneration).where(
+            PersonalizedResourceGeneration.id == generation_id,
+            PersonalizedResourceGeneration.is_deleted == False,
+        )
+        if for_update:
+            query = query.with_for_update()
+        result = await self.db.execute(query)
+        generation = result.scalar_one_or_none()
+        if generation is None:
+            raise ResourcePublicationError("generation_not_found")
+        return generation

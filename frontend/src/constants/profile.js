@@ -2,7 +2,7 @@ export const PROFILE_VALUE_LABELS = {
   exam_sprint: '备考冲刺',
   daily_homework: '课后巩固',
   casual: '兴趣拓展',
-  video_animation: '视频动画',
+  video_animation: 'AI 交互',
   chart_logic: '图表逻辑',
   text_analysis: '文本解析',
   code_practice: '代码实操',

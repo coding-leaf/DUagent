@@ -19,7 +19,7 @@ _LEARNING_GOAL_KEYWORDS = (
 )
 
 _RESOURCE_PREFERENCE_KEYWORDS = (
-    ("video_animation", ("视频", "动画")),
+    ("video_animation", ("视频", "动画", "ai", "交互", "对话", "提问", "聊天")),
     ("chart_logic", ("图解", "图表", "思维导图", "流程图", "diagram", "mindmap")),
     ("code_practice", ("代码", "实操", "编程", "练习")),
     ("text_analysis", ("文本", "文档", "阅读", "文字")),

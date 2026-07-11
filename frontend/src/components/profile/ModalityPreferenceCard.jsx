@@ -8,7 +8,7 @@ export default function ModalityPreferenceCard({ modal_preference = {} }) {
       </h3>
       <div className="flex flex-col gap-4">
         {[
-          { key: 'video_animation', label: '视频动画' },
+          { key: 'video_animation', label: 'AI 交互' },
           { key: 'chart_logic', label: '图表逻辑' },
           { key: 'text_analysis', label: '文本分析' },
           { key: 'code_practice', label: '代码实操' },

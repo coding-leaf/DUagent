@@ -10,7 +10,7 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
-def compute_modal_preference(activities: List[Tuple[str, int]]) -> Dict[str, int]:
+def compute_modal_preference(activities: List[Tuple]) -> Dict[str, int]:
     modal_durations = {
         "video_animation": 0, 
         "chart_logic": 0, 
@@ -20,17 +20,31 @@ def compute_modal_preference(activities: List[Tuple[str, int]]) -> Dict[str, int
     }
     total_effective_duration = 0
     
-    for res_type, duration in activities:
+    for item in activities:
+        if len(item) == 3:
+            res_type, act_type, duration = item
+        else:
+            res_type, duration = item
+            act_type = None
+            
         duration = int(duration or 0)
         total_effective_duration += duration
-        if res_type == "video":
-            modal_durations["video_animation"] += duration
-        elif res_type in ["mindmap", "diagram"]:
-            modal_durations["chart_logic"] += duration
-        elif res_type in ["document", "reading"]:
-            modal_durations["text_analysis"] += duration
-        elif res_type == "code":
+        
+        # 1. 优先判定活动类型
+        if act_type == "node_practice_submit":
             modal_durations["code_practice"] += duration
+        # 2. 根据资源类型归类
+        elif res_type:
+            if res_type == "video":
+                modal_durations["video_animation"] += duration
+            elif res_type in ["mindmap", "diagram"]:
+                modal_durations["chart_logic"] += duration
+            elif res_type in ["document", "reading", "personal_lesson"]:
+                modal_durations["text_analysis"] += duration
+            elif res_type == "code":
+                modal_durations["code_practice"] += duration
+            elif res_type == "practice":
+                modal_durations["formula_derivation"] += duration
             
     modal_preference = {}
     if total_effective_duration > 0:
@@ -243,7 +257,7 @@ async def compute_profile_fields(
 
     # 1. Resource/Modal Preference
     activities_result = await db.execute(
-        select(Resource.type, func.sum(LearningActivity.duration_seconds))
+        select(Resource.type, LearningActivity.activity_type, func.sum(LearningActivity.duration_seconds))
         .select_from(LearningActivity)
         .join(Resource, LearningActivity.resource_id == Resource.id, isouter=True)
         .where(
@@ -252,7 +266,7 @@ async def compute_profile_fields(
             LearningActivity.activity_type.in_(["resource_study", "node_practice_submit"]),
             LearningActivity.is_deleted == False
         )
-        .group_by(Resource.type)
+        .group_by(Resource.type, LearningActivity.activity_type)
     )
     activities = list(activities_result.all())
     modal_preference = compute_modal_preference(activities)

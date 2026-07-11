@@ -25,6 +25,17 @@ def test_compute_modal_preference():
     assert prefs["code_practice"] == 50    # 100/200 * 100
     assert prefs["formula_derivation"] == 0
 
+def test_compute_modal_preference_3_tuples_and_new_types():
+    activities = [
+        ("personal_lesson", "resource_study", 100),
+        ("practice", "resource_study", 50),
+        (None, "node_practice_submit", 200),
+    ]
+    prefs = compute_modal_preference(activities)
+    assert prefs["text_analysis"] == 50       # 100/200 * 100
+    assert prefs["formula_derivation"] == 25  # 50/200 * 100
+    assert prefs["code_practice"] == 100      # 200/200 * 100
+
 def test_compute_modal_preference_empty():
     prefs = compute_modal_preference([])
     assert all(v == 0 for v in prefs.values())

@@ -2880,5 +2880,52 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+---
+
+### 2026-07-12 — 清除个性化资源卡片上的后台对齐建议及（附建议）标签
+
+**涉及文件：**
+- `frontend/src/components/personalized/PersonalizedResourceCard.jsx`
+- `frontend/src/components/personalized/PersonalizedResourceCard.test.jsx`
+
+**核心改动：**
+1. **隐去审核建议文本（review_warnings）**：在个性化学习资源的列表卡片中，不再渲染展示任何系统对齐或调试建议信息。
+2. **简化审核通过状态标签**：当状态为 `approved_with_advice`（审核通过并附建议）时，现在卡片上只会清爽、大方地显示 `审核通过` 状态标签，不再带有 “（附建议）” 的字样。
+3. **调整单元测试**：修改 `PersonalizedResourceCard.test.jsx`，确保不再断言包含 “附建议” 字眼以及具体意见文本，单元测试全部顺利通过。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证（0 错误 0 警告）
+- 前端 build：通过 `npm run build` 成功打包
+- 前端测试：通过 `npm run test:unit` 回归测试（114 项测试 100% 全部通过）
+
+**接口漂移：**
+- 无。
+
+---
+
+### 2026-07-12 — 解决学生模态偏好全 0% 的后台统计 Bug 并在前后端重构为“AI 交互”
+
+**涉及文件：**
+- `frontend/src/constants/profile.js`
+- `frontend/src/components/profile/ModalityPreferenceCard.jsx`
+- `backend/app/services/profile_rules.py`
+- `backend/app/services/profile_dialogue_service.py`
+- `backend/tests/test_profile_rules.py`
+
+**核心改动：**
+1. **修复“专业课程讲解（personal_lesson）”时长流失 Bug**：在后端 `compute_modal_preference` 规则函数中新增对资源类型 `'personal_lesson'` 的映射，将其正确归入 `'text_analysis'` (文本分析) 的累计统计中。
+2. **修复“代码实操提交（node_practice_submit）”无法入账 Bug**：由于提交评测的 `LearningActivity` 关联 `resource_id` 为 `NULL`，原联表查询导致结果丢弃。我们更新 SQL 统计同时提取 `activity_type` 并组合分组，并在 `compute_modal_preference` 规则中优先判定活动类型，将 `node_practice_submit` 时长直接强制精准计入 `'code_practice'`。
+3. **完成“视频动画”向“AI 交互”重构**：
+   - **前端**：将 `PROFILE_VALUE_LABELS.video_animation` 及 `ModalityPreferenceCard` 对应词条替换展示为 `'AI 交互'`。
+   - **后端**：在 `_RESOURCE_PREFERENCE_KEYWORDS` 提取特征时，对 `video_animation` 库扩充纳入 `'ai', '交互', '对话', '提问', '聊天'` 等现代教学高频词，实现全链路契约完全兼容。
+4. **单元测试回归**：在 `test_profile_rules.py` 补充了针对 3 元组及新增资源类型的精准测试用例，后端 9 项 pytest 100% 全部通过。
+
+**验证结果：**
+- 前端 lint/build：成功编译，打包通过。
+- 后端 pytest：`pytest tests/test_profile_rules.py` 100% 通过（9/9 passed）。
+
+**接口漂移：**
+- 无。底层存储字段依旧保持高度安全兼容，未破坏数据库已有数据或智能体接口定义。
+
 
 

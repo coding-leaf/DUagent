@@ -6,7 +6,14 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from agent_service_v2.schemas.evaluation import ChapterProgressItem, EvaluationData, EvaluationGenerateRequest, TableColumn, TableData
+from agent_service_v2.schemas.evaluation import (
+    ChapterProgressItem,
+    EvaluationData,
+    EvaluationGenerateRequest,
+    LearningInsight,
+    TableColumn,
+    TableData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +27,7 @@ def generate_evaluation_data(request: EvaluationGenerateRequest) -> EvaluationDa
         mastery_table=_build_mastery_table(request),
         resource_usage_table=_build_resource_usage_table(request),
         summary_text=_build_summary_text(request),
+        insight=LearningInsight(facts_version=request.facts_version),
     )
 
 
@@ -131,24 +139,23 @@ def _mastery_level(score: float) -> str:
 def build_evaluation_prompt(request: EvaluationGenerateRequest, rule_result: EvaluationData) -> str:
     system_prompt = (
         "你是 EDUagent 的学习评估助手。根据学习进度、练习结果、资源使用和系统规则评估，"
-        "生成 EvaluationData JSON 对象，其中只有 summary_text 允许由你改写。\n\n"
-        "输出字段必须完整：progress_table、mastery_table、resource_usage_table、summary_text。\n"
-        "progress_table、mastery_table、resource_usage_table 必须沿用系统规则结果，不要改写表格行、列或数值。\n\n"
+        "生成学习解释 JSON，其中只能包含 summary_text 和 insight。\n\n"
         "约束：\n"
         "- 不要编造输入中没有出现的章节或资源类型\n"
         "- 不要改写 KG 节点状态、完成率、正确率、资源次数等事实字段\n"
         "- summary_text 必须基于输入中的 KG、个人资料、学习画像和学习行为\n"
         "- summary_text 使用模板：学习范围；当前掌握；学习行为；下一步建议\n"
         "- 证据不足时明确说明证据不足，不要编造学习记录\n"
-        "- 只输出 JSON 对象，其属性包括 \"summary_text\", \"progress_table\", \"mastery_table\", \"resource_usage_table\""
+        "- strengths 和 weak_points 必须给出 knowledge_point 与 evidence\n"
+        "- weak_points 可使用 high、medium、low priority\n"
+        "- 只输出包含 summary_text 和 insight 的 JSON 对象"
     )
 
     parts: list[str] = [system_prompt, ""]
     parts.append(f"用户ID：{request.user_id}")
     parts.append(f"课程ID：{request.course_id}")
     parts.append("")
-    parts.append("评估生成要求：请输出完整 EvaluationData JSON。若某表格字段证据不足，请沿用系统规则表格。")
-    parts.append("注意：表格必须沿用系统规则结果；你只负责按模板改写 summary_text。")
+    parts.append("评估生成要求：只解释系统规则事实，不得重算或改写表格。")
     parts.append("")
     if request.student_profile:
         parts.append("个人资料：")
@@ -201,7 +208,11 @@ def build_evaluation_prompt(request: EvaluationGenerateRequest, rule_result: Eva
     parts.append("  学习行为：结合最近活跃、学习时长、资源偏好和练习参与。")
     parts.append("  下一步建议：给出 2-3 条与个人资料和引导级别匹配的建议。")
     parts.append("")
-    parts.append("请输出符合 JSON 格式的字符串，包含 progress_table, mastery_table, resource_usage_table, summary_text 字段，不要有 markdown 包装。")
+    parts.append(
+        "请输出 JSON：{\"summary_text\": \"...\", \"insight\": "
+        "{\"strengths\": [], \"weak_points\": [], "
+        "\"learning_preferences\": [], \"next_actions\": []}}，不要 Markdown 包装。"
+    )
 
     return "\n".join(parts)
 
@@ -219,7 +230,7 @@ async def generate_evaluation_with_llm(
 
     try:
         # AgentScope 2.x: OpenAIChatModel 实例可以直接作为 Callable 调用
-        response = model(prompt)
+        response = await model(prompt)
         raw_text = response.text.strip()
 
         data = _parse_evaluation_json(raw_text)
@@ -251,4 +262,89 @@ def _enrich_evaluation_result(
     summary = llm_data.get("summary_text")
     if isinstance(summary, str) and summary.strip():
         enriched.summary_text = summary.strip()
+    insight = llm_data.get("insight")
+    if isinstance(insight, dict):
+        enriched.insight = LearningInsight.model_validate(
+            {**insight, "facts_version": request.facts_version}
+        )
     return enriched
+
+
+async def generate_quiz_diagnosis_with_llm(
+    request: QuizDiagnoseRequest,
+    model: Any,
+) -> dict[str, Any]:
+    """Generates a detailed pedagogical evaluation and remedial recommendations based on submitted C quiz answers."""
+    from agent_service_v2.schemas.evaluation import QuizDiagnoseRequest
+
+    questions_str = json.dumps(request.questions, ensure_ascii=False, indent=2)
+    answers_str = json.dumps(request.answers, ensure_ascii=False, indent=2)
+
+    prompt = f"""You are an Expert C Programming Pedagogical Diagnostic Agent.
+Please evaluate and diagnose this student's C programming quiz submission:
+
+=== QUIZ QUESTIONS ===
+{questions_str}
+
+=== STUDENT SUBMITTED ANSWERS ===
+{answers_str}
+
+Analyze their performance. Identify:
+1. Conceptual blindspots and patterns in their errors.
+2. Code-level issues (compilation, logic, syntax) if there are coding exercises.
+3. Concrete learning suggestions tailored specifically to their performance.
+
+Your output MUST be a strict JSON object with EXACTLY this structure:
+{{
+  "diagnosis": {{
+    "summary": "A concise, encouraging summary of how the student did, overall score evaluation, and general sentiment.",
+    "score_analysis": "A detailed breakdown of their score, performance by question types, and conceptual alignment.",
+    "wrong_points_analysis": "An in-depth pedagogical analysis of their incorrect answers, diagnosing precisely why they made those mistakes and what foundational concepts they missed.",
+    "suggestions": [
+      "Practical recommendation 1 (e.g., read Chapter X, section Y; review topic Z)",
+      "Practical recommendation 2...",
+      "Practical recommendation 3..."
+    ]
+  }}
+}}
+"""
+    if model is None:
+        return {
+            "diagnosis": {
+                "summary": "本次练习已完成。建议仔细温习答错题目的解析以巩固基础知识。",
+                "score_analysis": f"共完成 {len(request.questions)} 道习题。",
+                "wrong_points_analysis": "已记录您的错题。您可以在个性化练习中再次强化。",
+                "suggestions": [
+                    "温习本章节大纲中的关键知识点。",
+                    "利用智能工作台开展个性化交互强化练习。"
+                ]
+            }
+        }
+
+    try:
+        response = await model(prompt)
+        text = response.text.strip()
+
+        match = _MARKDOWN_FENCE_PATTERN.search(text)
+        if match:
+            text = match.group(1).strip()
+
+        data = json.loads(text)
+        if not isinstance(data, dict) or "diagnosis" not in data:
+            raise ValueError("Diagnosis field missing from LLM response")
+
+        return data
+    except Exception as exc:
+        logger.error("Failed to generate quiz diagnosis with LLM: %s", exc)
+        # Safe fallback baseline
+        return {
+            "diagnosis": {
+                "summary": "本次练习已完成。建议仔细温习答错题目的解析以巩固基础知识。",
+                "score_analysis": f"共完成 {len(request.questions)} 道习题。",
+                "wrong_points_analysis": "已记录您的错题。您可以在个性化练习中再次强化。",
+                "suggestions": [
+                    "温习本章节大纲中的关键知识点。",
+                    "利用智能工作台开展个性化交互强化练习。"
+                ]
+            }
+        }

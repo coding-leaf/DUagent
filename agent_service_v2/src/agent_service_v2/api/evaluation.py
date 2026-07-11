@@ -5,8 +5,8 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
 from agent_service_v2.agents.model_provider import AgentModelSettings, build_chat_model_from_settings
-from agent_service_v2.schemas.evaluation import EvaluationGenerateRequest
-from agent_service_v2.agents.evaluation import generate_evaluation_data, generate_evaluation_with_llm
+from agent_service_v2.schemas.evaluation import EvaluationGenerateRequest, QuizDiagnoseRequest
+from agent_service_v2.agents.evaluation import generate_evaluation_data, generate_evaluation_with_llm, generate_quiz_diagnosis_with_llm
 
 logger = logging.getLogger(__name__)
 
@@ -37,3 +37,23 @@ async def generate_v2_evaluation(request: EvaluationGenerateRequest):
 
     # 3. 失败时平滑降级，仍然返回成功并携带规则 Baseline
     return {"code": 200, "message": "success", "data": rule_result}
+
+
+@router.post(
+    "/quiz/diagnose",
+    status_code=status.HTTP_200_OK,
+    tags=["Evaluation"],
+    summary="对学生练习作答结果进行综合诊断与个性化建议 (V2)",
+)
+async def generate_v2_quiz_diagnose(request: QuizDiagnoseRequest):
+    """根据学生提交的试卷问题与作答详情，诊断薄弱盲点并产生针对性补救建议。"""
+    try:
+        settings = AgentModelSettings()
+        model = build_chat_model_from_settings(settings)
+        res_dict = await generate_quiz_diagnosis_with_llm(request, model)
+        return {"code": 200, "message": "success", "data": res_dict}
+    except Exception as exc:
+        logger.exception("LLM quiz diagnosis failed: %s", exc)
+
+    res_dict = await generate_quiz_diagnosis_with_llm(request, None)
+    return {"code": 200, "message": "success", "data": res_dict}

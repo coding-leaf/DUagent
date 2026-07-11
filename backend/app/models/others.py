@@ -100,6 +100,7 @@ class Evaluation(Base):
     mastery_table: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     resource_usage_table: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    insight: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     create_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
     update_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

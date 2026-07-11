@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,7 @@ class EvaluationGenerateRequest(BaseModel):
     profile_context: dict[str, Any] | None = Field(None, description="Backend 规则生成的课程画像上下文")
     kg_context: dict[str, Any] | None = Field(None, description="课程 KG 节点与节点进度上下文")
     learning_activity: dict[str, Any] | None = Field(None, description="学习行为统计上下文")
+    facts_version: str = Field("", description="Backend 学习事实快照版本")
 
 
 class TableColumn(BaseModel):
@@ -53,8 +54,34 @@ class TableData(BaseModel):
     rows: list[dict[str, Any]] = Field(..., description="数据行")
 
 
+class InsightPoint(BaseModel):
+    knowledge_point: str = Field(..., min_length=1, description="知识点名称")
+    evidence: str = Field(..., min_length=1, description="支撑判断的事实证据")
+    priority: Literal["high", "medium", "low"] | None = Field(
+        None,
+        description="薄弱点优先级",
+    )
+
+
+class LearningInsight(BaseModel):
+    strengths: list[InsightPoint] = Field(default_factory=list)
+    weak_points: list[InsightPoint] = Field(default_factory=list)
+    learning_preferences: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    facts_version: str = Field("", description="Backend 学习事实快照版本")
+
+
 class EvaluationData(BaseModel):
     progress_table: TableData | None = Field(None, description="学习进度表")
     mastery_table: TableData | None = Field(None, description="知识点掌握程度表")
     resource_usage_table: TableData | None = Field(None, description="资源使用习惯记录表")
     summary_text: str | None = Field(None, description="LLM 综合文字总结")
+    insight: LearningInsight = Field(default_factory=LearningInsight)
+
+
+class QuizDiagnoseRequest(BaseModel):
+    user_id: str = Field(..., description="User ID")
+    course_id: str = Field(..., description="Course ID")
+    quiz_id: str = Field(..., description="Quiz ID")
+    questions: list[dict[str, Any]] = Field(..., description="List of questions in the quiz")
+    answers: list[dict[str, Any]] = Field(..., description="List of user answers submitted")

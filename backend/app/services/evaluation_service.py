@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
@@ -24,6 +26,24 @@ from app.infrastructure.locks import evaluation_lock
 logger = logging.getLogger(__name__)
 
 _empty_table = {"columns": [], "rows": []}
+_empty_insight = {
+    "strengths": [],
+    "weak_points": [],
+    "learning_preferences": [],
+    "next_actions": [],
+    "facts_version": "",
+}
+
+
+def _build_facts_version(payload: dict) -> str:
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return f"sha256:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
 
 
 class EvaluationService:
@@ -51,6 +71,7 @@ class EvaluationService:
                 "resource_usage_table": _empty_table,
                 "node_progress": node_progress,
                 "summary_text": "",
+                "insight": dict(_empty_insight),
                 "generated_at": None,
             }
 
@@ -62,6 +83,7 @@ class EvaluationService:
             "resource_usage_table": ev.resource_usage_table or _empty_table,
             "node_progress": node_progress,
             "summary_text": ev.summary_text or "",
+            "insight": ev.insight or dict(_empty_insight),
             "generated_at": ev.generated_at.isoformat() if ev.generated_at else None,
         }
 
@@ -204,6 +226,7 @@ class EvaluationService:
         payload["resource_usage"] = {
             "by_type": _aggregate_resource_usage(resource_usage_result.scalars().all())
         }
+        payload["facts_version"] = _build_facts_version(payload)
 
         return payload
 
@@ -288,6 +311,7 @@ async def run_evaluation_refresh_background(
                     mastery_table=data.get("mastery_table", _empty_table),
                     resource_usage_table=data.get("resource_usage_table", _empty_table),
                     summary_text=data.get("summary_text", ""),
+                    insight=data.get("insight") or dict(_empty_insight),
                     generated_at=now,
                 )
                 db.add(ev)

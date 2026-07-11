@@ -746,7 +746,7 @@ POST /api/v1/admin/course-catalogs/:catalog_id/resources/generations
 |------|------|------|------|
 | chapter | string | 否 | 章节 |
 | knowledge_point | string | 否 | 知识点 |
-| resource_types | array | 是 | 至少一种资源类型：document / mindmap / reading / code |
+| resource_types | array | 是 | 至少一种公共资源类型：lesson / diagram / example |
 
 `resource_types` 必须至少包含 1 项；缺失或空数组均返回 `42210`。
 
@@ -1372,13 +1372,13 @@ GET /api/v1/quiz/history?course_id={course_id}&page=1&page_size=20
 
 ## 十、资源库 `/api/v1/resources`
 
-**资源类型约定：** 资源库只存学习资料，不承担练习题主链路。个性化题目生成、取题、判题统一走 `/api/v1/quiz`。v1 资源类型为：
+**资源类型约定：** 资源库只存学习资料，不承担练习题主链路。个性化题目生成、取题、判题统一走 `/api/v1/quiz`。新生成的公共资源类型为：
 
-- `document`：知识讲解文档，Markdown 内容。
-- `mindmap`：思维导图，Mermaid / JSON / 文本结构。
-- `reading`：拓展阅读材料，Markdown 内容。
-- `code`：代码示例，代码块 + 解释 + 复杂度/常见问题。
-- `video`：预留类型，v1 默认不生成或返回视频内容。
+- `lesson`：标准知识讲义，Markdown 内容。
+- `diagram`：知识图解，Mermaid 内容，具体图形由知识点特征决定。
+- `example`：讲解型代码示例，Markdown + 代码块，不承担 OJ 判题。
+
+历史库存中的 `document / mindmap / reading / code / video` 仍可由读取接口返回，仅用于兼容展示，不再作为管理员新生成枚举。
 
 ### 10.1 获取资源库
 
@@ -1464,7 +1464,7 @@ POST /api/v1/resources/generate
 | course_id | string | 是 | 课程 ID |
 | chapter | string | 否 | 章节 |
 | knowledge_point | string | 否 | 知识点 |
-| resource_types | array | 否 | 资源类型列表：document / mindmap / reading / code；不传则默认生成这四类 |
+| resource_types | array | 是 | 公共资源类型列表：lesson / diagram / example；至少一项 |
 
 **响应 `data`：**
 
@@ -1637,6 +1637,47 @@ GET /api/v1/tutoring/conversations/:id
 | messages[].timestamp | string | 消息时间 |
 | created_at | string | 对话创建时间 |
 | updated_at | string | 最后更新时间 |
+
+### 11.4 代码沙箱执行
+
+```
+POST /api/v1/sandbox/execute
+```
+
+**用途：** AIChat 工作台的 `CodeSandboxCard` 调用此接口运行学生当前代码。Frontend 只访问 Backend 代理接口，不直连 Judge0。
+
+**请求体 `application/json`：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| code | string | 是 | 完整源代码 |
+| language | string | 是 | 语言标识：`c` / `cpp` / `python` / `java` / `go` / `javascript` |
+| stdin | string | 否 | 标准输入，默认空字符串 |
+
+**响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| status | string | 标准化执行状态：`success` / `wrong_answer` / `time_limit_exceeded` / `compilation_error` / `runtime_error` / `internal_error` / `exec_format_error` / `queued` / `processing` / `unknown` / `degraded` |
+| compile_status | string | `OK` / `Compilation Error` / `UNKNOWN` |
+| compile_output | string | 编译输出；编译失败时包含编译器错误 |
+| execution | object/null | 运行诊断；`degraded` 时为 null |
+| execution.status_id | integer/null | Judge0 原始状态 ID |
+| execution.status_description | string | Judge0 状态描述 |
+| execution.stdout | string | 标准输出 |
+| execution.stderr | string | 标准错误 |
+| execution.exit_code | integer/null | 进程退出码 |
+| execution.exit_signal | integer/null | 退出信号 |
+| execution.run_time_ms | integer | 运行耗时毫秒 |
+| execution.memory_kb | integer | 内存占用 KB |
+| reason | string/null | 降级或失败原因 |
+| message | string/null | 面向前端的提示消息 |
+
+**降级约定：**
+
+- Judge0 不可用、连接超时或返回不可恢复错误时，Backend 返回 HTTP 200，`message=degraded`，`data.status=degraded`。
+- 不支持的语言返回 HTTP 400，错误体为 `{ "detail": { "code": 40001, "message": "...", "data": null } }`。
+- 前端看到 `data.status !== "success"` 且不为 `degraded` 时，应按运行失败展示，不得仅凭 `compile_status=OK` 判断为运行成功。
 
 ---
 

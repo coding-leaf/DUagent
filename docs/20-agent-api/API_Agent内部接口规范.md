@@ -1,7 +1,12 @@
 # Agent-API 内部接口规范
 
 > Backend (FastAPI, Port 8001) ↔ Agent Service (FastAPI + AgentScope, Port 8002)
-> 版本: v5.0 | 日期: 2026-05-17
+> 版本: v5.1 | 日期: 2026-07-11
+
+> **当前状态说明（v3 / AgentScope 2.x 迁移中）：**
+> `agent_service_v2` 已承接 Workbench 对话、课程资料入库、知识图谱生成、资源生成、习题生成、学情评估和作答诊断等核心链路，路径统一位于 `/agent/v2/...`。
+> `agent_service` v1 仍作为 legacy 双轨保留，用于尚未提供 v2 等价接口的画像对话补充与学习路径生成等链路。
+> 历史 `/agent/v1/...` 章节保留为 legacy 契约说明；新增或迁移功能优先落到 `/agent/v2/...`。
 
 ---
 
@@ -132,6 +137,59 @@ Backend 会把 SQL 权威上下文放入 `context` 字段，Agent Service v2 将
 | message_id | string | 本条回复的消息 ID |
 | knowledge_points_used | array | 回答中引用的知识点 |
 | suggested_exercises | array | 推送的相似例题 |
+
+**Workbench 工具约定：**
+
+| 工具名 | 权限 | 说明 |
+|------|------|------|
+| run_code_in_oj | read-only | 编译并执行 C / C++ / Python / Java / Go / JavaScript 代码。Agent Service v2 通过 Backend internal API 代理调用 Judge0，不直连 Judge0，不写 MySQL。 |
+
+`run_code_in_oj` 入参：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| code | string | 是 | 完整源代码 |
+| language | string | 是 | 语言标识：`c` / `cpp` / `python` / `java` / `go` / `javascript` |
+| stdin | string | 否 | 标准输入，默认空字符串 |
+
+`run_code_in_oj` 返回事实：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| status | string | `success` / `wrong_answer` / `time_limit_exceeded` / `compilation_error` / `runtime_error` / `internal_error` / `exec_format_error` / `queued` / `processing` / `unknown` / `degraded` |
+| compile_status | string | `OK` / `Compilation Error` / `UNKNOWN` |
+| compile_output | string | 编译输出 |
+| execution | object/null | 运行输出和诊断；`degraded` 时为 null |
+| message | string/null | 降级提示 |
+
+**CodeSandboxCard 工件约定：**
+
+Agent 可通过 `write_artifact_file` 写入 JSON 工件，供前端工作台渲染交互式代码练习卡片：
+
+```json
+{
+  "type": "CodeSandboxCard",
+  "props": {
+    "question_text": "分析并修复以下代码问题。",
+    "code": "print('hello')",
+    "language": "python",
+    "default_stdin": ""
+  }
+}
+```
+
+`props.question_text`、`props.code`、`props.language` 必填；`props.default_stdin` 可为空字符串。
+
+**Backend internal OJ 代理接口（Agent Service v2 → Backend）：**
+
+```
+POST /internal/ai-chat/oj/evaluate
+Header: X-Internal-Agent-Token: <token>
+```
+
+该接口属于 Backend internal API，不是 Agent Service 对外 API。Agent Service v2 的 `run_code_in_oj` 工具必须通过此接口调用，不能绕过 Backend 直接访问 Judge0。
+
+请求体与 `run_code_in_oj` 入参一致。响应仍使用 Backend 统一包装：`{ "code": 200, "message": "success" | "degraded", "data": <run_code_in_oj 返回事实> }`。
 
 ---
 
@@ -394,7 +452,7 @@ POST /agent/v1/resources/generate
 | webhook_url | string | 是 | 完成回调 URL（Backend 的 `/api/v1/webhooks/agent`） |
 | chapter | string | 否 | 章节 |
 | knowledge_point | string | 否 | 知识点 |
-| resource_types | array | 否 | 资源类型列表：document / mindmap / reading / code；不传则默认生成这四类 |
+| resource_types | array | 是 | 公共资源类型列表：lesson / diagram / example；至少一项 |
 
 **资料来源：** Agent Service 根据 `course_id` 从已上传并向量化的 `course_knowledge` 知识库检索/读取课程资料。
 
@@ -419,7 +477,7 @@ POST /agent/v1/resources/generate
 | result | object | 完成时携带 |
 | result.resources | array | 生成的资源列表 |
 | result.resources[].title | string | 资源标题 |
-| result.resources[].type | string | 类型：document / mindmap / reading / code / video；video 为预留类型，v1 默认不生成 |
+| result.resources[].type | string | 新公共资源类型：lesson / diagram / example |
 | result.resources[].description | string | 资源描述 |
 | result.resources[].content | string | 资源内容 |
 | result.resources[].chapter | string | 所属章节 |

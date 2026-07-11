@@ -194,11 +194,11 @@
         }
       }
     },
-    "/resources/generate": {
+    "/agent/v2/knowledge/resources/generations": {
       "post": {
         "tags": ["Resources"],
         "summary": "生成资源库",
-        "description": "异步任务。Backend 先创建本地任务并把 task_id 传给 Agent；Agent 返回和回调时原样带回该 task_id。Agent 根据 course_id 从已上传并向量化的 course_knowledge 知识库检索/读取课程资料，多智能体并行生成课程级学习资料：document / mindmap / reading / code。video 为预留类型，v1 默认不生成。个性化题目由 /assessment/generate-questions 生成。完成后通过 Webhook 回调 Backend。Agent 只返回结构化资源结果，不直接写 SQL；Backend 根据 task_id 校验并幂等落库。",
+        "description": "异步公共资源任务。Backend 创建本地任务并传入 task_id；Agent 根据 course_id 检索课程知识库，生成 lesson / diagram / example，完成后通过 Webhook 回调 Backend。Agent 不直接写 SQL。",
         "requestBody": {
           "required": true,
           "content": {
@@ -764,18 +764,21 @@
       },
       "ResourceGenerateRequest": {
         "type": "object",
-        "required": ["task_id", "user_id", "course_id", "webhook_url"],
+        "required": ["task_id", "course_id", "resource_types", "webhook_url"],
         "properties": {
           "task_id": { "type": "string", "description": "Backend 预先创建的任务 ID，Agent 返回和回调时原样带回" },
-          "user_id": { "type": "string", "description": "触发教师用户 ID" },
           "course_id": { "type": "string", "description": "课程 ID" },
           "webhook_url": { "type": "string", "description": "完成回调 URL" },
           "chapter": { "type": "string", "description": "章节" },
           "knowledge_point": { "type": "string", "description": "知识点" },
           "resource_types": {
             "type": "array",
-            "items": { "type": "string" },
-            "description": "资源类型列表：document / mindmap / reading / code；不传则默认生成这四类"
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": ["lesson", "diagram", "example"]
+            },
+            "description": "公共资源类型列表，至少一项"
           }
         }
       },

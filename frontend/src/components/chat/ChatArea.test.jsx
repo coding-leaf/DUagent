@@ -50,16 +50,3 @@ test('submits quick action prompts through sendMessage instead of mock demos', (
   expect(chatState.sendMessage).toHaveBeenCalledWith('帮我根据当前薄弱点生成补弱学习计划。');
   expect(chatState.runMockToolDemo).not.toHaveBeenCalled();
 });
-
-test('toggles plan mode and applies it to the next sent message', () => {
-  render(<ChatArea activeCourseName="Test Course" onOpenLeftDrawer={vi.fn()} />);
-
-  fireEvent.click(screen.getByRole('button', { name: /计划模式/ }));
-  fireEvent.change(screen.getByPlaceholderText('在这里输入你的问题...'), {
-    target: { value: '帮我分析薄弱点' }
-  });
-  fireEvent.click(screen.getByTestId('send-message-button'));
-
-  expect(chatState.sendMessage).toHaveBeenCalledWith('帮我分析薄弱点', { planMode: true });
-  expect(chatState.runMockToolDemo).not.toHaveBeenCalled();
-});

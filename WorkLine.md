@@ -1676,3 +1676,28 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。仅在既有 `artifact_created` SSE 事件载荷中将 `artifact.title` 字段进行序列化传输，符合原订接口规范。
+
+---
+
+### 2026-07-11 — 交互式编程沙箱排版美化与自由模式自选语言实现
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `frontend/src/components/workspace/plugins/codeSandbox/CodeSandboxCard.jsx`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.test.jsx`
+
+**核心改动：**
+1. 优化智能体系统提示词规范，要求调用 `create_validated_personal_code_problem` 时以统一的 H1、H2 标题架构输出 Markdown 格式 statement（仅保留题目、背景描述、运行要求和示例说明，去除了冗余代码块）。
+2. 在前端交互式编程沙箱中引入 `MarkdownViewer` 代替 `<p>`，使其能完美呈现 Markdown 富文本，优化题目的可读性。
+3. 重构“公开示例”的展现形式为圆角卡片网格布局，使 stdin 与预期输出直观清晰。
+4. 针对自由沙箱模式（没有 problem_id），添加了支持自选语言的 Select 下拉菜单（支持 C、C++、Python、Java、Go、JavaScript），支持根据语言自适应文件名扩展，且切换时根据代码是否为模板自动更新预置代码。
+5. 针对 OJ 沙箱模式，只读锁死所定语言。
+
+**验证结果：**
+- 前端测试：`cd frontend && npm run test:unit` 通过，118 passed。
+- 前端构建：`cd frontend && npm run build` 通过。
+- 后端测试：`cd agent_service_v2 && ./.venv/bin/pytest tests` 通过，88 passed。
+- 后端编译：通过 `py_compile`。
+
+**接口漂移：**
+- 无。

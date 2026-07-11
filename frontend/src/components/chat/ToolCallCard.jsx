@@ -32,7 +32,18 @@ const TOOL_TITLE_MAP = {
   TaskGet: '读取计划任务',
   draft_study_artifact: '生成学习资料',
   read_learning_state: '读取学习状态',
-  review_grounding: '检查回答依据'
+  review_grounding: '检查回答依据',
+  write_artifact_file: '编写工作区课件',
+  create_code_sandbox_card: '装载代码实操沙箱',
+  run_code_in_oj: '在线沙盒编译运行',
+  retrieve_course_context: '检索教材教学上下文',
+  read_learning_progress: '分析学情薄弱点',
+  read_recent_answers: '调取历史作答轨迹',
+  validate_personal_code_problem_draft: '编程练习题 OJ 校验',
+  create_personalized_resource_draft: '生成个性化教学草稿',
+  record_personalized_validation: '对齐性格式检验',
+  review_personalized_resource: '教学合规性审核',
+  publish_personalized_resource: '发布个性化学习资源'
 };
 
 export default function ToolCallCard({ name, title, status, description, inputSummary, outputSummary }) {

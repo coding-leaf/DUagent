@@ -2927,5 +2927,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。底层存储字段依旧保持高度安全兼容，未破坏数据库已有数据或智能体接口定义。
 
+---
+
+### 2026-07-12 — 在 AI-Chat 的 Tool 调用轨迹中全量补充多智能体工具链的中文映射
+
+**涉及文件：**
+- `frontend/src/components/chat/ToolCallCard.jsx`
+
+**核心改动：**
+1. **全量补齐多智能体工具中文映射**：针对 AI 在大模型流式对话、OJ 评测、定制讲义及自主规划等真实场景中调用的所有底层工具，在前端 `TOOL_TITLE_MAP` 中新增了高雅、友好的中文标题映射。
+2. **新增映射工具包括**：
+   * `write_artifact_file` ➜ `'编写工作区课件'`
+   * `create_code_sandbox_card` ➜ `'装载代码实操沙箱'`
+   * `run_code_in_oj` ➜ `'在线沙盒编译运行'`
+   * `retrieve_course_context` ➜ `'检索教材教学上下文'`
+   * `read_learning_progress` ➜ `'分析学情薄弱点'`
+   * `read_recent_answers` ➜ `'调取历史作答轨迹'`
+   * `validate_personal_code_problem_draft` ➜ `'编程练习题 OJ 校验'`
+   * `create_personalized_resource_draft` ➜ `'生成个性化教学草稿'`
+   * `record_personalized_validation` ➜ `'对齐性格式检验'`
+   * `review_personalized_resource` ➜ `'教学合规性审核'`
+   * `publish_personalized_resource` ➜ `'发布个性化学习资源'`
+3. **效果**：使 AI 交互运行轨迹对学生而言更清晰、高级、更具科技感，极大优化了多智能体运行轨迹的可读性。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证（0 错误 0 警告）
+- 前端 build：通过 `npm run build` 成功打包并通过所有依赖分析
+
+**接口漂移：**
+- 无。
+
+
 
 

@@ -1,8 +1,60 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useChat } from '../../../../context/ChatContext';
+import Icon from '../../../Icon';
 import CodeSandboxConsole from './CodeSandboxConsole';
 import { buildAskAIPrompt, getSourceFilename } from './codeSandboxViewModel';
 import { useCodeSandboxExecution } from './useCodeSandboxExecution';
 import { useCodeProblem } from './useCodeProblem';
+
+const markdownComponents = {
+  h1: ({ children, ...props }) => (
+    <h1 className="text-base font-bold text-slate-900 mt-4 mb-2 pb-1 border-b border-slate-200" {...props}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }) => (
+    <h2 className="text-sm font-semibold text-slate-800 mt-3 mb-1.5" {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }) => (
+    <h3 className="text-xs font-semibold text-slate-700 mt-2 mb-1" {...props}>
+      {children}
+    </h3>
+  ),
+  p: ({ children, ...props }) => (
+    <p className="text-slate-600 leading-relaxed mb-2 text-xs" {...props}>
+      {children}
+    </p>
+  ),
+  ul: ({ children, ...props }) => (
+    <ul className="list-disc pl-4 mb-2 space-y-0.5 text-xs text-slate-600" {...props}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol className="list-decimal pl-4 mb-2 space-y-0.5 text-xs text-slate-600" {...props}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }) => (
+    <li className="text-slate-600 text-xs" {...props}>
+      {children}
+    </li>
+  ),
+  code: ({ node, inline, className, children, ...props }) => {
+    return inline ? (
+      <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded font-mono text-[10px]" {...props}>
+        {children}
+      </code>
+    ) : (
+      <pre className="bg-slate-100 text-slate-800 p-2 rounded-lg font-mono text-[10px] overflow-x-auto my-1.5 border border-slate-200 whitespace-pre-wrap max-w-full">
+        <code {...props}>{children}</code>
+      </pre>
+    );
+  }
+};
 
 export default function CodeSandboxCard({ problem_id: problemId, question_text, code: legacyCode, language, default_stdin }) {
   const { sendMessage, isSending } = useChat();
@@ -46,15 +98,41 @@ export default function CodeSandboxCard({ problem_id: problemId, question_text, 
         </h3>
       </div>
 
-      <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 text-slate-700 text-sm leading-relaxed">
-        <p className="font-semibold text-slate-800 mb-1">题目要求：</p>
-        <p>{questionText}</p>
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-slate-700 text-sm leading-relaxed shadow-sm">
+        <div className="flex items-center gap-1.5 border-b border-slate-250 pb-2 mb-3">
+          <Icon name="assignment" className="text-slate-600 text-sm shrink-0" />
+          <span className="font-semibold text-slate-800 text-xs uppercase tracking-wider">题目描述 & 要求</span>
+        </div>
+        <div className="prose prose-sm max-w-none text-slate-750">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {questionText}
+          </ReactMarkdown>
+        </div>
         {problem?.public_cases?.length > 0 && (
-          <div className="mt-3 space-y-2 text-xs">
-            <p className="font-semibold">公开示例：</p>
-            {problem.public_cases.map((testCase, index) => (
-              <pre key={index} className="whitespace-pre-wrap text-slate-600">输入：{testCase.stdin}输出：{testCase.expected_output}</pre>
-            ))}
+          <div className="mt-4 pt-3 border-t border-slate-200/80">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Icon name="analytics" className="text-slate-500 text-xs shrink-0" />
+              <span className="font-semibold text-slate-600 text-xs uppercase tracking-wider">公开测试用例：</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {problem.public_cases.map((testCase, index) => (
+                <div key={index} className="bg-white border border-slate-200/80 rounded-lg p-2.5 font-mono text-[11px] text-slate-600 shadow-sm flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-1 mb-0.5">
+                    <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-semibold">示例 {index + 1}</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400 font-semibold w-10 shrink-0">输入:</span>
+                      <code className="bg-slate-50 text-slate-700 px-1.5 py-0.5 rounded font-mono text-[10px] max-w-full overflow-x-auto truncate">{testCase.stdin || '(空)'}</code>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400 font-semibold w-10 shrink-0">输出:</span>
+                      <code className="bg-slate-50 text-slate-700 px-1.5 py-0.5 rounded font-mono text-[10px] max-w-full overflow-x-auto truncate">{testCase.expected_output}</code>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

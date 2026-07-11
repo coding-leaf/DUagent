@@ -99,6 +99,7 @@ test('uses fixed cases for persisted problems without exposing stdin input', asy
     expect(screen.getByText('隐藏用例未通过')).toBeInTheDocument();
   });
   expect(submitCodeProblem).toHaveBeenCalledWith(expect.objectContaining({ problemId: 'problem-1' }));
-  expect(screen.getByText(/输入：1 2/)).toBeInTheDocument();
+  expect(screen.getByText('输入:')).toBeInTheDocument();
+  expect(screen.getByText(/1 2/)).toBeInTheDocument();
   expect(screen.queryByText('hidden input')).toBeNull();
 });

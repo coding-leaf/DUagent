@@ -62,7 +62,11 @@ const renderWithProviders = (ui) => render(
 );
 
 const StreamConsumer = () => {
-  const { activeSession, messages, workspaceArtifacts, activeArtifactId, runLogs, clearRunLogs, sendMessage, resetConversation, isSending } = useChat();
+  const {
+    activeSession, messages, workspaceArtifacts, activeArtifactId,
+    runLogs, clearRunLogs, sendMessage, resetConversation, isSending,
+    hiddenArtifactIds, hideArtifact, restoreArtifact
+  } = useChat();
   const assistant = messages.find(m => m.role === 'assistant');
   const user = messages.find(m => m.role === 'user');
   return (
@@ -79,6 +83,7 @@ const StreamConsumer = () => {
       <div data-testid="log-count">{runLogs?.length || 0}</div>
       <div data-testid="last-log-message">{runLogs?.at(-1)?.message || ''}</div>
       <div data-testid="sending">{String(isSending)}</div>
+      <div data-testid="hidden-count">{hiddenArtifactIds?.length || 0}</div>
       <button data-testid="send" onClick={() => sendMessage('hello')}>
         Send
       </button>
@@ -90,6 +95,12 @@ const StreamConsumer = () => {
       </button>
       <button data-testid="clear-logs" onClick={() => clearRunLogs()}>
         Clear Logs
+      </button>
+      <button data-testid="hide-artifact" onClick={() => hideArtifact('artifact-plan')}>
+        Hide
+      </button>
+      <button data-testid="restore-artifact" onClick={() => restoreArtifact('artifact-plan')}>
+        Restore
       </button>
     </div>
   );
@@ -312,4 +323,47 @@ test('ChatProvider records native stream and debug events for developer console'
     screen.getByTestId('clear-logs').click();
   });
   expect(screen.getByTestId('log-count').textContent).toBe('0');
+});
+
+test('handles hiding and restoring artifacts', async () => {
+  getHistoryMock.mockResolvedValue({
+    code: 200,
+    data: {
+      messages: [
+        {
+          role: 'assistant',
+          content: '已生成补弱计划。',
+          meta: {
+            artifacts: [
+              {
+                id: 'artifact-plan',
+                type: 'Markdown',
+                props: { title: '补弱计划', content: '# 补弱计划' }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  });
+
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('artifact-count').textContent).toBe('1');
+  });
+  expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-plan');
+  expect(screen.getByTestId('hidden-count').textContent).toBe('0');
+
+  await act(async () => {
+    screen.getByTestId('hide-artifact').click();
+  });
+  expect(screen.getByTestId('hidden-count').textContent).toBe('1');
+  expect(screen.getByTestId('active-artifact-id').textContent).toBe('');
+
+  await act(async () => {
+    screen.getByTestId('restore-artifact').click();
+  });
+  expect(screen.getByTestId('hidden-count').textContent).toBe('0');
+  expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-plan');
 });

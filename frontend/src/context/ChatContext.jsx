@@ -61,7 +61,24 @@ export const ChatProvider = ({ children }) => {
   const [isSending, setIsSending] = useState(false);
   const [workspaceArtifacts, setWorkspaceArtifacts] = useState([]);
   const [activeArtifactId, setActiveArtifactId] = useState(null);
+  const [hiddenArtifactIds, setHiddenArtifactIds] = useState([]);
   const { runLogs, appendRunLog, clearRunLogs } = useRunLogs();
+
+  const hideArtifact = (id) => {
+    setHiddenArtifactIds(prev => {
+      const next = [...prev, id];
+      if (activeArtifactId === id) {
+        const visible = workspaceArtifacts.filter(a => !next.includes(a.id));
+        setActiveArtifactId(visible.length > 0 ? visible[visible.length - 1].id : null);
+      }
+      return next;
+    });
+  };
+
+  const restoreArtifact = (id) => {
+    setHiddenArtifactIds(prev => prev.filter(i => i !== id));
+    setActiveArtifactId(id);
+  };
 
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
@@ -81,6 +98,7 @@ export const ChatProvider = ({ children }) => {
       setMessages([]);
       setWorkspaceArtifacts([]);
       setActiveArtifactId(null);
+      setHiddenArtifactIds([]);
       clearRunLogs();
       return;
     }
@@ -96,12 +114,14 @@ export const ChatProvider = ({ children }) => {
       setMessages([]);
       setWorkspaceArtifacts([]);
       setActiveArtifactId(null);
+      setHiddenArtifactIds([]);
       clearRunLogs();
     }
   }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation, clearRunLogs]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
+    setHiddenArtifactIds([]);
     if (activeSession) {
       chatService.getHistory(activeSession).then(res => {
         if (res.code === 200 && res.data) {
@@ -216,6 +236,7 @@ export const ChatProvider = ({ children }) => {
               }
               return next;
             });
+            setHiddenArtifactIds(prev => prev.filter(i => i !== artifact.id));
             setActiveArtifactId(artifact.id);
           }
         }
@@ -314,7 +335,8 @@ export const ChatProvider = ({ children }) => {
     <ChatContext.Provider value={{
       sessions, activeSession, setActiveSession, messages, isSending,
       sendMessage, regenerate, editMessage, cancelStream, resetConversation, deleteSession,
-      workspaceArtifacts, activeArtifactId, setActiveArtifactId, runLogs, clearRunLogs
+      workspaceArtifacts, activeArtifactId, setActiveArtifactId, runLogs, clearRunLogs,
+      hiddenArtifactIds, hideArtifact, restoreArtifact
     }}>
       {children}
     </ChatContext.Provider>

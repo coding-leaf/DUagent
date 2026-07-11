@@ -2248,3 +2248,39 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Git 提交：已在分支 `ai-dev/agentscope-v2` 上完成了本地提交。
 
 **接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复 RAG 检索在班级聊天时由于 Course Offering ID 与 Course Catalog ID 冲突导致的 0 检索 Bug
+
+**涉及文件：**
+- `backend/app/services/tutoring_stream_adapter.py`
+
+**核心改动：**
+1. **解决开课班级与教材目录的 ID 隔离冲突**：在新版系统的 RAG 设计中，向量数据是按照**教材目录 ID（Course Catalog ID）**作为隔离单元入库的（Qdrant 中存为 `chunk.metadata.course_id`）。而学生发起的聊天会话是绑定在**开课班级 ID（Course Offering ID）**之下的。之前后端在向 Agent Service 发送会话 Payload 时，错误地将班级 ID 透传作为 Agent 侧的 `course_id` 参数。这导致 Agent 侧构建的 RAG 过滤条件为 `metadata_filter={"course_id": "班级ID"}`，与 Qdrant 里的 Catalog ID 无法匹配，从而导致了 RAG 检索结果恒为 0，使 AI 误称课本库中没有相应知识。
+2. **安全映射 Catalog ID 字段**：在 `tutoring_stream_adapter.py` 的 `_build_workbench_payload` 中，自动拦截 `scope == "course"` 的场景，将由 `TutoringPayloadBuilder` 提前解析转换出的 `catalog_id` 正确地作为 `course_id` 发送给 Agent Service，使两端使用的 ID 底层物理对齐，彻底修复了 RAG 检索真空问题。
+
+**验证结果：**
+- 前端 lint / build：未运行（未改动前端代码）
+- 后端 py_compile / pytest：通过 `python3 -m py_compile backend/app/services/tutoring_stream_adapter.py` 且运行 `pytest tests/test_tutoring_stream_adapter.py tests/test_tutoring_privacy.py tests/test_tutoring_service.py -v`（10 passed）。
+- Agent pytest：未修改 Agent 代码。
+
+**接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复长期记忆 Qdrant 集合首次连接自动以 1536 维重建引发的维度冲突 Bug
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **阻断 Mem0 默认 1536 维建库机制**：在 `workbench_factory.py` 实例化 `Mem0Middleware` 前，插入采用同步 `QdrantClient` 主动防御式建库的代码。在发现 `student_memories` 集合不存在时，显式使用系统预配的实际嵌入维度 `settings.EMBEDDING_DIMENSION`（1024 维）提前建立该集合。如此一来，Mem0 连接时直接沿用已有的 1024 维集合，完美避开其因没有 `embedder` 配置而回落到默认 1536 维重建的行为，彻底解决了长期记忆模块不可用、时好时坏的历史顽疾。
+
+**验证结果：**
+- 前端 lint / build：未修改前端。
+- 后端 py_compile / pytest：未修改后端。
+- Agent pytest：对 `workbench_factory.py` 执行 `py_compile` 通过，且运行 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_factory.py tests/test_personal_code_problem_tools.py` 8 个用例全部 100% 通过（8 passed）。
+
+**接口漂移：** 无。

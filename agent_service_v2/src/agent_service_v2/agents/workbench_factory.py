@@ -60,10 +60,81 @@ class WorkbenchAgentFactory:
             run_id=run_id,
             workspace=workspace,
         )
+
+        from agentscope.tool import FunctionTool
+        from agent_service_v2.tools.rag import retrieve_course_context
+
+        if course_id:
+            async def retrieve_course_context_tool(query: str, limit: int = 3) -> dict:
+                """Retrieve related book paragraphs from the course textbook material to help answer questions.
+
+                Args:
+                    query (str): The search query keywords or question text.
+                    limit (int, optional): Maximum number of segments to return. Defaults to 3.
+                """
+                return await retrieve_course_context(query=query, course_id=course_id, limit=limit)
+
+            rag_tools = [FunctionTool(retrieve_course_context_tool)]
+        else:
+            rag_tools = []
+
+        # Initialize Mem0 long-term memory middleware & extract memory tools
+        from agent_service_v2.agents.model_provider import build_embedding_model_from_settings, AgentModelSettings
+        settings = AgentModelSettings()
+        embedding_model = build_embedding_model_from_settings(settings)
+
+        memory_tools = []
+        middlewares = []
+
+        if embedding_model and settings.QDRANT_URL:
+            # Pre-create student_memories collection with correct vector dimensions (typically 1024 for bge-m3)
+            # to prevent Mem0 from recreating it with its hardcoded default OpenAI 1536 dimensions.
+            try:
+                from qdrant_client import QdrantClient
+                from qdrant_client.models import Distance, VectorParams
+                q_client = QdrantClient(url=settings.QDRANT_URL)
+                if not q_client.collection_exists(collection_name="student_memories"):
+                    q_client.create_collection(
+                        collection_name="student_memories",
+                        vectors_config=VectorParams(
+                            size=settings.EMBEDDING_DIMENSION,
+                            distance=Distance.COSINE,
+                        ),
+                    )
+            except Exception:
+                pass
+
+            try:
+                from mem0.configs.base import MemoryConfig
+                from agentscope.middleware import Mem0Middleware
+                from agentscope.middleware._longterm_memory._mem0._tools import _build_memory_tools
+
+                mem0_qdrant_cfg = MemoryConfig(
+                    vector_store={
+                        "provider": "qdrant",
+                        "config": {
+                            "collection_name": "student_memories",
+                            "url": settings.QDRANT_URL,
+                        }
+                    }
+                )
+                mem0_mw = Mem0Middleware(
+                    user_id=user_id,
+                    chat_model=model,
+                    embedding_model=embedding_model,
+                    mem0_config=mem0_qdrant_cfg,
+                    mode="both",
+                )
+                memory_tools = _build_memory_tools(mem0_mw)
+                middlewares.append(mem0_mw)
+            except Exception as exc:
+                # Log or fallback if mem0 initialization encounters any issues
+                pass
+
         toolkit = Toolkit(
             tool_groups=build_workbench_tool_groups(
-                memory_tools=[],
-                rag_tools=[],
+                memory_tools=memory_tools,
+                rag_tools=rag_tools,
                 learning_progress_tools=learning_progress_tools,
                 oj_execution_tools=oj_execution_tools,
                 personal_code_problem_tools=personal_code_problem_tools,
@@ -71,7 +142,7 @@ class WorkbenchAgentFactory:
                 run_id=run_id,
             )
         )
-        middlewares = []
+
         if run_id and log_sink:
             middlewares.append(
                 AgentRunLoggingMiddleware(

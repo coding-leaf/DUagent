@@ -87,3 +87,14 @@ test('renders tabs and handles tab click', () => {
   fireEvent.click(tab2);
   expect(setActiveArtifactIdMock).toHaveBeenCalledWith('art2');
 });
+
+test('filters hidden artifacts and shows empty state if all are hidden', () => {
+  useChat.mockReturnValue({
+    workspaceArtifacts: [
+      { id: '1', type: 'QuizCard', props: { question: 'What is React?' } },
+    ],
+    hiddenArtifactIds: ['1'],
+  });
+  render(<AgentWorkspace />);
+  expect(screen.getByText(/暂无生成产物/)).toBeDefined();
+});

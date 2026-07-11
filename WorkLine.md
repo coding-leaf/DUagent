@@ -2840,5 +2840,23 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+---
+
+### 2026-07-12 — 移除了 AI 对话用户输入框中的“附件/回形针”占位图标
+
+**涉及文件：**
+- `frontend/src/components/chat/ChatArea.jsx`
+
+**核心改动：**
+1. **移除了输入框内的 attach_file 图标**：在对话输入框（`<textarea>`）左侧彻底删除了包含 `attach_file` 的按钮容器代码。该图标按钮之前为静态占位用途，无任何绑定事件或后台逻辑，清除后能使对话底部的提问输入栏视觉效果更加简洁。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证（0 错误 0 警告）
+- 前端 build：通过 `npm run build` 成功打包
+- 前端测试：通过 `npm run test:unit` 回归测试（114 项测试 100% 全部通过）
+
+**接口漂移：**
+- 无。
+
 
 

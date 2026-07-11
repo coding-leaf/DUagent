@@ -182,12 +182,6 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
           </div>
           
           <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-2.5 flex items-end gap-2 focus-within:border-cyan-400 focus-within:ring-4 focus-within:ring-cyan-500/10 transition-all">
-            <div className="flex gap-1 text-slate-400 pb-1 pl-1">
-              <button className="p-1.5 hover:bg-slate-100 hover:text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center justify-center">
-                <Icon name="attach_file" className="material-symbols-outlined text-[18px]"/>
-              </button>
-            </div>
-            
             <textarea 
               className="flex-1 border-none focus:ring-0 px-2 py-2 text-[14px] text-slate-800 placeholder-slate-400 resize-none outline-none max-h-32 bg-transparent" 
               placeholder="在这里输入你的问题..." 

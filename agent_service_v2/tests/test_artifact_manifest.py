@@ -34,6 +34,7 @@ def test_publisher_emits_new_artifact_once_and_writes_manifest(tmp_path):
         "artifact": {
             "id": "artifact_001_functions",
             "type": "Markdown",
+            "title": "函数资料",
             "props": {"title": "函数资料", "content": "# 函数资料\n"},
         }
     }

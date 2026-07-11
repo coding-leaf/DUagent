@@ -201,6 +201,7 @@ def test_protocol_adapter_emits_artifact_after_artifact_tool_success():
         "artifact": {
             "id": "artifact_001_functions",
             "type": "Markdown",
+            "title": "函数资料",
             "props": {"title": "函数资料", "content": "# 函数资料\n"},
         }
     }

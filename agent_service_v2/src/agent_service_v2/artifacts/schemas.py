@@ -48,6 +48,7 @@ class PublishedArtifact:
             "artifact": {
                 "id": self.id,
                 "type": self.type,
+                "title": self.title,
                 "props": self.props,
             }
         }

@@ -82,7 +82,6 @@ export const formatResourceType = createStatusLabelFormatter({
 }, 'UNKNOWN');
 
 export const RESOURCE_TYPE_OPTIONS = [
-  { value: 'document', label: '文档' },
   { value: 'mindmap', label: '思维导图' },
   { value: 'reading', label: '阅读材料' },
   { value: 'code', label: '代码示例' }

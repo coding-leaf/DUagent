@@ -1873,3 +1873,223 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 内部微服务调用路径从 `/agent/v1/evaluation/generate` 迁移至 `/agent/v2/evaluation/generations`。Client API（公开接口）无漂移，完全向下兼容。
 
+
+---
+
+### 2026-07-11 — 完成学生端个性化错题练习与多模态资源生成 V2 迁移打通（彻底铲除 v1 Legacy 冗余接口）
+
+**涉及文件：**
+- `backend/app/api/v1/personalized_resources.py` (修改：重定向同步出题与异步资源生成目标路径至 V2)
+- `backend/app/api/v1/quiz.py` (修改：重定向学生练习题生成目标路径至 V2)
+- `backend/app/services/resource_service.py` (修改：重定向课程级异步课件生成目标路径至 V2)
+- `backend/app/services/quiz_service.py` (修改：重定向异步批改诊断目标路径至 V2)
+- `agent_service_v2/src/agent_service_v2/api/knowledge.py` (修改：扩展出题与资源生成 Schema 以无缝容纳个性化学情参数)
+- `agent_service_v2/src/agent_service_v2/api/evaluation.py` (修改：新增 V2 作答异步诊断评估接口 `/quiz/diagnose`，具备全自动降级保底)
+- `agent_service_v2/src/agent_service_v2/schemas/evaluation.py` (修改：新增 `QuizDiagnoseRequest` 实体契约)
+- `agent_service_v2/src/agent_service_v2/agents/evaluation.py` (修改：新增 `generate_quiz_diagnosis_with_llm` 大模型推理与高可用退回兜底机制)
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py` (修改：引入靶向弱点自适应出题逻辑与大模型 JSON 输出强健后处理/归一化)
+- `agent_service_v2/tests/test_knowledge_api.py` (修改：追加全面的个性化及标准习题/资源生产 API 单元测试)
+- `agent_service_v2/tests/test_evaluation_api.py` (修改：追加全面的 Quiz 作答诊断成功与降级保底双重用例测试)
+- `WorkLine.md`
+
+**核心改动：**
+1. **Pydantic v2 混合契约兼容与泛化（智能体端）**：
+   - 彻底打破了 V2 原本仅服务管理员端跑批的固定模式。通过将 `QuizGenerationRequest` 和 `ResourceGenerationRequest` 核心字段设为 `Optional` 并混入 `personalized`、`personalization_context`、`user_id` 等个性化学情字段，构造出兼容 Baseline (批量建库) 与 Student (自适应推荐) 的泛化 Schema，杜绝了 Pydantic 字段多余/缺失导致的 422 报错。
+2. **靶向弱点自适应个性化出题（智能体端）**：
+   - 在 `ResourceWorkerAgent.generate_asset` 中重磅引入了**个性化学情自适应提示词组件（Personalized LLM Prompting Container）**。
+   - 当 `personalized=True` 时，智能体会深度提取分析 `personalization_context` 内携带的学生**学情总结（Evaluation Summary）**、**引导级别（Guidance Level）**、**近期错题集（Wrong Points）** 与 **当前在学节点（Learning Path Node）**，靶向针对薄弱区域定制出题，并在 `explanation` 中进行温柔、鼓励式的循序渐进多步原理解析。
+3. **出题 JSON Schema 归一化后处理（The Iron-Clad Shield）**：
+   - 为彻底防御大模型因题型混杂输出 `"title"`、`"content"` 或 `"description"` 不一导致的后端 `QuizQuestion` 写入校验崩溃，在 Agent 解析处引入了**智能后处理归一化层**，全自动进行 `title <-> content` 双向补全、`description -> content` 映射，以及平滑检测转换列表型 options 为 C 语言标准题库结构，从而构建了完美的系统集成高容错性。
+4. **作答智能诊断与高可用高容错架构（The Diagnostic Engine）**：
+   - 在 `agents/evaluation.py` 中重构实现了基于 C 语言教学大纲与错题规律深度分析的诊断模型 `generate_quiz_diagnosis_with_llm`，智能归纳学生的**语法概念盲点（Conceptual Blindspots）**、**代码分析建议（Pedagogical Suggestions）**。
+   - 当 LLM 接口受限或服务熔断时，通过捕获异常和空模型校验，自动触发安全退回，生成结构高度对称、可无缝存入 `QuizSession.diagnosis_json` 且包含针对性复习大纲与工作台强化操作的温和降级 Baseline，保障系统 100% 运行可靠性。
+5. **后端 Legacy 旧接口全面清空（后端）**：
+   - 重定向了 `personalized_resources.py`、`quiz.py`、`quiz_service.py` 以及 `resource_service.py` 中的所有微服务端点。
+   - 原 `/agent/v1/assessment/generate-questions` 升级替换为 `/agent/v2/knowledge/quiz/generations`；
+   - 原 `/agent/v1/resources/generate` 升级替换为 `/agent/v2/knowledge/resources/generations`；
+   - 原 `/agent/v1/assessment/evaluate` 升级替换为 `/agent/v2/evaluation/quiz/diagnose`。
+   - 至此，整个系统在日常学生核心链路上残存的全部 `/agent/v1/...` 核心微服务旧接口被**彻底、干净、无死角地清理完成**。
+
+**验证结果：**
+- **智能体 V2 单元测试**：
+  - 运行 `PYTHONPATH=src ./.venv/bin/pytest tests/test_knowledge_api.py -v`（6 passed）
+  - 运行 `PYTHONPATH=src ./.venv/bin/pytest tests/test_evaluation_api.py -v`（4 passed，含诊断成功与退回测试）
+  - 运行 `cd agent_service_v2 && ./.venv/bin/pytest -q`，所有 **101 个测试 100% 全绿通过（101 passed）**。
+- **后端语法检查**：对所有 4 个后端修改文件调用 `python3 -m py_compile` 进行独立编译，全量 100% 成功通过。
+- **后端集成测试**：
+  - 运行 `pytest tests/test_agent_integration.py -k "Quiz"`（5 passed）。
+  - 运行 `pytest tests/test_agent_integration.py -k "Evaluation"`（3 passed）。
+
+**接口漂移：**
+- Backend 调 Agent Service 微服务端点迁移：
+  - 原 `/agent/v1/assessment/generate-questions` -> `/agent/v2/knowledge/quiz/generations`；
+  - 原 `/agent/v1/resources/generate` -> `/agent/v2/knowledge/resources/generations`；
+  - 原 `/agent/v1/assessment/evaluate` -> `/agent/v2/evaluation/quiz/diagnose`。
+- Client 对外部公开 API 契约纹丝不动，100% 向下兼容。
+
+
+
+
+---
+
+### 2026-07-11 — 修复知识库入库协程未 await 与 SiliconFlow 向量化维度参数/空值引发的 20015 Bug（打通全量教材 RAG 向量安全入库）
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/rag.py` (修改：① 补全 `kb.insert_document` 的 `await` 关键字；② 引入 32 长度安全分批容器，防御 SiliconFlow 20015 API 批大小硬限报错；③ 增加了空切片与仅含空白字符切片的清洗过滤器，防止无意义数据入库触发边界错误)
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py` (修改：在实例化 `OpenAIEmbeddingModel` 时显式配置 `pass_dimensions=False`，防御 SiliconFlow 不支持 OpenAI 专属 `dimensions` 参数而导致的 20015 API 报错)
+- `agent_service_v2/tests/test_rag_tools.py` (修改：对齐 Mock 实现为 `AsyncMock` 并保障分批断言正常)
+- `WorkLine.md` (修改：追加全面修复日志)
+
+**核心改动：**
+1. **RAG 库入库落盘修复（智能体端）**：
+   - 修复了 `agent_service_v2/src/agent_service_v2/tools/rag.py` 中 `kb.insert_document` (AgentScope 异步协程) 调用时缺失 `await` 的严重 Bug。此 Bug 导致入库任务虽在解析/切片层面成功返回 100% 进度和切片数，但实际并未真正发起异步 IO 写入 Qdrant。
+   - 补全 `await` 后，教材切片数据能够高精度、完整地在后台被实时向量化并持久化写入 Qdrant 向量数据库，消除了图谱生成与 RAG 检索的“冷启动”断层。
+2. **SiliconFlow 向量化维度参数错误修复（禁用 pass_dimensions）**：
+   - 定位并排查出 SiliconFlow 在向量化 `BAAI/bge-m3` 模型时，不支持 OpenAI 专有的 `dimensions` 自适应维度参数。AgentScope 2.x 默认在 `OpenAIEmbeddingModel` 中自动传递了 `"dimensions": 1024`，从而导致接口返回 400 Bad Request 错误码 `20015`。
+   - 在 `model_provider.py` 中，显式设置 `pass_dimensions=False`。经验证这完全在 AgentScope 框架的标准规范设计内（属于专为非 OpenAI 第三方供应商预留的优雅开关参数），从而完美并彻底解决了 20015 报错。
+3. **教材空白切片物理隔离清洗**：
+   - 针对 PDF 课本因封面、插页或白页分词产生的仅含空白/换行字符的无意义物理切片（如 `Chunk 0` 和 `Chunk 1`），在入库前通过 `.strip()` 进行高保真物理清洗过滤，既节省 Qdrant 存储与 API 请求 Token，也增强了整个 RAG 流程的稳健性。
+4. **SiliconFlow 向量化单批大小安全兜底控制（批处理大小 32）**：
+   - 解决了因调用真正生效后，一次性将全量（如 479 个）教材切片提交给 SiliconFlow 的 `/embeddings`（搭载 `BAAI/bge-m3`）接口，导致对方网关触发单批次限制并抛出 `Error code: 400 - {'code': 20015, 'message': 'The parameter is invalid. Please check again.'}` 的问题。
+   - 在 `rag.py` 中实现了 **High-Fidelity Batching Wrapper**。该包装器利用 `uuid.uuid4().hex` 生成唯一的文档单元 ID，以最多 **32** 个切片为安全批次（处于 SiliconFlow 绝对安全水位线以下）进行分批写入。既规避了第三方限流校验屏障，又百分之百保障了教材在向量库中逻辑单元的完整性。
+5. **测试契约与单元测试对齐**：
+   - 在 `tests/test_rag_tools.py` 中，将 Mock 对象的 `insert_document` 升级为 `AsyncMock`，完美消除因调用变更为异步带来的 `TypeError: object MagicMock can't be used in 'await' expression`，保障了单元测试环境的高保真度与执行可靠性。
+
+**验证结果：**
+- **智能体 V2 单元测试**：
+  - 运行 `PYTHONPATH=src ./.venv/bin/pytest tests/test_rag_tools.py -v`（2 passed）
+  - 运行 `cd agent_service_v2 && ./.venv/bin/pytest -q`，所有 **101 个测试 100% 全绿通过（101 passed）**。
+- **服务重载与可用性**：
+  - 重载并重启了 Port `8002` 的 `agent_service_v2` Uvicorn 服务，全面开启 `--reload` 监控，应用启动日志全部正常，入库与知识调用端点状态 100% 连通。
+
+**接口漂移：**
+- 无接口变动，完全内聚并修复了 V2 原生 RAG 向量分批存储。
+
+---
+
+### 2026-07-11 — 收口代码可提交性并标注 Agent v1/v2 双轨残留
+
+**涉及文件：**
+- `PROJECT.md`
+- `docs/20-agent-api/API_Agent内部接口规范.md`
+- `docs/superpowers/specs/2026-07-11-codebase-cleanup-submit-readiness-design.md`
+- `docs/superpowers/plans/2026-07-11-codebase-cleanup-submit-readiness.md`
+- `backend/app/services/agent_client.py`
+- `backend/app/api/v1/profile.py`
+- `backend/app/services/learning_path_refresh_service.py`
+- `agent_service_v2/src/agent_service_v2/agents/evaluation.py`
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/api/evaluation.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/schemas/evaluation.py`
+- `agent_service_v2/tests/test_evaluation_api.py`
+- `frontend/src/components/effects/KnowledgeProgressTable.jsx`
+- `frontend/src/components/effects/MasteryDistributionCard.jsx`
+
+**核心改动：**
+1. 将本轮整理目标固化为 submit readiness 设计与实施计划，明确第一轮只做可提交性、契约状态和验证收口，不继续扩功能。
+2. 清理 `git diff --check` 报告的尾随空格和 EOF 格式问题，未改业务逻辑。
+3. 梳理运行时代码中的 Agent v1 残留：`/agent/v1/profile/dialogue-update` 与 `/agent/v1/learning-path/generate` 当前在 `agent_service_v2` 无等价接口，暂保留 legacy 双轨并在调用点标注原因；`agent_client.py` 注释示例改为 v2 路径。
+4. 更新 `PROJECT.md` 与 Agent API 文档头部状态说明，将当前主线修正为 AgentScope v2 迁移中，v1 仅作为 legacy residual 保留。
+5. 检查未跟踪项后未删除任何本地上传资料、Judge0 下载目录、`.agent/`、`.superpowers/` 或用户工作目录。
+
+**验证结果：**
+- 格式检查：`git diff --check` 通过。
+- 后端 py_compile：`python3 -m py_compile backend/app/services/agent_client.py backend/app/api/v1/profile.py backend/app/services/learning_path_refresh_service.py` 通过。
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest -q` 通过，101 passed，1 个 Starlette/httpx deprecation warning。
+- 前端 lint / build：`cd frontend && npm run lint && npm run build` 通过；保留既有 chunk size warning。
+
+**接口漂移：**
+- 无新增运行时接口漂移。
+- 明确记录 legacy 双轨残留：`POST /agent/v1/profile/dialogue-update`、`POST /agent/v1/learning-path/generate`，原因是 v2 尚无等价接口。
+
+**遗留问题：**
+- 工作树仍包含大量此前功能变更和未跟踪文件，尚未分批 commit。
+- `docs/20-agent-api/API_Agent内部接口规范.md` 只补了顶部状态说明，后续仍需按 v2 路由逐章重写完整契约。
+
+---
+
+### 2026-07-11 — 清理前端高置信无用链接与重复服务封装
+
+**涉及文件：**
+- `frontend/src/services/catalogService.js`（删除）
+- `frontend/src/services/catalogService.test.js`（删除）
+- `frontend/src/api/services/learning.js`
+- `frontend/src/api/services/quiz.js`
+- `frontend/src/pages/Login.jsx`
+- `frontend/src/pages/Register.jsx`
+- `frontend/src/pages/Success.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. 交叉检查前端路由、`Link` / `navigate` 调用、`api/services` 调用点与后端路由后，确认 `frontend/src/services/catalogService.js` 是旧版重复 catalog service，运行时没有 import，仅自身测试覆盖，已删除。
+2. 删除 `learningService.refreshLearningPath()` 与 `quizService.getHistory()` 两个未被运行时代码调用的前端 service 方法；对应后端接口暂保留，不在本轮删除。
+3. 将登录、注册、成功页中的 `href="#"` 假链接替换为静态文本，避免无效跳转。
+
+**验证结果：**
+- 引用检查：`rg` 确认无 `services/catalogService`、`refreshLearningPath()`、`quizService.getHistory`、`href="#"` 残留。
+- 格式检查：`git diff --check` 通过。
+- 前端 lint / build：`cd frontend && npm run lint && npm run build` 通过；保留既有 chunk size warning。
+- 后端 py_compile / pytest：未运行（本轮未修改后端代码）。
+- Agent pytest：未运行（本轮未修改 Agent 代码）。
+
+**接口漂移：**
+- Client 对 Backend 的实际运行时 API 调用无漂移。
+- 仅删除未被调用的前端封装方法；后端 `POST /api/v1/learning-path/refresh` 与 `GET /api/v1/quiz/history` 仍保留。
+
+**遗留问题：**
+- 后端仍有若干前端未消费接口，例如 `POST /api/v1/quiz/generate`、`POST /api/v1/resources/generate`、`POST /api/v1/profile/initialize`、`POST /api/v1/profile/dialogue-update`。这些接口有测试或潜在外部调用，本轮不删除，建议另开一次契约废弃审计。
+
+---
+
+### 2026-07-11 — 迁移 KG catalog chunks 读取到 AgentScope v2 服务
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/rag.py`
+- `agent_service_v2/src/agent_service_v2/api/knowledge.py`
+- `agent_service_v2/tests/test_rag_tools.py`
+- `agent_service_v2/tests/test_knowledge_api.py`
+- `backend/app/services/kg_generation.py`
+- `backend/tests/test_generate_kg.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 将 catalog chunks 的 Qdrant 读取从 Backend 迁移到 `agent_service_v2`，按 AgentScope 2.0.3 的 payload 结构读取 `chunk.metadata.course_id` 与 `chunk.content.text`。
+2. `/agent/v2/knowledge/knowledge-graphs/generations` 支持 `source_type=catalog_chunks` + `catalog_id`，由 Agent Service 构建 KG context 后交给现有 Leader KG 生成流程。
+3. Backend `kg_generation.py` 删除直读 Qdrant 的上下文构建逻辑，`catalog_chunks` 分支改为通过专用长超时 AgentClient 调 Agent Service，Backend 只负责校验图谱 JSON 与写入 MySQL。
+
+**验证结果：**
+- 格式检查：`git diff --check` 通过。
+- 后端 py_compile / pytest：`python3 -m py_compile backend/app/services/kg_generation.py` 通过；`cd backend && PYTHONPATH=. python3 -m pytest tests/test_generate_kg.py -q` 通过，13 passed。
+- Agent pytest：`cd agent_service_v2 && ./.venv/bin/pytest -q` 通过，103 passed，1 个 Starlette/httpx deprecation warning；`./.venv/bin/python -m py_compile src/agent_service_v2/tools/rag.py src/agent_service_v2/api/knowledge.py` 通过。
+- 真实 Qdrant 只读验证：`build_catalog_kg_context("dbb2c56906ef4bb9", limit=2, max_chars=2000)` 可读取 context，长度 704。
+- 真实 Agent 内部端点验证：`POST /agent/v2/knowledge/knowledge-graphs/generations` with `source_type=catalog_chunks` 成功返回 23 nodes / 44 edges。
+- 真实 Backend KG 任务验证：新建任务 `492eb33dc43e491d` 完成，写入 active graph `aac6d2519d104079`，version 1，28 nodes / 32 edges。第一次真实任务 `a1538764a16747e4` 暴露 60s 超时问题，已通过 KG 专用 180s AgentClient 修复。
+
+**接口漂移：**
+- Client API 无漂移。
+- Agent API 内部契约扩展：`POST /agent/v2/knowledge/knowledge-graphs/generations` 现在支持 `source_type="catalog_chunks"` 与 `catalog_id`，用于替代 Backend 直连 Qdrant。
+
+---
+
+### 2026-07-11 — 移除管理员端 PPT 选项与打通回调鉴权及多模态 Payload 标准化
+
+**涉及文件：**
+- `frontend/src/components/admin/catalog/formatters.js`
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py`
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **移除管理员端 PPT 生成选项**：为避免在管理员批量生成资源时，由 HTML/C-Code 混合输出的 PPT (document) 类型导致的大模型 JSON 解析崩溃（JSONDecodeError），从 `RESOURCE_TYPE_OPTIONS` 中删除了“文档”配置项，仅保留稳定运行的思维导图、阅读材料和代码示例。
+2. **打通 Webhook 鉴权防线 (verify_webhook_secret)**：在 `agent_service_v2` 成功/失败的回调函数 `_dispatch_webhook_success` 和 `_dispatch_webhook_failure` 中引入 `AgentModelSettings` 变量，并为外发 HTTP Webhook 请求中添加 `X-Webhook-Secret` 头部信息，消除了后端接口校验返回的 `401 Unauthorized` 阻断。
+3. **多模态 Payload 标准化适配**：重构了 `_dispatch_webhook_success` 里的 payload 构建逻辑，添加了 `task_type` 字段，并将多模态字典格式 `results` 映射并补全为后端期望的 `result: {"resources": [...]}` 形式。字段标准化包含了对 `"document"`, `"mindmap"`, `"reading"` 内容的不同 Key 对齐到统一的 `content` 必填项中，打通了回调写入 MySQL 的数据壁垒。
+
+**验证结果：**
+- 前端 Lint/Build: `npm run lint && npm run build` 端到端打包全绿编译通过（通过）。
+- 智能体 v2 编译与单元测试：`python3 -m py_compile` 编译通过；`pytest tests/` 106 个测试用例 100% 全部通过（通过）。
+- 后端 webhook 校验集成测试：`python3 -m pytest tests/test_admin_catalog_resource_generation.py -v` 29 个用例全部通过（通过）。
+
+**接口漂移：**
+- 内部微服务回调 Payload 的 `results` 属性更改为规范的 `result.resources` 结构，并补全了 `task_type`；对外部 Client API 保持完全向下兼容，无任何客户端接口漂移。

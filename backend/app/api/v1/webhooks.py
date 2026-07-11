@@ -11,7 +11,7 @@ from app.schemas.webhook import AgentWebhookRequest
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 
-_RESOURCE_TYPES = {"document", "mindmap", "reading", "code", "video"}
+_RESOURCE_TYPES = {"lesson", "diagram", "example"}
 _RESOURCE_REQUIRED_FIELDS = {
     "title",
     "type",

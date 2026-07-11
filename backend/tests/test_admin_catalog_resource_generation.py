@@ -626,7 +626,7 @@ async def test_admin_catalog_generation_creates_task_and_sends_catalog_id_to_age
                 json={
                     "chapter": "树",
                     "knowledge_point": "二叉树",
-                    "resource_types": ["document", "mindmap"],
+                    "resource_types": ["lesson", "diagram"],
                 },
             )
 
@@ -640,7 +640,7 @@ async def test_admin_catalog_generation_creates_task_and_sends_catalog_id_to_age
     assert payload["course_id"] == catalog_id
     assert payload["chapter"] == "树"
     assert payload["knowledge_point"] == "二叉树"
-    assert payload["resource_types"] == ["document", "mindmap"]
+    assert payload["resource_types"] == ["lesson", "diagram"]
 
     async with async_session_factory() as db:
         task = await db.get(AsyncTask, data["task_id"])
@@ -688,7 +688,7 @@ async def test_admin_catalog_generation_without_metadata_creates_parent_and_chil
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
                 headers=_auth_headers("admin-admin-gen", "admin"),
-                json={"resource_types": ["document"]},
+                json={"resource_types": ["lesson"]},
             )
 
     assert response.status_code == 202, response.text
@@ -744,7 +744,7 @@ async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_ac
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
                 headers=_auth_headers("admin-admin-gen", "admin"),
-                json={"resource_types": ["document"]},
+                json={"resource_types": ["lesson"]},
             )
 
     assert response.status_code == 202, response.text
@@ -782,7 +782,7 @@ async def test_admin_catalog_generation_without_metadata_fails_parent_when_no_us
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
                 headers=_auth_headers("admin-admin-gen", "admin"),
-                json={"resource_types": ["document"]},
+                json={"resource_types": ["lesson"]},
             )
 
     assert response.status_code == 202, response.text
@@ -804,7 +804,7 @@ async def test_admin_catalog_generation_rejects_no_bound_classes_without_task():
         response = await client.post(
             f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
             headers=_auth_headers("admin-admin-gen", "admin"),
-            json={"resource_types": ["document"]},
+            json={"resource_types": ["lesson"]},
         )
 
     assert response.status_code == 409
@@ -844,7 +844,7 @@ async def test_admin_catalog_generation_rejects_invalid_resource_types_without_t
         response = await client.post(
             f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
             headers=_auth_headers("admin-admin-gen", "admin"),
-            json={"resource_types": ["document", "bad"]},
+            json={"resource_types": ["lesson", "bad"]},
         )
 
     assert response.status_code == 422
@@ -886,7 +886,7 @@ async def test_admin_catalog_generation_rejects_not_ready_catalogs(
         response = await client.post(
             f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
             headers=_auth_headers("admin-admin-gen", "admin"),
-            json={"resource_types": ["document"]},
+            json={"resource_types": ["lesson"]},
         )
 
     assert response.status_code == 409
@@ -903,7 +903,7 @@ async def test_non_admin_cannot_generate_catalog_resources():
         response = await client.post(
             f"/api/v1/admin/course-catalogs/{catalog_id}/resources/generations",
             headers=_auth_headers("teacher-admin-gen", "teacher"),
-            json={"resource_types": ["document"]},
+            json={"resource_types": ["lesson"]},
         )
 
     assert response.status_code == 403
@@ -951,7 +951,7 @@ async def test_webhook_writes_shared_catalog_resource_visible_to_all_bound_class
                     "resources": [
                         {
                             "title": "Catalog Doc",
-                            "type": "document",
+                            "type": "lesson",
                             "description": "doc",
                             "content": "doc content",
                             "chapter": "树",
@@ -1033,7 +1033,7 @@ async def test_webhook_kg_node_child_overrides_agent_metadata_and_updates_parent
                     "support_band": "good",
                     "body_top1_score": 0.67,
                 },
-                "resource_types": ["document"],
+                "resource_types": ["lesson"],
             },
         )
         db.add_all([parent, child])
@@ -1051,7 +1051,7 @@ async def test_webhook_kg_node_child_overrides_agent_metadata_and_updates_parent
                     "resources": [
                         {
                             "title": "Pointer Doc",
-                            "type": "document",
+                            "type": "lesson",
                             "description": "doc",
                             "content": "doc content",
                             "chapter": "课程整体",
@@ -1317,7 +1317,7 @@ async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
                 course_id=class_a,
                 catalog_id=catalog_id,
                 title="Doc A",
-                type="document",
+                type="lesson",
                 description="a",
                 tags=[],
                 chapter="树",
@@ -1329,7 +1329,7 @@ async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
                 course_id=class_b,
                 catalog_id=catalog_id,
                 title="Doc B",
-                type="document",
+                type="lesson",
                 description="b",
                 tags=[],
                 chapter="树",
@@ -1341,7 +1341,7 @@ async def test_admin_catalog_resource_list_aggregates_bound_class_resources():
                 course_id=class_a,
                 catalog_id=catalog_id,
                 title="Deleted",
-                type="document",
+                type="lesson",
                 description="d",
                 tags=[],
                 chapter="树",
@@ -1378,7 +1378,7 @@ async def test_admin_soft_deletes_resource_and_hides_from_reads():
                 id="resource-soft-delete",
                 course_id=class_id,
                 title="Delete Me",
-                type="document",
+                type="lesson",
                 description="d",
                 tags=[],
                 chapter="树",

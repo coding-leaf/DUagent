@@ -11,10 +11,9 @@ const QUESTION_TYPE_OPTIONS = [
 ];
 
 const RESOURCE_TYPE_OPTIONS = [
-  { value: 'document', label: '文档', icon: 'description' },
-  { value: 'mindmap', label: '思维导图', icon: 'account_tree' },
-  { value: 'reading', label: '阅读材料', icon: 'menu_book' },
-  { value: 'code', label: '代码示例', icon: 'code' },
+  { value: 'lesson', label: '标准讲义', icon: 'description' },
+  { value: 'diagram', label: '知识图解', icon: 'account_tree' },
+  { value: 'example', label: '代码示例', icon: 'code' },
 ];
 
 export default function GenerateModal({ courseId, onClose, onGenerated }) {

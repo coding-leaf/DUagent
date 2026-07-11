@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from agentscope.message import UserMsg
+
+from agent_service_v2.schemas.resources import (
+    PublicResourceAsset,
+    PublicResourceDraft,
+)
+from agent_service_v2.tools.rag import retrieve_course_context
+
+
+PUBLIC_RESOURCE_TYPES = {"lesson", "diagram", "example"}
+
+
+class PublicResourceGenerator:
+    def __init__(self, *, model: Any) -> None:
+        if model is None:
+            raise ValueError("model_required")
+        self._model = model
+
+    async def generate(
+        self,
+        resource_type: str,
+        *,
+        chapter: str,
+        knowledge_point: str,
+        course_id: str,
+    ) -> dict[str, Any]:
+        retrieval = await retrieve_course_context(
+            query=knowledge_point,
+            course_id=course_id,
+            limit=4,
+        )
+        context = str(retrieval.get("context_text") or "").strip()
+        prompt = build_public_resource_prompt(
+            resource_type,
+            chapter,
+            knowledge_point,
+            context,
+        )
+        response = await self._model(
+            [UserMsg(name="public_resource_generator", content=prompt)]
+        )
+        payload = json.loads(_strip_json_fence(_response_text(response)))
+        return normalize_public_asset(
+            resource_type,
+            payload,
+            chapter=chapter,
+            knowledge_point=knowledge_point,
+            sources=retrieval.get("sources") or [],
+        )
+
+
+def build_public_resource_prompt(
+    resource_type: str,
+    chapter: str,
+    knowledge_point: str,
+    course_context: str,
+) -> str:
+    if resource_type not in PUBLIC_RESOURCE_TYPES:
+        raise ValueError(f"unsupported_public_resource_type:{resource_type}")
+
+    instructions = {
+        "lesson": (
+            "生成标准课程讲义，使用 Markdown，包含概念、原理、易错点、"
+            "小结和课程范围内的示例。"
+        ),
+        "diagram": (
+            "选择 flowchart、sequence、mindmap、class 或 state 中最适合的一种 "
+            "Mermaid 图。content 只放 Mermaid 源码，并返回 diagram_kind。"
+        ),
+        "example": (
+            "生成讲解型代码示例 Markdown，包含目标、完整代码、运行结果、"
+            "逐段解释和常见错误；不要生成可判题练习。"
+        ),
+    }[resource_type]
+    return f"""你是课程公共资源生成器。
+
+章节：{chapter}
+知识点：{knowledge_point}
+
+课程原文：
+{course_context or '没有检索到可用课程原文；不要编造超出课程范围的事实。'}
+
+任务：{instructions}
+
+只输出 JSON：
+{{
+  "title": "中文标题",
+  "content": "完整内容",
+  "description": "一句话说明",
+  "tags": ["标签"],
+  "diagram_kind": null
+}}
+非 diagram 类型的 diagram_kind 必须为 null。不要输出 Markdown JSON 围栏。
+"""
+
+
+def normalize_public_asset(
+    resource_type: str,
+    payload: dict[str, Any],
+    *,
+    chapter: str,
+    knowledge_point: str,
+    sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if resource_type not in PUBLIC_RESOURCE_TYPES:
+        raise ValueError(f"unsupported_public_resource_type:{resource_type}")
+    draft = PublicResourceDraft.model_validate(payload)
+    asset = PublicResourceAsset(
+        title=draft.title,
+        type=resource_type,
+        format="mermaid" if resource_type == "diagram" else "markdown",
+        content=draft.content,
+        description=draft.description,
+        chapter=chapter,
+        knowledge_point=knowledge_point,
+        tags=draft.tags or [chapter, knowledge_point, resource_type],
+        sources=sources,
+        diagram_kind=draft.diagram_kind,
+    )
+    return asset.model_dump()
+
+
+def _response_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if isinstance(text, str):
+        return text.strip()
+    blocks = getattr(response, "content", [])
+    return "".join(
+        block.text
+        for block in blocks
+        if isinstance(getattr(block, "text", None), str)
+    ).strip()
+
+
+def _strip_json_fence(value: str) -> str:
+    stripped = value.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()

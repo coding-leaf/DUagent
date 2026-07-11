@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, AsyncIterator
-import httpx
 from agentscope.model import ChatResponse
 from agentscope.message import UserMsg
 
@@ -58,8 +57,8 @@ Input Course Context:
 Requirements:
 1. Identify all critical C language topics as "nodes". Each node must contain:
    - "id": Unique flat identifier, lowercase string (e.g. "c_pointers", "basic_syntax")
-   - "name": Concise human-readable name of the topic
-   - "chapter": Chapter heading it belongs to
+   - "name": Concise human-readable name of the topic, which MUST be in Simplified Chinese (简体中文) (e.g., "指针基础")
+   - "chapter": Chapter heading it belongs to, which MUST be in Simplified Chinese (简体中文) (e.g., "第一章：指针基础")
 2. Identify dependencies between these nodes as prerequisite "edges". Each edge must contain:
    - "from": ID of prerequisite node
    - "to": ID of target node
@@ -68,8 +67,8 @@ Requirements:
 Output MUST be a strict, raw JSON object without markdown wrappers, matching this format exactly:
 {{
   "nodes": [
-    {{"id": "intro", "name": "Introduction", "chapter": "Chapter 1"}},
-    {{"id": "vars", "name": "Variables", "chapter": "Chapter 1"}}
+    {{"id": "intro", "name": "C语言介绍", "chapter": "第一章：引言"}},
+    {{"id": "vars", "name": "变量与数据类型", "chapter": "第一章：引言"}}
   ],
   "edges": [
     {{"from": "intro", "to": "vars"}}
@@ -100,7 +99,7 @@ Output MUST be a strict, raw JSON object without markdown wrappers, matching thi
 
 
 class ResourceWorkerAgent:
-    """Worker Agent: Specialized in generating high-quality learning assets (PPT, Mindmaps, Coding Quizzes)."""
+    """Worker Agent: Specialized in generating high-quality learning assets (Mindmaps, Coding Quizzes)."""
 
     def __init__(self, settings: AgentModelSettings):
         self.settings = settings
@@ -112,12 +111,32 @@ class ResourceWorkerAgent:
         chapter: str,
         knowledge_point: str,
         *,
+        course_id: str | None = None,
         count: int = 3,
         question_types: list[str] | None = None,
         difficulty: str | None = None,
         personalized: bool = False,
         personalization_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # 🚀 1. 根据 course_id 与 knowledge_point 触发 RAG 检索
+        rag_context = ""
+        if course_id and knowledge_point:
+            try:
+                from agent_service_v2.tools.rag import retrieve_course_context
+                rag_res = await retrieve_course_context(
+                    query=knowledge_point,
+                    course_id=course_id,
+                    limit=4,
+                    settings=self.settings,
+                )
+                rag_context = rag_res.get("context_text", "")
+            except Exception as e:
+                logger.warning("RAG retrieval failed inside Worker Agent for node %s: %s", knowledge_point, e)
+
+        course_reference_section = ""
+        if rag_context:
+            course_reference_section = f"\n=== COURSE REFERENCE MATERIAL CHUNKS (RAG) ===\n{rag_context}\n"
+
         if resource_type == "quiz":
             q_types_str = ", ".join(question_types) if question_types else "single_choice, multi_choice, code"
             diff_str = difficulty or "medium"
@@ -156,6 +175,7 @@ Topic: {knowledge_point or "General"}
 Target Difficulty: {diff_str}
 Allowed Question Types: {q_types_str}
 {personalization_prompt}
+{course_reference_section}
 Ensure the questions are precise and cover critical syllabus concepts.
 
 Your output MUST be a strict JSON object with this structure:
@@ -164,44 +184,44 @@ Your output MUST be a strict JSON object with this structure:
      // Each question must match one of the allowed types (single_choice, multi_choice, code)
      // Example single_choice:
      {{
-       "title": "A single-choice question title or statement",
-       "content": "A single-choice question title or statement",
+       "title": "A single-choice question title or statement in Simplified Chinese (简体中文)",
+       "content": "A single-choice question title or statement in Simplified Chinese (简体中文)",
        "type": "single_choice",
        "options": [
-         {{"key": "A", "text": "Option A text"}},
-         {{"key": "B", "text": "Option B text"}},
-         {{"key": "C", "text": "Option C text"}},
-         {{"key": "D", "text": "Option D text"}}
+         {{"key": "A", "text": "Option A text in Simplified Chinese"}},
+         {{"key": "B", "text": "Option B text in Simplified Chinese"}},
+         {{"key": "C", "text": "Option C text in Simplified Chinese"}},
+         {{"key": "D", "text": "Option D text in Simplified Chinese"}}
        ],
        "answer": "A",
-       "explanation": "Why Option A is correct",
+       "explanation": "Why Option A is correct, written in Simplified Chinese",
        "chapter": "{chapter or ""}",
        "knowledge_point": "{knowledge_point or ""}",
        "difficulty": "{diff_str}"
      }},
      // Example multi_choice:
      {{
-       "title": "A multiple choice question statement",
-       "content": "A multiple choice question statement",
+       "title": "A multiple choice question statement in Simplified Chinese (简体中文)",
+       "content": "A multiple choice question statement in Simplified Chinese (简体中文)",
        "type": "multi_choice",
        "options": [
-         {{"key": "A", "text": "Option A text"}},
-         {{"key": "B", "text": "Option B text"}},
-         {{"key": "C", "text": "Option C text"}},
-         {{"key": "D", "text": "Option D text"}}
+         {{"key": "A", "text": "Option A text in Simplified Chinese"}},
+         {{"key": "B", "text": "Option B text in Simplified Chinese"}},
+         {{"key": "C", "text": "Option C text in Simplified Chinese"}},
+         {{"key": "D", "text": "Option D text in Simplified Chinese"}}
        ],
        "answer": ["A", "C"],
-       "explanation": "Why Option A & C are correct",
+       "explanation": "Why Option A & C are correct, written in Simplified Chinese",
        "chapter": "{chapter or ""}",
        "knowledge_point": "{knowledge_point or ""}",
        "difficulty": "{diff_str}"
      }},
      // Example code challenge:
      {{
-       "title": "Write a C function to...",
-       "content": "Write a C function to...",
+       "title": "Code challenge title in Simplified Chinese",
+       "content": "Code challenge description in Simplified Chinese",
        "type": "code",
-       "description": "Challenge description...",
+       "description": "Challenge description in Simplified Chinese",
        "initial_code": "int main() {{\\n  // Write code here\\n}}",
        "test_cases": [
          {{"input": "5", "expected_output": "25"}}
@@ -212,6 +232,10 @@ Your output MUST be a strict JSON object with this structure:
      }}
   ]
 }}
+
+Language Requirements:
+1. ALL descriptive textual fields (including: "title", "content", options' "text", "explanation", "description") MUST be generated in Simplified Chinese (简体中文).
+2. Keep only the C programming source codes and their compilable format. The comments inside code blocks should also be in Simplified Chinese.
 """
         elif resource_type == "document":
             prompt = f"""You are a C Programming Lecturer.
@@ -219,12 +243,16 @@ Please generate an HTML-based interactive presentation slide deck (rich tutorial
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
+{course_reference_section}
 Include code block examples and thorough explanations. 
 Output format MUST be a strict JSON:
 {{
-  "title": "Presentation Title",
+  "title": "Presentation Title in Simplified Chinese",
   "html_content": "<div class='slide'><h1>{knowledge_point or "General"}</h1><p>...</p></div>"
 }}
+
+Language Requirements:
+1. "title" and the inner HTML content in "html_content" (including slide headers, explanations, paragraph texts) MUST be fully generated in Simplified Chinese (简体中文).
 """
         elif resource_type == "mindmap":
             prompt = f"""You are a Knowledge-mapping assistant.
@@ -232,20 +260,29 @@ Generate a structured Mermaid.js mindmap source string for:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
+{course_reference_section}
 Output format MUST be a strict JSON:
 {{
-  "title": "Mindmap title",
+  "title": "Mindmap title in Simplified Chinese",
   "mermaid_code": "mindmap\\n  root(({knowledge_point or "General"}))\\n    Concept\\n      Subconcept"
 }}
+
+Language Requirements:
+1. "title" and all node texts / concepts inside "mermaid_code" MUST be fully generated in Simplified Chinese (简体中文) (e.g. root((指针基础)) -> Concept[指针概念] -> Subconcept[指针定义]).
 """
         else:
             # Fallback reading
             prompt = f"""Generate rich, deep reading notes for {knowledge_point or "General"} inside {chapter or "General"}.
+
+{course_reference_section}
 Output MUST be JSON:
 {{
-  "title": "Extra Reading",
+  "title": "Extra Reading in Simplified Chinese",
   "markdown_content": "### Introduction to {knowledge_point or "General"}\\n..."
 }}
+
+Language Requirements:
+1. "title" and the entire markdown tutorial "markdown_content" (including headers, explanations, text paragraphs) MUST be fully generated in Simplified Chinese (简体中文).
 """
         if not self.model:
             raise RuntimeError("LLM Model not configured in agent_service_v2")
@@ -294,165 +331,6 @@ Output MUST be JSON:
         return data
 
 
-class CriticAgent:
-    """Critic Agent: Audits C Code generation results and validates compilation dry-runs."""
-
-    def __init__(self, settings: AgentModelSettings):
-        self.settings = settings
-
-    async def audit_and_test(self, asset: dict[str, Any]) -> bool:
-        """Validates C solutions inside the workers generated quiz list."""
-        questions = asset.get("questions", [])
-        for q in questions:
-            if q.get("type") == "code":
-                desc = q.get("description", "")
-                test_cases = q.get("test_cases", [])
-                
-                # 🚫 High-Precision Quality Verification (Fail-fast rule)
-                if not desc or not test_cases:
-                    logger.warning("Critic validation rejected asset: Missing sandbox description or test_cases.")
-                    return False
-        return True
-
-
-# =====================================================================
-# Coordinated Flow Invokers
-# =====================================================================
-
 async def run_leader_team_kg_generation(settings: AgentModelSettings, context_text: str) -> dict[str, Any]:
     leader = CoursePlannerAgent(settings)
     return await leader.plan_curriculum(context_text)
-
-
-async def run_leader_team_resource_generation(
-    settings: AgentModelSettings,
-    task_id: str,
-    course_id: str,
-    chapter: str | None,
-    knowledge_point: str | None,
-    resource_types: list[str] | None,
-    webhook_url: str
-) -> dict[str, Any]:
-    """Leader orchestrates workers to construct and audit multimodality courseware assets."""
-    chapter = chapter or ""
-    knowledge_point = knowledge_point or "综合"
-    resource_types = resource_types or ["document"]
-
-    worker = ResourceWorkerAgent(settings)
-    critic = CriticAgent(settings)
-    
-    results = {}
-    for res_type in resource_types:
-        try:
-            asset = await worker.generate_asset(res_type, chapter, knowledge_point)
-            
-            # Iron critic validation gate
-            is_valid = await critic.audit_and_test(asset)
-            if not is_valid:
-                raise ValueError(f"Critic Agent rejected C compilation of {res_type} on {knowledge_point}")
-                
-            results[res_type] = asset
-        except Exception as exc:
-            logger.error("Worker node production failed on %s: %s", res_type, exc)
-            
-            # Webhook error reporting to parent backend
-            await _dispatch_webhook_failure(webhook_url, task_id, str(exc))
-            raise RuntimeError(f"Leader aborted generation on worker compilation error: {exc}")
-
-    # Success: Commit Webhook callback to Backend
-    await _dispatch_webhook_success(webhook_url, task_id, results, chapter, knowledge_point)
-    return results
-
-
-async def _dispatch_webhook_success(
-    url: str,
-    task_id: str,
-    results: dict[str, Any],
-    chapter: str,
-    knowledge_point: str,
-):
-    if not url:
-        return
-
-    resources = []
-    for res_type, asset in results.items():
-        if not isinstance(asset, dict):
-            continue
-
-        title = asset.get("title") or f"{chapter} - {knowledge_point} - {res_type}"
-        description = asset.get("description") or f"面向 {knowledge_point} 的{res_type}。"
-
-        content = ""
-        if res_type == "document":
-            content = asset.get("html_content") or asset.get("content") or ""
-        elif res_type == "mindmap":
-            content = asset.get("mermaid_code") or asset.get("content") or ""
-        elif res_type == "reading":
-            content = asset.get("markdown_content") or asset.get("content") or ""
-        else:
-            content = asset.get("content") or ""
-
-        tags = asset.get("tags") or [chapter, knowledge_point, res_type]
-        if not isinstance(tags, list):
-            tags = [str(tags)]
-
-        resources.append({
-            "title": str(title),
-            "type": str(res_type),
-            "description": str(description),
-            "content": str(content),
-            "chapter": str(chapter),
-            "knowledge_point": str(knowledge_point),
-            "tags": tags
-        })
-
-    payload = {
-        "task_id": task_id,
-        "task_type": "resource_generation",
-        "status": "completed",
-        "progress": 100,
-        "result": {"resources": resources}
-    }
-
-    headers = {}
-    try:
-        from agent_service_v2.agents.model_provider import AgentModelSettings
-        settings = AgentModelSettings()
-        if settings.WEBHOOK_SECRET:
-            headers["X-Webhook-Secret"] = settings.WEBHOOK_SECRET
-    except Exception as e:
-        logger.error("Failed to load settings for webhook secret: %s", e)
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(url, json=payload, headers=headers)
-    except Exception as e:
-        logger.error("Failed to commit success callback to backend webhook: %s", e)
-
-
-async def _dispatch_webhook_failure(url: str, task_id: str, error_msg: str):
-    if not url:
-        return
-    payload = {
-        "task_id": task_id,
-        "task_type": "resource_generation",
-        "status": "failed",
-        "progress": 100,
-        "error_code": "leader_team_melting",
-        "error_message": error_msg[:500]
-    }
-
-    headers = {}
-    try:
-        from agent_service_v2.agents.model_provider import AgentModelSettings
-        settings = AgentModelSettings()
-        if settings.WEBHOOK_SECRET:
-            headers["X-Webhook-Secret"] = settings.WEBHOOK_SECRET
-    except Exception as e:
-        logger.error("Failed to load settings for webhook secret: %s", e)
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(url, json=payload, headers=headers)
-    except Exception as e:
-        logger.error("Failed to commit failure callback to backend webhook: %s", e)

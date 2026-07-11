@@ -12,7 +12,7 @@ from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.kg_resource_targets import select_valid_resource_targets
 from app.services.resource_scope import resource_scope_clause
 
-RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
+RESOURCE_TYPES = {"lesson", "diagram", "example"}
 
 
 def now_utc() -> datetime:

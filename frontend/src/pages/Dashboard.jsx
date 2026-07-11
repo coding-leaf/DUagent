@@ -9,14 +9,15 @@ import Icon from '../components/Icon';
 
 const RESOURCE_TYPES = [
   { value: '全部', label: '全部' },
-  { value: 'document', label: '文档' },
-  { value: 'mindmap', label: '思维导图' },
-  { value: 'reading', label: '阅读资料' },
-  { value: 'code', label: '代码' },
-  { value: 'video', label: '视频' }
+  { value: 'lesson', label: '标准讲义' },
+  { value: 'diagram', label: '知识图解' },
+  { value: 'example', label: '代码示例' }
 ];
 
 const TYPE_MAP = {
+  lesson: { label: '标准讲义', icon: 'description', colorClass: 'text-blue-600 bg-blue-50 border-blue-100' },
+  diagram: { label: '知识图解', icon: 'schema', colorClass: 'text-purple-600 bg-purple-50 border-purple-100' },
+  example: { label: '代码示例', icon: 'code', colorClass: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
   document: { label: '文档', icon: 'description', colorClass: 'text-blue-600 bg-blue-50 border-blue-100' },
   mindmap: { label: '思维导图', icon: 'schema', colorClass: 'text-purple-600 bg-purple-50 border-purple-100' },
   reading: { label: '阅读资料', icon: 'menu_book', colorClass: 'text-amber-600 bg-amber-50 border-amber-100' },

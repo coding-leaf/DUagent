@@ -75,14 +75,17 @@ export const formatTaskStatus = createStatusLabelFormatter({
 }, '—');
 
 export const formatResourceType = createStatusLabelFormatter({
-  document: '文档',
-  mindmap: '思维导图',
-  reading: '阅读材料',
-  code: '代码示例'
+  lesson: '标准讲义',
+  diagram: '知识图解',
+  example: '代码示例',
+  document: '旧版文档',
+  mindmap: '旧版思维导图',
+  reading: '旧版阅读材料',
+  code: '旧版代码示例'
 }, 'UNKNOWN');
 
 export const RESOURCE_TYPE_OPTIONS = [
-  { value: 'mindmap', label: '思维导图' },
-  { value: 'reading', label: '阅读材料' },
-  { value: 'code', label: '代码示例' }
+  { value: 'lesson', label: '标准讲义' },
+  { value: 'diagram', label: '知识图解' },
+  { value: 'example', label: '代码示例' }
 ];

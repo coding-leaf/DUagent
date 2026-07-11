@@ -6,6 +6,9 @@ import Icon from '../components/Icon';
 import MarkdownViewer from '../components/common/MarkdownViewer';
 
 const TYPE_LABELS = {
+  lesson: '标准讲义',
+  diagram: '知识图解',
+  example: '代码示例',
   document: '文档',
   reading: '阅读材料',
   code: '代码示例',
@@ -98,9 +101,9 @@ export default function ResourceDetail() {
   const displayTags = (resource.tags || []).map(formatTag).filter(Boolean);
 
   let finalContent = getDisplayContent(resource) || '';
-  if (resource.type === 'mindmap' && !/^```/m.test(finalContent)) {
+  if (['diagram', 'mindmap'].includes(resource.type) && !/^```/m.test(finalContent)) {
     finalContent = `\`\`\`mermaid\n${finalContent}\n\`\`\``;
-  } else if (resource.type === 'code' && !finalContent.includes('```') && !/^#+\s/m.test(finalContent)) {
+  } else if (['example', 'code'].includes(resource.type) && !finalContent.includes('```') && !/^#+\s/m.test(finalContent)) {
     finalContent = `\`\`\`\n${finalContent}\n\`\`\``; 
   }
 

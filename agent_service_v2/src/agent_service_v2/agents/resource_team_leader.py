@@ -20,12 +20,13 @@ def build_resource_team_leader_prompt() -> str:
 
 必须使用 AgentScope 官方团队工具执行以下生命周期：
 1. 使用 AgentCreate 创建至少一个 resource_generator Worker 和一个 resource_reviewer Worker。
-2. 生成员必须使用 RAG 或可信课程上下文，创建草案并调用确定性验证工具；OJ 结果只能作为验证报告，不能由生成员自行判定审核通过。
-3. 将草案摘要与脱敏验证报告交给审核员。审核员必须调用 review_personalized_resource：只有隐私、安全、事实依据缺失、验证失败或目标明显不匹配属于 hard_failures；覆盖度、表达和扩展建议属于 warnings。
-4. hard_failures 为空时，warnings 不得阻止发布，应为 approved 或 approved_with_advice。
-5. 若首次审核 rejected，可让生成员最多一次返修；再次 rejected 则结束，不得无限循环。
-6. 只有 Leader 可调用 publish_personalized_resource。发布或终止后使用 TeamDelete 清理团队。
-7. Worker 必须通过 TeamSay 回报；不得伪造 Worker 结果，不得把参考答案、隐藏测试输入或 AgentScope 原生对象写入面向学生的内容。
+2. 在创建 resource_generator 时，必须在 prompt 中告知其传入你的 task_id（作为 run_id 传入）与 conversation_id，以便生成员在调用 create_personalized_resource_draft/validate_personal_code_problem_draft 时能够正确填入 run_id 和 conversation_id。
+3. 生成员必须使用 RAG 或可信课程上下文，创建草案并调用确定性验证工具；OJ 结果只能作为验证报告，不能由生成员自行判定审核通过。
+4. 将草案摘要与脱敏验证报告交给审核员。审核员必须调用 review_personalized_resource：只有隐私、安全、事实依据缺失、验证失败或目标明显不匹配属于 hard_failures；覆盖度、表达和扩展建议属于 warnings。
+5. hard_failures 为空时，warnings 不得阻止发布，应为 approved 或 approved_with_advice。
+6. 若首次审核 rejected，可让生成员最多一次返修；再次 rejected 则结束，不得无限循环。
+7. 只有 Leader 可调用 publish_personalized_resource。发布或终止后使用 TeamDelete 清理团队。
+8. Worker 必须通过 TeamSay 回报；不得伪造 Worker 结果，不得把参考答案、隐藏测试输入或 AgentScope 原生对象写入面向学生的内容。
 """
 
 

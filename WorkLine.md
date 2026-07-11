@@ -2554,3 +2554,26 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent pytest：同上。
 
 **接口漂移：** 无。
+
+
+---
+
+### 2026-07-12 — 彻底删除图表模式（Mermaid 渲染），重归标准语法高亮代码展示
+
+**涉及文件：**
+- `frontend/src/components/common/MarkdownViewer.jsx`
+
+**核心改动：**
+1. **完全移除 `MermaidDiagram` 和 `MermaidErrorBoundary`（删除渲染引擎层）**：
+   在通用 `MarkdownViewer.jsx` 中，清理了引入的 `mermaid` 工具包、以及所有渲染相关的 React 局部类组件与函数组件，从打包产物中减少无用依赖。
+2. **剔除 `match[1] === 'mermaid'` 特殊处理（恢复标准语法高亮展示）**：
+   从 Markdown 的自定义 `code` 标签渲染契约中，移除对 `mermaid` 语言的高危拦截逻辑。此后，所有在大模型生成的回答、课程讲义中出现的 ````mermaid` 代码块，将完全回归标准的 Markdown 高亮代码框（内置一键 Copy 复制功能、vscDarkPlus 经典暗色主题风格），以最纯粹、安全且稳定的语法形式向学生展示，完美避开了所有由于图形引擎解析产生的黑洞。
+3. **修复 ESLint 代码残留**：
+   移除了无用的 React imports（`React`, `useState`, `useEffect` 等）以及 `components` 钩子 `useMemo` 中已失效的 `loading` 依赖项，保持前端无任何 Lint 警告或报错。
+
+**验证结果：**
+- 前端 lint/build：运行 `npm run lint && npm run build` 100% 成功通过（0 错误，0 警告）。
+- 后端 py_compile / pytest：未修改。
+- Agent pytest：未修改。
+
+**接口漂移：** 无。

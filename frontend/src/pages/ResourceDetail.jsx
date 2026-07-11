@@ -185,16 +185,6 @@ export default function ResourceDetail() {
                 </div>
               )}
 
-              <footer className="mt-8 pt-8 flex justify-center items-center gap-6">
-                <button className="group flex items-center justify-center gap-2 w-32 h-12 rounded-full border border-slate-200 text-slate-600 hover:bg-cyan-50 hover:text-cyan-600 hover:border-cyan-200 transition-all font-bold text-sm">
-                  <Icon name="thumb_up" className="material-symbols-outlined text-[20px] transition-transform group-hover:-translate-y-1"/>
-                  <span>有用</span>
-                </button>
-                <button className="group flex items-center justify-center gap-2 w-32 h-12 rounded-full border border-slate-200 text-slate-600 hover:bg-cyan-50 hover:text-cyan-600 hover:border-cyan-200 transition-all font-bold text-sm">
-                  <Icon name="share" className="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-12"/>
-                  <span>分享</span>
-                </button>
-              </footer>
           </article>
 
         </div>

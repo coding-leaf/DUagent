@@ -91,8 +91,10 @@ async def test_create_validated_problem_rejects_duplicate_test_inputs_before_per
         ],
     )
 
-    with pytest.raises(CodeProblemValidationError, match="duplicate"):
+    with pytest.raises(CodeProblemValidationError, match="duplicate") as exc:
         await validate_code_problem_draft(draft, execute_case=None)
+
+    assert exc.value.reason == "duplicate_test_input"
 
 
 @pytest.mark.asyncio

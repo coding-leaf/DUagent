@@ -92,3 +92,42 @@ async def test_internal_recent_answers_caps_request_schema_limit():
     assert response.status_code == 200
     kwargs = mock_service.await_args.kwargs
     assert kwargs["limit"] == 10
+
+
+@pytest.mark.asyncio
+async def test_internal_code_problem_returns_stable_validation_reason():
+    from app.services.code_problem_service import CodeProblemValidationError
+
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        with patch(
+            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            new_callable=AsyncMock,
+        ) as mock_service:
+            mock_service.side_effect = CodeProblemValidationError(
+                "conversation_ownership_check_failed"
+            )
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/internal/ai-chat/code-problems",
+                    headers={"X-Internal-Agent-Token": "secret"},
+                    json={
+                        "user_id": "u1",
+                        "course_id": "offering-1",
+                        "conversation_id": "conv-1",
+                        "run_id": "run-1",
+                        "draft": {
+                            "title": "回显",
+                            "statement": "读取并输出输入。",
+                            "language": "python",
+                            "starter_code": "print(input())",
+                            "reference_solution": "print(input())",
+                            "test_inputs": [
+                                {"stdin": "1\n", "is_public": True},
+                                {"stdin": "2\n", "is_public": False},
+                            ],
+                        },
+                    },
+                )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["data"]["reason"] == "conversation_ownership_check_failed"

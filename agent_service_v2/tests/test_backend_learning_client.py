@@ -67,6 +67,33 @@ def test_backend_learning_client_classifies_http_errors(status_code, expected_re
     assert exc.value.status_code == status_code
 
 
+def test_backend_learning_client_preserves_safe_detail_reason():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "detail": {
+                    "code": 40001,
+                    "message": "代码题草案验证失败",
+                    "data": {"reason": "conversation_ownership_check_failed"},
+                }
+            },
+            request=request,
+        )
+
+    client = BackendLearningClient(
+        base_url="http://backend",
+        token="secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(BackendLearningClientError) as exc:
+        asyncio.run(client.post_json("/internal/ai-chat/code-problems", {}))
+
+    assert exc.value.reason == "backend_rejected"
+    assert exc.value.detail_reason == "conversation_ownership_check_failed"
+
+
 def test_build_backend_learning_client_from_settings_requires_base_url_and_token():
     missing = AgentModelSettings(
         BACKEND_INTERNAL_BASE_URL="",

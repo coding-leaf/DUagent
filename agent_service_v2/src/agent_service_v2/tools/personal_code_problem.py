@@ -72,7 +72,10 @@ def build_personal_code_problem_tools(
         try:
             data = await client.post_json("/internal/ai-chat/code-problems", payload)
         except BackendLearningClientError as exc:
-            return {"status": _failure_status(exc.reason), "reason": exc.reason}
+            return {
+                "status": _failure_status(exc.reason),
+                "reason": exc.detail_reason or exc.reason,
+            }
         result = {"status": "created", **data}
         if artifact_writer is not None and data.get("problem_id") and data.get("language"):
             artifact = artifact_writer(

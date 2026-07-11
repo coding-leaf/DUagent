@@ -119,10 +119,14 @@ async def create_personal_code_problem(
             draft=req.draft,
             execute_case=execute_code_in_oj,
         )
-    except CodeProblemValidationError:
+    except CodeProblemValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": 40001, "message": "代码题草案验证失败", "data": None},
+            detail={
+                "code": 40001,
+                "message": "代码题草案验证失败",
+                "data": {"reason": exc.reason},
+            },
         )
     try:
         await db.commit()

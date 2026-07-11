@@ -23,7 +23,11 @@ class FakeClient:
 
 class RejectingClient:
     async def post_json(self, _path, _payload):
-        raise BackendLearningClientError("backend_validation_error", status_code=422)
+        raise BackendLearningClientError(
+            "backend_rejected",
+            status_code=400,
+            detail_reason="conversation_ownership_check_failed",
+        )
 
 
 def _text(chunk) -> str:
@@ -143,5 +147,5 @@ def test_personal_code_problem_tool_reports_backend_validation_as_rejected():
 
     assert json.loads(_text(response)) == {
         "status": "rejected",
-        "reason": "backend_validation_error",
+        "reason": "conversation_ownership_check_failed",
     }

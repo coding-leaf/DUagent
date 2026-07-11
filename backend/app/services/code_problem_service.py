@@ -13,7 +13,9 @@ from app.schemas.code_problem import CodeProblemDraft
 
 
 class CodeProblemValidationError(ValueError):
-    pass
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -116,12 +118,12 @@ async def validate_code_problem_draft(
     hidden_count = 0
     for test_case in draft.test_inputs:
         if test_case.stdin in seen_inputs:
-            raise CodeProblemValidationError("duplicate test input")
+            raise CodeProblemValidationError("duplicate_test_input")
         seen_inputs.add(test_case.stdin)
         public_count += int(test_case.is_public)
         hidden_count += int(not test_case.is_public)
     if public_count == 0 or hidden_count == 0:
-        raise CodeProblemValidationError("at least one public and one hidden test input are required")
+        raise CodeProblemValidationError("public_and_hidden_test_inputs_required")
     if execute_case is None:
         return []
     outputs: list[str] = []
@@ -129,7 +131,7 @@ async def validate_code_problem_draft(
         result = await execute_case(draft.reference_solution, draft.language, test_case.stdin)
         execution = result.get("execution") or {}
         if result.get("status") != "success" or result.get("compile_status") != "OK":
-            raise CodeProblemValidationError("reference solution execution failed")
+            raise CodeProblemValidationError("reference_solution_execution_failed")
         outputs.append(normalize_code_problem_output(str(execution.get("stdout") or "")))
     return outputs
 
@@ -211,7 +213,7 @@ async def create_validated_personal_problem_from_ai_chat(
         )
     )
     if conversation_result.scalar_one_or_none() is None:
-        raise CodeProblemValidationError("conversation ownership check failed")
+        raise CodeProblemValidationError("conversation_ownership_check_failed")
     enrollment_result = await db.execute(
         select(CourseEnrollment.id).where(
             CourseEnrollment.student_id == owner_user_id,
@@ -220,7 +222,7 @@ async def create_validated_personal_problem_from_ai_chat(
         )
     )
     if enrollment_result.scalar_one_or_none() is None:
-        raise CodeProblemValidationError("course enrollment check failed")
+        raise CodeProblemValidationError("course_enrollment_check_failed")
     return await create_validated_personal_problem(
         db,
         owner_user_id=owner_user_id,

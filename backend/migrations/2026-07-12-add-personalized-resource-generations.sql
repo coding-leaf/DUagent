@@ -13,12 +13,14 @@ CREATE TABLE personalized_resource_generations (
     review_decision VARCHAR(30) NULL,
     review_report JSON NULL,
     published_resource_id VARCHAR(32) NULL,
+    published_code_problem_id VARCHAR(32) NULL,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT fk_prg_user FOREIGN KEY (user_id) REFERENCES users(id),
     CONSTRAINT fk_prg_course FOREIGN KEY (course_id) REFERENCES courses(id),
     CONSTRAINT fk_prg_resource FOREIGN KEY (published_resource_id) REFERENCES resources(id),
+    CONSTRAINT fk_prg_code_problem FOREIGN KEY (published_code_problem_id) REFERENCES code_problems(id),
     INDEX idx_prg_user_course (user_id, course_id, is_deleted),
     INDEX idx_prg_status (status, is_deleted)
 );

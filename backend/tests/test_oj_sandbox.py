@@ -37,7 +37,7 @@ async def test_internal_oj_evaluate_requires_token():
 async def test_internal_code_problem_creation_requires_token():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
-            "/internal/ai-chat/code-problems",
+            "/internal/ai-chat/code-problem-validations",
             json={
                 "user_id": "student-1",
                 "course_id": "course-1",
@@ -61,33 +61,26 @@ async def test_internal_code_problem_creation_requires_token():
 
 @pytest.mark.asyncio
 async def test_internal_code_problem_creation_returns_safe_metadata_only():
-    from app.models.code_problem import CodeProblem
-    from app.services.code_problem_service import CreatedCodeProblem
+    from types import SimpleNamespace
 
-    created = CreatedCodeProblem(
-        problem=CodeProblem(
-            id="problem-1",
-            course_id="course-1",
-            owner_user_id="student-1",
-            title="回显",
-            statement="读取并输出输入。",
-            language="python",
-            starter_code="print(input())",
-            reference_solution="print(input())  # private",
-            validation_report={},
-        ),
-        public_case_count=1,
-        hidden_case_count=1,
+    created = SimpleNamespace(
+        id="generation-1",
+        status="validated",
+        validation_report={
+            "status": "passed",
+            "public_case_count": 1,
+            "hidden_case_count": 1,
+        },
     )
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
             new_callable=AsyncMock,
         ) as create_problem:
             create_problem.return_value = created
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/code-problems",
+                    "/internal/ai-chat/code-problem-validations",
                     headers={"X-Internal-Agent-Token": "secret"},
                     json={
                         "user_id": "student-1",
@@ -110,7 +103,8 @@ async def test_internal_code_problem_creation_returns_safe_metadata_only():
 
     assert response.status_code == 200
     assert response.json()["data"] == {
-        "problem_id": "problem-1",
+        "generation_id": "generation-1",
+        "status": "validated",
         "language": "python",
         "public_case_count": 1,
         "hidden_case_count": 1,
@@ -121,33 +115,26 @@ async def test_internal_code_problem_creation_returns_safe_metadata_only():
 
 @pytest.mark.asyncio
 async def test_internal_code_problem_creation_normalizes_language_alias_before_service_call():
-    from app.models.code_problem import CodeProblem
-    from app.services.code_problem_service import CreatedCodeProblem
+    from types import SimpleNamespace
 
-    created = CreatedCodeProblem(
-        problem=CodeProblem(
-            id="problem-1",
-            course_id="course-1",
-            owner_user_id="student-1",
-            title="Echo",
-            statement="Read and write input.",
-            language="cpp",
-            starter_code="int main() { return 0; }",
-            reference_solution="int main() { return 0; }",
-            validation_report={},
-        ),
-        public_case_count=1,
-        hidden_case_count=1,
+    created = SimpleNamespace(
+        id="generation-1",
+        status="validated",
+        validation_report={
+            "status": "passed",
+            "public_case_count": 1,
+            "hidden_case_count": 1,
+        },
     )
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
             new_callable=AsyncMock,
         ) as create_problem:
             create_problem.return_value = created
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/code-problems",
+                    "/internal/ai-chat/code-problem-validations",
                     headers={"X-Internal-Agent-Token": "secret"},
                     json={
                         "user_id": "student-1",
@@ -210,13 +197,13 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
     try:
         with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
             with patch(
-                "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+                "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
                 new_callable=AsyncMock,
             ) as create_problem:
                 create_problem.return_value = created
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     response = await client.post(
-                        "/internal/ai-chat/code-problems",
+                        "/internal/ai-chat/code-problem-validations",
                         headers={"X-Internal-Agent-Token": "secret"},
                         json={
                             "user_id": "student-1",

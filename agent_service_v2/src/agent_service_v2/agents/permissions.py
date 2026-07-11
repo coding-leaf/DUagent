@@ -14,7 +14,7 @@ SAFE_WORKBENCH_TOOLS = [
     "write_artifact_file",
     "review_grounding",
     "run_code_in_oj",
-    "create_validated_personal_code_problem",
+    "validate_personal_code_problem_draft",
     "search_memory",
     "add_memory",
     "retrieve_course_context_tool",

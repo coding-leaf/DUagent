@@ -1,8 +1,6 @@
 import asyncio
 import json
 
-from agentscope.workspace import LocalWorkspace
-
 from agent_service_v2.tools.backend_learning_client import BackendLearningClientError
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 
@@ -14,7 +12,8 @@ class FakeClient:
     async def post_json(self, path, payload):
         self.calls.append((path, payload))
         return {
-            "problem_id": "problem-1",
+            "generation_id": "generation-1",
+            "status": "validated",
             "language": "python",
             "public_case_count": 1,
             "hidden_case_count": 1,
@@ -34,7 +33,7 @@ def _text(chunk) -> str:
     return chunk.content[0].text
 
 
-def test_personal_code_problem_tool_delegates_validation_and_storage_to_backend():
+def test_personal_code_problem_tool_delegates_validation_to_backend_without_publishing():
     client = FakeClient()
     tool = build_personal_code_problem_tools(
         client=client,
@@ -58,15 +57,15 @@ def test_personal_code_problem_tool_delegates_validation_and_storage_to_backend(
     data = json.loads(_text(response))
 
     assert data == {
-        "status": "created",
-        "problem_id": "problem-1",
+        "status": "validated",
+        "generation_id": "generation-1",
         "language": "python",
         "public_case_count": 1,
         "hidden_case_count": 1,
     }
     assert client.calls == [
         (
-            "/internal/ai-chat/code-problems",
+            "/internal/ai-chat/code-problem-validations",
             {
                 "user_id": "student-1",
                 "course_id": "course-1",
@@ -88,14 +87,13 @@ def test_personal_code_problem_tool_delegates_validation_and_storage_to_backend(
     ]
 
 
-def test_personal_code_problem_tool_writes_code_sandbox_artifact_after_creation(tmp_path):
+def test_personal_code_problem_validation_does_not_write_published_artifact(tmp_path):
     tool = build_personal_code_problem_tools(
         client=FakeClient(),
         user_id="student-1",
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
-        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
     )[0]
 
     response = asyncio.run(
@@ -111,17 +109,9 @@ def test_personal_code_problem_tool_writes_code_sandbox_artifact_after_creation(
     )
 
     data = json.loads(_text(response))
-    artifact_path = tmp_path / "runs" / "run-1" / "artifacts" / "problem-1_card.json"
-    assert data["status"] == "created"
-    assert data["artifact"]["filename"] == "problem-1_card.json"
-    assert json.loads(artifact_path.read_text(encoding="utf-8")) == {
-        "type": "CodeSandboxCard",
-        "title": "回显",
-        "props": {
-            "problem_id": "problem-1",
-            "language": "python",
-        },
-    }
+    assert data["status"] == "validated"
+    assert data["generation_id"] == "generation-1"
+    assert "artifact" not in data
 
 
 def test_personal_code_problem_tool_reports_backend_validation_as_rejected():

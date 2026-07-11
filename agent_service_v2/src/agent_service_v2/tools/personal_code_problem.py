@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
 from typing import Any
 
 from agentscope.tool import FunctionTool
@@ -11,7 +9,6 @@ from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClient,
     BackendLearningClientError,
 )
-from agent_service_v2.tools.artifact_files import build_write_artifact_file
 
 
 def _failure_status(reason: str) -> str:
@@ -31,13 +28,7 @@ def build_personal_code_problem_tools(
     run_id: str,
     workspace: LocalWorkspace | None = None,
 ) -> list[FunctionTool]:
-    artifact_writer = (
-        build_write_artifact_file(workspace=workspace, run_id=run_id)
-        if workspace is not None
-        else None
-    )
-
-    async def create_validated_personal_code_problem(
+    async def validate_personal_code_problem_draft(
         title: str,
         statement: str,
         language: str,
@@ -70,51 +61,27 @@ def build_personal_code_problem_tools(
             },
         }
         try:
-            data = await client.post_json("/internal/ai-chat/code-problems", payload)
+            data = await client.post_json(
+                "/internal/ai-chat/code-problem-validations", payload
+            )
         except BackendLearningClientError as exc:
             return {
                 "status": _failure_status(exc.reason),
                 "reason": exc.detail_reason or exc.reason,
             }
-        result = {"status": "created", **data}
-        if artifact_writer is not None and data.get("problem_id") and data.get("language"):
-            artifact = artifact_writer(
-                filename=_artifact_filename(str(data["problem_id"])),
-                content=json.dumps(
-                    {
-                        "type": "CodeSandboxCard",
-                        "title": title,
-                        "props": {
-                            "problem_id": data["problem_id"],
-                            "language": data["language"],
-                        },
-                    },
-                    ensure_ascii=False,
-                ),
-                artifact_type="CodeSandboxCard",
-                title=title,
-            )
-            result["artifact"] = {
-                "filename": artifact["filename"],
-                "status": artifact["status"],
-            }
-        return result
+        return {"status": "validated", **data}
 
     return [
         FunctionTool(
-            create_validated_personal_code_problem,
-            name="create_validated_personal_code_problem",
+            validate_personal_code_problem_draft,
+            name="validate_personal_code_problem_draft",
             description=(
-                "Validate and save one private fixed-test-case programming problem for the current student. "
+                "Validate one private fixed-test-case programming-problem draft for the current student. "
                 "Supported canonical languages are c, cpp, python, java, go, and javascript. "
                 "Provide at least one public input and one hidden input. "
-                "The reference solution and all inputs are validated by Backend and never returned."
+                "Backend OJ validates the reference solution and inputs, but this tool does not publish. "
+                "A reviewer must approve the returned generation_id before publication."
             ),
             is_read_only=False,
         )
     ]
-
-
-def _artifact_filename(problem_id: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", problem_id).strip("_") or "code_problem"
-    return f"{slug}_card.json"

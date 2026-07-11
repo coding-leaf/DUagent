@@ -17,7 +17,7 @@ from app.services.ai_chat_learning_context import (
 from app.services.oj_execution_service import execute_code_in_oj, OJExecutionError
 from app.services.code_problem_service import (
     CodeProblemValidationError,
-    create_validated_personal_problem_from_ai_chat,
+    validate_personal_problem_draft_from_ai_chat,
 )
 
 router = APIRouter(prefix="/internal/ai-chat", tags=["internal-ai-chat"])
@@ -103,14 +103,14 @@ async def evaluate_oj_code(
         }
 
 
-@router.post("/code-problems")
-async def create_personal_code_problem(
+@router.post("/code-problem-validations")
+async def validate_personal_code_problem(
     req: PersonalCodeProblemCreateRequest,
     _auth: None = Depends(verify_internal_agent_token),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        created = await create_validated_personal_problem_from_ai_chat(
+        generation = await validate_personal_problem_draft_from_ai_chat(
             db,
             owner_user_id=req.user_id,
             course_id=req.course_id,
@@ -140,9 +140,10 @@ async def create_personal_code_problem(
         "code": 200,
         "message": "success",
         "data": {
-            "problem_id": created.problem.id,
-            "language": created.problem.language,
-            "public_case_count": created.public_case_count,
-            "hidden_case_count": created.hidden_case_count,
+            "generation_id": generation.id,
+            "status": generation.status,
+            "language": req.draft.language,
+            "public_case_count": generation.validation_report["public_case_count"],
+            "hidden_case_count": generation.validation_report["hidden_case_count"],
         },
     }

@@ -127,9 +127,9 @@ async def test_validate_code_problem_runs_reference_solution_for_every_fixed_inp
 
 
 @pytest.mark.asyncio
-async def test_create_validated_problem_adds_problem_cases_and_personal_resource_link():
+async def test_validation_draft_does_not_publish_problem_or_personal_resource():
     from app.schemas.code_problem import CodeProblemDraft, CodeProblemTestInput
-    from app.services.code_problem_service import create_validated_personal_problem
+    from app.services.code_problem_service import validate_personal_problem_draft
 
     class FakeSession:
         def __init__(self):
@@ -157,7 +157,7 @@ async def test_create_validated_problem_adds_problem_cases_and_personal_resource
     )
 
     session = FakeSession()
-    created = await create_validated_personal_problem(
+    generation = await validate_personal_problem_draft(
         session,
         owner_user_id="student-1",
         course_id="course-1",
@@ -167,7 +167,32 @@ async def test_create_validated_problem_adds_problem_cases_and_personal_resource
         execute_case=execute_case,
     )
 
-    assert created.problem.owner_user_id == "student-1"
-    assert created.public_case_count == 1
-    assert created.hidden_case_count == 1
-    assert len(session.added) == 4
+    assert generation.status == "validated"
+    assert generation.validation_report["status"] == "passed"
+    assert generation.validation_report["public_case_count"] == 1
+    assert generation.validation_report["hidden_case_count"] == 1
+    assert len(session.added) == 1
+
+
+@pytest.mark.asyncio
+async def test_publish_code_problem_requires_independent_review_approval():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.code_problem_service import (
+        CodeProblemValidationError,
+        publish_reviewed_personal_problem,
+    )
+
+    db = MagicMock()
+    db.execute = AsyncMock()
+    generation = MagicMock(
+        status="validated",
+        review_decision=None,
+        validation_report={"status": "passed"},
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = generation
+    db.execute.return_value = result
+
+    with pytest.raises(CodeProblemValidationError, match="review_approval_required"):
+        await publish_reviewed_personal_problem(db, generation_id="generation-1")

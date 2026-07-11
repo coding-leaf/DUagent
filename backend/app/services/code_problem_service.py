@@ -9,6 +9,7 @@ from app.models.code_problem import CodeProblem, CodeProblemTestCase
 from app.models.conversation import Conversation
 from app.models.course import CourseEnrollment
 from app.models.others import UserPersonalizedResource
+from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 from app.schemas.code_problem import CodeProblemDraft
 
 
@@ -23,6 +24,168 @@ class CreatedCodeProblem:
     problem: CodeProblem
     public_case_count: int
     hidden_case_count: int
+
+
+async def validate_personal_problem_draft(
+    db: AsyncSession,
+    *,
+    owner_user_id: str,
+    course_id: str,
+    conversation_id: str,
+    run_id: str,
+    draft: CodeProblemDraft,
+    execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
+) -> PersonalizedResourceGeneration:
+    outputs = await validate_code_problem_draft(draft, execute_case=execute_case)
+    public_case_count = sum(case.is_public for case in draft.test_inputs)
+    generation = PersonalizedResourceGeneration(
+        user_id=owner_user_id,
+        course_id=course_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        source_type="ai_chat",
+        goal=draft.statement,
+        resource_type="validated_code_problem",
+        status="validated",
+        draft={
+            **draft.model_dump(),
+            "expected_outputs": outputs,
+        },
+        validation_report={
+            "status": "passed",
+            "validator": "oj_fixed_cases",
+            "public_case_count": public_case_count,
+            "hidden_case_count": len(draft.test_inputs) - public_case_count,
+        },
+    )
+    db.add(generation)
+    await db.flush()
+    return generation
+
+
+async def validate_personal_problem_draft_from_ai_chat(
+    db: AsyncSession,
+    *,
+    owner_user_id: str,
+    course_id: str,
+    conversation_id: str,
+    run_id: str,
+    draft: CodeProblemDraft,
+    execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
+) -> PersonalizedResourceGeneration:
+    await _verify_ai_chat_problem_scope(
+        db,
+        owner_user_id=owner_user_id,
+        course_id=course_id,
+        conversation_id=conversation_id,
+    )
+    return await validate_personal_problem_draft(
+        db,
+        owner_user_id=owner_user_id,
+        course_id=course_id,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        draft=draft,
+        execute_case=execute_case,
+    )
+
+
+async def _verify_ai_chat_problem_scope(
+    db: AsyncSession,
+    *,
+    owner_user_id: str,
+    course_id: str,
+    conversation_id: str,
+) -> None:
+    conversation_result = await db.execute(
+        select(Conversation.id).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == owner_user_id,
+            Conversation.course_id == course_id,
+            Conversation.is_deleted == False,
+        )
+    )
+    if conversation_result.scalar_one_or_none() is None:
+        raise CodeProblemValidationError("conversation_ownership_check_failed")
+    enrollment_result = await db.execute(
+        select(CourseEnrollment.id).where(
+            CourseEnrollment.student_id == owner_user_id,
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.is_deleted == False,
+        )
+    )
+    if enrollment_result.scalar_one_or_none() is None:
+        raise CodeProblemValidationError("course_enrollment_check_failed")
+
+
+async def publish_reviewed_personal_problem(
+    db: AsyncSession,
+    *,
+    generation_id: str,
+) -> CreatedCodeProblem:
+    result = await db.execute(
+        select(PersonalizedResourceGeneration)
+        .where(
+            PersonalizedResourceGeneration.id == generation_id,
+            PersonalizedResourceGeneration.is_deleted == False,
+        )
+        .with_for_update()
+    )
+    generation = result.scalar_one_or_none()
+    if generation is None:
+        raise CodeProblemValidationError("generation_not_found")
+    if generation.validation_report.get("status") != "passed":
+        raise CodeProblemValidationError("validation_required")
+    if generation.review_decision not in {"approved", "approved_with_advice"}:
+        raise CodeProblemValidationError("review_approval_required")
+    if generation.status not in {"approved", "approved_with_advice"}:
+        raise CodeProblemValidationError("invalid_generation_status")
+
+    draft = generation.draft
+    test_inputs = draft["test_inputs"]
+    outputs = draft["expected_outputs"]
+    problem = CodeProblem(
+        course_id=generation.course_id,
+        owner_user_id=generation.user_id,
+        origin="ai_chat",
+        conversation_id=generation.conversation_id,
+        run_id=generation.run_id,
+        title=draft["title"],
+        statement=draft["statement"],
+        language=draft["language"],
+        starter_code=draft["starter_code"],
+        reference_solution=draft["reference_solution"],
+        validation_report=generation.validation_report,
+        create_by=generation.user_id,
+    )
+    db.add(problem)
+    await db.flush()
+    for ordinal, (test_case, output) in enumerate(zip(test_inputs, outputs), start=1):
+        db.add(
+            CodeProblemTestCase(
+                problem_id=problem.id,
+                ordinal=ordinal,
+                stdin=test_case["stdin"],
+                expected_output=output,
+                is_public=test_case["is_public"],
+            )
+        )
+    db.add(
+        UserPersonalizedResource(
+            user_id=generation.user_id,
+            course_id=generation.course_id,
+            code_problem_id=problem.id,
+            source_type=generation.source_type,
+        )
+    )
+    generation.published_code_problem_id = problem.id
+    generation.status = "published"
+    await db.flush()
+    return CreatedCodeProblem(
+        problem=problem,
+        public_case_count=generation.validation_report["public_case_count"],
+        hidden_case_count=generation.validation_report["hidden_case_count"],
+    )
 
 
 def normalize_code_problem_output(value: str) -> str:
@@ -134,101 +297,3 @@ async def validate_code_problem_draft(
             raise CodeProblemValidationError("reference_solution_execution_failed")
         outputs.append(normalize_code_problem_output(str(execution.get("stdout") or "")))
     return outputs
-
-
-async def create_validated_personal_problem(
-    db: AsyncSession,
-    *,
-    owner_user_id: str,
-    course_id: str,
-    conversation_id: str,
-    run_id: str,
-    draft: CodeProblemDraft,
-    execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
-) -> CreatedCodeProblem:
-    outputs = await validate_code_problem_draft(draft, execute_case=execute_case)
-    public_case_count = sum(case.is_public for case in draft.test_inputs)
-    hidden_case_count = len(draft.test_inputs) - public_case_count
-    problem = CodeProblem(
-        course_id=course_id,
-        owner_user_id=owner_user_id,
-        origin="ai_chat",
-        conversation_id=conversation_id,
-        run_id=run_id,
-        title=draft.title,
-        statement=draft.statement,
-        language=draft.language,
-        starter_code=draft.starter_code,
-        reference_solution=draft.reference_solution,
-        validation_report={
-            "status": "validated",
-            "public_case_count": public_case_count,
-            "hidden_case_count": hidden_case_count,
-        },
-        create_by=owner_user_id,
-    )
-    db.add(problem)
-    await db.flush()
-    for ordinal, (test_case, output) in enumerate(zip(draft.test_inputs, outputs), start=1):
-        db.add(
-            CodeProblemTestCase(
-                problem_id=problem.id,
-                ordinal=ordinal,
-                stdin=test_case.stdin,
-                expected_output=output,
-                is_public=test_case.is_public,
-            )
-        )
-    db.add(
-        UserPersonalizedResource(
-            user_id=owner_user_id,
-            course_id=course_id,
-            code_problem_id=problem.id,
-            source_type="ai_chat",
-        )
-    )
-    return CreatedCodeProblem(
-        problem=problem,
-        public_case_count=public_case_count,
-        hidden_case_count=hidden_case_count,
-    )
-
-
-async def create_validated_personal_problem_from_ai_chat(
-    db: AsyncSession,
-    *,
-    owner_user_id: str,
-    course_id: str,
-    conversation_id: str,
-    run_id: str,
-    draft: CodeProblemDraft,
-    execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
-) -> CreatedCodeProblem:
-    conversation_result = await db.execute(
-        select(Conversation.id).where(
-            Conversation.id == conversation_id,
-            Conversation.user_id == owner_user_id,
-            Conversation.course_id == course_id,
-            Conversation.is_deleted == False,
-        )
-    )
-    if conversation_result.scalar_one_or_none() is None:
-        raise CodeProblemValidationError("conversation_ownership_check_failed")
-    enrollment_result = await db.execute(
-        select(CourseEnrollment.id).where(
-            CourseEnrollment.student_id == owner_user_id,
-            CourseEnrollment.course_id == course_id,
-            CourseEnrollment.is_deleted == False,
-        )
-    )
-    if enrollment_result.scalar_one_or_none() is None:
-        raise CodeProblemValidationError("course_enrollment_check_failed")
-    return await create_validated_personal_problem(
-        db,
-        owner_user_id=owner_user_id,
-        course_id=course_id,
-        conversation_id=conversation_id,
-        run_id=run_id,
-        draft=draft,
-        execute_case=execute_case,
-    )

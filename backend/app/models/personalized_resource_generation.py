@@ -34,6 +34,9 @@ class PersonalizedResourceGeneration(Base):
     published_resource_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("resources.id"), nullable=True
     )
+    published_code_problem_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("code_problems.id"), nullable=True
+    )
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     update_time: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

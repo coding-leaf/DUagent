@@ -2381,3 +2381,13 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 已确认当前数据库表存在且 17 个字段与模型一致。
 - 验证：`python3 -m pytest tests/test_personalized_resource_generation_service.py -v`（4 passed）；相关模型与 service 通过 `py_compile`。
 - 接口漂移：无。本批仅建立内部持久化与 service，尚未开放新 HTTP API。
+
+### 2026-07-12 — 解耦代码题 OJ 验证与审核发布
+
+- AI Chat 代码题工具改为 `validate_personal_code_problem_draft`，只提交草案给 Backend OJ 验证并返回 `generation_id`，不再直接创建代码题、学生资源关联或工作台卡片。
+- 新增代码题审核后发布 service；只有状态为 `approved` / `approved_with_advice` 且 OJ 报告通过的草案才能生成私有代码题和固定测试用例。
+- 保留会话归属和选课关系校验；参考答案、隐藏输入和期望输出仅保存在内部草案，不进入工具响应或聊天产物。
+- 内部接口从 `POST /internal/ai-chat/code-problems` 修订为 `POST /internal/ai-chat/code-problem-validations`，Agent tool、权限白名单、提示词和回归测试已同步。
+- 数据库新增 `published_code_problem_id` 外键列并验证成功。
+- 验证：Backend 34 passed；Agent Service 22 passed；相关 Python 文件通过 `py_compile`。
+- 接口漂移：有。仅 Agent Service 与 Backend 间内部接口变更，双方调用点已同步；公开学生 API 未变化。

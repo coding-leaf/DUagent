@@ -100,7 +100,7 @@ async def test_internal_code_problem_returns_stable_validation_reason():
 
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
             new_callable=AsyncMock,
         ) as mock_service:
             mock_service.side_effect = CodeProblemValidationError(
@@ -108,7 +108,7 @@ async def test_internal_code_problem_returns_stable_validation_reason():
             )
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/code-problems",
+                    "/internal/ai-chat/code-problem-validations",
                     headers={"X-Internal-Agent-Token": "secret"},
                     json={
                         "user_id": "u1",

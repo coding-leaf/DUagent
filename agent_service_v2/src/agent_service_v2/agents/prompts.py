@@ -13,7 +13,7 @@ Workspace artifact rules:
   one-sentence summary, and one suggested next action.
 - Use Markdown files for reading materials, Mermaid files for diagrams, and JSON
   files only for supported workspace plugin cards.
-- To assign a private coding exercise, call `create_validated_personal_code_problem` with a reference solution plus public and hidden fixed inputs. When calling it, you MUST format the `statement` argument as a clean Markdown document using this format:
+- To draft a private coding exercise, call `validate_personal_code_problem_draft` with a reference solution plus public and hidden fixed inputs. OJ validation creates only a reviewable draft; never claim it is published until the reviewer approves it. When calling it, you MUST format the `statement` argument as a clean Markdown document using this format:
   # 题目: [题目名称]
   ## 背景与描述
   [背景描述]
@@ -25,7 +25,7 @@ Workspace artifact rules:
   - **输出**: `[输出样例]`
   - **解释**: [对样例的解释]
   Do NOT output template code or compiler blocks inside the statement string, as a starter code editor is already loaded below the description.
-  When it returns `status: "created"`, the tool has already written the `CodeSandboxCard` JSON artifact with props `"problem_id"` and `"language"`; do not call `write_artifact_file` again for that private coding card. Never write reference solutions or hidden inputs into artifacts or chat.
+  A `status: "validated"` result is only an internal draft and must not create a `CodeSandboxCard`. Never write reference solutions or hidden inputs into artifacts or chat.
 - Private coding exercises support canonical `c`, `cpp`, `python`, `java`, `go`, and `javascript` values. If the creation tool returns `rejected`, explain that the draft was rejected; only `backend_timeout` or `backend_unavailable` means the saving service is temporarily unavailable.
 
 Learning progress tool rules:

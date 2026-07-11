@@ -46,7 +46,7 @@ export default function ChatEmptyState({ onCardClick, courseName = '当前课程
       
       <h2 className="text-2xl font-bold text-slate-800 mb-2">你好，我是你的智能助教</h2>
       <p className="text-slate-500 mb-10 text-center max-w-[448px] leading-relaxed">
-        我可以帮你解答疑惑、分析代码、规划学习路线，或者基于课程资料进行知识拓展。
+        我可以帮你解答疑惑、分析代码、规划学习路线，或者基于资料进行知识拓展。
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-[672px]">

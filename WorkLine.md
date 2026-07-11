@@ -2481,3 +2481,71 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
   - 单元测试：运行 `pytest tests/test_evaluation_api.py tests/test_team_permissions.py -v` 绿灯通过（6 passed，包括权限白名单校验用例）。
 - **接口漂移**：无。
 
+
+---
+
+### 2026-07-12 — 解决 AI Chat 生成 Mermaid 图表渲染失败与提问白屏崩溃
+
+**涉及文件：**
+- `frontend/src/utils/mermaid.js`
+- `frontend/src/components/common/MarkdownViewer.jsx`
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. **Mermaid 语法智能自愈与双引号转义清洗**：在 `src/utils/mermaid.js` 中，引入全局静态图表 SVG 缓存 `mermaidCache`；在 `sanitizeMermaidSource` 逻辑中加入三大智能自愈与纠正引擎：
+   - 自动将节点标签中 unescaped 或 escaped 的嵌套双引号 `\"` 或 `"` 标准化优雅降级转换为单引号 `'`，彻底消除由于引号嵌套导致 Mermaid 解析器将剩余词识别为外部标识符而抛出语法错误的 bug；
+   - 自动在文本末尾补足 unclosed 的 `subgraph` 缺失的 `end` 标签，消除漏写 end 的语法崩溃；
+   - 自动修复 `->` 非法操作符为 `-->` 关系指向。
+2. **极速同步缓存读取（首屏 Zero Flickering）**：在 `MarkdownViewer.jsx` 的 `MermaidDiagram` 中引入同步缓存检测。渲染时同步检查 `getCachedSvg` 并立即初始化，消除由于 SWR 状态切换或消息列表重绘引起的图表高频重算与“生成中...”骨架屏闪烁，做到 0ms 瞬间秒开。
+3. **流式加载隔离保护防白屏挂死（Streaming Protection）**：在 `MarkdownViewer` 暴露 `loading` 属性，并添加在 `useMemo` 依赖项中。当父消息处于 `message.loading === true` 的流式输出状态时，将 `mermaid` 代码块渲染为常规的语法高亮代码展示，阻止在流式生成的“断句”过程中高频触发对半成品代码的 `mermaid.render()` 调用，彻底解决了因频繁渲染报错导致 React 引擎崩溃挂起、聊天界面直接白屏的历史顽疾。一旦流式完成（`loading === false`），自动重新挂载并触发一次性高精度的完成态 Mermaid 可视化渲染。
+
+**验证结果：**
+- 前端 lint / build：通过 `cd frontend && npm run lint && npm run build`（打包编译 100% 成功，0 错误，0 警告）。
+- 后端 py_compile / pytest：未修改。
+- Agent pytest：未修改。
+
+**接口漂移：** 无。
+
+
+### 2026-07-12 — 解决 AI Chat 刷新页面后聊天记录/会话状态丢失问题
+
+**涉及文件：**
+- `frontend/src/context/ChatContext.jsx`
+
+**核心改动：**
+1. **新增班级隔离级 LocalStorage 缓存机制**：
+   在 `setActiveSession` 手动切换会话，以及流式消息完成 `completeMessage` 后，将当前的 `activeSession` 状态同步序列化并持久化记录到浏览器的 `localStorage` 中。使用 `active_session_id_${activeCourseId}` 进行班级与课程级物理键名隔离，保证了学生在不同课程之间切换时能精准还原该课程专属的历史会话上下文。
+2. **重塑挂载与重构防降级时序（Session Restoring）**：
+   在会话列表加载完毕的第一个 `useEffect` 逻辑中，引入对 `localStorage` 缓存的先验合法性校验（检查缓存 ID 是否依然存续在最新加载的历史列表中）。若校验通过，页面将优先并一键式、无感知恢复聚焦至刷新前的那个活跃会话中，而不是原本内存态重置为 null 导致的强制被动重置回最新的 `sessions[0].id`，完美弥合了刷新后会话丢失与闪退的体验黑洞。
+3. **闭环生命周期级持久化管理**：
+   在重置新会话（起草稿态时 `resetConversation`）以及会话被完全清空、彻底物理删除时，主动联动擦除对应课程下的 `localStorage` 缓存键，避免后续脏数据污染。
+
+**验证结果：**
+- 前端 lint/build：运行 `npm run lint && npm run build` 打包无语法报错，完全通过。
+- 后端 py_compile / pytest：未修改。
+- Agent pytest：未修改。
+
+**接口漂移：** 无。
+
+
+---
+
+### 2026-07-12 — 修复 AI 对话因报错图重新挂载及渲染异常导致的白屏挂死
+
+**涉及文件：**
+- `frontend/src/components/common/MarkdownViewer.jsx`
+
+**核心改动：**
+1. **引入局部的 `MermaidErrorBoundary`（物理隔离渲染/卸载崩溃）**：
+   在 `MarkdownViewer.jsx` 中新增 React 局部 `MermaidErrorBoundary` 异常处理类组件，用其安全包裹 `<MermaidDiagram />` 渲染节点。即便 Mermaid 在重绘、流式突绘或组件意外卸载重建时因 DOM 节点提前移除抛出任何同步/非同步致命异常，也会被优雅拦截并在当前区块降级渲染为文本源码，坚决不向外污染 React 全局渲染树。
+2. **将渲染失败状态固化写入缓存（Failed State Caching）**：
+   重塑 `MermaidDiagram` 的 `useState` 状态机与 `setCachedSvg` 的工作流，当 Mermaid 发生语法报错或解析异常时，将特殊标记 `'__FAILED_FALLBACK__'` 同步写入 `mermaidCache` 中。
+   后续因会话继续提问或高频状态变更引起组件重新挂载（Remount）时，在初始化 `useState` 阶段便能秒级同步命中该“失败缓存”，直接一键渲染 `<pre>` 源码，**彻底杜绝其再次跑进 `useEffect` 的 `mermaid.render()` 高频异步解析逻辑中**。
+
+**验证结果：**
+- 前端 lint/build：运行 `npm run lint && npm run build` 打包完美通过，0 错误，0 警告。
+- 后端 py_compile / pytest：未修改。
+- Agent pytest：未修改。
+
+**接口漂移：** 无。

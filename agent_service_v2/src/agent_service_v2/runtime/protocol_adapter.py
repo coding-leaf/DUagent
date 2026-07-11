@@ -75,7 +75,28 @@ class EDUProtocolAdapter:
                 events.append(self._build_event(EduEventType.PLAN_UPDATED, plan_payload))
             if self._is_successful_artifact_tool_result(event):
                 events.extend(self._build_artifact_events())
+
+            # RAG source refs conversion
+            source_refs_payload = self._build_source_refs_payload(event)
+            if source_refs_payload is not None:
+                events.append(self._build_event(EduEventType.SOURCE_REFS, source_refs_payload))
         return events
+
+    def _build_source_refs_payload(self, event: ToolResultEndEvent) -> dict[str, Any] | None:
+        state = getattr(event.state, "value", event.state)
+        if state == "error":
+            return None
+        tool_name = self._tool_names.get(event.tool_call_id)
+        if not tool_name or "retrieve_course_context" not in tool_name:
+            return None
+
+        result_text = self._tool_result_text.get(event.tool_call_id, "")
+        parsed = _parse_json_object(result_text)
+        citations = parsed.get("citations")
+        if not citations:
+            return None
+
+        return {"citations": citations}
 
     def _build_event(self, event_type: EduEventType, payload: dict[str, Any]) -> EduEvent:
         self._seq += 1
@@ -125,9 +146,16 @@ class EDUProtocolAdapter:
             parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
             if parsed:
                 if "status" in parsed:
-                    payload["status"] = parsed["status"]
+                    status_val = parsed["status"]
+                    payload["status"] = status_val if isinstance(status_val, str) else str(status_val)
                 if "reason" in parsed:
-                    payload["reason"] = parsed["reason"]
+                    reason_val = parsed["reason"]
+                    if isinstance(reason_val, str):
+                        payload["reason"] = reason_val
+                    elif isinstance(reason_val, (dict, list)):
+                        payload["reason"] = json.dumps(reason_val, ensure_ascii=False)
+                    else:
+                        payload["reason"] = str(reason_val)
                 summary = parsed.get("summary") if isinstance(parsed.get("summary"), dict) else {}
                 returned_count = summary.get("returned_count")
                 if returned_count is not None:

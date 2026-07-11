@@ -2229,3 +2229,22 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Git 提交：已在分支 `ai-dev/agentscope-v2` 上完成了本地提交。
 
 **接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复 RAG 检索 kb.search 缺失 await 导致的 coroutine 迭代错误
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/rag.py`
+- `agent_service_v2/tests/test_rag_tools.py`
+
+**核心改动：**
+1. **补全协程 await 异步等待**：在检索工具 `retrieve_course_context` 中，修复调用 AgentScope 原生的异步方法 `kb.search` 漏写 `await` 导致的运行时错误（将 coroutine 误当作列表进行迭代并抛出 `'coroutine' object is not iterable` 异常）。
+2. **高保真单元测试对齐**：在 `test_rag_tools.py` 中将 `mock_kb.search` 升级为 `AsyncMock(return_value=...)`，避免测试环境由于同步 Mock 产生虚假通过，对齐了异步运行的真实逻辑。
+
+**验证结果：**
+- 编译检查：`python3 -m py_compile` 编译通过。
+- 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest` 105 个用例 100% 顺利全绿通过（105 passed）。
+- Git 提交：已在分支 `ai-dev/agentscope-v2` 上完成了本地提交。
+
+**接口漂移：** 无。

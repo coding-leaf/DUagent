@@ -1699,5 +1699,177 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 后端测试：`cd agent_service_v2 && ./.venv/bin/pytest tests` 通过，88 passed。
 - 后端编译：通过 `py_compile`。
 
+---
+
+### 2026-07-11 — 基于 AgentScope 2.x 原生 RAG（PDF/Text Parser, ApproxTokenChunker, KnowledgeBase）的高精度课本入库与检索实现
+
+**涉及文件：**
+- `backend/app/services/catalog_ingestion_service.py`
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py`
+- `agent_service_v2/src/agent_service_v2/tools/rag.py`
+- `agent_service_v2/src/agent_service_v2/api/knowledge.py`
+- `agent_service_v2/src/agent_service_v2/main.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/tests/test_rag_tools.py`
+- `agent_service_v2/tests/test_knowledge_api.py`
+
+**核心改动：**
+1. **接口契约升级**：将 Backend 触发教材知识入库的 API 地址直接从老版本的 `/agent/v1/knowledge/ingestions` 升级替换为 `/agent/v2/knowledge/ingestions`，同步修改 Backend 和 Agent 侧对应的调用点和接口挂载。
+2. **模型提供商扩展**：在 `AgentModelSettings` 配置中添加了 Embedding 与 Reranker 的字段以及对应的 `QDRANT_` 环境变量支持，并实现了对应的实例化工厂函数。
+3. **高精度 Ingestion 链**：在 Agent Service 侧实现 `ingest_course_material` 逻辑，使用原生 `PDFParser`/`TextParser` 读取教材，并通过 `ApproxTokenChunker(chunk_size=512, overlap=50)` 进行语义感知的分片切分，最后封装为原生 `Chunk` 批量写入隔离过滤的 `KnowledgeBase` 中。在入库 API 中加入了严格的路径防跨目录遍历校验。
+4. **高质量检索与重排**：在 Agent 侧实现 `retrieve_course_context` 检索工具并挂载至 `WorkbenchAgent`，在检索时通过 `metadata_filter` 物理隔离不同课程数据，并利用 `Reranker` 重打分排序以提升相关性。
+5. **事件适配器透出**：修改 `protocol_adapter.py` 里的 `adapt_many` 对 `retrieve_course_context` 成功的工具返回进行拦截，提取其中的 `citations` 结构，派生并流式向前端分发 `source_refs` 事件。
+
+**验证结果：**
+- 单元测试：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_rag_tools.py tests/test_knowledge_api.py -v`（5 passed）。
+- 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest -q`（93 passed）。
+- 后端测试：`cd backend && ../.venv/bin/pytest tests/test_course_catalog_ingestion.py -v`（22 passed）。
+- 后端编译：`python3 -m py_compile backend/app/services/catalog_ingestion_service.py` 编译通过。
+
 **接口漂移：**
-- 无。
+- 教材知识入库接口变更：从原有的 `POST /agent/v1/knowledge/ingestions` 迁移至 `POST /agent/v2/knowledge/ingestions`。
+
+---
+
+### 2026-07-11 — 修复 Agent 侧 Ingestion 时 Chunker 与 Parser 协程未 await 的 TypeError
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/rag.py`
+- `agent_service_v2/tests/test_rag_tools.py`
+
+**核心改动：**
+1. 修复 `ingest_course_material` 中 `PDFParser.parse` 与 `ApproxTokenChunker.chunk` 协程未 awaited 的问题（`TypeError: 'coroutine' object is not iterable`）。
+2. 在 `test_rag_tools.py` 中将 Mock Parser/Chunker 从 `MagicMock` 升级为 `AsyncMock`，同步对其进行测试覆盖。
+
+**验证结果：**
+- pytest 测试通过，93 passed。
+
+---
+
+### 2026-07-11 — 修复 TextBlock Pydantic 校验引起的 Ingestion 校验错误
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/rag.py`
+- `agent_service_v2/tests/test_rag_tools.py`
+
+**核心改动：**
+1. 修复由于 `ApproxTokenChunker` 切片得到的 `raw_chunk.content` 本身即为 `TextBlock`，但我们又多此一举用 `TextBlock(text=raw_chunk.content)` 重新包装从而导致的 Pydantic 校验失败的问题。直接将 `raw_chunk.content` 传给 `Chunk` 的 `content`。
+2. 同步更新 `test_rag_tools.py` 中的 mock 数据，将 mock 的 `content` 传为真正的 `TextBlock` 实例。
+
+**验证结果：**
+- 单元测试：93 passed。
+- 三端人工联调：课本成功切分解析并完成入库，状态回写为 `ingested`。
+
+---
+
+### 2026-07-11 — 修复 Agent 侧 Embedding 模型导入错误并迁移为 OpenAIEmbeddingModel
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/model_provider.py`
+
+**核心改动：**
+1. 修复由于 AgentScope 2.x 中已弃用 `OpenAITextEmbedding` 模型类而导致的 `ImportError`，将其重构成符合 2.x 原生规范的 `OpenAIEmbeddingModel` 并使用 `OpenAICredential` 进行初始化。
+
+**验证结果：**
+- pytest 单元测试与全量测试全数通过，93 passed。
+
+---
+
+### 2026-07-11 — 修复 QdrantStore 构造函数不支持 collection_name 与 dimensions 报错
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/rag.py`
+
+**核心改动：**
+1. 修复由于 AgentScope 2.x 中 `QdrantStore` 的构造函数并不接受 `collection_name` 与 `dimensions` 参数而导致的意外参数报错。重构实例化代码直接使用 `url`, `path`, `api_key` 和 `client_kwargs`。
+2. 修改 `ensure_qdrant_collection_exists` 内部取 collection_name 逻辑为直接从 `settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION` 获取。
+
+**验证结果：**
+- 单元测试与全量测试 100% 通过，93 passed。
+
+---
+
+### 2026-07-11 — 引入 Mem0 长期学习记忆中间件与 PPT-Master 高保真可编辑 PPT 生成工具
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/src/agent_service_v2/tools/ppt_generator.py` (新增)
+- `agent_service_v2/tests/test_workbench_toolkit.py`
+
+**核心改动：**
+1. **Mem0 长期记忆接入**：在 `workbench_factory.py` 中引入 `Mem0Middleware`。我们配置其使用现有的 Qdrant 高性能服务（`http://127.0.0.1:6333`）并指定专属集合名 `"student_memories"`，完美避免了 Qdrant 本地临时锁文件冲突。同时在会话启动时，同步提取并注册其 `search_memory` 与 `add_memory` 工具到 Agent 的 ToolGroup 中。
+2. **PPT-Master 高保真幻灯片生成**：新增并实现了 `ppt_generator.py` 工具模块，封装了 `generate_learning_ppt` 这一高级 PPTX 编译与卡片绘制工具。它接收幻灯片结构并使用 DrawingML 原生组件生成专业配色（深蓝、蒂芙尼绿、现代 Slate）、圆角卡片、左右栏对照排版和带有代码高亮的主题代码区。
+3. **工作台 Artifact 流式分发与课件下载**：生成的课件会以 `.pptx` 文件落库至会话 `LocalWorkspace` 的根目录下，工具会自动生成对应的 `Markdown` 预览卡片发布给前端 Canvas。该卡片包含漂亮的文本幻灯片提纲和直接点击下载 native PPTX 文件的超链接。
+4. **安全权限白名单与单元测试**：在 `permissions.py` 中将 `search_memory`, `add_memory`, 和 `generate_learning_ppt` 增至 `SAFE_WORKBENCH_TOOLS` 安全清单。编写并补充了对应的单元测试，确保高代码质量。
+
+**验证结果：**
+- 编译检查：`python3 -m py_compile` 对所有涉及的 4 个 Python 源码文件进行了独立编译，100% 成功。
+- 单元测试与全量测试：全套 pytest 覆盖测试，所有 94 个用例全部顺利通过（94 passed）。
+
+**接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 实现管理员端 V2 强契约打通与 Leader-Team 多智能体一键批量资源生产
+
+**涉及文件：**
+- `frontend/src/components/quiz/QuestionRenderer.jsx` (修改：增加 'code' / 'coding' 题型分发)
+- `frontend/src/components/quiz/CodingQuestionCard.jsx` (新增：公共编程答题卡卡片组件)
+- `backend/app/services/kg_generation.py` (修改：移除裸调 LLM，升级对接 v2 接口)
+- `backend/app/services/catalog_resource_generation_service.py` (修改：对齐 `/agent/v2/knowledge/resources/generations` 契约)
+- `backend/app/services/catalog_quiz_generation_service.py` (修改：对齐 `/agent/v2/knowledge/quiz/generations` 契约)
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py` (新增：Leader-Team 协同与 GCC Critic 自检智能体)
+- `agent_service_v2/src/agent_service_v2/api/knowledge.py` (修改：注册 /knowledge-graphs/generations, /resources/generations, /quiz/generations 全新 V2 接口)
+- `docs/superpowers/specs/2026-07-11-admin-course-ingestion-path-generation-design.md` (新增：V2 重构架构与多智能体 Spec 规格书)
+
+**核心改动：**
+1. **公共题库 code 盲区攻克（前端）**：在公共练习 `Quiz.jsx` 中，对 `QuestionRenderer` 扩展了 `'code'` / `'coding'` / `'code_problem'` 题型适配。首创 `CodingQuestionCard` 交互答题组件，完美嵌套了已有的高精度 Monaco 代码编辑器与在线 OJ 测试沙箱（`<CodeSandboxCard>`），学生可以在公共关卡答题流里无缝写 C 代码、跑测试用例，一举消除了公共练习的编程死角。
+2. **ESLint 既有残留修复（前端）**：干净利落、无害地修复了 `CodeSandboxCard.jsx` 第 148 行与 `ChatContext.jsx` 第 124 行既有的 ESLint `set-state-in-effect` rule 报错，使前端 lint & build 达到 100% 绝对清爽，扫平了后续持续构建的障碍。
+3. **拔除 backend 裸连大模型毒瘤（后端）**：重构了 `kg_generation.py`，彻底移除了 backend 内手写的 `httpx` 直连 LLM 产生的旧代码，改为用统一的 `agent_client` 对接 `agent_service_v2` 的新 API 契约，完美贯彻了跨模块安全防线。
+4. **后端 Service 升级 V2 契约（后端）**：将 `catalog_resource_generation_service.py` 与 `catalog_quiz_generation_service.py` 内部残存的、调用已废弃的旧 v1 服务接口（`/agent/v1/...`），全量升级对接为了 `agent_service_v2` 精准提供的 `/resources/generations` 和 `/quiz/generations` 路由。
+5. **Leader-Team 多智能体一键跑批（智能体端）**：在 `agent_service_v2` 侧，利用 AgentScope 2.x 模型池优雅构建了 `CoursePlannerAgent` (Leader 课程规划智能体)、`ResourceWorkerAgent` (各多模态子类型生产 Workers) 以及具有 C 代码 dry-run 试编译自检能力的 `CriticAgent` 铁腕熔断安全审查网。新注册并打通了 3 个极具契约精神的 `/agent/v2/knowledge/...` 管理类接口，并支持异常时的整套异步跑批 Fail-fast 抛错回调。
+
+**验证结果：**
+- 前端 lint & build：`npm run lint && npm run build` 端到端全绿编译通过（通过）。
+- 后端 Python 语法检查：`python3 -m py_compile` 对所有 5 个修改的后端与智能体文件进行独立编译，100% 语法无误通过（通过）。
+
+**接口漂移：**
+- Backend 到 Agent Service 内部调用：原 `/agent/v1/resources/generate` 变更为 `/agent/v2/knowledge/resources/generations`；原 `/agent/v1/assessment/generate-questions` 变更为 `/agent/v2/knowledge/quiz/generations`；新增 `/agent/v2/knowledge/knowledge-graphs/generations`。
+- 以上接口均为内部微服务对接，Client 对 Backend 接口保持完全向下兼容，不造成任何前端接口漂移。
+
+---
+
+### 2026-07-11 — 完成学情评估报告接口 V2 迁移及 AgentScope 2.x 双轨混合运行
+
+**涉及文件：**
+- `backend/app/services/evaluation_service.py`
+- `agent_service_v2/src/agent_service_v2/schemas/evaluation.py` (新增)
+- `agent_service_v2/src/agent_service_v2/agents/evaluation.py` (新增)
+- `agent_service_v2/src/agent_service_v2/api/evaluation.py` (新增)
+- `agent_service_v2/src/agent_service_v2/main.py`
+- `agent_service_v2/tests/test_evaluation_api.py` (新增)
+- `WorkLine.md`
+
+**核心改动：**
+1. **接口契约 V2 升级**：将后端触发学情报告刷新的后台任务接口从原有的 `POST /agent/v1/evaluation/generate` 变更为 V2 版本的 **`POST /agent/v2/evaluation/generations`**。
+2. **Pydantic v2 契约补齐**：在 `agent_service_v2` 侧，使用标准的 Pydantic v2 补齐了 `ChapterProgressItem`、`QuizResultItem`、`ResourceUsage`、`EvaluationGenerateRequest` 与 `EvaluationData` 契约，保证跨模块调用时数据的高精度与健壮校验。
+3. **AgentScope 2.x 双轨运行与事实拦截（The Double-Guard Rail）**：
+   - 规则层（Rule Baseline）：利用传入的学情及练习等各项行为统计指标直接运行物理规则，高精确度生成进度、掌握度及资源使用等 3 大核心 Baseline 事实评估表格，完全防御 LLM 的数据篡改与数字幻觉。
+   - 智能体文字总结增强（LLM Enrichment）：使用 AgentScope 2.x 原生 `OpenAIChatModel` 作为 Callable 进行一键调用，输出深度增强的学习范围、当前掌握、学习行为及下一步行动建议。
+   - 安全保底与降级（Exception-proof）：智能体侧暴露的 `/generations` 接口内置严密的超时及报错 Try-Except 屏障，若 LLM 发生任何异常，将瞬间无缝、平滑地自动退回纯统计事实规则版，确保前端业务完全不被阻断，100% 高可用。
+4. **自动化集成与回归测试**：
+   - 在 `agent_service_v2` 中实现了专用的 `test_evaluation_api.py`。其覆盖了① 规则 Baseline 退回逻辑；② 大模型 Enrichment 增强逻辑。测试 100% 全绿通过。
+
+**验证结果：**
+- 智能体 V2 单元测试：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_evaluation_api.py -v` (2 passed)
+- 智能体 V2 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest -q` (96 passed)
+- 后端语法检查：`python3 -m py_compile backend/app/services/evaluation_service.py` 成功编译通过。
+- 后端评估服务单元测试：`cd backend && ../.venv/bin/pytest tests/test_evaluation_service_refactored.py tests/test_evaluation_routes_refactored.py -v` (9 passed)
+- 后端评估集成测试：`cd backend && ../.venv/bin/pytest tests/test_agent_integration.py -k "Evaluation" -v` (3 passed)
+
+**接口漂移：**
+- 内部微服务调用路径从 `/agent/v1/evaluation/generate` 迁移至 `/agent/v2/evaluation/generations`。Client API（公开接口）无漂移，完全向下兼容。
+

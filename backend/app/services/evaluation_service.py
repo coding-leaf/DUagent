@@ -289,7 +289,7 @@ async def run_evaluation_refresh_background(
     """后台异步执行 Agent /evaluation/generate 并写入 Evaluation。"""
     async with async_session_factory() as db:
         try:
-            data = await agent_client.post_json("/agent/v1/evaluation/generate", payload)
+            data = await agent_client.post_json("/agent/v2/evaluation/generations", payload)
 
             async with evaluation_lock(db, user_id, course_id):
                 now = datetime.now(timezone.utc)

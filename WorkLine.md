@@ -2400,3 +2400,14 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 带自然语言目标的请求转发至 `/agent/v2/personalized-resources/generations`；旧固定资源请求仍走原知识资源接口。
 - 验证：Backend 个性化资源、内部协议、代码题及 OJ 相关测试共 38 passed；相关文件通过 `py_compile`。
 - 接口漂移：新增内部个性化资源协议与学生请求可选字段；旧请求字段和默认行为兼容。
+
+### 2026-07-12 — 接入 AgentScope 2.0.3 官方个性化资源团队
+
+- 使用本地 AgentScope 2.0.3 的 `create_app(..., custom_subagent_templates=...)` 建立官方 App，并挂载到 Agent Service v2 内部路径；保留既有 Workbench 路由并行运行。
+- 注册 `resource_generator` 与 `resource_reviewer` 两个 `SubAgentTemplate`，关闭 Leader 权限规则和工作目录继承，使用独立角色白名单。
+- Generator 只允许 RAG、草案、确定性验证与 TeamSay；Reviewer 只允许宽松审核与 TeamSay；发布工具不在两个 Worker 白名单中，仅由 Leader 协调使用。
+- Leader 通过官方 credential、agent、session、chat API 创建运行，提示词强制 AgentCreate、TeamSay、TeamDelete、独立审核与最多一次返修。
+- 新增 `/agent/v2/personalized-resources/generations` 产品入口，仅返回运行坐标，不序列化 AgentScope 原生事件。
+- 启动独立 `eduagent-agentscope-redis` 容器作为官方 RedisStorage，绑定 `127.0.0.1:6379`，未修改 `.env`，未复用 Judge0 Redis。
+- 验证：Agent Team App、模板、权限、工具和官方运行适配共 10 passed；Redis `PING` 返回 `PONG`。
+- 接口漂移：新增 Agent Service v2 个性化资源生成入口和内部 Team runtime mount；Frontend 仍不得直连 runtime。

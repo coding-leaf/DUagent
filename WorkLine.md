@@ -1618,3 +1618,28 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 扩展：`GET /api/v1/personalized-resources` 的每项新增可空 `code_problem` 安全摘要字段；已同步更新 Client OpenAPI 与前端接口规范。
 - Agent API：无变化。
+
+---
+
+### 2026-07-11 — 修复 AIChat 私有代码题创建后画布无编码卡片
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/personal_code_problem.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/tests/test_personal_code_problem_tools.py`
+
+**核心改动：**
+1. `create_validated_personal_code_problem` 在 Backend 成功返回 `problem_id` 和 `language` 后，直接写入当前 run workspace 的 `CodeSandboxCard` JSON artifact，避免依赖模型再手动调用 `write_artifact_file`。
+2. Workbench factory 将 `LocalWorkspace` 注入私有代码题工具，保持 Agent Service 只写隔离 workspace，不触碰 MySQL；私有题落库仍由 Backend 内部接口负责。
+3. 系统提示词更新为私有代码题创建工具会自动生成编码卡片，禁止模型为同一私有题重复调用 `write_artifact_file`。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_personal_code_problem_tools.py -q` 曾失败于 `build_personal_code_problem_tools() got an unexpected keyword argument 'workspace'`。
+- GREEN：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_personal_code_problem_tools.py -q` 通过，3 passed。
+- Agent focused：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_personal_code_problem_tools.py tests/test_artifact_file_tool.py tests/test_artifact_scanner.py tests/test_workbench_factory.py tests/test_protocol_adapter.py -q` 通过，40 passed。
+- Agent py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/tools/personal_code_problem.py src/agent_service_v2/agents/workbench_factory.py src/agent_service_v2/agents/prompts.py` 通过。
+- Agent full：`cd agent_service_v2 && ./.venv/bin/pytest -q` 通过，88 passed, 1 warning。
+
+**接口漂移：**
+- 无。未新增 HTTP 路径、SSE 事件类型或前端消费字段；仍复用既有 `artifact_created` 与 `CodeSandboxCard.props.{problem_id,language}`。

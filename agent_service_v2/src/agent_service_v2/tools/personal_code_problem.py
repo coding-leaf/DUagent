@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 from agentscope.tool import FunctionTool
+from agentscope.workspace import LocalWorkspace
 
 from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClient,
     BackendLearningClientError,
 )
+from agent_service_v2.tools.artifact_files import build_write_artifact_file
 
 
 def _failure_status(reason: str) -> str:
@@ -25,7 +29,14 @@ def build_personal_code_problem_tools(
     course_id: str | None,
     conversation_id: str | None,
     run_id: str,
+    workspace: LocalWorkspace | None = None,
 ) -> list[FunctionTool]:
+    artifact_writer = (
+        build_write_artifact_file(workspace=workspace, run_id=run_id)
+        if workspace is not None
+        else None
+    )
+
     async def create_validated_personal_code_problem(
         title: str,
         statement: str,
@@ -62,7 +73,29 @@ def build_personal_code_problem_tools(
             data = await client.post_json("/internal/ai-chat/code-problems", payload)
         except BackendLearningClientError as exc:
             return {"status": _failure_status(exc.reason), "reason": exc.reason}
-        return {"status": "created", **data}
+        result = {"status": "created", **data}
+        if artifact_writer is not None and data.get("problem_id") and data.get("language"):
+            artifact = artifact_writer(
+                filename=_artifact_filename(str(data["problem_id"])),
+                content=json.dumps(
+                    {
+                        "type": "CodeSandboxCard",
+                        "title": title,
+                        "props": {
+                            "problem_id": data["problem_id"],
+                            "language": data["language"],
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                artifact_type="CodeSandboxCard",
+                title=title,
+            )
+            result["artifact"] = {
+                "filename": artifact["filename"],
+                "status": artifact["status"],
+            }
+        return result
 
     return [
         FunctionTool(
@@ -77,3 +110,8 @@ def build_personal_code_problem_tools(
             is_read_only=False,
         )
     ]
+
+
+def _artifact_filename(problem_id: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", problem_id).strip("_") or "code_problem"
+    return f"{slug}_card.json"

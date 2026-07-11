@@ -58,6 +58,7 @@ class WorkbenchAgentFactory:
             course_id=course_id,
             conversation_id=conversation_id,
             run_id=run_id,
+            workspace=workspace,
         )
         toolkit = Toolkit(
             tool_groups=build_workbench_tool_groups(

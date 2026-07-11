@@ -29,6 +29,7 @@ async def workbench_chat(req: WorkbenchChatRequest) -> StreamingResponse:
     run = await session.start_async(
         user_id=req.user_id,
         course_id=req.course_id if req.scope == "course" else None,
+        catalog_id=req.catalog_id if req.scope == "course" else None,
         conversation_id=req.conversation_id,
         message=req.message,
         context=req.context,

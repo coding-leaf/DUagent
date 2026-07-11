@@ -8,6 +8,22 @@ from app.services.agent_client import AgentServiceError
 from app.services.tutoring_stream_adapter import TutoringStreamAdapter
 
 
+def test_workbench_payload_keeps_offering_and_catalog_ids_separate():
+    result = TutoringStreamAdapter._build_workbench_payload(
+        {
+            "user_id": "student-1",
+            "scope": "course",
+            "course_id": "offering-1",
+            "catalog_id": "catalog-1",
+            "conversation_id": "conv-1",
+            "message": "练习指针",
+        }
+    )
+
+    assert result["course_id"] == "offering-1"
+    assert result["catalog_id"] == "catalog-1"
+
+
 @pytest.mark.asyncio
 async def test_stream_adapter_forwards_v2_events_with_backend_envelope():
     calls = []

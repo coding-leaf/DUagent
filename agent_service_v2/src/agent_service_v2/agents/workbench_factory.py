@@ -92,6 +92,7 @@ class WorkbenchAgentFactory:
         *,
         user_id: str,
         course_id: str | None,
+        catalog_id: str | None = None,
         workspace: LocalWorkspace,
         run_id: str | None = None,
         conversation_id: str | None = None,
@@ -124,7 +125,7 @@ class WorkbenchAgentFactory:
         from agentscope.tool import FunctionTool
         from agent_service_v2.tools.rag import retrieve_course_context
 
-        if course_id:
+        if catalog_id:
             async def retrieve_course_context_tool(query: str, limit: int = 3) -> dict:
                 """Retrieve related book paragraphs from the course textbook material to help answer questions.
 
@@ -132,7 +133,7 @@ class WorkbenchAgentFactory:
                     query (str): The search query keywords or question text.
                     limit (int, optional): Maximum number of segments to return. Defaults to 3.
                 """
-                return await retrieve_course_context(query=query, course_id=course_id, limit=limit)
+                return await retrieve_course_context(query=query, course_id=catalog_id, limit=limit)
 
             rag_tools = [FunctionTool(retrieve_course_context_tool)]
         else:

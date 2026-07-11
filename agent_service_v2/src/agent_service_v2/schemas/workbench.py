@@ -11,4 +11,5 @@ class WorkbenchChatRequest(BaseModel):
     message: str
     scope: str = "course"
     course_id: str | None = None
+    catalog_id: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)

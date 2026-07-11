@@ -51,6 +51,7 @@ class WorkbenchSession:
         *,
         user_id: str,
         course_id: str | None,
+        catalog_id: str | None = None,
         conversation_id: str | None,
         message: str,
         context: dict,
@@ -59,6 +60,7 @@ class WorkbenchSession:
             self._start_async(
                 user_id=user_id,
                 course_id=course_id,
+                catalog_id=catalog_id,
                 conversation_id=conversation_id,
                 message=message,
                 context=context,
@@ -71,6 +73,7 @@ class WorkbenchSession:
         *,
         user_id: str,
         course_id: str | None,
+        catalog_id: str | None = None,
         conversation_id: str | None,
         message: str,
         context: dict,
@@ -78,6 +81,7 @@ class WorkbenchSession:
         return await self._start_async(
             user_id=user_id,
             course_id=course_id,
+            catalog_id=catalog_id,
             conversation_id=conversation_id,
             message=message,
             context=context,
@@ -89,6 +93,7 @@ class WorkbenchSession:
         *,
         user_id: str,
         course_id: str | None,
+        catalog_id: str | None,
         conversation_id: str | None,
         message: str,
         context: dict,
@@ -105,6 +110,7 @@ class WorkbenchSession:
             agent = self._agent_factory.create_agent(
                 user_id=user_id,
                 course_id=course_id,
+                catalog_id=catalog_id,
                 workspace=workspace,
                 run_id=run.run_id,
                 conversation_id=run.conversation_id,

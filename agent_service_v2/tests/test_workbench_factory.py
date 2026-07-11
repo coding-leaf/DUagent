@@ -41,6 +41,29 @@ def test_factory_creates_agentscope_agent_with_model(tmp_path: Path):
     assert isinstance(agent, Agent)
 
 
+def test_factory_accepts_catalog_id_separately_from_course_id(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1",
+        course_id="offering-1",
+        conversation_id="conv1",
+    )
+    factory = WorkbenchAgentFactory(model_provider=lambda: FakeModel())
+
+    agent = factory.create_agent(
+        user_id="u1",
+        course_id="offering-1",
+        catalog_id="catalog-1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )
+
+    assert isinstance(agent, Agent)
+
+
 def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
     class FakeModel:
         pass

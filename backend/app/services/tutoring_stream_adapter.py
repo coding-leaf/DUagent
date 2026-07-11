@@ -126,14 +126,17 @@ class TutoringStreamAdapter:
 
     @staticmethod
     def _build_workbench_payload(payload: dict) -> dict:
+        scope = payload.get("scope") or "global"
         return {
             "user_id": payload.get("user_id") or "",
-            "scope": payload.get("scope") or "global",
+            "scope": scope,
             "course_id": payload.get("course_id"),
+            "catalog_id": payload.get("catalog_id") if scope == "course" else None,
             "conversation_id": payload.get("conversation_id"),
             "message": payload.get("message") or "",
             "context": payload,
         }
+
 
     async def stream(
         self,

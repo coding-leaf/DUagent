@@ -2134,3 +2134,98 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent pytest：未运行（未改动智能体代码）。
 
 **接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复 PPT 生成工具在 AgentScope 中的路径访问错误并添加单元测试
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/ppt_generator.py`
+- `agent_service_v2/tests/test_ppt_generator.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **修复 PowerPoint 生成崩溃问题**：将 `ppt_generator.py` 中对 `workspace.path` 的属性访问更改为从 `run_id` 的 `WorkbenchRunStore` 获取的 `artifact_dir`（即 `runs/{run_id}/artifacts/`），消除了由于 `LocalWorkspace` 没有 `path` 属性导致的 `AttributeError` 崩溃。
+2. **对齐 PPTX 讲义下载相对路径**：将 PPTX 讲义文件和对应的 Markdown 幻灯片大纲写在同一个 `artifacts` 目录下，使得生成的 Markdown 中自带的相对链接 `./{pptx_filename}` 能够正确下载/定位文件。
+3. **增加 PPT 工具生成单元测试**：新建了 `test_ppt_generator.py` 单元测试，专门验证 PowerPoint 讲义生成的完整链路（包含幻灯片内容填充、文件存储和下载链接验证），避免未来功能迭代再次引发此问题。
+
+**验证结果：**
+- 前端 lint / build：未运行（未改动前端代码）
+- 后端 py_compile / pytest：未运行（未改动后端代码）
+- Agent pytest：运行 `cd agent_service_v2 && ./.venv/bin/pytest` 全部 107 个测试用例全部通过，包括新增的 `test_ppt_generator.py`（通过）。
+
+**接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复 PPT 生成后前端报错、实现安全的文件代理下载机制并强化 AI 提示词输出下载链接
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/artifacts/scanner.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `backend/app/api/v1/tutoring.py`
+- `frontend/src/components/common/MarkdownViewer.jsx`
+- `frontend/src/components/workspace/plugins/MarkdownViewer.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. **解决 PPTX 导致的前端生成报错气泡**：在 `scanner.py` 中，使 `ArtifactScanner.scan` 自动越过 `.pptx` 类型的二进制资产。这阻止了扫描器由于不支持该非渲染类型而引发 `ArtifactValidationError` 中断事件流，使得 AI Chat 的 PPTX 生成状态能圆满完成，展现绿色的成功状态。
+2. **实现安全的后端文件下载代理并修复 500 报错**：在 `tutoring.py` 中新增 `GET /api/v1/tutoring/conversations/{conversation_id}/files/{filename}` 接口。将 `select` 提升为 `tutoring.py` 顶层全局引入，修复由于 `get_download_user` 校验依赖无法解析 `select(User)` 导致的 `NameError: name 'select' is not defined` 500 服务端内部错误。通过 SQLAlchemy 查询严格验证 `current_user.id` 对 `conversation_id` 的所有权，防止平行越权下载。在物理会话运行目录中倒序匹配并返回 `FileResponse`。
+3. **前端相对路径自动拦截重写并注入令牌**：在通用聊天 Markdown 和 Agent 专属工作台 Markdown 渲染器中，拦截并自定义 ReactMarkdown 的 `a` 标签渲染。当检测到以 `./` 开头的相对链接时，将其透明自动地映射到上述安全的后端下载代理 API，并从 `localStorage` 中自动取出并拼接 `?token=...` 凭据，修复了浏览器直连原生下载凭据丢失导致的 401 报错，并附上 Lucide 下载图标（Icon download），提供优质连贯交互。
+4. **强化 AI 提示词保证链接输出**：在 `prompts.py` 的 `WORKBENCH_SYSTEM_PROMPT` 中，专门为 PowerPoint 生成（`generate_learning_ppt`）追加了硬性规定，要求 AI 在最终的聊天回复气泡里必须也打印出带有标准相对路径的下载链接格式 `👉 **[下载 PowerPoint 讲义幻灯片 (PPTX 格式)](./{pptx_filename})**`，使下载体验在聊天面板 and 工作台双向对齐闭环。
+
+**验证结果：**
+- 前端 lint / build：通过 `cd frontend && npm run lint && npm run build`（打包编译成功，0 错误，0 警告）。
+- 后端 py_compile / pytest：通过 `python3 -m py_compile backend/app/api/v1/tutoring.py` 且 `cd backend && ../.venv/bin/python -m pytest tests/test_tutoring_routes_refactored.py tests/test_tutoring_stream_adapter.py -v`（6 passed）。
+- Agent pytest：通过 `cd agent_service_v2 && ./.venv/bin/pytest`（107 passed）。
+
+**接口漂移：**
+- 新增安全文件下载代理 API：`GET /api/v1/tutoring/conversations/{conversation_id}/files/{filename}`，此接口仅服务于具有当前会话所有权的已登录学生用户。
+
+---
+
+### 2026-07-11 — 清理并下线 PPT-Master 讲义幻灯片生成工具及相关链条
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/ppt_generator.py` (已删除)
+- `agent_service_v2/tests/test_ppt_generator.py` (已删除)
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/src/agent_service_v2/artifacts/scanner.py`
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py`
+- `agent_service_v2/tests/test_workbench_toolkit.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **彻底物理删除 PPT 生成模块与配套测试**：将 `ppt_generator.py` 工具文件及对其功能覆盖验证的单元测试 `test_ppt_generator.py` 彻底物理删除。
+2. **清理安全白名单与智能体提示词**：从 `permissions.py` 的白名单 `SAFE_WORKBENCH_TOOLS` 中移除了 `"generate_learning_ppt"`，防止其作为白名单执行；在 `prompts.py` 里的 `WORKBENCH_SYSTEM_PROMPT` 中删除了关于生成 PowerPoint 并打印下载相对链接的硬性引导句。
+3. **完全解绑工作台工厂与工具组组装链**：在 `workbench_toolkit.py` 中删除了 `ppt_generator_tools` 的形参定义及生成并添加 `"ppt_generator"` 工具组的逻辑；同时在 `workbench_factory.py` 中彻底移除引用、导入、构建和向工具组传输 `ppt_generator_tools` 的中间桥接逻辑。
+4. **清理资产扫描过滤规则与 ResourceWorkerAgent 注释**：在 `scanner.py` 中去除了在扫描会话工作目录资产时对 `.pptx` 文件的特殊过滤忽略，保持流程极简；清理了 `leader_team.py` 里 `ResourceWorkerAgent` 的 docstring 说明，抹去 PPT 字样。
+5. **清理相关的依赖测试**：在 `test_workbench_toolkit.py` 中删除了针对 `ppt_generator_tools` 自动添加为工具组的测试用例 `test_workbench_tool_groups_include_ppt_generator_group_when_tools_exist`，防止由于接口签名移除而导致测试运行崩溃。
+
+**验证结果：**
+- 前端 lint / build：未修改前端。
+- 后端 py_compile / pytest：未修改。
+- Agent pytest：运行 `cd agent_service_v2 && ./.venv/bin/pytest` 105 个测试用例全部一次性 100% 通过（删除 2 个 PPT 相关的 testcase 导致用例数从 107 降为 105）。
+
+**接口漂移：** 无。
+
+
+---
+
+### 2026-07-11 — 修复 RAG 检索权限拦截漏洞，将 retrieve_course_context_tool 加入安全工具白名单
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/permissions.py`
+
+**核心改动：**
+1. **解决 RAG 检索权限拦截错误**：将课程知识库检索工具 `retrieve_course_context_tool` 显式添加至 `SAFE_WORKBENCH_TOOLS` 安全工具白名单中。该工具在 `workbench_factory.py` 内部随会话 `course_id` 存在而动态创建，之前由于未在此列表中，执行时会触发 AgentScope 的 `RequireUserConfirmEvent`；在前端缺乏 HITL UI 交互逻辑的背景下，后端对该事件采取 Fail-Fast 逻辑并输出 `permission.required` 错误日志，直接返回 `user_confirmation_required` 的 `WORKFLOW_FAILED` 事件，引发前端“生成失败，请重试”的会话崩溃。
+
+**验证结果：**
+- 编译检查：对修改的 `permissions.py` 进行 Python 语法检查通过。
+- 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest` 105 个测试用例 100% 通过（105 passed）。
+- Git 提交：已在分支 `ai-dev/agentscope-v2` 上完成了本地提交。
+
+**接口漂移：** 无。

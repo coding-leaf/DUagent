@@ -1643,3 +1643,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。未新增 HTTP 路径、SSE 事件类型或前端消费字段；仍复用既有 `artifact_created` 与 `CodeSandboxCard.props.{problem_id,language}`。
+
+---
+
+### 2026-07-11 — 画布卡片关闭与找回功能实现
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/artifacts/schemas.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `agent_service_v2/tests/test_artifact_manifest.py`
+- `frontend/src/utils/chatStreamEvents.js`
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/context/ChatContext.test.jsx`
+- `frontend/src/components/workspace/AgentWorkspace.jsx`
+- `frontend/src/components/workspace/AgentWorkspace.test.jsx`
+- `frontend/src/components/workspace/WorkspaceTabs.jsx`
+- `frontend/src/components/Icon.jsx`
+- `frontend/src/hooks/__tests__/useLearningEffects.test.js`
+
+**核心改动：**
+1. 后端在 `PublishedArtifact.to_event_payload` 中将 `title` 序列化输出至 `artifact_created` 事件中，以支持 JSON 格式卡片获取标题。
+2. 前端在 `normalizeArtifact` 中解析并保留 `title`，确保画布页签显示正确的名称，而非默认英文类名。
+3. 前端 `ChatContext` 增加 `hiddenArtifactIds` 状态，以及 `hideArtifact` 和 `restoreArtifact` 控制函数，用于卡片的关闭和找回还原。
+4. `WorkspaceTabs` 实现全新的多页签样式，带有 `✕` 关闭按钮和“找回已关闭 (N)”下拉列表。同时实现 `insert_drive_file` 缺省图标到 `FileText` 的映射，防止问号回退。
+5. 修复了由于用户对 `useLearningEffects` 修改导致的单元测试失败。
+
+**验证结果：**
+- 前端测试：`cd frontend && npm run test:unit` 通过，117 passed。
+- 前端构建：`cd frontend && npm run build` 通过。
+- 后端测试：`cd agent_service_v2 && ./.venv/bin/pytest tests` 通过，88 passed。
+- 后端编译：通过 `py_compile`。
+
+**接口漂移：**
+- 无。仅在既有 `artifact_created` SSE 事件载荷中将 `artifact.title` 字段进行序列化传输，符合原订接口规范。

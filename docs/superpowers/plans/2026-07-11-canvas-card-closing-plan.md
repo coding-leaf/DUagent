@@ -127,9 +127,47 @@
   Add unit tests verifying `hiddenArtifactIds` starts empty, hides an artifact, restores it, and resets when session changes.
   ```javascript
   // In frontend/src/context/ChatContext.test.jsx
-  // Add a test block:
   test('handles hiding and restoring artifacts', async () => {
-    // Write test mimicking hideArtifact(id) and restoreArtifact(id)
+    getHistoryMock.mockResolvedValue({
+      code: 200,
+      data: {
+        messages: [
+          {
+            role: 'assistant',
+            content: '已生成补弱计划。',
+            meta: {
+              artifacts: [
+                {
+                  id: 'artifact-plan',
+                  type: 'Markdown',
+                  props: { title: '补弱计划', content: '# 补弱计划' }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    });
+
+    renderWithProviders(<StreamConsumer />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-count').textContent).toBe('1');
+    });
+    expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-plan');
+    expect(screen.getByTestId('hidden-count').textContent).toBe('0');
+
+    await act(async () => {
+      screen.getByTestId('hide-artifact').click();
+    });
+    expect(screen.getByTestId('hidden-count').textContent).toBe('1');
+    expect(screen.getByTestId('active-artifact-id').textContent).toBe('');
+
+    await act(async () => {
+      screen.getByTestId('restore-artifact').click();
+    });
+    expect(screen.getByTestId('hidden-count').textContent).toBe('0');
+    expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-plan');
   });
   ```
 
@@ -185,6 +223,16 @@
   Add a test verifying that `AgentWorkspace` filters out hidden artifacts and renders the empty state if all artifacts are hidden.
   ```javascript
   // In frontend/src/components/workspace/AgentWorkspace.test.jsx
+  test('filters hidden artifacts and shows empty state if all are hidden', () => {
+    useChat.mockReturnValue({
+      workspaceArtifacts: [
+        { id: '1', type: 'QuizCard', props: { question: 'What is React?' } },
+      ],
+      hiddenArtifactIds: ['1'],
+    });
+    render(<AgentWorkspace />);
+    expect(screen.getByText(/暂无生成产物/)).toBeDefined();
+  });
   ```
 
 - [ ] **Step 2: Run tests to verify failure**

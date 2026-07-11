@@ -2464,5 +2464,19 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - **验证**：
   - 语法编译校验：`py_compile` 对修改的 python 文件均校验成功。
   - 单元测试：运行 `agent_service_v2` 单元测试 `pytest tests/test_evaluation_api.py` 绿灯通过（4 passed，涉及 mock 的模型评估覆盖通过）。
+- **接口漂移**：无.
+
+### 2026-07-12 — 修复多智能体 Leader 权限拦截挂死与大模型流式调用异常
+
+- **涉及文件**：
+  - `agent_service_v2/src/agent_service_v2/agents/team_permissions.py`
+  - `agent_service_v2/src/agent_service_v2/api/evaluation.py`
+  - `WorkLine.md`
+- **核心改动**：
+  - 1. **Leader 角色授权 RAG 检索工具**：在 `ROLE_TOOL_NAMES["resource_team_leader"]` 中追加允许调用 `"retrieve_course_context_tool"` 的权限规则。避免当生成目标不具体（如输入“随便”）时，Leader 智能体为了解课程上下文主动发起 RAG 检索而触发越权拦截，导致任务无限挂起（state 为 `asking`）。
+  - 2. **禁用学情评估大模型流式输出**：在 `agent_service_v2/src/agent_service_v2/api/evaluation.py` 中，调用 `build_chat_model_from_settings` 构造学情评估和试卷诊断模型时，显式指定 `stream=False`。修复因为默认启用 `stream=True` 导致模型返回 `async_generator`，在读取 `.text` 属性时抛出 `'async_generator' object has no attribute 'text'` 导致评估生成失败的异常。
+- **验证**：
+  - 语法编译校验：`py_compile` 校验修改文件均通过。
+  - 单元测试：运行 `pytest tests/test_evaluation_api.py tests/test_team_permissions.py -v` 绿灯通过（6 passed，包括权限白名单校验用例）。
 - **接口漂移**：无。
 

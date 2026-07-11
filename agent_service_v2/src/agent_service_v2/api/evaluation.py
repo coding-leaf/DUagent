@@ -27,7 +27,7 @@ async def generate_v2_evaluation(request: EvaluationGenerateRequest):
     # 2. 尝试调用大模型对其进行丰富 summary_text
     try:
         settings = AgentModelSettings()
-        model = build_chat_model_from_settings(settings)
+        model = build_chat_model_from_settings(settings, stream=False)
         if model:
             enriched_result = await generate_evaluation_with_llm(request, rule_result, model)
             if enriched_result:
@@ -49,7 +49,7 @@ async def generate_v2_quiz_diagnose(request: QuizDiagnoseRequest):
     """根据学生提交的试卷问题与作答详情，诊断薄弱盲点并产生针对性补救建议。"""
     try:
         settings = AgentModelSettings()
-        model = build_chat_model_from_settings(settings)
+        model = build_chat_model_from_settings(settings, stream=False)
         res_dict = await generate_quiz_diagnosis_with_llm(request, model)
         return {"code": 200, "message": "success", "data": res_dict}
     except Exception as exc:

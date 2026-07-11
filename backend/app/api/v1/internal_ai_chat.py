@@ -17,7 +17,7 @@ from app.services.ai_chat_learning_context import (
 from app.services.oj_execution_service import execute_code_in_oj, OJExecutionError
 from app.services.code_problem_service import (
     CodeProblemValidationError,
-    validate_personal_problem_draft_from_ai_chat,
+    create_validated_personal_problem_from_ai_chat,
 )
 
 router = APIRouter(prefix="/internal/ai-chat", tags=["internal-ai-chat"])
@@ -110,7 +110,7 @@ async def validate_personal_code_problem(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        generation = await validate_personal_problem_draft_from_ai_chat(
+        created = await create_validated_personal_problem_from_ai_chat(
             db,
             owner_user_id=req.user_id,
             course_id=req.course_id,
@@ -140,10 +140,11 @@ async def validate_personal_code_problem(
         "code": 200,
         "message": "success",
         "data": {
-            "generation_id": generation.id,
-            "status": generation.status,
+            "generation_id": created.generation.id,
+            "status": created.generation.status,
+            "problem_id": created.problem.id,
             "language": req.draft.language,
-            "public_case_count": generation.validation_report["public_case_count"],
-            "hidden_case_count": generation.validation_report["hidden_case_count"],
+            "public_case_count": created.public_case_count,
+            "hidden_case_count": created.hidden_case_count,
         },
     }

@@ -100,7 +100,7 @@ async def test_internal_code_problem_returns_stable_validation_reason():
 
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
+            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
             new_callable=AsyncMock,
         ) as mock_service:
             mock_service.side_effect = CodeProblemValidationError(
@@ -131,3 +131,53 @@ async def test_internal_code_problem_returns_stable_validation_reason():
 
     assert response.status_code == 400
     assert response.json()["detail"]["data"]["reason"] == "conversation_ownership_check_failed"
+
+
+@pytest.mark.asyncio
+async def test_internal_code_problem_returns_published_problem_id():
+    from types import SimpleNamespace
+
+    created = SimpleNamespace(
+        generation=SimpleNamespace(id="generation-1", status="published"),
+        problem=SimpleNamespace(id="problem-1", language="python"),
+        public_case_count=1,
+        hidden_case_count=1,
+    )
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        with patch(
+            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            new_callable=AsyncMock,
+            return_value=created,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/internal/ai-chat/code-problem-validations",
+                    headers={"X-Internal-Agent-Token": "secret"},
+                    json={
+                        "user_id": "u1",
+                        "course_id": "offering-1",
+                        "conversation_id": "conv-1",
+                        "run_id": "run-1",
+                        "draft": {
+                            "title": "回显",
+                            "statement": "读取并输出输入。",
+                            "language": "python",
+                            "starter_code": "print(input())",
+                            "reference_solution": "print(input())",
+                            "test_inputs": [
+                                {"stdin": "1\n", "is_public": True},
+                                {"stdin": "2\n", "is_public": False},
+                            ],
+                        },
+                    },
+                )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "generation_id": "generation-1",
+        "status": "published",
+        "problem_id": "problem-1",
+        "language": "python",
+        "public_case_count": 1,
+        "hidden_case_count": 1,
+    }

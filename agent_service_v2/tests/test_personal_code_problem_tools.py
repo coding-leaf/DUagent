@@ -13,7 +13,8 @@ class FakeClient:
         self.calls.append((path, payload))
         return {
             "generation_id": "generation-1",
-            "status": "validated",
+            "status": "published",
+            "problem_id": "problem-1",
             "language": "python",
             "public_case_count": 1,
             "hidden_case_count": 1,
@@ -33,7 +34,7 @@ def _text(chunk) -> str:
     return chunk.content[0].text
 
 
-def test_personal_code_problem_tool_delegates_validation_to_backend_without_publishing():
+def test_personal_code_problem_tool_returns_published_private_problem():
     client = FakeClient()
     tool = build_personal_code_problem_tools(
         client=client,
@@ -57,8 +58,9 @@ def test_personal_code_problem_tool_delegates_validation_to_backend_without_publ
     data = json.loads(_text(response))
 
     assert data == {
-        "status": "validated",
+        "status": "published",
         "generation_id": "generation-1",
+        "problem_id": "problem-1",
         "language": "python",
         "public_case_count": 1,
         "hidden_case_count": 1,
@@ -87,7 +89,7 @@ def test_personal_code_problem_tool_delegates_validation_to_backend_without_publ
     ]
 
 
-def test_personal_code_problem_validation_does_not_write_published_artifact(tmp_path):
+def test_personal_code_problem_publication_returns_problem_id_without_leaking_draft(tmp_path):
     tool = build_personal_code_problem_tools(
         client=FakeClient(),
         user_id="student-1",
@@ -109,9 +111,11 @@ def test_personal_code_problem_validation_does_not_write_published_artifact(tmp_
     )
 
     data = json.loads(_text(response))
-    assert data["status"] == "validated"
+    assert data["status"] == "published"
     assert data["generation_id"] == "generation-1"
+    assert data["problem_id"] == "problem-1"
     assert "artifact" not in data
+    assert "reference_solution" not in data
 
 
 def test_personal_code_problem_tool_reports_backend_validation_as_rejected():

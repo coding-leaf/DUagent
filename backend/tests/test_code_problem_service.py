@@ -127,9 +127,13 @@ async def test_validate_code_problem_runs_reference_solution_for_every_fixed_inp
 
 
 @pytest.mark.asyncio
-async def test_validation_draft_does_not_publish_problem_or_personal_resource():
+async def test_ai_chat_private_problem_publishes_immediately_after_oj_validation(monkeypatch):
+    from unittest.mock import AsyncMock
+
     from app.schemas.code_problem import CodeProblemDraft, CodeProblemTestInput
-    from app.services.code_problem_service import validate_personal_problem_draft
+    from app.services import code_problem_service
+    from app.models.code_problem import CodeProblem, CodeProblemTestCase
+    from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 
     class FakeSession:
         def __init__(self):
@@ -157,7 +161,18 @@ async def test_validation_draft_does_not_publish_problem_or_personal_resource():
     )
 
     session = FakeSession()
-    generation = await validate_personal_problem_draft(
+    monkeypatch.setattr(
+        code_problem_service,
+        "_verify_ai_chat_problem_scope",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        code_problem_service,
+        "link_published_generation",
+        AsyncMock(return_value=None),
+    )
+
+    created = await code_problem_service.create_validated_personal_problem_from_ai_chat(
         session,
         owner_user_id="student-1",
         course_id="course-1",
@@ -167,11 +182,19 @@ async def test_validation_draft_does_not_publish_problem_or_personal_resource():
         execute_case=execute_case,
     )
 
-    assert generation.status == "validated"
-    assert generation.validation_report["status"] == "passed"
-    assert generation.validation_report["public_case_count"] == 1
-    assert generation.validation_report["hidden_case_count"] == 1
-    assert len(session.added) == 1
+    generations = [item for item in session.added if isinstance(item, PersonalizedResourceGeneration)]
+    problems = [item for item in session.added if isinstance(item, CodeProblem)]
+    cases = [item for item in session.added if isinstance(item, CodeProblemTestCase)]
+
+    assert len(generations) == 1
+    assert generations[0].status == "published"
+    assert generations[0].published_code_problem_id == problems[0].id
+    assert len(problems) == 1
+    assert len(cases) == 2
+    assert created.problem is problems[0]
+    assert created.generation is generations[0]
+    assert created.public_case_count == 1
+    assert created.hidden_case_count == 1
 
 
 @pytest.mark.asyncio

@@ -3,12 +3,11 @@ from __future__ import annotations
 from agentscope.tool import FunctionTool, ToolBase, ToolGroup
 from agentscope.workspace import LocalWorkspace
 
-from agent_service_v2.tools.artifact_files import build_write_artifact_file
-from agent_service_v2.tools.planning import build_planning_group
-from agent_service_v2.tools.workbench_placeholders import (
-    read_learning_state,
-    review_grounding,
+from agent_service_v2.tools.artifact_files import (
+    build_create_code_sandbox_card,
+    build_write_artifact_file,
 )
+from agent_service_v2.tools.planning import build_planning_group
 
 
 def build_workbench_tool_groups(
@@ -70,19 +69,17 @@ def build_workbench_tool_groups(
     groups.extend(
         [
             ToolGroup(
-                name="learning_state",
-                description="Read Backend-provided learner state summaries.",
-                tools=[FunctionTool(read_learning_state, is_read_only=True)],
-            ),
-            ToolGroup(
                 name="artifact",
-                description="Write saveable learning artifacts into the run workspace.",
-                tools=[FunctionTool(build_write_artifact_file(workspace=workspace, run_id=run_id))],
-            ),
-            ToolGroup(
-                name="review",
-                description="Review generated advice for grounding and safety.",
-                tools=[FunctionTool(review_grounding, is_read_only=True)],
+                description="Create validated learning artifacts in the AgentScope run workspace.",
+                instructions=(
+                    "Use write_artifact_file only for Markdown or Mermaid. "
+                    "Use create_code_sandbox_card only after the private-problem tool returns "
+                    "status published and a non-empty problem_id."
+                ),
+                tools=[
+                    FunctionTool(build_write_artifact_file(workspace=workspace, run_id=run_id)),
+                    FunctionTool(build_create_code_sandbox_card(workspace=workspace, run_id=run_id)),
+                ],
             ),
         ]
     )

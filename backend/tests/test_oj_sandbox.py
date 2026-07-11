@@ -64,17 +64,14 @@ async def test_internal_code_problem_creation_returns_safe_metadata_only():
     from types import SimpleNamespace
 
     created = SimpleNamespace(
-        id="generation-1",
-        status="validated",
-        validation_report={
-            "status": "passed",
-            "public_case_count": 1,
-            "hidden_case_count": 1,
-        },
+        generation=SimpleNamespace(id="generation-1", status="published"),
+        problem=SimpleNamespace(id="problem-1"),
+        public_case_count=1,
+        hidden_case_count=1,
     )
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
+            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
             new_callable=AsyncMock,
         ) as create_problem:
             create_problem.return_value = created
@@ -104,7 +101,8 @@ async def test_internal_code_problem_creation_returns_safe_metadata_only():
     assert response.status_code == 200
     assert response.json()["data"] == {
         "generation_id": "generation-1",
-        "status": "validated",
+        "status": "published",
+        "problem_id": "problem-1",
         "language": "python",
         "public_case_count": 1,
         "hidden_case_count": 1,
@@ -118,17 +116,14 @@ async def test_internal_code_problem_creation_normalizes_language_alias_before_s
     from types import SimpleNamespace
 
     created = SimpleNamespace(
-        id="generation-1",
-        status="validated",
-        validation_report={
-            "status": "passed",
-            "public_case_count": 1,
-            "hidden_case_count": 1,
-        },
+        generation=SimpleNamespace(id="generation-1", status="published"),
+        problem=SimpleNamespace(id="problem-1"),
+        public_case_count=1,
+        hidden_case_count=1,
     )
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
+            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
             new_callable=AsyncMock,
         ) as create_problem:
             create_problem.return_value = created
@@ -165,6 +160,7 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
 
     from app.api.deps import get_db
     from app.models.code_problem import CodeProblem
+    from app.models.personalized_resource_generation import PersonalizedResourceGeneration
     from app.services.code_problem_service import CreatedCodeProblem
 
     class CommitFailingDB:
@@ -186,6 +182,16 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
             reference_solution="print(input())",
             validation_report={},
         ),
+        generation=PersonalizedResourceGeneration(
+            id="generation-1",
+            user_id="student-1",
+            course_id="course-1",
+            source_type="ai_chat",
+            goal="读取并输出输入。",
+            resource_type="validated_code_problem",
+            status="published",
+            draft={},
+        ),
         public_case_count=1,
         hidden_case_count=1,
     )
@@ -197,7 +203,7 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
     try:
         with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
             with patch(
-                "app.api.v1.internal_ai_chat.validate_personal_problem_draft_from_ai_chat",
+                "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
                 new_callable=AsyncMock,
             ) as create_problem:
                 create_problem.return_value = created

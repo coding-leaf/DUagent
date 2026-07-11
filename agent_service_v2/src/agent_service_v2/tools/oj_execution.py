@@ -17,8 +17,14 @@ def build_oj_execution_tools(
         code: str,
         language: str,
         stdin: str = "",
-        **_ignored: Any,
     ) -> dict[str, Any]:
+        """Compile and run source code in the configured online judge.
+
+        Args:
+            code: Complete source code to compile and execute.
+            language: Canonical language value such as c, cpp, python, java, go, or javascript.
+            stdin: Optional complete standard input for this execution.
+        """
         if client is None:
             return {
                 "status": "degraded",

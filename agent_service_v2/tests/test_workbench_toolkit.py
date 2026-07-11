@@ -1,10 +1,6 @@
 from agentscope.tool import ToolGroup
 from agentscope.workspace import LocalWorkspace
 
-from agent_service_v2.tools.workbench_placeholders import (
-    read_learning_state,
-    review_grounding,
-)
 from agent_service_v2.tools.planning import build_planning_group
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
@@ -41,13 +37,12 @@ def test_workbench_tool_groups_include_expected_boundaries():
 
     assert [group.name for group in groups] == [
         "planning",
-        "learning_state",
         "artifact",
-        "review",
     ]
     artifact_group = next(group for group in groups if group.name == "artifact")
     assert [getattr(tool, "name", type(tool).__name__) for tool in artifact_group.tools] == [
-        "write_artifact_file"
+        "write_artifact_file",
+        "create_code_sandbox_card",
     ]
 
 
@@ -66,9 +61,7 @@ def test_workbench_tool_groups_include_learning_progress_group_when_tools_exist(
     assert [group.name for group in groups] == [
         "planning",
         "learning_progress",
-        "learning_state",
         "artifact",
-        "review",
     ]
 
 
@@ -86,18 +79,3 @@ def test_workbench_tool_groups_include_personal_code_problem_group_when_tools_ex
     )
 
     assert "personal_code_problem" in [group.name for group in groups]
-
-
-
-def test_placeholder_tools_return_structured_observations():
-    assert read_learning_state(user_id="u1", course_id="c1") == {
-        "status": "placeholder",
-        "tool": "read_learning_state",
-        "user_id": "u1",
-        "course_id": "c1",
-    }
-    assert review_grounding(summary="answer") == {
-        "status": "placeholder",
-        "tool": "review_grounding",
-        "summary": "answer",
-    }

@@ -9,7 +9,13 @@ from app.schemas.personalized_resource_generation import (
     PersonalizedReviewRequest,
     PersonalizedValidationRequest,
 )
-from app.services.code_problem_service import publish_reviewed_personal_problem
+from app.schemas.internal_ai_chat import PersonalCodeProblemCreateRequest
+from app.services.code_problem_service import (
+    CodeProblemValidationError,
+    publish_reviewed_personal_problem,
+    validate_personal_problem_draft,
+)
+from app.services.oj_execution_service import execute_code_in_oj
 from app.services.personalized_resource_generation_service import (
     PersonalizedResourceGenerationService,
     ResourcePublicationError,
@@ -38,6 +44,37 @@ async def create_draft(
         **req.model_dump()
     )
     return _success({"generation_id": generation.id, "status": generation.status})
+
+
+@router.post("/code-problem-validations")
+async def validate_code_problem_draft(
+    req: PersonalCodeProblemCreateRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        generation = await validate_personal_problem_draft(
+            db,
+            owner_user_id=req.user_id,
+            course_id=req.course_id,
+            conversation_id=req.conversation_id,
+            run_id=req.run_id,
+            draft=req.draft,
+            execute_case=execute_code_in_oj,
+        )
+        await db.commit()
+    except CodeProblemValidationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=exc.reason)
+    return _success(
+        {
+            "generation_id": generation.id,
+            "status": generation.status,
+            "language": req.draft.language,
+            "public_case_count": generation.validation_report["public_case_count"],
+            "hidden_case_count": generation.validation_report["hidden_case_count"],
+        }
+    )
 
 
 @router.post("/{generation_id}/validation")

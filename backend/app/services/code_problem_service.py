@@ -22,6 +22,7 @@ class CodeProblemValidationError(ValueError):
 @dataclass(frozen=True)
 class CreatedCodeProblem:
     problem: CodeProblem
+    generation: PersonalizedResourceGeneration
     public_case_count: int
     hidden_case_count: int
 
@@ -63,7 +64,7 @@ async def validate_personal_problem_draft(
     return generation
 
 
-async def validate_personal_problem_draft_from_ai_chat(
+async def create_validated_personal_problem_from_ai_chat(
     db: AsyncSession,
     *,
     owner_user_id: str,
@@ -72,14 +73,14 @@ async def validate_personal_problem_draft_from_ai_chat(
     run_id: str,
     draft: CodeProblemDraft,
     execute_case: Callable[[str, str, str], Awaitable[dict[str, Any]]],
-) -> PersonalizedResourceGeneration:
+) -> CreatedCodeProblem:
     await _verify_ai_chat_problem_scope(
         db,
         owner_user_id=owner_user_id,
         course_id=course_id,
         conversation_id=conversation_id,
     )
-    return await validate_personal_problem_draft(
+    generation = await validate_personal_problem_draft(
         db,
         owner_user_id=owner_user_id,
         course_id=course_id,
@@ -88,6 +89,7 @@ async def validate_personal_problem_draft_from_ai_chat(
         draft=draft,
         execute_case=execute_case,
     )
+    return await _create_problem_from_generation(db, generation)
 
 
 async def _verify_ai_chat_problem_scope(
@@ -102,7 +104,7 @@ async def _verify_ai_chat_problem_scope(
             Conversation.id == conversation_id,
             Conversation.user_id == owner_user_id,
             Conversation.course_id == course_id,
-            Conversation.is_deleted == False,
+            Conversation.is_deleted.is_(False),
         )
     )
     if conversation_result.scalar_one_or_none() is None:
@@ -111,7 +113,7 @@ async def _verify_ai_chat_problem_scope(
         select(CourseEnrollment.id).where(
             CourseEnrollment.student_id == owner_user_id,
             CourseEnrollment.course_id == course_id,
-            CourseEnrollment.is_deleted == False,
+            CourseEnrollment.is_deleted.is_(False),
         )
     )
     if enrollment_result.scalar_one_or_none() is None:
@@ -126,9 +128,9 @@ async def publish_reviewed_personal_problem(
     course_id: str | None = None,
 ) -> CreatedCodeProblem:
     query = select(PersonalizedResourceGeneration).where(
-            PersonalizedResourceGeneration.id == generation_id,
-            PersonalizedResourceGeneration.is_deleted == False,
-        )
+        PersonalizedResourceGeneration.id == generation_id,
+        PersonalizedResourceGeneration.is_deleted.is_(False),
+    )
     if user_id is not None:
         query = query.where(PersonalizedResourceGeneration.user_id == user_id)
     if course_id is not None:
@@ -146,6 +148,13 @@ async def publish_reviewed_personal_problem(
     if generation.status not in {"approved", "approved_with_advice"}:
         raise CodeProblemValidationError("invalid_generation_status")
 
+    return await _create_problem_from_generation(db, generation)
+
+
+async def _create_problem_from_generation(
+    db: AsyncSession,
+    generation: PersonalizedResourceGeneration,
+) -> CreatedCodeProblem:
     draft = generation.draft
     test_inputs = draft["test_inputs"]
     outputs = draft["expected_outputs"]
@@ -185,6 +194,7 @@ async def publish_reviewed_personal_problem(
     await db.flush()
     return CreatedCodeProblem(
         problem=problem,
+        generation=generation,
         public_case_count=generation.validation_report["public_case_count"],
         hidden_case_count=generation.validation_report["hidden_case_count"],
     )

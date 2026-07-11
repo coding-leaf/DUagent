@@ -73,7 +73,7 @@ def build_resource_draft_tools(client: BackendLearningClient) -> list[FunctionTo
     ) -> dict:
         return await _post(
             client,
-            "/internal/ai-chat/code-problem-validations",
+            "/internal/personalized-resources/code-problem-validations",
             {
                 "user_id": user_id,
                 "course_id": course_id,

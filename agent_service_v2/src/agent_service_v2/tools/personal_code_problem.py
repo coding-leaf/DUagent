@@ -38,6 +38,20 @@ def build_personal_code_problem_tools(
         hidden_inputs: list[str],
         **_ignored: Any,
     ) -> dict[str, Any]:
+        """Validate and publish one private fixed-case problem for the current student.
+
+        Args:
+            title: A concise problem title.
+            statement: A complete Markdown problem statement without the reference solution.
+            language: One of c, cpp, python, java, go, or javascript.
+            starter_code: Safe starter code shown to the student; an empty string is allowed.
+            reference_solution: A complete solution used only by Backend OJ validation.
+            public_inputs: Complete stdin values visible to the student; at least one is required.
+            hidden_inputs: Complete stdin values hidden from the student; at least one is required.
+
+        Returns:
+            A published result with generation_id and problem_id, or a rejected/unavailable result.
+        """
         if client is None or not course_id or not conversation_id:
             return {
                 "status": "unavailable",
@@ -69,18 +83,18 @@ def build_personal_code_problem_tools(
                 "status": _failure_status(exc.reason),
                 "reason": exc.detail_reason or exc.reason,
             }
-        return {"status": "validated", **data}
+        return data
 
     return [
         FunctionTool(
             validate_personal_code_problem_draft,
             name="validate_personal_code_problem_draft",
             description=(
-                "Validate one private fixed-test-case programming-problem draft for the current student. "
+                "Validate and immediately publish one private fixed-test-case programming problem for the current student. "
                 "Supported canonical languages are c, cpp, python, java, go, and javascript. "
                 "Provide at least one public input and one hidden input. "
-                "Backend OJ validates the reference solution and inputs, but this tool does not publish. "
-                "A reviewer must approve the returned generation_id before publication."
+                "Success is only status published with a non-empty problem_id. "
+                "Never expose the reference solution or hidden inputs in chat or artifacts."
             ),
             is_read_only=False,
         )

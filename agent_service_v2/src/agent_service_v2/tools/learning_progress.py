@@ -40,6 +40,11 @@ def build_learning_progress_tools(
     course_id: str | None,
 ) -> list[FunctionTool]:
     async def read_learning_progress(limit_nodes: int = 50, **_ignored: Any) -> dict[str, Any]:
+        """Read the current student's course progress before giving next-step advice.
+
+        Args:
+            limit_nodes: Maximum progress nodes to return, from 1 through 100.
+        """
         if client is None:
             return _error_result("backend_learning_client_not_configured")
         if not course_id:
@@ -63,6 +68,14 @@ def build_learning_progress_tools(
         only_wrong: bool = True,
         **_ignored: Any,
     ) -> dict[str, Any]:
+        """Read recent answer evidence for one node or knowledge-point name.
+
+        Args:
+            node_id: Exact node identifier returned by read_learning_progress.
+            knowledge_point: Exact knowledge-point name when no node_id is available.
+            limit: Maximum records to return, from 1 through 10.
+            only_wrong: Whether to return only incorrect answers.
+        """
         if client is None:
             return _error_result("backend_learning_client_not_configured")
         if not course_id:

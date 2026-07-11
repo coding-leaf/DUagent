@@ -90,3 +90,29 @@ def test_rule_fallback_keeps_facts_version_in_empty_insight():
         "next_actions": [],
         "facts_version": "facts-v7",
     }
+
+
+def test_text_from_chat_response_with_agentscope_types():
+    from agentscope.model import ChatResponse
+    from agentscope.message import TextBlock
+    from agent_service_v2.agents.evaluation import _text_from_chat_response
+
+    # Test with real-like ChatResponse containing TextBlocks
+    response = ChatResponse(
+        content=[
+            TextBlock(text="Hello "),
+            TextBlock(text="World!")
+        ],
+        is_last=True
+    )
+    assert _text_from_chat_response(response) == "Hello World!"
+
+    # Test with string fallback
+    assert _text_from_chat_response("Direct string") == "Direct string"
+
+    # Test with fallback object that has text attribute
+    mock_obj = MagicMock()
+    mock_obj.text = "Mock text"
+    # hasattr(mock_obj, "content") will be True, but content will be a MagicMock (not list)
+    assert _text_from_chat_response(mock_obj) == "Mock text"
+

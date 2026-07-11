@@ -20,6 +20,24 @@ logger = logging.getLogger(__name__)
 _MARKDOWN_FENCE_PATTERN = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
 
 
+def _text_from_chat_response(response: Any) -> str:
+    """Extract text content from AgentScope 2.x ChatResponse or similar object."""
+    if isinstance(response, str):
+        return response
+    if hasattr(response, "content") and isinstance(response.content, (list, tuple)):
+        parts: list[str] = []
+        for block in response.content:
+            text = getattr(block, "text", None)
+            if isinstance(text, str):
+                parts.append(text)
+        return "".join(parts)
+    text = getattr(response, "text", None)
+    if isinstance(text, str):
+        return text
+    return str(response) if response is not None else ""
+
+
+
 def generate_evaluation_data(request: EvaluationGenerateRequest) -> EvaluationData:
     """基于底层统计规则生成 Baseline 评估数据。"""
     return EvaluationData(
@@ -232,7 +250,7 @@ async def generate_evaluation_with_llm(
         # AgentScope 2.x: OpenAIChatModel requires a list of Msg objects
         from agentscope.message import UserMsg
         response = await model([UserMsg(name="user", content=prompt)])
-        raw_text = response.text.strip()
+        raw_text = _text_from_chat_response(response).strip()
 
         data = _parse_evaluation_json(raw_text)
         result = _enrich_evaluation_result(request, rule_result, data)
@@ -325,7 +343,7 @@ Your output MUST be a strict JSON object with EXACTLY this structure:
     try:
         from agentscope.message import UserMsg
         response = await model([UserMsg(name="user", content=prompt)])
-        text = response.text.strip()
+        text = _text_from_chat_response(response).strip()
 
         match = _MARKDOWN_FENCE_PATTERN.search(text)
         if match:

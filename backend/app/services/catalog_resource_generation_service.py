@@ -9,11 +9,10 @@ from app.models.others import AsyncTask, Resource
 from app.schemas.operations import CatalogResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.kg_resource_targets import select_core_resource_targets
+from app.services.kg_resource_targets import select_valid_resource_targets
 from app.services.resource_scope import resource_scope_clause
 
 RESOURCE_TYPES = {"document", "mindmap", "reading", "code"}
-KG_RESOURCE_TARGET_LIMIT = 10
 
 
 def now_utc() -> datetime:
@@ -217,7 +216,7 @@ class CatalogResourceGenerationService:
             payload["knowledge_point"] = req.knowledge_point
 
         try:
-            await agent_client.post_json("/agent/v1/resources/generate", payload)
+            await agent_client.post_json("/agent/v2/knowledge/resources/generations", payload)
         except AgentServiceError as e:
             task.status = "failed"
             task.error_code = str(e.agent_code or "agent_error")
@@ -262,9 +261,8 @@ class CatalogResourceGenerationService:
             await self.db.commit()
             return task
 
-        selection = select_core_resource_targets(
-            kg.nodes if isinstance(kg.nodes, list) else [],
-            max_targets=KG_RESOURCE_TARGET_LIMIT,
+        selection = select_valid_resource_targets(
+            kg.nodes if isinstance(kg.nodes, list) else []
         )
         target_nodes = selection["targets"]
         if not target_nodes:
@@ -311,6 +309,7 @@ class CatalogResourceGenerationService:
                 "target_node_count": len(target_nodes),
                 "total_child_count": len(target_nodes),
                 "target_nodes": target_nodes,
+                "skipped_nodes": selection["skipped"],
                 "selection_degraded": selection["selection_degraded"],
                 "selection_degraded_reason": selection["degraded_reason"],
                 "completed_child_count": 0,
@@ -357,7 +356,7 @@ class CatalogResourceGenerationService:
                 "webhook_url": webhook_url,
             }
             try:
-                await agent_client.post_json("/agent/v1/resources/generate", payload)
+                await agent_client.post_json("/agent/v2/knowledge/resources/generations", payload)
             except AgentServiceError as e:
                 child.status = "failed"
                 child.error_code = str(e.agent_code or "agent_error")

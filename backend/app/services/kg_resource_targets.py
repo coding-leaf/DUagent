@@ -1,53 +1,29 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
 from typing import Any
 
 SUPPORT_BAND_ORDER = ("strong", "good", "weak_but_usable")
 UNKNOWN_SUPPORT_BAND = "unknown"
-DEFAULT_MAX_TARGETS = 10
 
 
-def select_core_resource_targets(
-    nodes: list[dict[str, Any]],
-    max_targets: int = DEFAULT_MAX_TARGETS,
-) -> dict[str, Any]:
-    """Select deterministic KG nodes for resource generation."""
-    limit = max(0, int(max_targets))
-    if limit == 0:
-        return {"targets": [], "selection_degraded": False, "degraded_reason": ""}
+def select_valid_resource_targets(nodes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return every unique KG node that has enough course support."""
+    targets_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    skipped: list[dict[str, str]] = []
+    has_support_metadata = False
 
-    normalized = _dedupe_nodes(nodes)
-    has_support_metadata = any(
-        item["support_band"] != UNKNOWN_SUPPORT_BAND for item in normalized
-    )
-    if has_support_metadata:
-        targets = _select_with_support_bands(normalized, limit)
-        degraded = False
-        reason = ""
-    else:
-        targets = _round_robin_by_chapter(normalized, limit)
-        degraded = bool(normalized)
-        reason = "node_support_metadata_missing" if normalized else ""
-
-    return {
-        "targets": targets,
-        "selection_degraded": degraded,
-        "degraded_reason": reason,
-    }
-
-
-def _dedupe_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    best_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     for index, node in enumerate(nodes):
         node_id = str(node.get("id") or node.get("node_id") or "").strip()
         node_name = str(node.get("name") or node.get("node_name") or "").strip()
         chapter = str(node.get("chapter") or "").strip()
         if not node_id or not node_name or not chapter:
+            skipped.append({"node_id": node_id, "reason": "missing_required_fields"})
             continue
 
         support_band = _support_band(node)
+        has_support_metadata = has_support_metadata or support_band != UNKNOWN_SUPPORT_BAND
         if support_band == "unsupported":
+            skipped.append({"node_id": node_id, "reason": "unsupported"})
             continue
 
         candidate = {
@@ -59,14 +35,28 @@ def _dedupe_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "_order": index,
         }
         key = (chapter, node_name)
-        existing = best_by_key.get(key)
-        if existing is None or _sort_key(candidate) < _sort_key(existing):
-            best_by_key[key] = candidate
+        existing = targets_by_key.get(key)
+        if existing is not None:
+            skipped.append({"node_id": node_id, "reason": "duplicate_chapter_name"})
+            if _sort_key(candidate) < _sort_key(existing):
+                targets_by_key[key] = candidate
+            continue
+        targets_by_key[key] = candidate
 
-    return [
+    targets = [
         _public(item)
-        for item in sorted(best_by_key.values(), key=lambda item: item["_order"])
+        for item in sorted(targets_by_key.values(), key=lambda item: item["_order"])
     ]
+    return {
+        "targets": targets,
+        "skipped": skipped,
+        "selection_degraded": bool(targets) and not has_support_metadata,
+        "degraded_reason": (
+            "node_support_metadata_missing"
+            if targets and not has_support_metadata
+            else ""
+        ),
+    }
 
 
 def _support_band(node: dict[str, Any]) -> str:
@@ -94,35 +84,6 @@ def _score(node: dict[str, Any]) -> float | None:
         return float(raw)
     except (TypeError, ValueError):
         return None
-
-
-def _select_with_support_bands(
-    nodes: list[dict[str, Any]], limit: int
-) -> list[dict[str, Any]]:
-    selected: list[dict[str, Any]] = []
-    for band in SUPPORT_BAND_ORDER:
-        band_nodes = [item for item in nodes if item["support_band"] == band]
-        selected.extend(_round_robin_by_chapter(band_nodes, limit - len(selected)))
-        if len(selected) >= limit:
-            break
-    return selected[:limit]
-
-
-def _round_robin_by_chapter(
-    nodes: list[dict[str, Any]], limit: int
-) -> list[dict[str, Any]]:
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for item in sorted(nodes, key=_sort_key):
-        grouped[item["chapter"]].append(item)
-
-    queues = deque((chapter, deque(items)) for chapter, items in grouped.items())
-    selected: list[dict[str, Any]] = []
-    while queues and len(selected) < limit:
-        chapter, items = queues.popleft()
-        selected.append(_public(items.popleft()))
-        if items:
-            queues.append((chapter, items))
-    return selected
 
 
 def _sort_key(item: dict[str, Any]) -> tuple[int, float, int]:

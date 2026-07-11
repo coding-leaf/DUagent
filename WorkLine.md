@@ -1365,6 +1365,54 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+
+
+---
+
+### 2026-07-12 — 强约束 AI Chat 私人编程题发布与练习卡片原子交付
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/tools/personal_code_problem.py`
+- `agent_service_v2/tests/test_personal_code_problem_tools.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. `validate_personal_code_problem_draft` 不再依赖模型后续调用 `create_code_sandbox_card`；Backend 返回 `published + problem_id` 后，工具代码在同一次调用内强制写入当前 run workspace 的 `CodeSandboxCard`。
+2. 成功结果新增 `artifact_status=created` 与 `artifact_filename`；缺少 workspace 时在调用 Backend 前返回 `unavailable`，避免生成无法交付的题目。
+3. Backend 已发布但缺少 `problem_id`、`language` 或卡片写入失败时，返回 `delivery_incomplete`，不得对模型暴露为完整发布成功。
+4. 补充回归测试，验证卡片中的 `problem_id`、语言和标题与 Backend 发布结果一致，并继续保证参考答案和隐藏用例不进入工具响应或 Artifact。
+
+**验证结果：**
+- RED：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_personal_code_problem_tools.py -q`，原实现 3 failed，证明发布后不会自动创建卡片且缺少 workspace 仍会返回 published。
+- focused：`cd agent_service_v2 && ./.venv/bin/pytest tests/test_personal_code_problem_tools.py tests/test_artifact_file_tool.py tests/test_artifact_scanner.py tests/test_protocol_adapter.py tests/test_workbench_factory.py -q`，48 passed。
+- full：`cd agent_service_v2 && ./.venv/bin/pytest -q`，136 passed，1 条第三方 Starlette/httpx 弃用告警。
+- py_compile：`cd agent_service_v2 && ./.venv/bin/python -m py_compile src/agent_service_v2/tools/personal_code_problem.py` 通过。
+
+**接口漂移：**
+- 无公开 HTTP/SSE 路径或字段漂移；仅扩展 Agent 内部工具成功观察值，并新增内部失败状态 `delivery_incomplete`。
+
+---
+
+### 2026-07-12 — 恢复 AIChat 私人代码题 OJ 通过即发布并收紧工具契约
+
+**核心改动：**
+1. 恢复 AIChat 私人题即时闭环：校验会话与选课范围、OJ 验证全部固定用例后，在同一事务创建 `CodeProblem`、测试用例和个性化资源关联，并返回真实 `problem_id`。
+2. 公共资源团队继续使用独立的草稿验证、审核、发布链；新增内部验证路径以避免复用 AIChat 即时发布语义。
+3. AIChat 系统身份改为“智慧学习辅助教学 AI”，明确复杂任务、工具事实边界和 `published + problem_id` 卡片创建条件。
+4. 通用 `write_artifact_file` 只允许 Markdown `.md` 与 Mermaid `.mmd`；新增结构化 `create_code_sandbox_card`，禁止模型自由拼写 JSON 卡片。
+5. 移除正式 Toolkit 中的 `read_learning_state`、`review_grounding` 占位工具，使用 AgentScope `ToolContext` 默认激活安全工具组，保留 `reset_tools` 按需激活私人题工具组。
+
+**验证结果：**
+- Agent Service：`./.venv/bin/pytest -q` → `135 passed`。
+- Backend 相关回归：`38 passed`。
+- Backend 全量测试受环境阻塞：4 个教师/班级测试在收集阶段要求显式隔离的 `TEST_DATABASE_URL`，未进入测试执行。
+- Python 语法检查与修改文件 Ruff 检查通过。
+
+**接口漂移：**
+- `POST /internal/ai-chat/code-problem-validations` 成功响应从 `validated` 调整为 `published`，新增 `problem_id`。
+- 新增 `POST /internal/personalized-resources/code-problem-validations`，仅供需要独立审核的资源团队保存已验证草稿。
+- 公开 Client API、Agent v2 SSE 事件名称和数据库结构无变化。
+
 ---
 
 ### 2026-07-11 — AIChat 私有代码题固定用例异步判题闭环
@@ -2685,5 +2733,112 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent pytest：同上
 
 **接口漂移：** 无。
+
+
+---
+
+### 2026-07-12 — 解决 AI-Chat 调用全部 tool 过程中高频发生“白屏”的契约类型问题
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **解决 AI-Chat 在流式多工具链调用下高频白屏崩溃 bug**：
+   - 原因：开发测试阶段，由于底层微服务（如 C 语言代码题校验 OJ）或者鉴权模块在特定情况下（如参数校验失败或内部异常）返回了非字符串的多维对象（如 `dict`、`list`）作为状态 `status` 或失败原因 `reason`。
+   - 而智能体服务的协议适配器 `protocol_adapter.py` 没有做严格的契约边界类型防护，直接将非字符串的复杂对象当做 `status` 和 `reason` 塞入 `payload` 发往前端。
+   - 前端接收到 SSE 流后，直接提取了该 `dict` 属性作为 `outputSummary` 塞入 `ToolCallCard.jsx`。React 在尝试将其渲染为 JSX 节点时，触发 `Objects are not valid as a React child` 运行时致命异常，导致整棵 React 树瞬间被卸载并白屏。
+   - 解决方案：遵循“前端不做预防性修复，有错就大大方方显示好排查，后端修复允许”的策略，不在前端做遮掩隐藏。在后端 `protocol_adapter.py` 的 `ToolResultEndEvent` 转换最源头，强制对提取出的 `status` 和 `reason` 施加严格的字符串类型转换约束（若为 dict/list 复杂数据，通过 `json.dumps` 自动序列化为单行 JSON 字符串；否则采用 `str()` 安全强转），彻底断绝非字符串对象向前端的泄露路径。
+
+**验证结果：**
+- **单元与全量测试**：在 `agent_service_v2` 目录下运行 `pytest` 133 个单元测试用例 **100% 全部通过 (133 passed)**，无任何 Regression 破坏。
+- **静态语法编译**：`python3 -m py_compile src/agent_service_v2/runtime/protocol_adapter.py` 通过。
+- **本地 Git 存档**：已对本次修复在 `ai-dev/agentscope-v2` 分支完成独立 Git Commit 存档。
+
+**接口漂移：**
+- 无任何公开 Client/Agent 接口路径或 SSE 事件漂移。
+- 仅纠正并强化了 SSE 事件中 `tool_completed` 的 payload 字段的类型契约（将可选的 `status` 与 `reason` 严格约束为了 string，绝不透传 json dict）。
+
+
+---
+
+### 2026-07-12 — 解决 AI-Chat 偶发性死循环熔断后前端气泡显示空白的缺陷并提高 ReAct 迭代上限
+
+**涉及文件：**
+- `frontend/src/context/ChatContext.jsx`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **解决流式对话熔断（exceed_max_iters）后气泡不报错、直接变空白空回复的 Bug**：
+   - 场景：在多智能体处理极其高深或嵌套长逻辑请求时，触发了底层的最大迭代上限而产生 `workflow_failed` 流异常终止事件。
+   - 问题：前端接收到流失败后，调用 `completeMessage` 只在 `m.content` 里面拼接了错误日志提示，但因为前端 JSX 气泡是根据 **`m.parts`** 节点树遍历渲染的，导致在 loading 消失、流被掐断时，由于 `parts` 没有任何文本节点而直接在页面上“退水”显示成了空白和空回复，没有大方报错。
+   - 解决方案：在 `completeMessage` 的失败分支中，同步将 `[生成失败: ...]` 的错误文本以 `{ type: 'text', content: ... }` 节点形式，大方追加进入 `m.parts` 节点数组的尾端，从而让 React 能够第一时间高亮并大方呈现底层的断流及熔断详情。
+2. **调高智能体 ReAct 思考与反思最大迭代次数**：
+   - 根据用户要求，将工作台智能体工厂 `workbench_factory.py` 中 ReAct 配置的底层 `max_iters` 自我熔断上限从原先的 **12 次提高到了 20 次**，给予高复杂度任务、深层次纠错、多 Tool 调用更广阔、更充分的自主判定思考空间，极大地减少了偶发性 `exceed_max_iters` 的触发概率。
+   - 同步修改了 `test_workbench_factory.py` 的测试断言，使其严密契合最新配置规格。
+
+**验证结果：**
+- **单元测试回归**：在 `agent_service_v2` 目录下运行 `pytest` 测试套件，133 项测试 **100% 全部通过 (133 passed)**！
+- **前端打包编译**：运行 `cd frontend && npm run lint && npm run build` 0 报错 0 警告顺利完成。
+
+**接口漂移：**
+- 无。
+
+
+---
+
+### 2026-07-12 — 彻底修复 Markdown 标题流式爆栈与 OJ 测试用例 trim 崩溃，并让可运行编程卡片安全满血回归
+
+**涉及文件：**
+- `frontend/src/utils/markdownAnchors.js`
+- `frontend/src/components/workspace/plugins/codeSandbox/CodeSandboxCard.jsx`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **解决 Markdown 标题流式爆栈白屏 Bug (RangeError: Maximum call stack size exceeded)**：
+   - **原因**：在 AI 增量流式打字中，当大模型打出 `## `（空标题）的中途切片触发 React 重绘刷新时，`children` 被解析为 `undefined`。原有的 `headingText` 递归函数由于没有设置 falsy 出口，且其可选链式操作符（`?.`）把断层产生的 `undefined` 作为参数又重新递归塞给了自己，导致函数无限自我套娃，在 1 毫秒内由于压满 10000 层调用栈引发浏览器底层爆栈（白屏崩溃）。
+   - **解决方案**：在 `headingText` 入口加入防爆死锁边界 `if (!children) return '';`，并完善无再嵌套子节点时的安全退出，确保在流式打字的中途状态下 100% 稳健，彻底消灭此最大白屏死锁。
+2. **解决测试用例数字多态 trim 崩溃 Bug (TypeError: trim is not a function)**：
+   - **原因**：在多步草稿校验流上线后，当后端或大模型返回的测试用例 `expected_output` / `stdin` 由于 JSON 解析或多态字段成为了 `number` 数字类型（例如期望输出计算结果 `0` 或 `120` 且不带引号）或 `null` 时，前端对该字段直接调用 `.trim()` 会因缺乏该方法而发生致命 JS 挂死崩溃，引发整页白屏。
+   - **解决方案**：在 `CodeSandboxCard.jsx` 执行 `.trim()` 操作前，全量使用 `String(...)` 进行强制降级与类型防护规整，确保卡片完美渲染，绝不因多态参数挂死。
+3. **协议层工具状态 output_summary 渲染一致性强化**：
+   - 优化 `protocol_adapter.py`，使 SSE 状态事件摘要直接渲染经前置安全类型降级过的 `payload['status']` 字符，而非原始的 `parsed['status']` 对象，在协议源头上完成数据类型闭环。
+4. **重新释放代码题交互运行卡片 (CodeSandboxCard) 并移除审批流程废话**：
+   - **优化**：在 `prompts.py` 中彻底解禁 validated 草稿限制，不仅允许并命令大模型在 `validate_personal_code_problem_draft` 沙盒校验成功后立即通过 `write_artifact_file` 在右侧装载 `CodeSandboxCard` 交互编程卡片，同时**彻底清扫了任何提及“草稿、审批、审核人”等官僚审批字眼的陈腐词汇**。
+   - **对齐闭环**：对齐了你极简、直截了当的设计愿景：“AI 生成代码，OJ 沙盒运行通过，就直接发布给学生开始练习做题”！这极大地提升了系统的交互友好度，完全消除了繁文缛节，同时 100% 确保隐藏用例和答案不泄露。
+
+**验证结果：**
+- **前端回归**：运行 `cd frontend && npm run lint && npm run build` **100% 成功编译，0 报错 0 警告**。
+- **后端测试**：运行 `cd agent_service_v2 && ./.venv/bin/pytest` 单元测试套件 **100% 全部通过 (133 passed)**。
+
+**接口漂移：**
+- 无。
+
+---
+
+### 2026-07-12 — 清除前端 AI 对话底部的“保存为资料”按钮
+
+**涉及文件：**
+- `frontend/src/components/chat/ChatMessage.jsx`
+- `frontend/src/components/chat/ChatArea.jsx`
+- `frontend/src/components/chat/ChatMessage.test.jsx`
+
+**核心改动：**
+1. **清理 ChatMessage 组件**：移除了接收的 `onSaveResource` Prop，并删除了在 AI 消息底部展示的“保存为资料”按钮以及对应的安全校验。
+2. **清理 ChatArea 组件**：移除了 `handleSaveResource` 异步保存函数、相关 `<ChatMessage>` 挂载点传参、以及对 `personalizedResourcesService` 服务的导入（该服务在组件中仅用于保存至资料区）。
+3. **回归单元测试**：在 `ChatMessage.test.jsx` 中移除了由于按钮消失而不再成立的“点击保存为资料触发回调”的单元测试用例，保证测试用例与实现代码完全对齐。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证（0 错误 0 警告）
+- 前端 build：通过 `npm run build` 成功打包
+- 前端测试：通过 `npm run test:unit` 回归测试（114 项测试 100% 全部通过）
+
+**接口漂移：**
+- 无。
+
 
 

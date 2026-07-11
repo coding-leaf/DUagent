@@ -98,17 +98,3 @@ describe('ChatMessage', () => {
   });
 });
 
-it('offers an explicit save action for completed assistant content', () => {
-  const onSaveResource = vi.fn();
-  render(
-    <ChatMessage
-      message={{ role: 'assistant', content: '# 指针讲义', loading: false }}
-      onSendMessage={vi.fn()}
-      onRegenerate={vi.fn()}
-      onSaveResource={onSaveResource}
-    />,
-  );
-
-  screen.getByRole('button', { name: '保存到个性化资源' }).click();
-  expect(onSaveResource).toHaveBeenCalledTimes(1);
-});

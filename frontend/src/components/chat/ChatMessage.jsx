@@ -58,7 +58,7 @@ function ContentSafetyNotice({ review }) {
   );
 }
 
-export default function ChatMessage({ message, onSendMessage, onRegenerate, onSaveResource, isLastAssistant = false }) {
+export default function ChatMessage({ message, onSendMessage, onRegenerate, isLastAssistant = false }) {
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
   const isSafetyBlocked = !isUser && message.safetyBlocked;
@@ -129,6 +129,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, onSa
                   <MarkdownViewer
                     content={extractModelText(part.content || '')}
                     className="text-slate-700 text-[13px]"
+                    loading={message.loading}
                     compact
                   />
                 </div>
@@ -140,6 +141,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, onSa
             <MarkdownViewer
               content={extractModelText(message.content)}
               className={isUser ? 'text-white text-[13px]' : 'text-slate-700 text-[13px]'}
+              loading={message.loading}
               compact={!isUser}
             />
           </div>
@@ -187,16 +189,6 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, onSa
               <Icon name="content_copy" className="text-[14px]" />
               复制
             </button>
-            {onSaveResource && !isSafetyBlocked && (
-              <button
-                onClick={() => onSaveResource(message)}
-                aria-label="保存到个性化资源"
-                className="flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-700 shadow-sm hover:bg-cyan-100"
-              >
-                <Icon name="bookmark_add" className="text-[14px]" />
-                保存为资料
-              </button>
-            )}
           </div>
         )}
 
@@ -205,6 +197,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, onSa
           <MarkdownViewer 
             key={`diagram-${index}`}
             content={`\`\`\`mermaid\n${extractModelText(diag)}\n\`\`\``} 
+            loading={message.loading}
           />
         ))}
 

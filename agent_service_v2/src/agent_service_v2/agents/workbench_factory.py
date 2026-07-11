@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -19,8 +20,67 @@ from agent_service_v2.tools.personal_code_problem import build_personal_code_pro
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
 
+logger = logging.getLogger(__name__)
+MEMORY_COLLECTION_NAME = "student_memories"
+
+
 class MissingModelConfigError(RuntimeError):
     pass
+
+
+class MemoryCollectionDimensionError(RuntimeError):
+    pass
+
+
+def _build_mem0_config(*, qdrant_url: str, collection_name: str, embedding_dimension: int):
+    from mem0.configs.base import MemoryConfig
+
+    return MemoryConfig(
+        vector_store={
+            "provider": "qdrant",
+            "config": {
+                "collection_name": collection_name,
+                "url": qdrant_url,
+                "embedding_model_dims": embedding_dimension,
+            },
+        },
+    )
+
+
+def _ensure_memory_collection(
+    *,
+    client: Any,
+    collection_name: str,
+    embedding_dimension: int,
+) -> None:
+    from qdrant_client.models import Distance, VectorParams
+
+    if client.collection_exists(collection_name=collection_name):
+        collection = client.get_collection(collection_name=collection_name)
+        actual_dimension = collection.config.params.vectors.size
+        if actual_dimension == embedding_dimension:
+            return
+        if collection.points_count:
+            raise MemoryCollectionDimensionError(
+                f"memory collection dimension mismatch: expected={embedding_dimension} "
+                f"actual={actual_dimension} points={collection.points_count}",
+            )
+        logger.warning(
+            "Recreating empty memory collection with correct dimension: "
+            "collection=%s expected=%s actual=%s",
+            collection_name,
+            embedding_dimension,
+            actual_dimension,
+        )
+        client.delete_collection(collection_name=collection_name)
+
+    client.create_collection(
+        collection_name=collection_name,
+        vectors_config=VectorParams(
+            size=embedding_dimension,
+            distance=Distance.COSINE,
+        ),
+    )
 
 
 class WorkbenchAgentFactory:
@@ -87,36 +147,21 @@ class WorkbenchAgentFactory:
         middlewares = []
 
         if embedding_model and settings.QDRANT_URL:
-            # Pre-create student_memories collection with correct vector dimensions (typically 1024 for bge-m3)
-            # to prevent Mem0 from recreating it with its hardcoded default OpenAI 1536 dimensions.
             try:
                 from qdrant_client import QdrantClient
-                from qdrant_client.models import Distance, VectorParams
-                q_client = QdrantClient(url=settings.QDRANT_URL)
-                if not q_client.collection_exists(collection_name="student_memories"):
-                    q_client.create_collection(
-                        collection_name="student_memories",
-                        vectors_config=VectorParams(
-                            size=settings.EMBEDDING_DIMENSION,
-                            distance=Distance.COSINE,
-                        ),
-                    )
-            except Exception:
-                pass
-
-            try:
-                from mem0.configs.base import MemoryConfig
                 from agentscope.middleware import Mem0Middleware
                 from agentscope.middleware._longterm_memory._mem0._tools import _build_memory_tools
 
-                mem0_qdrant_cfg = MemoryConfig(
-                    vector_store={
-                        "provider": "qdrant",
-                        "config": {
-                            "collection_name": "student_memories",
-                            "url": settings.QDRANT_URL,
-                        }
-                    }
+                q_client = QdrantClient(url=settings.QDRANT_URL)
+                _ensure_memory_collection(
+                    client=q_client,
+                    collection_name=MEMORY_COLLECTION_NAME,
+                    embedding_dimension=settings.EMBEDDING_DIMENSION,
+                )
+                mem0_qdrant_cfg = _build_mem0_config(
+                    qdrant_url=settings.QDRANT_URL,
+                    collection_name=MEMORY_COLLECTION_NAME,
+                    embedding_dimension=settings.EMBEDDING_DIMENSION,
                 )
                 mem0_mw = Mem0Middleware(
                     user_id=user_id,
@@ -128,8 +173,7 @@ class WorkbenchAgentFactory:
                 memory_tools = _build_memory_tools(mem0_mw)
                 middlewares.append(mem0_mw)
             except Exception as exc:
-                # Log or fallback if mem0 initialization encounters any issues
-                pass
+                logger.exception("Memory middleware initialization disabled: %s", exc)
 
         toolkit = Toolkit(
             tool_groups=build_workbench_tool_groups(

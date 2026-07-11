@@ -2284,3 +2284,30 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent pytest：对 `workbench_factory.py` 执行 `py_compile` 通过，且运行 `cd agent_service_v2 && ./.venv/bin/pytest tests/test_workbench_factory.py tests/test_personal_code_problem_tools.py` 8 个用例全部 100% 通过（8 passed）。
 
 **接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 完整修复 Mem0 默认 1536 维与项目 1024 维配置冲突
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 在 Mem0 `MemoryConfig` 的 Qdrant 配置中显式传入项目 `EMBEDDING_DIMENSION`，不再依赖 Mem0 的 1536 默认值。
+2. 初始化 Memory middleware 前校验 `student_memories` 的真实向量维度；错误维度的空集合自动重建，非空集合保留数据并抛出明确错误。
+3. 移除 Memory 初始化的静默异常吞噬，失败时记录明确日志并禁用 Memory 工具。
+4. 增加配置维度、空集合重建和非空集合保护回归测试。
+
+**运行态核验：**
+- embedding 模型：`BAAI/bge-m3`，配置维度 1024。
+- `student_memories` 原状态：1536 维、0 条数据。
+- 已将空集合重建为 1024 维；课程资源集合 `course_knowledge_v1_1024` 未修改。
+
+**验证结果：**
+- RED：新增测试初次运行 3 failed、5 passed，确认旧实现未覆盖目标行为。
+- Agent 语法检查：`python -m py_compile src/agent_service_v2/agents/workbench_factory.py` 通过。
+- Agent 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest`，108 passed，1 个第三方 Starlette/httpx 弃用警告。
+
+**接口漂移：** 无。

@@ -70,7 +70,7 @@ def build_public_resource_prompt(
         ),
         "diagram": (
             "选择 flowchart、sequence、mindmap、class 或 state 中最适合的一种 "
-            "Mermaid 图。content 只放 Mermaid 源码，并返回 diagram_kind。"
+            "Mermaid 图。content 只放 Mermaid 源码，并返回 diagram_kind。注意：Mermaid 节点的文本绝不能直接包含中括号 `[`、`]`、圆括号 `()` 或双引号等 Mermaid 的语法保留操作符；如果文本中必须带有空格、数组中括号（例如 arr[i]）或特殊标点符号，必须将整个节点标签文本用双引号包围（例如 ID[\"label text with arr['i']\"]），并将所有内部双引号替换为单引号 `'`，严禁产生未转义、未包裹的括号嵌套冲突。"
         ),
         "example": (
             "生成讲解型代码示例 Markdown，包含目标、完整代码、运行结果、"

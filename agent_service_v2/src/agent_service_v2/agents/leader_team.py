@@ -269,6 +269,7 @@ Output format MUST be a strict JSON:
 
 Language Requirements:
 1. "title" and all node texts / concepts inside "mermaid_code" MUST be fully generated in Simplified Chinese (简体中文) (e.g. root((指针基础)) -> Concept[指针概念] -> Subconcept[指针定义]).
+2. CRITICAL SYNTATIC RULE: Never use unquoted brackets `[` or `]` or double-quotes inside node text/labels in `mermaid_code`. If a label contains special characters, spaces, brackets, or code snippets (e.g. `arr[i]`), you MUST wrap the entire label in double quotes (e.g., ID["text with arr['i']"]) and convert any nested double-quotes to single quotes `'` to prevent Mermaid syntax parsing errors.
 """
         else:
             # Fallback reading

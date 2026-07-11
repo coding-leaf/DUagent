@@ -83,6 +83,7 @@ export const normalizeArtifact = (event) => {
   return {
     id: artifact.id || `artifact-${crypto.randomUUID()}`,
     type: artifact.type,
+    title: artifact.title || null,
     props: artifact.props || {},
     timestamp: event.timestamp || new Date().toISOString()
   };

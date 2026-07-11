@@ -57,7 +57,7 @@ describe('useLearningEffects', () => {
     await waitFor(() => {
       expect(result.current.effectsData).toEqual(mockData);
       expect(result.current.overview.total).toBe(2);
-      expect(result.current.overview.practiced).toBe(1);
+      expect(result.current.overview.mastered).toBe(1);
       expect(result.current.overview.pending).toBe(1);
     });
   });

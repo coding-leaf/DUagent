@@ -24,18 +24,25 @@ const buildAgentMessage = (message, options = {}) => {
 };
 
 const artifactsFromMessages = (messages = []) => {
-  return messages.flatMap(message => {
+  const artifactsMap = new Map();
+  messages.forEach(message => {
     const artifacts = message?.meta?.artifacts;
-    if (!Array.isArray(artifacts)) return [];
-    return artifacts
-      .filter(artifact => artifact && artifact.type)
-      .map(artifact => ({
-        id: artifact.id || `artifact-${crypto.randomUUID()}`,
-        type: artifact.type,
-        props: artifact.props || {},
-        timestamp: artifact.timestamp || message.timestamp || new Date().toISOString()
-      }));
+    if (Array.isArray(artifacts)) {
+      artifacts
+        .filter(artifact => artifact && artifact.type)
+        .forEach(artifact => {
+          const id = artifact.id || `artifact-${crypto.randomUUID()}`;
+          artifactsMap.set(id, {
+            id,
+            type: artifact.type,
+            title: artifact.title || null,
+            props: artifact.props || {},
+            timestamp: artifact.timestamp || message.timestamp || new Date().toISOString()
+          });
+        });
+    }
   });
+  return Array.from(artifactsMap.values());
 };
 
 export const ChatProvider = ({ children }) => {
@@ -199,7 +206,16 @@ export const ChatProvider = ({ children }) => {
         if (event.type === 'artifact_created') {
           const artifact = normalizeArtifact(event);
           if (artifact) {
-            setWorkspaceArtifacts(prev => [...prev, artifact]);
+            setWorkspaceArtifacts(prev => {
+              const next = [...prev];
+              const idx = next.findIndex(a => a.id === artifact.id);
+              if (idx >= 0) {
+                next[idx] = artifact;
+              } else {
+                next.push(artifact);
+              }
+              return next;
+            });
             setActiveArtifactId(artifact.id);
           }
         }

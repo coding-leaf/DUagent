@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import CourseCatalog, CourseOffering
@@ -41,6 +41,8 @@ class NodeResourceService:
                     node_name = node.get("name", node_name)
                     break
 
+        catalog_id, host_course_id = await self._resolve_catalog_context(course_id)
+
         return {
             "node_id": node_id,
             "node_name": node_name,
@@ -49,15 +51,46 @@ class NodeResourceService:
                 resource_scope.catalog_id,
                 node_name,
             ),
-            "exercises": await self._node_exercises(course_id, node_name),
+            "exercises": await self._node_exercises(course_id, catalog_id, host_course_id, node_name),
             "chapter_materials": await self._chapter_materials(
                 course_id,
                 resource_scope.catalog_id,
                 chapter,
             ),
-            "full_exercise_count": await self._full_exercise_count(course_id),
-            "full_exercise_set": await self._full_exercise_set(course_id),
+            "full_exercise_count": await self._full_exercise_count(course_id, catalog_id, host_course_id),
+            "full_exercise_set": await self._full_exercise_set(course_id, catalog_id, host_course_id),
         }
+
+    async def _resolve_catalog_context(self, course_id: str) -> tuple[str | None, str | None]:
+        """查询课程与班级（Offering）级联关系，返回确定归属的 (catalog_id, host_course_id)"""
+        offering_result = await self.db.execute(
+            select(CourseOffering).where(
+                CourseOffering.id == course_id,
+                CourseOffering.is_deleted == False,
+            )
+        )
+        offering = offering_result.scalar_one_or_none()
+        if offering is not None:
+            catalog_id = offering.catalog_id
+            catalog_result = await self.db.execute(
+                select(CourseCatalog).where(
+                    CourseCatalog.id == catalog_id,
+                    CourseCatalog.is_deleted == False,
+                )
+            )
+            catalog = catalog_result.scalar_one_or_none()
+            host_course_id = catalog.kg_host_course_id if catalog else None
+            return catalog_id, host_course_id
+
+        # 如果不是 Offering，尝试把 course_id 视为 host_course_id
+        catalog_result = await self.db.execute(
+            select(CourseCatalog).where(
+                CourseCatalog.kg_host_course_id == course_id,
+                CourseCatalog.is_deleted == False,
+            )
+        )
+        catalog = catalog_result.scalar_one_or_none()
+        return (catalog.id if catalog else None), course_id
 
     async def _resolve_active_kg(self, course_id: str):
         kg = None
@@ -108,12 +141,21 @@ class NodeResourceService:
             for resource in result.scalars().all()
         ]
 
-    async def _node_exercises(self, course_id: str, node_name: str) -> list[dict]:
+    async def _node_exercises(self, course_id: str, catalog_id: str | None, host_course_id: str | None, node_name: str) -> list[dict]:
+        course_ids = {course_id}
+        if host_course_id:
+            course_ids.add(host_course_id)
+
+        conditions = [QuizQuestion.course_id.in_(list(course_ids))]
+        if catalog_id:
+            conditions.append(QuizQuestion.catalog_id == catalog_id)
+
         result = await self.db.execute(
             select(QuizQuestion).where(
-                QuizQuestion.course_id == course_id,
+                or_(*conditions),
                 QuizQuestion.knowledge_point == node_name,
                 QuizQuestion.is_deleted == False,
+                QuizQuestion.source.in_(["common", "baseline"]),
             )
         )
         return [
@@ -136,21 +178,39 @@ class NodeResourceService:
             for resource in result.scalars().all()
         ]
 
-    async def _full_exercise_count(self, course_id: str) -> int:
+    async def _full_exercise_count(self, course_id: str, catalog_id: str | None, host_course_id: str | None) -> int:
+        course_ids = {course_id}
+        if host_course_id:
+            course_ids.add(host_course_id)
+
+        conditions = [QuizQuestion.course_id.in_(list(course_ids))]
+        if catalog_id:
+            conditions.append(QuizQuestion.catalog_id == catalog_id)
+
         result = await self.db.execute(
             select(func.count(QuizQuestion.id)).where(
-                QuizQuestion.course_id == course_id,
+                or_(*conditions),
                 QuizQuestion.is_deleted == False,
+                QuizQuestion.source.in_(["common", "baseline"]),
             )
         )
         return result.scalar() or 0
 
-    async def _full_exercise_set(self, course_id: str) -> list[dict]:
+    async def _full_exercise_set(self, course_id: str, catalog_id: str | None, host_course_id: str | None) -> list[dict]:
+        course_ids = {course_id}
+        if host_course_id:
+            course_ids.add(host_course_id)
+
+        conditions = [QuizQuestion.course_id.in_(list(course_ids))]
+        if catalog_id:
+            conditions.append(QuizQuestion.catalog_id == catalog_id)
+
         result = await self.db.execute(
             select(QuizQuestion)
             .where(
-                QuizQuestion.course_id == course_id,
+                or_(*conditions),
                 QuizQuestion.is_deleted == False,
+                QuizQuestion.source.in_(["common", "baseline"]),
             )
             .limit(10)
         )

@@ -2418,7 +2418,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 新增 SWR `usePersonalizedResources`，由 SWR 负责缓存、按 processing_count 轮询和刷新；页面不再手写 `useEffect + setInterval`。
 - 新增统一资源卡，覆盖专业讲解、知识图解、练习、拓展阅读、验证代码题五类，并显示手动、AI 对话、学情建议等来源和宽松审核建议。
 - 新增 `/personalized-resources/generate` 自然语言生成页及多智能体角色进度；旧三步固定类型弹窗不再作为资源中心主入口。
-- AI Chat 完成回答提供显式“保存为资料”，通过统一自然语言生成协议进入草案、验证、审核与发布链路。
+- AI Chat 完成回答提供显式“保存为资料”，通过统一自然语言生成协议进入草案、验证、审核与发布链路.
 - `/learning-effects` 使用结构化学情弱点预填生成目标；只有学生点击按钮并在生成页再次确认后才提交，不做后台自动生成。
 - 验证：Frontend 相关 8 个测试文件 17 passed；lint 0 errors（1 个既有 ChatContext warning）；build 通过（既有大 chunk 提示）；Backend 相关 38 passed。
 - 接口漂移：个性化列表新增审核/生成元数据，生成请求新增自然语言目标；旧字段兼容。
+
+### 2026-07-12 — 修复 Redis 一键拉起与大纲公共题库继承共享
+
+- **核心改动**：
+  - 1. **修改 `./start_all.sh`**：在拉起 Docker 容器部分增加对 `eduagent-agentscope-redis` 的自动检测与创建/启动。若容器不存在则自动拉取 `redis:7-alpine` 并创建，若存在则自动 `docker start` 启动，彻底屏蔽新部署环境的 Redis 手动创建细节。
+  - 2. **兼容大纲级公共题目检索**：在 `knowledge_progress.py` 与 `learning_path_resource_probe.py` 中，支持通过 Offering 关联的 `catalog_id` 自动级联检索属于该大纲的公共题目，避免新创建的教学 Offering 班级因为没有重新在管理员后台触发题库生成导致公共资源库无题、掌握度评估永远为 0 的 Bug。
+  - 3. **清理冗余错题关联限制**：在 `quiz_service.py` 的错题诊断统计中，去除对答题记录进行 `QuizQuestion.course_id == class_course_id` 的冗余 Offering 物理过滤，使学生在不同班级作答公共题产生的错题记录能被正确计入弱点诊断。
+- **验证**：
+  - 运行 `python3 -m py_compile` 对三个文件进行语法校验，全部成功。
+  - 运行 `pytest tests/test_knowledge_progress.py tests/test_learning_path_resource_probe.py tests/test_evaluation_service_refactored.py tests/test_quiz_async.py` 全部 19 个相关测试用例 100% 绿灯通过。
+- **接口漂移**：无。
+
+### 2026-07-12 — 修复学生端无法查询大纲级公共题库
+
+- **涉及文件**：
+  - `backend/app/services/node_resource_service.py`
+  - `backend/tests/test_node_resource_service.py`
+  - `WorkLine.md`
+- **核心改动**：
+  - 1. **级联解析归属关系**：在 `NodeResourceService` 中新增 `_resolve_catalog_context` 方法，显式查询 `CourseOffering` 和 `CourseCatalog` 获取对应的 `catalog_id` 和主机课程 `kg_host_course_id`。
+  - 2. **优化习题查询范围**：重构 `_node_exercises`、`_full_exercise_count` 和 `_full_exercise_set` 方法，支持通过 In-Or 条件联查班级自身、主机课程或大纲关联的习题。
+  - 3. **过滤排除个性化习题**：仅将 `source.in_(["common", "baseline"])` 的习题挂载至静态节点资源面板，符合大纲题库设计定位。
+  - 4. **新增回归测试**：在 `test_node_resource_service.py` 中编写 `test_node_resource_service_resolves_catalog_quizzes` 级联题库关联回归测试用例。
+- **验证**：
+  - 运行 `python3 -m py_compile` 对修改文件进行语法校验，全部成功。
+  - 运行 `pytest tests/test_node_resource_service.py -v` 绿灯通过（2 passed，新增 regression 覆盖正常）。
+  - 运行 `pytest tests/test_node_resources.py tests/test_learning_path_resource_probe.py tests/test_quiz_async.py -v` 绿灯通过。
+- **接口漂移**：无。
+

@@ -120,6 +120,7 @@ export const ChatProvider = ({ children }) => {
   }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation, clearRunLogs]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setHiddenArtifactIds([]);
     if (activeSession) {
@@ -133,12 +134,13 @@ export const ChatProvider = ({ children }) => {
         }
       }).catch(console.error);
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages([]);
       setWorkspaceArtifacts([]);
       setActiveArtifactId(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const cancelStream = () => {
     if (abortControllerRef.current) {

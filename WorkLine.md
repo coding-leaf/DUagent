@@ -2093,3 +2093,44 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 内部微服务回调 Payload 的 `results` 属性更改为规范的 `result.resources` 结构，并补全了 `task_type`；对外部 Client API 保持完全向下兼容，无任何客户端接口漂移。
+
+---
+
+### 2026-07-11 — 修复 Qdrant 维度冲突、Evaluation 异步模型调用与 Webhook 代码字段提取
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/evaluation.py`
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py`
+- `agent_service_v2/tests/test_evaluation_api.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **删除 Qdrant 冲突集合**：删除了原维度为 1536 的空 `student_memories` 集合，允许微服务使用 `BAAI/bge-m3`（1024 维）自动以正确维度重建并初始化。
+2. **Evaluation 异步模型调用修复**：在 `evaluation.py` 中为 `model(prompt)` 调用补上 `await`（2处），解决 model 异步调用返回协程导致的 `'coroutine' object has no attribute 'text'` 异常，并同步更新测试将 MagicMock 改为 AsyncMock。
+3. **Webhook 提取字段对齐**：在 `leader_team.py` 的回调逻辑中补充对 `"code"` 类型的 `markdown_content` 读取（与 `"reading"` 类型对齐），解决由于字段缺失回传空 content 导致前端资源卡片显示空白的问题。
+
+**验证结果：**
+- 后端 py_compile / pytest：通过 `cd backend && pytest tests/test_admin_catalog_resource_generation.py -v`（29 passed）。
+- Agent pytest：通过 `cd agent_service_v2 && pytest tests`（106 passed）。
+- 前端 lint / build：未运行（未修改前端代码）。
+
+**接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复生成产物时聊天记录刷空以及非 Markdown 类型资源渲染失败
+
+**涉及文件：**
+- `frontend/src/context/ChatContext.jsx`
+- `frontend/src/utils/mermaid.js`
+
+**核心改动：**
+1. **解决资源生成时聊天区域变白问题**：在 `ChatContext.jsx` 中，将负责加载会话历史的 `useEffect` 的依赖数组由原来的 `[sessions, activeCourseId, activeSession, activeArtifactId]` 精简为 `[activeSession]`，并添加 ESLint 忽略规则。避免在流式生成资源导致 `activeArtifactId` 频繁切换时，意外触发 `getHistory` 从数据库拉取未保存完的历史数据并清空当前流式渲染。
+2. **修复 Mermaid 图表渲染语法报错**：在 `mermaid.js` 中，将 subgraph 标题提取验证的正则从 `/^[\w-]+\s+\[.*\]$/` 修改为 `/^[\w-]+\s*\[.*\]$/`，以兼容 `subgraph ID["Label"]` 这种 ID 与中括号之间没有空格的常见合法写法，防止此类子图被错误重新包装成 invalid syntax 引发白屏或 "Mermaid syntax error" 报错。
+
+**验证结果：**
+- 前端 lint / build：通过 `cd frontend && npm run lint && npm run build` (编译打包成功)。
+- 后端 py_compile / pytest：未运行（未改动后端代码）。
+- Agent pytest：未运行（未改动智能体代码）。
+
+**接口漂移：** 无。

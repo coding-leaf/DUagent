@@ -5,10 +5,12 @@ from typing import Any
 from agentscope.tool import FunctionTool
 from agentscope.workspace import LocalWorkspace
 
+from agent_service_v2.artifacts.schemas import ArtifactValidationError
 from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClient,
     BackendLearningClientError,
 )
+from agent_service_v2.tools.artifact_files import build_create_code_sandbox_card
 
 
 def _failure_status(reason: str) -> str:
@@ -57,6 +59,11 @@ def build_personal_code_problem_tools(
                 "status": "unavailable",
                 "reason": "ai_chat_context_not_configured",
             }
+        if workspace is None:
+            return {
+                "status": "unavailable",
+                "reason": "ai_chat_workspace_not_configured",
+            }
         payload = {
             "user_id": user_id,
             "course_id": course_id,
@@ -83,7 +90,41 @@ def build_personal_code_problem_tools(
                 "status": _failure_status(exc.reason),
                 "reason": exc.detail_reason or exc.reason,
             }
-        return data
+        if data.get("status") != "published":
+            return data
+
+        problem_id = data.get("problem_id")
+        published_language = data.get("language")
+        if not isinstance(problem_id, str) or not problem_id:
+            return {
+                "status": "delivery_incomplete",
+                "reason": "published_problem_id_missing",
+            }
+        if not isinstance(published_language, str) or not published_language:
+            return {
+                "status": "delivery_incomplete",
+                "reason": "published_problem_language_missing",
+                "problem_id": problem_id,
+            }
+
+        create_card = build_create_code_sandbox_card(workspace=workspace, run_id=run_id)
+        try:
+            artifact = create_card(
+                problem_id=problem_id,
+                language=published_language,
+                title=title,
+            )
+        except (ArtifactValidationError, OSError):
+            return {
+                "status": "delivery_incomplete",
+                "reason": "code_sandbox_card_creation_failed",
+                "problem_id": problem_id,
+            }
+        return {
+            **data,
+            "artifact_status": "created",
+            "artifact_filename": artifact["filename"],
+        }
 
     return [
         FunctionTool(
@@ -93,7 +134,7 @@ def build_personal_code_problem_tools(
                 "Validate and immediately publish one private fixed-test-case programming problem for the current student. "
                 "Supported canonical languages are c, cpp, python, java, go, and javascript. "
                 "Provide at least one public input and one hidden input. "
-                "Success is only status published with a non-empty problem_id. "
+                "Success is only status published with a non-empty problem_id and artifact_status created. "
                 "Never expose the reference solution or hidden inputs in chat or artifacts."
             ),
             is_read_only=False,

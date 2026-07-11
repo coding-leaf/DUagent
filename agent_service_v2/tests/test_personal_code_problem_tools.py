@@ -1,6 +1,8 @@
 import asyncio
 import json
 
+from agentscope.workspace import LocalWorkspace
+
 from agent_service_v2.tools.backend_learning_client import BackendLearningClientError
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 
@@ -34,14 +36,16 @@ def _text(chunk) -> str:
     return chunk.content[0].text
 
 
-def test_personal_code_problem_tool_returns_published_private_problem():
+def test_personal_code_problem_tool_returns_published_private_problem(tmp_path):
     client = FakeClient()
+    workspace = LocalWorkspace(workdir=str(tmp_path), workspace_id="ws")
     tool = build_personal_code_problem_tools(
         client=client,
         user_id="student-1",
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
+        workspace=workspace,
     )[0]
 
     response = asyncio.run(
@@ -64,6 +68,8 @@ def test_personal_code_problem_tool_returns_published_private_problem():
         "language": "python",
         "public_case_count": 1,
         "hidden_case_count": 1,
+        "artifact_status": "created",
+        "artifact_filename": "code-problem-problem-1.json",
     }
     assert client.calls == [
         (
@@ -89,7 +95,47 @@ def test_personal_code_problem_tool_returns_published_private_problem():
     ]
 
 
-def test_personal_code_problem_publication_returns_problem_id_without_leaking_draft(tmp_path):
+def test_personal_code_problem_publication_creates_matching_card_without_leaking_draft(tmp_path):
+    workspace = LocalWorkspace(workdir=str(tmp_path), workspace_id="ws")
+    tool = build_personal_code_problem_tools(
+        client=FakeClient(),
+        user_id="student-1",
+        course_id="course-1",
+        conversation_id="conversation-1",
+        run_id="run-1",
+        workspace=workspace,
+    )[0]
+
+    response = asyncio.run(
+        tool.call(
+            title="回显",
+            statement="读取并输出输入。",
+            language="python",
+            starter_code="print(input())",
+            reference_solution="print(input())",
+            public_inputs=["shown\n"],
+            hidden_inputs=["hidden\n"],
+        )
+    )
+
+    data = json.loads(_text(response))
+    assert data["status"] == "published"
+    assert data["generation_id"] == "generation-1"
+    assert data["problem_id"] == "problem-1"
+    assert data["artifact_status"] == "created"
+    assert "reference_solution" not in data
+    artifact_path = (
+        tmp_path / "runs" / "run-1" / "artifacts" / "code-problem-problem-1.json"
+    )
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8").split("---\n", 2)[-1])
+    assert artifact == {
+        "type": "CodeSandboxCard",
+        "title": "回显",
+        "props": {"problem_id": "problem-1", "language": "python"},
+    }
+
+
+def test_personal_code_problem_tool_requires_workspace_for_atomic_delivery():
     tool = build_personal_code_problem_tools(
         client=FakeClient(),
         user_id="student-1",
@@ -110,21 +156,20 @@ def test_personal_code_problem_publication_returns_problem_id_without_leaking_dr
         )
     )
 
-    data = json.loads(_text(response))
-    assert data["status"] == "published"
-    assert data["generation_id"] == "generation-1"
-    assert data["problem_id"] == "problem-1"
-    assert "artifact" not in data
-    assert "reference_solution" not in data
+    assert json.loads(_text(response)) == {
+        "status": "unavailable",
+        "reason": "ai_chat_workspace_not_configured",
+    }
 
 
-def test_personal_code_problem_tool_reports_backend_validation_as_rejected():
+def test_personal_code_problem_tool_reports_backend_validation_as_rejected(tmp_path):
     tool = build_personal_code_problem_tools(
         client=RejectingClient(),
         user_id="student-1",
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
+        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
     )[0]
 
     response = asyncio.run(

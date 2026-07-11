@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useChat } from '../../../../context/ChatContext';
 import CodeSandboxConsole from './CodeSandboxConsole';
 import { buildAskAIPrompt, getSourceFilename } from './codeSandboxViewModel';
@@ -110,16 +109,18 @@ function StdinInput({ isFixedCase, stdin, onStdinChange }) {
   );
 }
 
-function ActionButtons({ isSending, isRunning, isFixedCase, onAskAI, onRun }) {
+function ActionButtons({ isSending, isRunning, isFixedCase, onAskAI, onRun, showAskAI = true }) {
   return (
     <div className="flex gap-3 justify-end pt-1">
-      <button
-        onClick={onAskAI}
-        disabled={isSending}
-        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-sm font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 border border-slate-200"
-      >
-        🙋 请求 AI 答疑
-      </button>
+      {showAskAI && (
+        <button
+          onClick={onAskAI}
+          disabled={isSending}
+          className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-sm font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 border border-slate-200"
+        >
+          🙋 请求 AI 答疑
+        </button>
+      )}
 
       <button
         onClick={onRun}
@@ -137,10 +138,10 @@ export default function CodeSandboxCard({
   question_text,
   code: legacyCode,
   language,
-  default_stdin
+  default_stdin,
+  showAskAI = true
 }) {
-  const { sendMessage, isSending, resetConversation } = useChat();
-  const navigate = useNavigate();
+  const { sendMessage, isSending } = useChat();
   const { problem, error, isLoading } = useCodeProblem(problemId);
   const isFixedCaseProblem = Boolean(problemId);
   const [selectedLanguage, setSelectedLanguage] = useState(language || 'python');
@@ -178,9 +179,7 @@ export default function CodeSandboxCard({
 
   const handleAskAI = () => {
     if (!isSending) {
-      resetConversation();
       sendMessage(buildAskAIPrompt({ code, language: displayLanguage, stdin, result }));
-      navigate('/ai-chat');
     }
   };
 
@@ -217,6 +216,7 @@ export default function CodeSandboxCard({
         isFixedCase={isFixedCaseProblem}
         onAskAI={handleAskAI}
         onRun={runCode}
+        showAskAI={showAskAI}
       />
     </div>
   );

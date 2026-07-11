@@ -111,6 +111,7 @@ const materialToLucide = {
     'data_object': 'Braces',
     'calendar_today': 'Calendar',
     'broken_image': 'ImageOff',
+    'insert_drive_file': 'FileText',
 };
 
 export default function Icon({ name, className = "", style = {} }) {

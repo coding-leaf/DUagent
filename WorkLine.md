@@ -2531,10 +2531,12 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 ---
 
-### 2026-07-12 — 修复 AI 对话因报错图重新挂载及渲染异常导致的白屏挂死
+### 2026-07-12 — 修复 AI 对话因报错图重新挂载及渲染异常导致的白屏挂死，并从大模型源头强化提示词转义约束
 
 **涉及文件：**
 - `frontend/src/components/common/MarkdownViewer.jsx`
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py`
+- `agent_service_v2/src/agent_service_v2/generators/public_resources.py`
 
 **核心改动：**
 1. **引入局部的 `MermaidErrorBoundary`（物理隔离渲染/卸载崩溃）**：
@@ -2542,10 +2544,13 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 2. **将渲染失败状态固化写入缓存（Failed State Caching）**：
    重塑 `MermaidDiagram` 的 `useState` 状态机与 `setCachedSvg` 的工作流，当 Mermaid 发生语法报错或解析异常时，将特殊标记 `'__FAILED_FALLBACK__'` 同步写入 `mermaidCache` 中。
    后续因会话继续提问或高频状态变更引起组件重新挂载（Remount）时，在初始化 `useState` 阶段便能秒级同步命中该“失败缓存”，直接一键渲染 `<pre>` 源码，**彻底杜绝其再次跑进 `useEffect` 的 `mermaid.render()` 高频异步解析逻辑中**。
+3. **强化大模型生成端 Mermaid 语法提示词约束（源头根治）**：
+   - 个人资源生成端（`leader_team.py` 中的 `ResourceWorkerAgent`）：在 `mindmap` 生成指令中，新增硬性语法约束（`CRITICAL SYNTATIC RULE`），明令大模型禁止在节点标签中直接包含未包裹的 `[`、`]`、`()`、双引号或特殊标点；若遇到空格或 C 语言数组等特殊符号，必须用外层双引号包裹（如 `ID["arr['i'] == *(arr+i)"]`）并转换内部双引号为单引号。
+   - 公共资源生成端（`public_resources.py` 中的 `build_public_resource_prompt`）：同步增强 `diagram` 的描述提示语，对 `flowchart`、`sequence`、`mindmap`、`class` 等类型的生成施加相同的嵌套括号/引号保护约束，杜绝非标准格式图表的产生。
 
 **验证结果：**
 - 前端 lint/build：运行 `npm run lint && npm run build` 打包完美通过，0 错误，0 警告。
-- 后端 py_compile / pytest：未修改。
-- Agent pytest：未修改。
+- 后端 py_compile / pytest：对修改后的 `leader_team.py` 和 `public_resources.py` 执行 `py_compile` 语法编译成功通过；在 `agent_service_v2` 目录下运行 `pytest` 单元测试全部 **132 passed**。
+- Agent pytest：同上。
 
 **接口漂移：** 无。

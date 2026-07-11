@@ -2311,3 +2311,40 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest`，108 passed，1 个第三方 Starlette/httpx 弃用警告。
 
 **接口漂移：** 无。
+
+---
+
+### 2026-07-11 — 修复 AIChat 代码题课程标识混用与拒绝原因丢失
+
+**涉及文件：**
+- `backend/app/services/tutoring_stream_adapter.py`
+- `backend/app/services/code_problem_service.py`
+- `backend/app/api/v1/internal_ai_chat.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `backend/tests/test_code_problem_service.py`
+- `backend/tests/test_internal_ai_chat.py`
+- `agent_service_v2/src/agent_service_v2/schemas/workbench.py`
+- `agent_service_v2/src/agent_service_v2/api/workbench.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/tools/backend_learning_client.py`
+- `agent_service_v2/src/agent_service_v2/tools/personal_code_problem.py`
+- `agent_service_v2/tests/test_workbench_api.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_backend_learning_client.py`
+- `agent_service_v2/tests/test_personal_code_problem_tools.py`
+- `docs/superpowers/plans/2026-07-11-workbench-course-identity-code-problem-repair.md`
+- `WorkLine.md`
+
+**核心改动：**
+1. Backend 向 Agent v2 同时传递 Course Offering `course_id` 与 Course Catalog `catalog_id`；工作区、会话权限和代码题使用 offering ID，教材 RAG 单独使用 catalog ID。
+2. `CodeProblemValidationError` 改为稳定原因码，Backend 内部接口通过 `detail.data.reason` 返回安全原因，Agent 客户端和代码题工具保留该原因。
+3. 错误原因不包含参考答案、隐藏用例输入或期望输出。
+
+**验证结果：**
+- Backend：相关 36 个测试通过，1 个既有 `passlib/crypt` 弃用警告。
+- Agent Service v2：全量 111 个测试通过，1 个既有 Starlette/httpx 弃用警告。
+- 真实烟测：用户 `0ec43e6e57eb4357`、会话 `5a962e7291b6477f` 使用 offering `747f2d8ab1304ca9` 成功通过归属/选课校验，C 指针交换参考解通过公开与隐藏 OJ 用例；事务随后回滚，未保留测试题。
+- 运行态：Backend `127.0.0.1:8001` 与 Agent Service v2 `127.0.0.1:8002` 已启动；Agent OpenAPI 已包含 `catalog_id`。
+
+**接口漂移：** 有。`POST /agent/v2/workbench/chat` 新增可选 `catalog_id`，并恢复 `course_id` 为 Course Offering ID；`POST /internal/ai-chat/code-problems` 的 400 错误 `detail.data` 新增稳定 `reason`。均为 Backend 与 Agent Service 间内部契约，Client API 未变化。

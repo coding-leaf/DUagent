@@ -15,6 +15,9 @@ SAFE_WORKBENCH_TOOLS = [
     "review_grounding",
     "run_code_in_oj",
     "create_validated_personal_code_problem",
+    "search_memory",
+    "add_memory",
+    "retrieve_course_context_tool",
 ]
 
 DANGEROUS_WORKBENCH_TOOLS = [

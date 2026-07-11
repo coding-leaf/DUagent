@@ -2451,3 +2451,18 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
   - 运行 `pytest tests/test_node_resources.py tests/test_learning_path_resource_probe.py tests/test_quiz_async.py -v` 绿灯通过。
 - **接口漂移**：无。
 
+### 2026-07-12 — 修复服务重启遗留异步任务挂死与 AI 评估大模型调用异常
+
+- **涉及文件**：
+  - `backend/app/main.py`
+  - `agent_service_v2/src/agent_service_v2/agents/evaluation.py`
+  - `WorkLine.md`
+- **核心改动**：
+  - 1. **补全服务启动待恢复任务类型**：在 `backend/app/main.py` 的 `_recoverable_task_types` 列表中追加 `"resource_generation"`、`"course_catalog_ingestion"` 和 `"quiz_generation"`，使服务重启时所有挂死的后台异步任务都能被正确扫描并置为 `failed`，避免前端读取到脏状态而无限转圈。
+  - 2. **适配 AgentScope 2.x 消息调用格式**：在 `agent_service_v2/src/agent_service_v2/agents/evaluation.py` 中，将两处 `model(prompt)` 大模型接口调用重构为使用 `UserMsg(name="user", content=prompt)` 列表形式传参，符合 AgentScope 2.x 的 `List[Msg]` 输入协议，修复“Input must be a list of Msg objects”的评估异常。
+  - 3. **单次数据订正**：手动运行 SQL 语句将目前处于 `'processing'` 状态的遗留历史长任务状态标记为 `failed`（状态信息：`服务重启，后台任务丢失`），清除存量脏数据。
+- **验证**：
+  - 语法编译校验：`py_compile` 对修改的 python 文件均校验成功。
+  - 单元测试：运行 `agent_service_v2` 单元测试 `pytest tests/test_evaluation_api.py` 绿灯通过（4 passed，涉及 mock 的模型评估覆盖通过）。
+- **接口漂移**：无。
+

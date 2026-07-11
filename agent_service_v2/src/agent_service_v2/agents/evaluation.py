@@ -229,8 +229,9 @@ async def generate_evaluation_with_llm(
     prompt = build_evaluation_prompt(request, rule_result)
 
     try:
-        # AgentScope 2.x: OpenAIChatModel 实例可以直接作为 Callable 调用
-        response = await model(prompt)
+        # AgentScope 2.x: OpenAIChatModel requires a list of Msg objects
+        from agentscope.message import UserMsg
+        response = await model([UserMsg(name="user", content=prompt)])
         raw_text = response.text.strip()
 
         data = _parse_evaluation_json(raw_text)
@@ -322,7 +323,8 @@ Your output MUST be a strict JSON object with EXACTLY this structure:
         }
 
     try:
-        response = await model(prompt)
+        from agentscope.message import UserMsg
+        response = await model([UserMsg(name="user", content=prompt)])
         text = response.text.strip()
 
         match = _MARKDOWN_FENCE_PATTERN.search(text)

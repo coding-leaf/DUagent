@@ -38,6 +38,9 @@ async def _recover_orphaned_background_tasks() -> None:
         "learning_path_refresh",
         "kg_generation",
         "code_problem_judging",
+        "resource_generation",
+        "course_catalog_ingestion",
+        "quiz_generation",
     ]
 
     async with async_session_factory() as db:

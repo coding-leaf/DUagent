@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import { useCourse } from '../context/CourseContext';
 import { personalizedResourcesService } from '../api/services/personalizedResources';
 import GenerateModal from '../components/personalized/GenerateModal';
+import CodeProblemResourceCard from '../components/personalized/CodeProblemResourceCard';
 import Icon from '../components/Icon';
 
 const TYPE_ICON = {
@@ -20,6 +21,7 @@ const TYPE_ICON = {
 const SOURCE_LABEL = {
   quiz_wrong_answer: '错题触发',
   manual: '手动生成',
+  ai_chat: 'AI 对话生成',
 };
 
 // 按知识点分组题目，返回 [{ knowledge_point, items[] }]
@@ -366,9 +368,9 @@ export default function PersonalizedResources() {
           ) : (
             <div className="space-y-6">
               {/* 生成中/失败的任务卡片 */}
-              {items.filter(i => !i.question && !i.resource).length > 0 && (
+              {items.filter(i => !i.question && !i.resource && !i.code_problem).length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {items.filter(i => !i.question && !i.resource).map(item => (
+                  {items.filter(i => !i.question && !i.resource && !i.code_problem).map(item => (
                     <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
                   ))}
                 </div>
@@ -388,6 +390,17 @@ export default function PersonalizedResources() {
                         navigate={navigate}
                         onDelete={handleDelete}
                       />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {items.filter(i => i.code_problem).length > 0 && (
+                <div>
+                  <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化编程练习</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {items.filter(i => i.code_problem).map(item => (
+                      <CodeProblemResourceCard key={item.id} item={item} onDelete={handleDelete} />
                     ))}
                   </div>
                 </div>

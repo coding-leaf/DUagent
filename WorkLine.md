@@ -1590,3 +1590,31 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - 无。本条仅记录审计结论，未修改运行接口。
+
+---
+
+### 2026-07-11 — 补齐个性化资源页私有代码题入口
+
+**涉及文件：**
+- `backend/app/api/v1/personalized_resources.py`
+- `backend/tests/test_personalized_resources.py`
+- `frontend/src/components/personalized/CodeProblemResourceCard.jsx`
+- `frontend/src/pages/CodeProblemPractice.jsx`
+- `frontend/src/pages/PersonalizedResources.jsx`
+- `frontend/src/App.jsx`
+- `docs/10-client-api/Client-API.openapi.json`
+- `docs/10-client-api/API_前端接口规范.md`
+
+**核心改动：**
+1. 个性化资源列表批量读取当前学生拥有且未删除的私有代码题，只投影题目 ID、标题、规范语言、难度、章节与知识点；不返回参考解、公开或隐藏用例。
+2. 个性化资源页新增“个性化编程练习”卡片，可跳转受保护的 `/code-problems/:problemId` 页面；该页复用既有固定用例代码沙箱，不新增判题接口或前端执行逻辑。
+3. 删除代码题关联资源时，Backend 在同一事务内软删除当前学生对应的私有代码题，防止已删除卡片仍能由旧链接读取。
+
+**验证结果：**
+- Backend：`37 passed, 1 warning`，并通过 `py_compile`。
+- Frontend：目标 Vitest `12 passed`；`npm run lint` 和 `npm run build` 成功。
+- `Client-API.openapi.json` 通过 `python3 -m json.tool` 校验。
+
+**接口漂移：**
+- Client API 扩展：`GET /api/v1/personalized-resources` 的每项新增可空 `code_problem` 安全摘要字段；已同步更新 Client OpenAPI 与前端接口规范。
+- Agent API：无变化。

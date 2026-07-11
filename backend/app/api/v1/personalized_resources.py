@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.models.code_problem import CodeProblem
 from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.models.quiz import QuizQuestion
 from app.models.user import User
@@ -50,9 +51,10 @@ async def list_personalized_resources(
     )
     uprs = result.scalars().all()
 
-    # Preload related resources and questions
+    # Preload related resources, questions and private code problems.
     resource_ids = [u.resource_id for u in uprs if u.resource_id]
     question_ids = [u.question_id for u in uprs if u.question_id]
+    code_problem_ids = [u.code_problem_id for u in uprs if u.code_problem_id]
     task_ids = [u.task_id for u in uprs if u.task_id]
 
     resources_map: dict = {}
@@ -68,6 +70,17 @@ async def list_personalized_resources(
             select(QuizQuestion).where(QuizQuestion.id.in_(question_ids), QuizQuestion.is_deleted == False)
         )
         questions_map = {q.id: q for q in q_r.scalars().all()}
+
+    code_problems_map: dict = {}
+    if code_problem_ids:
+        cp_r = await db.execute(
+            select(CodeProblem).where(
+                CodeProblem.id.in_(code_problem_ids),
+                CodeProblem.owner_user_id == current_user.id,
+                CodeProblem.is_deleted == False,
+            )
+        )
+        code_problems_map = {problem.id: problem for problem in cp_r.scalars().all()}
 
     tasks_map: dict = {}
     if task_ids:
@@ -124,6 +137,19 @@ async def list_personalized_resources(
                     "difficulty": q.difficulty,
                 }
 
+        code_problem_data = None
+        if u.code_problem_id:
+            problem = code_problems_map.get(u.code_problem_id)
+            if problem:
+                code_problem_data = {
+                    "id": problem.id,
+                    "title": problem.title,
+                    "language": problem.language,
+                    "difficulty": problem.difficulty,
+                    "chapter": problem.chapter,
+                    "knowledge_point": problem.knowledge_point,
+                }
+
         items.append({
             "id": u.id,
             "source_type": u.source_type,
@@ -132,6 +158,7 @@ async def list_personalized_resources(
             "task_status": task_status,
             "resource": resource_data,
             "question": question_data,
+            "code_problem": code_problem_data,
         })
 
     return {
@@ -340,6 +367,18 @@ async def delete_personalized_resource(
         r = r_result.scalar_one_or_none()
         if r and r.create_by == current_user.id:
             r.is_deleted = True
+
+    if upr.code_problem_id:
+        problem_result = await db.execute(
+            select(CodeProblem).where(
+                CodeProblem.id == upr.code_problem_id,
+                CodeProblem.owner_user_id == current_user.id,
+                CodeProblem.is_deleted == False,
+            )
+        )
+        problem = problem_result.scalar_one_or_none()
+        if problem:
+            problem.is_deleted = True
 
     await db.commit()
     return {"code": 200, "message": "success", "data": None}

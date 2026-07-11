@@ -1491,6 +1491,26 @@ Backend 会先根据教学班 `course_id` 解析绑定的 `CourseOffering.catalo
 - `409 course_material_missing`：课程资料尚未完成入库；
 - `409 knowledge_base_empty`：课程知识库为空。
 
+### 10.4 个性化资源中的私有代码题
+
+```
+GET /api/v1/personalized-resources?course_id={course_id}&page=1&page_size=20
+```
+
+**说明：** 返回当前学生在指定课程的个性化资源。`items[].code_problem` 为可空摘要；非空时前端应跳转 `/code-problems/:problemId` 并使用既有私有代码题详情/提交接口。摘要仅包含 `id`、`title`、`language`、`difficulty`、`chapter`、`knowledge_point`，绝不包含参考解、公开或隐藏测试输入、期望输出。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| items[].code_problem | object \| null | 当前学生拥有的私有代码题摘要 |
+| items[].code_problem.id | string | 私有代码题 ID |
+| items[].code_problem.language | string | `c` / `cpp` / `python` / `java` / `go` / `javascript` |
+| items[].code_problem.title | string | 题目标题 |
+| items[].code_problem.difficulty | string | 难度 |
+| items[].code_problem.chapter | string | 章节 |
+| items[].code_problem.knowledge_point | string | 知识点 |
+
+删除 `DELETE /api/v1/personalized-resources/:id` 时，若关联的是当前学生的私有代码题，Backend 同步软删除该题，避免已删除资源仍能通过旧链接读取。
+
 
 ---
 

@@ -16,6 +16,7 @@ import PracticeResult from './pages/PracticeResult';
 import AdminConsole from './pages/AdminConsole';
 import ResourceDetail from './pages/ResourceDetail';
 import PersonalizedResources from './pages/PersonalizedResources';
+import CodeProblemPractice from './pages/CodeProblemPractice';
 import { AuthProvider } from './context/AuthContext';
 import { CourseProvider } from './context/CourseContext';
 import { ChatProvider } from './context/ChatContext';
@@ -47,6 +48,7 @@ function App() {
               <Route path="/ai-chat" element={<ProtectedRoute allowedRoles={['student']}><AIChat /></ProtectedRoute>} />
               <Route path="/learning-effects" element={<ProtectedRoute allowedRoles={['student']}><LearningEffects /></ProtectedRoute>} />
               <Route path="/personalized-resources" element={<ProtectedRoute allowedRoles={['student']}><PersonalizedResources /></ProtectedRoute>} />
+              <Route path="/code-problems/:problemId" element={<ProtectedRoute allowedRoles={['student']}><CodeProblemPractice /></ProtectedRoute>} />
               
               {/* Teacher / Admin routes */}
               <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher', 'admin']}><TeacherConsole /></ProtectedRoute>} />

@@ -1,4 +1,4 @@
-from agentscope.permission import PermissionBehavior, PermissionContext, PermissionRule
+from agentscope.permission import PermissionBehavior, PermissionContext, PermissionRule, PermissionMode
 
 
 ROLE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
@@ -25,7 +25,7 @@ ROLE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
 
 
 def _permission_context(tool_names: tuple[str, ...]) -> PermissionContext:
-    context = PermissionContext()
+    context = PermissionContext(mode=PermissionMode.DONT_ASK)
     for tool_name in tool_names:
         context.allow_rules[tool_name] = [
             PermissionRule(

@@ -17,9 +17,9 @@ def test_knowledge_ingestion_api_bad_request_path_traversal() -> None:
             {"storage_uri": "local://../../etc/passwd"}
         ]
     }
-    
+
     response = client.post("/agent/v2/knowledge/ingestions", json=payload)
-    
+
     assert response.status_code == 400
     assert "safe relative path" in response.json()["message"]
 
@@ -31,13 +31,13 @@ def test_knowledge_ingestion_api_unsupported_file_type() -> None:
             {"storage_uri": "local://python-intro.xlsx"}
         ]
     }
-    
+
     with (
         patch("pathlib.Path.exists", return_value=True),
         patch("pathlib.Path.is_file", return_value=True),
     ):
         response = client.post("/agent/v2/knowledge/ingestions", json=payload)
-        
+
         assert response.status_code == 202
         data = response.json()["data"]
         assert data["chunk_count"] == 0
@@ -52,14 +52,14 @@ def test_knowledge_ingestion_api_normal_flow_success() -> None:
             {"storage_uri": "local://python-intro.pdf"}
         ]
     }
-    
+
     with (
         patch("pathlib.Path.exists", return_value=True),
         patch("pathlib.Path.is_file", return_value=True),
         patch("agent_service_v2.api.knowledge.ingest_course_material", new_callable=AsyncMock, return_value=15) as mock_ingest,
     ):
         response = client.post("/agent/v2/knowledge/ingestions", json=payload)
-        
+
         assert response.status_code == 202
         data = response.json()["data"]
         assert data["chunk_count"] == 15

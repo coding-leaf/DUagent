@@ -63,9 +63,9 @@ async def create_knowledge_ingestion(
     """接收后端上传指令，对教材物理文件进行高精度 Parser、切片并写入 Qdrant。"""
     settings = AgentModelSettings()
     storage_root = Path(settings.COURSE_CATALOG_STORAGE_ROOT).resolve()
-    
+
     material_results: list[KnowledgeIngestionMaterialResult] = []
-    
+
     for material in request.materials:
         try:
             # 1. 安全解析和防范目录遍历
@@ -304,7 +304,7 @@ async def generate_v2_quiz_questions(request: QuizGenerationRequest):
     """Allows instant direct call to Quiz Worker Agent to output custom choice and code challenges."""
     settings = AgentModelSettings()
     from agent_service_v2.agents.leader_team import ResourceWorkerAgent
-    
+
     try:
         worker = ResourceWorkerAgent(settings)
         # Leverage existing quiz generator assets inside workers

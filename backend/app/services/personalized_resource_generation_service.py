@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.others import Resource, UserPersonalizedResource
+from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 
 
@@ -130,13 +132,10 @@ class PersonalizedResourceGenerationService:
         )
         self.db.add(resource)
         await self.db.flush()
-        self.db.add(
-            UserPersonalizedResource(
-                user_id=generation.user_id,
-                course_id=generation.course_id,
-                resource_id=resource.id,
-                source_type=generation.source_type,
-            )
+        await link_published_generation(
+            self.db,
+            generation=generation,
+            resource_id=resource.id,
         )
         generation.published_resource_id = resource.id
         generation.status = "published"
@@ -166,3 +165,44 @@ class PersonalizedResourceGenerationService:
         if generation is None:
             raise ResourcePublicationError("generation_not_found")
         return generation
+
+
+async def link_published_generation(
+    db: AsyncSession,
+    *,
+    generation: PersonalizedResourceGeneration,
+    resource_id: str | None = None,
+    code_problem_id: str | None = None,
+) -> UserPersonalizedResource:
+    link = None
+    if generation.run_id:
+        result = await db.execute(
+            select(UserPersonalizedResource).where(
+                UserPersonalizedResource.task_id == generation.run_id,
+                UserPersonalizedResource.user_id == generation.user_id,
+                UserPersonalizedResource.course_id == generation.course_id,
+                UserPersonalizedResource.is_deleted == False,
+            )
+        )
+        link = result.scalar_one_or_none()
+    if link is None:
+        link = UserPersonalizedResource(
+            user_id=generation.user_id,
+            course_id=generation.course_id,
+            source_type=generation.source_type,
+            task_id=generation.run_id,
+        )
+        db.add(link)
+    link.resource_id = resource_id
+    link.code_problem_id = code_problem_id
+
+    if generation.run_id:
+        task_result = await db.execute(
+            select(AsyncTask).where(AsyncTask.id == generation.run_id).with_for_update()
+        )
+        task = task_result.scalar_one_or_none()
+        if task:
+            task.status = "completed"
+            task.progress = 100
+            task.completed_at = datetime.now(timezone.utc)
+    return link

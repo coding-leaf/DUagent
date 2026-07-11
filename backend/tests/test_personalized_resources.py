@@ -45,11 +45,20 @@ async def test_list_personalized_resources_projects_owned_code_problem_summary()
         chapter="字符串",
         knowledge_point="循环",
     )
+    generation = SimpleNamespace(
+        published_resource_id=None,
+        published_code_problem_id="problem-1",
+        status="published",
+        review_decision="approved_with_advice",
+        review_report={"warnings": ["可增加一个边界用例"]},
+        resource_type="validated_code_problem",
+    )
     db = _SequencedDb(
         [
             _Result(scalar=1),
             _Result(items=[personalized_resource]),
             _Result(scalar=0, items=[code_problem]),
+            _Result(items=[generation]),
             _Result(scalar=0),
         ]
     )
@@ -70,6 +79,10 @@ async def test_list_personalized_resources_projects_owned_code_problem_summary()
             "created_at": "2026-07-11T08:00:00",
             "task_id": None,
             "task_status": None,
+            "generation_status": "published",
+            "review_decision": "approved_with_advice",
+            "review_warnings": ["可增加一个边界用例"],
+            "resource_type": "validated_code_problem",
             "resource": None,
             "question": None,
             "code_problem": {

@@ -2,13 +2,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.models.code_problem import CodeProblem
 from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.models.quiz import QuizQuestion
+from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 from app.models.user import User
 from app.schemas.personalized import PersonalizedResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
@@ -82,6 +83,24 @@ async def list_personalized_resources(
         )
         code_problems_map = {problem.id: problem for problem in cp_r.scalars().all()}
 
+    generations_by_target: dict[str, PersonalizedResourceGeneration] = {}
+    if resource_ids or code_problem_ids:
+        generation_result = await db.execute(
+            select(PersonalizedResourceGeneration).where(
+                PersonalizedResourceGeneration.user_id == current_user.id,
+                PersonalizedResourceGeneration.course_id == course_id,
+                PersonalizedResourceGeneration.is_deleted == False,
+                or_(
+                    PersonalizedResourceGeneration.published_resource_id.in_(resource_ids),
+                    PersonalizedResourceGeneration.published_code_problem_id.in_(code_problem_ids),
+                ),
+            )
+        )
+        for generation in generation_result.scalars().all():
+            target_id = generation.published_resource_id or generation.published_code_problem_id
+            if target_id:
+                generations_by_target[target_id] = generation
+
     tasks_map: dict = {}
     if task_ids:
         t_r = await db.execute(
@@ -109,6 +128,7 @@ async def list_personalized_resources(
     for u in uprs:
         task = tasks_map.get(u.task_id) if u.task_id else None
         task_status = task.status if task else None
+        generation = generations_by_target.get(u.resource_id or u.code_problem_id or "")
 
         resource_data = None
         if u.resource_id:
@@ -156,6 +176,12 @@ async def list_personalized_resources(
             "created_at": u.created_at.isoformat() if u.created_at else "",
             "task_id": u.task_id,
             "task_status": task_status,
+            "generation_status": generation.status if generation else None,
+            "review_decision": generation.review_decision if generation else None,
+            "review_warnings": (
+                (generation.review_report or {}).get("warnings", []) if generation else []
+            ),
+            "resource_type": generation.resource_type if generation else None,
             "resource": resource_data,
             "question": question_data,
             "code_problem": code_problem_data,

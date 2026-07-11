@@ -52,6 +52,7 @@ async def test_publish_materializes_approved_draft_and_personalized_link():
         user_id="user-1",
         course_id="course-1",
         source_type="manual",
+        run_id=None,
         resource_type="personal_lesson",
         status="approved_with_advice",
         validation_report={"status": "passed"},

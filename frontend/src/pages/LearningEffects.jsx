@@ -6,9 +6,12 @@ import EffectsOverviewCards from '../components/effects/EffectsOverviewCards';
 import EffectsSummaryCard from '../components/effects/EffectsSummaryCard';
 import MasteryDistributionCard from '../components/effects/MasteryDistributionCard';
 import KnowledgeProgressTable from '../components/effects/KnowledgeProgressTable';
+import { formatDateTime } from '../utils/date';
+import { useNavigate } from 'react-router-dom';
 
 export default function LearningEffects() {
   const { activeCourseId } = useCourse();
+  const navigate = useNavigate();
 
   const {
     effectsData,
@@ -31,7 +34,18 @@ export default function LearningEffects() {
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="font-h1 text-h1 text-on-surface text-4xl font-bold mb-2">学习效果展示</h1>
-            <p className="text-body-md text-outline mt-2 text-slate-500">基于课程知识图谱、练习记录和评估快照的节点掌握情况</p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1.5 text-slate-500 mt-2 text-body-md">
+              <span className="text-outline">基于课程知识图谱、练习记录和评估快照的节点掌握情况</span>
+              {effectsData?.generated_at && (
+                <span className="hidden sm:inline text-slate-300">|</span>
+              )}
+              {effectsData?.generated_at && (
+                <span className="text-xs font-semibold bg-cyan-50 text-cyan-700 px-2.5 py-0.5 rounded-full border border-cyan-100 flex items-center w-fit">
+                  <Icon name="schedule" className="material-symbols-outlined text-[14px] mr-1" />
+                  评估时间：{formatDateTime(effectsData.generated_at)}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex gap-3">
             <button
@@ -67,7 +81,6 @@ export default function LearningEffects() {
 
             <EffectsOverviewCards
               overview={overview}
-              generatedAt={effectsData?.generated_at}
             />
 
             <section className="grid grid-cols-12 gap-6">
@@ -75,6 +88,16 @@ export default function LearningEffects() {
                 <EffectsSummaryCard
                   summaryText={effectsData?.summary_text}
                   loading={effectsLoading}
+                  onGenerateResources={() => navigate(
+                    '/personalized-resources/generate',
+                    {
+                      state: {
+                        goal: buildLearningEffectsGoal(effectsData),
+                        resourcePreferences: ['personal_lesson', 'practice'],
+                        sourceType: 'learning_effects',
+                      },
+                    },
+                  )}
                 />
               </div>
 
@@ -95,4 +118,16 @@ export default function LearningEffects() {
       </main>
     </div>
   );
+}
+
+function buildLearningEffectsGoal(effectsData) {
+  const weakPoints = effectsData?.insight?.weak_points || [];
+  const names = weakPoints
+    .map((point) => point.name || point.title || point.knowledge_point)
+    .filter(Boolean)
+    .slice(0, 5);
+  if (names.length) {
+    return `请针对我的薄弱点生成复习资料与练习：${names.join('、')}`;
+  }
+  return `请根据这份最新学情总结生成复习资料与练习：${effectsData?.summary_text || ''}`;
 }

@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.code_problem import CodeProblem, CodeProblemTestCase
 from app.models.conversation import Conversation
 from app.models.course import CourseEnrollment
-from app.models.others import UserPersonalizedResource
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
+from app.services.personalized_resource_generation_service import link_published_generation
 from app.schemas.code_problem import CodeProblemDraft
 
 
@@ -175,13 +175,10 @@ async def publish_reviewed_personal_problem(
                 is_public=test_case["is_public"],
             )
         )
-    db.add(
-        UserPersonalizedResource(
-            user_id=generation.user_id,
-            course_id=generation.course_id,
-            code_problem_id=problem.id,
-            source_type=generation.source_type,
-        )
+    await link_published_generation(
+        db,
+        generation=generation,
+        code_problem_id=problem.id,
     )
     generation.published_code_problem_id = problem.id
     generation.status = "published"

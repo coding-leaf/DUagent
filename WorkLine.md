@@ -2411,3 +2411,14 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 启动独立 `eduagent-agentscope-redis` 容器作为官方 RedisStorage，绑定 `127.0.0.1:6379`，未修改 `.env`，未复用 Judge0 Redis。
 - 验证：Agent Team App、模板、权限、工具和官方运行适配共 10 passed；Redis `PING` 返回 `PONG`。
 - 接口漂移：新增 Agent Service v2 个性化资源生成入口和内部 Team runtime mount；Frontend 仍不得直连 runtime。
+
+### 2026-07-12 — 统一个性化资源中心与生成入口
+
+- 个性化资源列表补充 `generation_status`、`review_decision`、`review_warnings` 与真实个性化资源类型；发布成功会复用并完成原生成任务占位关联，避免永久显示“生成中”。
+- 新增 SWR `usePersonalizedResources`，由 SWR 负责缓存、按 processing_count 轮询和刷新；页面不再手写 `useEffect + setInterval`。
+- 新增统一资源卡，覆盖专业讲解、知识图解、练习、拓展阅读、验证代码题五类，并显示手动、AI 对话、学情建议等来源和宽松审核建议。
+- 新增 `/personalized-resources/generate` 自然语言生成页及多智能体角色进度；旧三步固定类型弹窗不再作为资源中心主入口。
+- AI Chat 完成回答提供显式“保存为资料”，通过统一自然语言生成协议进入草案、验证、审核与发布链路。
+- `/learning-effects` 使用结构化学情弱点预填生成目标；只有学生点击按钮并在生成页再次确认后才提交，不做后台自动生成。
+- 验证：Frontend 相关 8 个测试文件 17 passed；lint 0 errors（1 个既有 ChatContext warning）；build 通过（既有大 chunk 提示）；Backend 相关 38 passed。
+- 接口漂移：个性化列表新增审核/生成元数据，生成请求新增自然语言目标；旧字段兼容。

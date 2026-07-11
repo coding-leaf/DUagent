@@ -4,6 +4,7 @@ import { useCourse } from '../../context/CourseContext';
 import ChatMessage from './ChatMessage';
 import ChatEmptyState from './ChatEmptyState';
 import Icon from '../Icon';
+import { personalizedResourcesService } from '../../api/services/personalizedResources';
 
 const QUICK_ACTIONS = [
   { key: 'weak_plan', label: '补弱计划', icon: 'route', prompt: '帮我根据当前薄弱点生成补弱学习计划。' },
@@ -47,6 +48,17 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
   const handleEditSubmit = (newContent) => {
     editMessage(newContent);
     setEditingMsg(null);
+  };
+
+  const handleSaveResource = async (message) => {
+    const content = typeof message.content === 'string' ? message.content : '';
+    if (!activeCourseId || !content.trim()) return;
+    await personalizedResourcesService.generate({
+      course_id: activeCourseId,
+      goal: `请将以下 AI 对话内容整理、验证并保存为个性化讲解资料：\n${content}`,
+      source_type: 'ai_chat',
+      resource_preferences: ['personal_lesson'],
+    });
   };
 
   const handleTextareaChange = (e) => {
@@ -97,6 +109,7 @@ export default function ChatArea({ activeCourseName, onOpenLeftDrawer }) {
                       message={msg}
                       onSendMessage={handleSendMessage}
                       onRegenerate={regenerate}
+                      onSaveResource={handleSaveResource}
                       isLastAssistant={isLastAi}
                     />
 

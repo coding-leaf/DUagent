@@ -1,22 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useCourse } from '../context/CourseContext';
-import { personalizedResourcesService } from '../api/services/personalizedResources';
-import GenerateModal from '../components/personalized/GenerateModal';
 import CodeProblemResourceCard from '../components/personalized/CodeProblemResourceCard';
+import PersonalizedResourceCard from '../components/personalized/PersonalizedResourceCard';
 import Icon from '../components/Icon';
-
-const TYPE_ICON = {
-  document: 'description',
-  mindmap: 'account_tree',
-  reading: 'menu_book',
-  code: 'code',
-  video: 'play_circle',
-  single_choice: 'radio_button_checked',
-  multi_choice: 'check_box',
-  short_answer: 'edit_note',
-};
+import usePersonalizedResources from '../hooks/usePersonalizedResources';
 
 const SOURCE_LABEL = {
   quiz_wrong_answer: '错题触发',
@@ -160,147 +149,28 @@ function QuizGroupCard({ kp, kpItems, courseId, navigate, onDelete }) {
   );
 }
 
-function ResourceCard({ item, onDelete }) {
-  if (item.task_status === 'processing') {
-    return (
-      <div className="bg-white border border-dashed border-cyan-300 rounded-xl p-5 flex items-center gap-4 animate-pulse">
-        <div className="w-10 h-10 rounded-full bg-cyan-100 flex items-center justify-center">
-          <Icon name="progress_activity" className="material-symbols-outlined text-cyan-400 animate-spin"/>
-        </div>
-        <div>
-          <p className="text-body-md font-medium text-secondary">正在生成中...</p>
-          <p className="text-label-sm text-gray-400">{SOURCE_LABEL[item.source_type] || item.source_type}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (item.task_status === 'failed') {
-    return (
-      <div className="bg-white border border-error/20 rounded-xl p-5 flex justify-between items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
-            <Icon name="error" className="material-symbols-outlined"/>
-          </div>
-          <div>
-            <p className="text-body-md font-medium text-error">生成失败</p>
-            <p className="text-label-sm text-gray-400">可重新尝试生成</p>
-          </div>
-        </div>
-        {onDelete && (
-          <button 
-            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
-            onClick={() => onDelete(item.id)}
-            title="删除"
-          >
-            <Icon name="delete" className="material-symbols-outlined text-[20px]"/>
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  if (item.resource) {
-    const r = item.resource;
-    const sourceLabel = SOURCE_LABEL[item.source_type] || item.source_type;
-    const sourceBg = item.source_type === 'quiz_wrong_answer' ? 'bg-red-50 text-red-600' : 'bg-cyan-50 text-cyan-600';
-    return (
-      <div className="relative group">
-        <Link to={`/resource/${r.id}`} className="block bg-white border border-outline-variant rounded-xl p-5 hover:shadow-md hover:border-cyan-300 hover:bg-cyan-50/5 transition-all duration-200">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
-            <Icon name={TYPE_ICON[r.type] || 'article'} className="material-symbols-outlined"/>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{r.knowledge_point}</span>
-              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${sourceBg}`}>{sourceLabel}</span>
-            </div>
-            <h4 className="text-body-md font-medium text-on-surface truncate">{r.title}</h4>
-            {r.description && <p className="text-label-sm text-secondary mt-1 line-clamp-1">{r.description}</p>}
-          </div>
-        </div>
-      </Link>
-      {onDelete && (
-        <button 
-          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto hover:text-red-500 hover:bg-red-50 rounded transition-all"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); }}
-          title="删除"
-        >
-          <Icon name="delete" className="material-symbols-outlined text-[20px]"/>
-        </button>
-      )}
-    </div>
-    );
-  }
-
-  return null;
-}
-
 export default function PersonalizedResources() {
   const { activeCourseId } = useCourse();
   const location = useLocation();
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [processingCount, setProcessingCount] = useState(0);
   const [filterSource, setFilterSource] = useState('all');
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [total, setTotal] = useState(0);
-  const pollRef = useRef(null);
-
-  const fetchItems = useCallback(async () => {
-    if (!activeCourseId) return;
-    try {
-      const params = {};
-      if (filterSource !== 'all') params.source_type = filterSource;
-      const res = await personalizedResourcesService.list(activeCourseId, params);
-      if (res.code === 200) {
-        setItems(res.data.items);
-        setTotal(res.data.total);
-        setProcessingCount(res.data.processing_count);
-      }
-    } catch (e) {
-      console.error('Failed to fetch personalized resources', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeCourseId, filterSource]);
-
-  // 初始加载 + filter 切换时重置 loading
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setLoading(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    fetchItems();
-  }, [fetchItems]);
+  const {
+    items,
+    total,
+    processingCount,
+    isLoading,
+    remove,
+  } = usePersonalizedResources(activeCourseId, filterSource);
 
   const handleDelete = async (id) => {
     if (!window.confirm('确定要删除这项资源吗？')) return;
     try {
-      const res = await personalizedResourcesService.delete(id);
-      if (res.code === 200) {
-        fetchItems();
-      }
+      await remove(id);
     } catch (e) {
       console.error('Failed to delete', e);
       alert('删除失败，请稍后重试');
     }
   };
-
-  // 轮询：processingCount > 0 时每 3 秒刷新一次
-  useEffect(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (processingCount > 0) {
-      pollRef.current = setInterval(fetchItems, 3000);
-    }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [processingCount, fetchItems]);
 
   const newTaskId = location.state?.newTaskId;
   const showNewTaskBanner = newTaskId && processingCount > 0;
@@ -317,7 +187,7 @@ export default function PersonalizedResources() {
               <p className="text-body-md text-secondary mt-1">专属于你的学习材料与练习题，共 {total} 项</p>
             </div>
             <button
-              onClick={() => setShowGenerateModal(true)}
+              onClick={() => navigate('/personalized-resources/generate')}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 active:scale-95 transition-all shadow-sm cursor-pointer"
             >
               <Icon name="add" className="material-symbols-outlined"/>
@@ -339,6 +209,8 @@ export default function PersonalizedResources() {
               { value: 'all', label: '全部' },
               { value: 'quiz_wrong_answer', label: '错题触发' },
               { value: 'manual', label: '手动生成' },
+              { value: 'ai_chat', label: 'AI 对话' },
+              { value: 'learning_effects', label: '学情建议' },
             ].map(opt => (
               <button
                 key={opt.value}
@@ -355,7 +227,7 @@ export default function PersonalizedResources() {
           </div>
 
           {/* 内容区 */}
-          {loading ? (
+          {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Icon name="progress_activity" className="material-symbols-outlined animate-spin text-4xl text-primary"/>
             </div>
@@ -363,7 +235,7 @@ export default function PersonalizedResources() {
             <div className="text-center py-20 text-secondary">
               <Icon name="psychology" className="material-symbols-outlined text-6xl mb-4 block text-gray-300"/>
               <p className="text-body-lg">暂无个性化资源</p>
-              <p className="text-body-md mt-2">完成练习后正确率低于 60% 会自动触发生成，或点击"生成资源"手动创建</p>
+              <p className="text-body-md mt-2">可从学习目标、AI 对话或学情建议中确认后生成，不会在后台自动创建</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -371,7 +243,7 @@ export default function PersonalizedResources() {
               {items.filter(i => !i.question && !i.resource && !i.code_problem).length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {items.filter(i => !i.question && !i.resource && !i.code_problem).map(item => (
-                    <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
+                    <PersonalizedResourceCard key={item.id} item={item} onDelete={handleDelete} />
                   ))}
                 </div>
               )}
@@ -412,7 +284,7 @@ export default function PersonalizedResources() {
                   <h3 className="text-label-sm text-secondary uppercase tracking-wider mb-3">个性化学习资源</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {items.filter(i => i.resource).map(item => (
-                      <ResourceCard key={item.id} item={item} onDelete={handleDelete} />
+                      <PersonalizedResourceCard key={item.id} item={item} onDelete={handleDelete} />
                     ))}
                   </div>
                 </div>
@@ -421,17 +293,6 @@ export default function PersonalizedResources() {
           )}
         </div>
       </main>
-
-      {showGenerateModal && (
-        <GenerateModal
-          courseId={activeCourseId}
-          onClose={() => setShowGenerateModal(false)}
-          onGenerated={() => {
-            setShowGenerateModal(false);
-            fetchItems();
-          }}
-        />
-      )}
     </div>
   );
 }

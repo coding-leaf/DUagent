@@ -40,7 +40,7 @@ describe('PersonalizedResourceCard', () => {
 
     expect(screen.getByText('知识图解')).toBeInTheDocument();
     expect(screen.getByText('学情建议')).toBeInTheDocument();
-    expect(screen.getByText('审核通过（附建议）')).toBeInTheDocument();
-    expect(screen.getByText('可增加一个边界示例')).toBeInTheDocument();
+    expect(screen.getByText('审核通过')).toBeInTheDocument();
+    expect(screen.queryByText('可增加一个边界示例')).not.toBeInTheDocument();
   });
 });

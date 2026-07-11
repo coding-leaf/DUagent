@@ -20,16 +20,30 @@ const SOURCE_LABEL = {
 
 const REVIEW_LABEL = {
   approved: '审核通过',
-  approved_with_advice: '审核通过（附建议）',
+  approved_with_advice: '审核通过',
   rejected: '审核未通过',
 };
 
 export default function PersonalizedResourceCard({ item, onDelete }) {
   if (item.task_status === 'processing') {
-    return <StatusCard icon="progress_activity" title="多智能体正在协作生成" spinning />;
+    return (
+      <StatusCard
+        icon="progress_activity"
+        title="多智能体正在协作生成"
+        spinning
+        onDelete={onDelete ? () => onDelete(item.id) : undefined}
+      />
+    );
   }
   if (item.task_status === 'failed') {
-    return <StatusCard icon="error" title="生成失败" tone="error" />;
+    return (
+      <StatusCard
+        icon="error"
+        title="生成失败"
+        tone="error"
+        onDelete={onDelete ? () => onDelete(item.id) : undefined}
+      />
+    );
   }
   if (!item.resource) return null;
 
@@ -61,9 +75,6 @@ export default function PersonalizedResourceCard({ item, onDelete }) {
             </div>
             <h4 className="text-body-md font-medium text-on-surface truncate">{resource.title}</h4>
             {resource.description && <p className="text-label-sm text-secondary mt-1 line-clamp-2">{resource.description}</p>}
-            {item.review_warnings?.map((warning) => (
-              <p key={warning} className="text-label-sm text-amber-700 mt-2">{warning}</p>
-            ))}
           </div>
         </div>
       </Link>
@@ -81,12 +92,22 @@ export default function PersonalizedResourceCard({ item, onDelete }) {
   );
 }
 
-function StatusCard({ icon, title, tone = 'info', spinning = false }) {
+function StatusCard({ icon, title, tone = 'info', spinning = false, onDelete }) {
   const color = tone === 'error' ? 'text-error border-error/20' : 'text-cyan-700 border-cyan-200';
   return (
-    <div className={`bg-white border border-dashed rounded-xl p-5 flex items-center gap-4 ${color}`}>
+    <div className={`relative group bg-white border border-dashed rounded-xl p-5 flex items-center gap-4 ${color}`}>
       <Icon name={icon} className={`material-symbols-outlined ${spinning ? 'animate-spin' : ''}`} />
       <p className="text-body-md font-medium">{title}</p>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="absolute top-3 right-3 p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-colors cursor-pointer"
+          aria-label="清除任务"
+        >
+          <Icon name="delete" className="material-symbols-outlined text-[20px]" />
+        </button>
+      )}
     </div>
   );
 }

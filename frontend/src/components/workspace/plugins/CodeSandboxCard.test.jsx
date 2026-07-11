@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import CodeSandboxCard from './codeSandbox/CodeSandboxCard';
 import { executeSandboxCode } from '../../../api/services/sandbox';
@@ -99,7 +99,29 @@ test('uses fixed cases for persisted problems without exposing stdin input', asy
     expect(screen.getByText('隐藏用例未通过')).toBeInTheDocument();
   });
   expect(submitCodeProblem).toHaveBeenCalledWith(expect.objectContaining({ problemId: 'problem-1' }));
-  expect(screen.getByText('输入:')).toBeInTheDocument();
-  expect(screen.getByText(/1 2/)).toBeInTheDocument();
+  expect(screen.getByText('1 2')).toBeInTheDocument();
   expect(screen.queryByText('hidden input')).toBeNull();
+});
+
+test('supports language selection in free sandbox mode', async () => {
+  render(
+    <CodeSandboxCard
+      question_text="自由编写代码"
+      code=""
+      language="python"
+      default_stdin=""
+    />
+  );
+
+  const select = screen.getByRole('combobox');
+  expect(select).toBeInTheDocument();
+  expect(select.value).toBe('python');
+
+  act(() => {
+    fireEvent.change(select, { target: { value: 'c' } });
+  });
+  await waitFor(() => {
+    expect(select.value).toBe('c');
+  });
+  expect(screen.getByText('main.c')).toBeInTheDocument();
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChat } from '../../../../context/ChatContext';
 import CodeSandboxConsole from './CodeSandboxConsole';
 import { buildAskAIPrompt, getSourceFilename } from './codeSandboxViewModel';
@@ -57,13 +58,13 @@ function PublicTestCases({ cases }) {
             <div className="flex items-start gap-1">
               <span className="text-slate-400 font-bold shrink-0">输入:</span>
               <span className="text-slate-700 bg-slate-50 px-1 py-0.5 rounded border border-slate-100 min-w-[30px] inline-block">
-                {testCase.stdin?.trim() || '(无输入)'}
+                {String(testCase.stdin || '').trim() || '(无输入)'}
               </span>
             </div>
             <div className="flex items-start gap-1">
               <span className="text-emerald-500 font-bold shrink-0">输出:</span>
               <span className="text-slate-700 bg-slate-50 px-1 py-0.5 rounded border border-slate-100 min-w-[30px] inline-block">
-                {testCase.expected_output?.trim()}
+                {String(testCase.expected_output || '').trim()}
               </span>
             </div>
           </div>
@@ -138,11 +139,13 @@ export default function CodeSandboxCard({
   language,
   default_stdin
 }) {
-  const { sendMessage, isSending } = useChat();
+  const { sendMessage, isSending, resetConversation } = useChat();
+  const navigate = useNavigate();
   const { problem, error, isLoading } = useCodeProblem(problemId);
   const isFixedCaseProblem = Boolean(problemId);
   const [selectedLanguage, setSelectedLanguage] = useState(language || 'python');
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (problem?.language) {
       setSelectedLanguage(problem.language);
@@ -150,6 +153,7 @@ export default function CodeSandboxCard({
       setSelectedLanguage(language);
     }
   }, [problem?.language, language]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const displayLanguage = problem?.language || selectedLanguage;
   const initialStarter = problem?.starter_code || legacyCode || defaultTemplates[displayLanguage] || '';
@@ -174,7 +178,9 @@ export default function CodeSandboxCard({
 
   const handleAskAI = () => {
     if (!isSending) {
+      resetConversation();
       sendMessage(buildAskAIPrompt({ code, language: displayLanguage, stdin, result }));
+      navigate('/ai-chat');
     }
   };
 

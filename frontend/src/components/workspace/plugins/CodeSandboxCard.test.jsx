@@ -5,10 +5,15 @@ import { executeSandboxCode } from '../../../api/services/sandbox';
 import { getCodeProblem, submitCodeProblem } from '../../../api/services/codeProblems';
 import { taskService } from '../../../api/services/task';
 
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+}));
+
 vi.mock('../../../context/ChatContext', () => ({
   useChat: () => ({
     sendMessage: vi.fn(),
     isSending: false,
+    resetConversation: vi.fn(),
   }),
 }));
 

@@ -2858,5 +2858,26 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+---
+
+### 2026-07-12 — 优化了个性化代码题的 AI 答题交互：新开会话并跳转至 AI 对话页面
+
+**涉及文件：**
+- `frontend/src/components/workspace/plugins/codeSandbox/CodeSandboxCard.jsx`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.test.jsx`
+
+**核心改动：**
+1. **重置并新开会话**：在 `CodeSandboxCard` 触发 `handleAskAI` 时，加入了对全局 `ChatContext` 提供的 `resetConversation()` 机制的调用，从而确保本次代码答题在干净独立的全新的 AI 会话中加载。
+2. **平滑路由跳转**：引入了 React Router 的 `useNavigate` 钩子，并在点击 `🙋 请求 AI 答疑` 按钮且成功触发提问后，调用 `navigate('/ai-chat')` 立即跳转到 AI 对话界面，使得用户可以在聊天面板上直观地查阅大模型正对本题代码及运行状态所进行的流式回答。
+3. **完善单元测试**：同步更新了单元测试文件 `CodeSandboxCard.test.jsx`，添加对 `react-router-dom` (尤其是 `useNavigate`) 及 `resetConversation` 的 Mock 支持，保障测试用例覆盖度和打包流程的稳健性。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证（0 错误 0 警告）
+- 前端 build：通过 `npm run build` 成功打包
+- 前端测试：通过 `npm run test:unit` 回归测试（114 项测试 100% 全部通过）
+
+**接口漂移：**
+- 无。
+
 
 

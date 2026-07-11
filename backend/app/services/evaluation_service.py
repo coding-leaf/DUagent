@@ -13,8 +13,12 @@ from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.resource_scope import resolve_course_resource_scope, resource_scope_clause
 from app.services.knowledge_progress import build_node_progress_rows
+from app.services.evaluation_facts import (
+    aggregate_chapter_progress as _aggregate_chapter_progress,
+    aggregate_quiz_results as _aggregate_quiz_results,
+    aggregate_resource_usage as _aggregate_resource_usage,
+)
 from app.infrastructure.locks import evaluation_lock
 
 logger = logging.getLogger(__name__)
@@ -77,7 +81,6 @@ class EvaluationService:
 
     async def _assemble_evaluation_payload(self, user_id: str, course_id: str) -> dict:
         payload: dict = {"user_id": user_id, "course_id": course_id}
-        resource_scope = await resolve_course_resource_scope(self.db, course_id)
         node_progress = await build_node_progress_rows(user_id, course_id, self.db)
 
         user_result = await self.db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
@@ -153,16 +156,9 @@ class EvaluationService:
             "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
         }
 
-        chapters_r = await self.db.execute(
-            select(Resource.chapter, func.count(Resource.id))
-            .where(resource_scope_clause(course_id, resource_scope.catalog_id), Resource.is_deleted == False)
-            .group_by(Resource.chapter)
-        )
-        chapter_progress = [
-            {"chapter": row[0] or "默认", "completion_rate": 0.0, "time_spent": 0}
-            for row in chapters_r
-        ]
-        payload["learning_progress"] = {"chapter_progress": chapter_progress}
+        payload["learning_progress"] = {
+            "chapter_progress": _aggregate_chapter_progress(node_progress)
+        }
 
         qz_r = await self.db.execute(
             select(QuizSession)
@@ -173,7 +169,7 @@ class EvaluationService:
         quizzes = qz_r.scalars().all()
         quiz_ids = [q.id for q in quizzes]
 
-        kp_stats: dict[str, dict] = {}
+        kp_stats: list[dict] = []
         if quiz_ids:
             qa_result = await self.db.execute(
                 select(
@@ -189,51 +185,25 @@ class EvaluationService:
                     QuizAnswer.is_deleted == False,
                     QuizQuestion.is_deleted == False,
                 )
-                .order_by(QuizAnswer.create_time.asc())
             )
-            for row in qa_result.all():
-                kp = row.knowledge_point or "未分类"
-                if kp not in kp_stats:
-                    kp_stats[kp] = {
-                        "chapter": row.chapter or "",
-                        "total": 0,
-                        "correct": 0,
-                        "personalized_count": 0,
-                        "recent_scores": [],
-                    }
-                kp_stats[kp]["total"] += 1
-                if row.is_correct:
-                    kp_stats[kp]["correct"] += 1
-                if row.personalized:
-                    kp_stats[kp]["personalized_count"] += 1
-                if len(kp_stats[kp]["recent_scores"]) < 10:
-                    kp_stats[kp]["recent_scores"].append(1 if row.is_correct else 0)
+            kp_stats = [row._mapping for row in qa_result.all()]
 
-        payload["quiz_results"] = [
-            {
-                "knowledge_point": kp,
-                "chapter": stats["chapter"],
-                "score": round(stats["correct"] / stats["total"] * 100, 1) if stats["total"] > 0 else 0.0,
-                "total_answers": stats["total"],
-                "personalized_count": stats["personalized_count"],
-                "recent_trend": round(sum(stats["recent_scores"]) / len(stats["recent_scores"]) * 100, 1)
-                                if stats["recent_scores"] else 0.0,
-            }
-            for kp, stats in kp_stats.items()
-        ]
+        payload["quiz_results"] = _aggregate_quiz_results(kp_stats)
 
-        types = ["document", "mindmap", "reading", "code", "video"]
-        by_type: dict = {}
-        for t in types:
-            c_r = await self.db.execute(
-                select(func.count(Resource.id)).where(
-                    resource_scope_clause(course_id, resource_scope.catalog_id),
-                    Resource.type == t,
-                    Resource.is_deleted == False,
-                )
+        resource_usage_result = await self.db.execute(
+            select(Resource.type)
+            .join(LearningActivity, LearningActivity.resource_id == Resource.id)
+            .where(
+                LearningActivity.user_id == user_id,
+                LearningActivity.course_id == course_id,
+                LearningActivity.activity_type.in_(["resource_view", "resource_study"]),
+                LearningActivity.is_deleted == False,
+                Resource.is_deleted == False,
             )
-            by_type[t] = c_r.scalar() or 0
-        payload["resource_usage"] = {"by_type": by_type}
+        )
+        payload["resource_usage"] = {
+            "by_type": _aggregate_resource_usage(resource_usage_result.scalars().all())
+        }
 
         return payload
 

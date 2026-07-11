@@ -270,6 +270,7 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
             {
                 "node_id": node_id,
                 "node_name": node_name,
+                "chapter": str(node.get("chapter") or ""),
                 "status": status_text,
                 "study_duration_seconds": duration,
                 "mastery_score": score,

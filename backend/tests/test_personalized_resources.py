@@ -82,3 +82,17 @@ async def test_list_personalized_resources_projects_owned_code_problem_summary()
             },
         }
     ]
+def test_generate_request_accepts_natural_language_goal_with_optional_hints():
+    from app.schemas.personalized import PersonalizedResourceGenerateRequest
+
+    request = PersonalizedResourceGenerateRequest(
+        course_id="course-1",
+        goal="根据我的薄弱点生成一份指针复习资料",
+        knowledge_point="指针",
+        resource_preferences=["personal_lesson", "diagram"],
+        difficulty="medium",
+    )
+
+    assert request.generate_type == "resource"
+    assert request.source_type == "manual"
+    assert request.resource_preferences == ["personal_lesson", "diagram"]

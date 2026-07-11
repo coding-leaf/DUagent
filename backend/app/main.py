@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
-    admin, auth, catalogs, courses, evaluation, internal_ai_chat, learning_path,
+    admin, auth, catalogs, courses, evaluation, internal_ai_chat,
+    internal_personalized_resources, learning_path,
     code_problems, learning_activities, personalized_resources, profile, quiz, resources,
     sandbox, tasks, teaching, tutoring, users, webhooks,
 )
@@ -106,6 +107,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(catalogs.router)
 app.include_router(internal_ai_chat.router)
+app.include_router(internal_personalized_resources.router)
 app.include_router(sandbox.router)
 app.include_router(code_problems.router)
 app.include_router(courses.router)

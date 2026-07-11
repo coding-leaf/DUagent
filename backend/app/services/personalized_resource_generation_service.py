@@ -59,8 +59,17 @@ class PersonalizedResourceGenerationService:
         await self.db.refresh(generation)
         return generation
 
-    async def record_validation(self, generation_id: str, report: dict):
-        generation = await self._get(generation_id)
+    async def record_validation(
+        self,
+        generation_id: str,
+        report: dict,
+        *,
+        user_id: str | None = None,
+        course_id: str | None = None,
+    ):
+        generation = await self._get(
+            generation_id, user_id=user_id, course_id=course_id
+        )
         target = "validated" if report.get("status") == "passed" else "failed"
         validate_generation_transition(generation.status, target)
         generation.validation_report = report
@@ -68,8 +77,17 @@ class PersonalizedResourceGenerationService:
         await self.db.flush()
         return generation
 
-    async def record_review(self, generation_id: str, report: dict):
-        generation = await self._get(generation_id)
+    async def record_review(
+        self,
+        generation_id: str,
+        report: dict,
+        *,
+        user_id: str | None = None,
+        course_id: str | None = None,
+    ):
+        generation = await self._get(
+            generation_id, user_id=user_id, course_id=course_id
+        )
         decision = str(report.get("decision") or "")
         validate_generation_transition(generation.status, decision)
         generation.review_decision = decision
@@ -78,8 +96,19 @@ class PersonalizedResourceGenerationService:
         await self.db.flush()
         return generation
 
-    async def publish(self, generation_id: str) -> Resource:
-        generation = await self._get(generation_id, for_update=True)
+    async def publish(
+        self,
+        generation_id: str,
+        *,
+        user_id: str | None = None,
+        course_id: str | None = None,
+    ) -> Resource:
+        generation = await self._get(
+            generation_id,
+            for_update=True,
+            user_id=user_id,
+            course_id=course_id,
+        )
         if (generation.validation_report or {}).get("status") != "passed":
             raise ResourcePublicationError("validation_required")
         if generation.review_decision not in {"approved", "approved_with_advice"}:
@@ -114,11 +143,22 @@ class PersonalizedResourceGenerationService:
         await self.db.flush()
         return resource
 
-    async def _get(self, generation_id: str, *, for_update: bool = False):
+    async def _get(
+        self,
+        generation_id: str,
+        *,
+        for_update: bool = False,
+        user_id: str | None = None,
+        course_id: str | None = None,
+    ):
         query = select(PersonalizedResourceGeneration).where(
             PersonalizedResourceGeneration.id == generation_id,
             PersonalizedResourceGeneration.is_deleted == False,
         )
+        if user_id is not None:
+            query = query.where(PersonalizedResourceGeneration.user_id == user_id)
+        if course_id is not None:
+            query = query.where(PersonalizedResourceGeneration.course_id == course_id)
         if for_update:
             query = query.with_for_update()
         result = await self.db.execute(query)

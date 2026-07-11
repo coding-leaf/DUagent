@@ -122,18 +122,23 @@ async def publish_reviewed_personal_problem(
     db: AsyncSession,
     *,
     generation_id: str,
+    user_id: str | None = None,
+    course_id: str | None = None,
 ) -> CreatedCodeProblem:
-    result = await db.execute(
-        select(PersonalizedResourceGeneration)
-        .where(
+    query = select(PersonalizedResourceGeneration).where(
             PersonalizedResourceGeneration.id == generation_id,
             PersonalizedResourceGeneration.is_deleted == False,
         )
-        .with_for_update()
-    )
+    if user_id is not None:
+        query = query.where(PersonalizedResourceGeneration.user_id == user_id)
+    if course_id is not None:
+        query = query.where(PersonalizedResourceGeneration.course_id == course_id)
+    result = await db.execute(query.with_for_update())
     generation = result.scalar_one_or_none()
     if generation is None:
         raise CodeProblemValidationError("generation_not_found")
+    if generation.resource_type != "validated_code_problem":
+        raise CodeProblemValidationError("resource_type_mismatch")
     if generation.validation_report.get("status") != "passed":
         raise CodeProblemValidationError("validation_required")
     if generation.review_decision not in {"approved", "approved_with_advice"}:

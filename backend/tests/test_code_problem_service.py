@@ -187,6 +187,7 @@ async def test_publish_code_problem_requires_independent_review_approval():
     db.execute = AsyncMock()
     generation = MagicMock(
         status="validated",
+        resource_type="validated_code_problem",
         review_decision=None,
         validation_report={"status": "passed"},
     )

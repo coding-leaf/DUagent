@@ -223,7 +223,7 @@ async def generate_personalized_resource(
                 payload["personalization_context"] = ctx
 
         try:
-            data = await agent_client.post_json("/agent/v1/assessment/generate-questions", payload)
+            data = await agent_client.post_json("/agent/v2/knowledge/quiz/generations", payload)
         except AgentServiceError as e:
             return JSONResponse(
                 status_code=500,
@@ -287,21 +287,33 @@ async def generate_personalized_resource(
         await db.flush()
         await db.refresh(task)
 
+        is_goal_generation = bool(req.goal)
         res_payload: dict = {
             "task_id": task.id,
             "user_id": current_user.id,
-            "course_id": catalog_context.catalog_id,
+            "course_id": req.course_id if is_goal_generation else catalog_context.catalog_id,
             "webhook_url": _webhook_url(request),
         }
+        if req.goal:
+            res_payload["goal"] = req.goal
         if req.chapter:
             res_payload["chapter"] = req.chapter
         if req.knowledge_point:
             res_payload["knowledge_point"] = req.knowledge_point
         if req.resource_types:
             res_payload["resource_types"] = req.resource_types
+        if req.resource_preferences:
+            res_payload["resource_preferences"] = req.resource_preferences
+        if req.difficulty:
+            res_payload["difficulty"] = req.difficulty
 
         try:
-            await agent_client.post_json("/agent/v1/resources/generate", res_payload)
+            agent_path = (
+                "/agent/v2/personalized-resources/generations"
+                if is_goal_generation
+                else "/agent/v2/knowledge/resources/generations"
+            )
+            await agent_client.post_json(agent_path, res_payload)
         except AgentServiceError as e:
             task.status = "failed"
             task.error_code = str(e.agent_code or "agent_error")[:20]

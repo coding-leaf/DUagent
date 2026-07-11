@@ -2391,3 +2391,12 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - 数据库新增 `published_code_problem_id` 外键列并验证成功。
 - 验证：Backend 34 passed；Agent Service 22 passed；相关 Python 文件通过 `py_compile`。
 - 接口漂移：有。仅 Agent Service 与 Backend 间内部接口变更，双方调用点已同步；公开学生 API 未变化。
+
+### 2026-07-12 — 统一个性化资源生成协议
+
+- 新增受内部 Agent Token 保护的草案、验证报告、审核结论和发布接口；所有变更按 `user_id + course_id + generation_id` 校验归属。
+- 审核协议将 `hard_failures` 与 `warnings` 分开，支持 `approved_with_advice`，软建议不阻断发布。
+- 学生生成请求新增自然语言 `goal`、`resource_preferences` 和可选难度提示；旧 `generate_type` 默认并保留，继续作为迁移兼容入口。
+- 带自然语言目标的请求转发至 `/agent/v2/personalized-resources/generations`；旧固定资源请求仍走原知识资源接口。
+- 验证：Backend 个性化资源、内部协议、代码题及 OJ 相关测试共 38 passed；相关文件通过 `py_compile`。
+- 接口漂移：新增内部个性化资源协议与学生请求可选字段；旧请求字段和默认行为兼容。

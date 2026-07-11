@@ -2577,3 +2577,113 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent pytest：未修改。
 
 **接口漂移：** 无。
+
+
+### 2026-07-12 — 解决课件与试题等生成默认 Python 的语言漂移异常
+
+**涉及文件：**
+- `backend/app/api/v1/personalized_resources.py`
+- `backend/app/services/catalog_resource_generation_service.py`
+- `agent_service_v2/src/agent_service_v2/api/knowledge.py`
+- `agent_service_v2/src/agent_service_v2/agents/resource_team_leader.py`
+- `agent_service_v2/src/agent_service_v2/generators/public_resource_flow.py`
+- `agent_service_v2/src/agent_service_v2/generators/public_resources.py`
+- `agent_service_v2/src/agent_service_v2/agents/leader_team.py`
+- `agent_service_v2/tests/test_knowledge_api.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. **全链路透传课程名称**：
+   - 后端端点：在 `personalized_resources.py`（个人资源生成）和 `catalog_resource_generation_service.py`（公共课件、课本节点资源生成）中，从数据库 `catalog` 表解析出当前班级的课程名（`catalog_title` / `catalog.title`，例如“C语言”），并作为 `course_title` 参数透传给 Agent Service v2 的 Pydantic 数据模型和 API 请求。
+   - Agent 协议：在 `knowledge.py` 中更新 `ResourceGenerationRequest` 和 `QuizGenerationRequest` 结构，使之能够可选地携带并解析 `course_title` 字段，并在 API 处理器中向下级联传递。
+   - 多智能体团队：在 `resource_team_leader.py` 中，支持 schema 的 `course_title` 解析，将其作为元数据序列化到 Leader 智能体的 user message 中，并在 Leader (LLM) 动态创建 `resource_generator` 与 `resource_reviewer` Worker 时在 System Prompt 里硬性声明课程语言环境约束。
+2. **生成端提示词强约束与 Fallback 兜底**：
+   - 公共课件与代码示例生成：在 `public_resources.py` 的 `build_public_resource_prompt` 函数中，解析 `course_title` 并生成直观的 `Course Title: C Programming Language` 元信息提示词，同时在 Prompt 内明确写入：“在没有检索到原文时，必须严格基于课程名称的主题环境（例如：若课程名称为“C语言”，则所有代码示例、图表、讲义概念必须 100% 使用C语言编写和讲解，绝对不能使用 Python、Java 等其他编程语言的任何内容）来进行合理的基础教学资源生成”。
+   - 学生个性化习题、文档、脑图生成：在 `leader_team.py` 的 `ResourceWorkerAgent.generate_asset` 中，添加 `course_title` 作为关键词参数，提取并格式化为 `course_info` 声明，对 `quiz`（习题/编程题）、`document`（课件/幻灯片）、`mindmap`（脑图）以及 fallback 拓展阅读提示词进行了深度科技约束（Language & Technology Requirements），严令大模型在 C 语言课程环境下 100% 使用 C 语言作为题目描述、注释以及可编译代码的唯一编程语言，彻底治愈了“无原文 RAG 检索时默认落入 Python”的行业通病。
+3. **单元测试回归对齐**：
+   - 在 `test_knowledge_api.py` 中，更新了 `test_quiz_generation_api_personalized_success` 的 Mock 调用匹配规则，补全了 `course_title=None` 的 signature 断言，确保所有内部调用点完美契合。
+
+**验证结果：**
+- **语法编译校验**：对所有 7 个修改的 python 核心文件运行 `python3 -m py_compile` 100% 成功。
+- **后端单元测试**：运行 `cd backend && pytest tests/test_admin_catalog_resource_generation.py -v` 绿灯通过（29 passed）。
+- **智能体单元测试**：在 `agent_service_v2` 目录下运行 `pytest tests/test_knowledge_api.py tests/test_leader_team.py tests/test_public_resource_generation.py tests/test_resource_agent_team.py -v` 100% 绿灯通过（共 17 passed）。
+
+**接口漂移：** 有。
+- Agent Service v2 的 `/agent/v2/knowledge/resources/generations` 和 `/agent/v2/knowledge/quiz/generations` 新增可选参数 `course_title: str | None`，向后兼容，未破坏既有 Client API 及 Web 访问。
+
+---
+
+### 2026-07-12 — 解决个性化资源“生成失败”卡片无法消除及 OpenAPI 契约对齐问题
+
+**涉及文件：**
+- `frontend/src/components/personalized/PersonalizedResourceCard.jsx`
+- `docs/20-agent-api/Agent-Service.openapi.json`
+- `WorkLine.md`
+
+**核心改动：**
+1. **解决个性化资源页面生成失败/进行中卡片无法消除 Bug**：
+   - 在 `PersonalizedResourceCard.jsx` 中，对处于 `processing` (生成中) 和 `failed` (生成失败) 状态的卡片 (它们是由 `StatusCard` 临时占位渲染)，打通了 `onDelete` 事件穿透。
+   - 升级 `StatusCard` 组件：使之可以接受并处理 `onDelete` 属性；将其根容器声明为 `relative group` 样式，在鼠标 hover 悬浮时，于右上角显式渲染标准的红色垃圾桶删除按钮。
+   - 当用户点击删除按钮时，完美触发原有删除逻辑（通过 soft delete 后端接口进行软删除，并配合 SWR 智能轮询及列表组件重新 mutate 获取过滤后列表），彻底清除了屏幕上堆积、残留的脏状态错误卡片。
+2. **对齐 OpenAPI 契约校验并修复测试失败 (test_openapi_alignment.py)**：
+   - 修复了 Pydantic 实际模型与设计契约文件 `docs/20-agent-api/Agent-Service.openapi.json` 之间的字段漂移：
+     - 在 `ResourceGenerateRequest` 的 API 参数模型中，将缺失的触发教师用户 ID `user_id` 补录进 openapi.json 的 schema 声明与 `required` 必填清单，同时将实际上可选的 `resource_types` 字段从 required 列表中移除（对齐 Python Model 的 `list[str] | None` 默认 None 机制）。
+     - 在 AI 课本知识检索对话端点 `TutoringChatRequest` 的嵌套模型 `user_profile` properties 中，补齐声明了用户个性化偏好 `custom_instruction`。
+   - 修复后，`agent_service` 目录下的 OpenAPI 契约对齐测试套件从 initial 状态下的 2 处 `AssertionError` 阻断，成功转为全量 **25 passed**。
+
+**验证结果：**
+- **前端打包编译**：运行 `cd frontend && npm run lint && npm run build` 100% 成功编译，0 错误，0 警告。
+- **后端语法校验**：`python3 -m py_compile backend/app/api/v1/personalized_resources.py` 成功通过。
+- **智能体单元测试**：运行 `cd agent_service && ./.venv/bin/pytest tests/test_openapi_alignment.py` 25 个测试用例 100% 绿灯全数通过。
+
+**接口漂移：**
+- 无外部 Client API 漂移。
+- 内部接口规范文件 `Agent-Service.openapi.json` 补齐了丢失的 `user_id` 和 `custom_instruction`，并纠正了 `resource_types` 的 required 归属，使文档完美契合最新运行代码现状。
+
+---
+
+### 2026-07-12 — 解决学生端 Dashboard 资源库分类过滤后列表为空的 Bug
+
+**涉及文件：**
+- `frontend/src/pages/Dashboard.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. **统一新旧资源类型的分类分组映射 (TYPE_GROUP_MAP)**：
+   - 原因：学生端 Dashboard 顶部的三个具体分类页签过滤码为硬编码（`lesson` 标准讲义、`diagram` 知识图解、`example` 代码示例）。而在真实的最新大模型与多智能体产物中，后端将标准讲义也存储为 `'document'`（文档）或 `'reading'`（阅读），知识图解存储为 `'mindmap'`（思维导图），代码示例存储为 `'code'`（代码）或 `'validated_code_problem'`（代码实操）。
+   - 这造成在 **“全部”** 页签下资源列表完整，但点击特定的具体页签时，由于 `resource.type === selectedType` 的严格文本匹配失效，过滤列表被全数刷空并展示“课程资源正在准备中”空态。
+   - 解决方案：在 `Dashboard.jsx` 中声明统一的组合标签映射 `TYPE_GROUP_MAP`，并将 `filteredResources` 的过滤谓词 `matchesType` 从原先的精确匹配，重构扩展为支持子类型归宿检查，从而解决此兼容隔离问题。
+
+**验证结果：**
+- **前端打包编译**：运行 `cd frontend && npm run lint && npm run build` 100% 编译成功（0 错误，0 警告）。
+- **后端与智能体**：本轮未改动后端及智能体 Python 代码，原有测试保持全绿。
+
+**接口漂移：**
+- 无任何接口漂移。
+
+
+---
+
+### 2026-07-12 — 修复 AgentScope 2.x ChatResponse 缺少 text 属性导致评估失败回退默认值的 Bug
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/evaluation.py`
+- `agent_service_v2/tests/test_evaluation_insight.py`
+
+**核心改动：**
+1. **彻底解决真实运行时 `response.text` 报错 `KeyError: 'text'` 问题**：
+   - 深入分析 AgentScope 2.x（2.0.3版本）的行为，发现 `OpenAIChatModel` 返回的 `ChatResponse` dataclass 继承自 `DictMixin`，其没有直接的 `.text` 属性，大模型回复的真实文本承载于 `response.content` (TextBlock 等内容块序列) 中。在测试环境通过 MagicMock.text 屏蔽了此错误，但在真实环境会导致崩溃降级为空评估/空白薄弱点总结。
+   - 解决方案：在 `evaluation.py` 中，定义了具有高兼容性、高容错的转换提取辅助函数 `_text_from_chat_response`，支持对 `ChatResponse`、包含 `.text` 的模拟/遗留/Mock 对象以及普通 String 类型进行完美的内容解析和合并。
+2. **重构评估与诊断的大模型调用逻辑**：
+   - 将综合评估总结生成 (`generate_evaluation_with_llm`) 及习题评估诊断生成 (`generate_quiz_diagnosis_with_llm`) 中高危的 `response.text` 全量替换为经过 `_text_from_chat_response` 提纯处理的更具鲁棒性的数据访问模式。
+3. **补齐智能体底层单元测试覆盖**：
+   - 在 `test_evaluation_insight.py` 中新增 `test_text_from_chat_response_with_agentscope_types` 单元测试，分别针对真实的 `ChatResponse` 块流式数据结构、原生字符串以及常规 Mock 对象的降级情况进行精密、高比例覆盖断言测试，确保没有回弹。
+
+**验证结果：**
+- 前端 lint / build：未修改前端
+- 后端 py_compile / pytest：对修改文件进行 py_compile 完美通过；在 `agent_service_v2` 目录下运行 `pytest` 133 个单元测试用例 **100% 全部通过 (133 passed)**！
+- Agent pytest：同上
+
+**接口漂移：** 无。
+
+

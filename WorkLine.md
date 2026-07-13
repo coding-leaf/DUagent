@@ -3729,3 +3729,19 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 路径及显式请求/响应字段无变化；消息 `meta` 增加内部 `event_timeline` 兼容字段。
 - Agent API 无变化。
+
+---
+
+### 2026-07-13 — 修复未完成选择题误显示训练结果
+
+**涉及范围：**
+- Frontend：提交前检查整套题均已作答；结果页与重练页使用替换导航，退出练习不再返回旧结果页；空多选答案不再视为已作答。
+- Backend：提交时锁定练习并校验用户归属、答案完整性、题号唯一性、题目有效性与重复提交。
+
+**验证结果：**
+- Frontend Quiz 与 PracticeResult hook 定向测试：8 passed。
+- Backend 提交完整性定向测试：1 passed；`quiz_service.py` 语法检查通过。
+
+**接口漂移：**
+- Client API 路径、字段和响应结构无变化；不完整或重复提交由原先错误计分改为 4xx 拒绝。
+- Agent API 无变化。

@@ -184,6 +184,29 @@ async def _load_quiz_questions(db: AsyncSession, q_ids: list[str]) -> dict[str, 
     return {q.id: q for q in q_batch.scalars().all()}
 
 
+def _submission_error(message: str, status_code: int = 400) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": status_code * 100, "message": message, "data": None},
+    )
+
+
+def _validate_submission_shape(quiz: QuizSession, answers: list[dict]) -> None:
+    expected_count = int(quiz.total_count or 0)
+    if expected_count <= 0:
+        return
+
+    question_ids = [answer.get("question_id", "") for answer in answers]
+    if len(answers) != expected_count:
+        raise _submission_error("请完成全部题目后再提交")
+    if len(set(question_ids)) != expected_count or any(not qid for qid in question_ids):
+        raise _submission_error("提交的题目不完整")
+    for item in answers:
+        answer = item.get("answer")
+        if answer is None or answer == "" or answer == []:
+            raise _submission_error("请完成全部题目后再提交")
+
+
 def _grade_submission(
     answers: list[dict], questions_by_id: dict[str, QuizQuestion]
 ) -> tuple[int, list[dict], list[dict], list[dict]]:
@@ -278,7 +301,13 @@ async def submit_quiz_answers(
     """主编排逻辑：题目拉取 -> 判分 -> 写库 -> 返回结果元组。"""
     # 1. 校验会话
     result = await db.execute(
-        select(QuizSession).where(QuizSession.id == req.quiz_id, QuizSession.is_deleted == False)
+        select(QuizSession)
+        .where(
+            QuizSession.id == req.quiz_id,
+            QuizSession.user_id == user_id,
+            QuizSession.is_deleted == False,
+        )
+        .with_for_update()
     )
     quiz = result.scalar_one_or_none()
     if quiz is None:
@@ -287,9 +316,22 @@ async def submit_quiz_answers(
             detail={"code": 40400, "message": "练习不存在", "data": None},
         )
 
+    _validate_submission_shape(quiz, req.answers)
+    if quiz.total_count:
+        submitted = await db.scalar(
+            select(func.count(QuizAnswer.id)).where(
+                QuizAnswer.quiz_id == req.quiz_id,
+                QuizAnswer.is_deleted == False,
+            )
+        )
+        if submitted:
+            raise _submission_error("该练习已提交", status_code=409)
+
     # 2. 拉取题目
     q_ids = [a.get("question_id", "") for a in req.answers]
     questions_by_id = await _load_quiz_questions(db, q_ids)
+    if quiz.total_count and len(questions_by_id) != len(q_ids):
+        raise _submission_error("提交包含无效题目")
 
     # 3. 评分比对
     correct_count, per_question_results, agent_questions, agent_answers = _grade_submission(

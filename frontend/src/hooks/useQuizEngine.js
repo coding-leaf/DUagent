@@ -29,6 +29,12 @@ const answerUpdaters = {
   default: (prev, qId, nextAnswer) => ({ ...prev, [qId]: nextAnswer }),
 };
 
+export const hasQuizAnswer = (answer) => (
+  Array.isArray(answer)
+    ? answer.length > 0
+    : answer !== null && answer !== undefined && String(answer).trim().length > 0
+);
+
 export function useQuizEngine({
   nodeId,
   sourceParam,
@@ -114,6 +120,11 @@ export function useQuizEngine({
       return;
     }
 
+    if (quizData.questions.some(question => !hasQuizAnswer(answers[question.id]))) {
+      toast.error('请完成全部题目后再提交');
+      return;
+    }
+
     const elapsedSeconds = Math.max(
       0,
       Math.floor((Date.now() - (quizStartRef.current || Date.now())) / 1000)
@@ -134,6 +145,7 @@ export function useQuizEngine({
           profileService.refreshProfile(activeCourseId).catch(() => {});
         }
         onNavigate('/quiz/result', {
+          replace: true,
           state: {
             result: res.data,
             quizContext: {

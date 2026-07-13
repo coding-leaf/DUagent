@@ -107,4 +107,21 @@ describe('usePracticeResult', () => {
 
     expect(result.current.currentTextIndex).toBe(2);
   });
+
+  it('retries by replacing the completed result history entry', () => {
+    const navigate = vi.fn();
+    const { result } = renderHook(() => usePracticeResult({
+      courseId: 'course1',
+      initialResultData: { correct_count: 1, total_count: 2 },
+      quizContext: { node_id: 'node1' },
+      navigate,
+    }));
+
+    act(() => result.current.handleRetry());
+
+    expect(navigate).toHaveBeenCalledWith(
+      '/quiz?course_id=course1&node_id=node1',
+      { replace: true }
+    );
+  });
 });

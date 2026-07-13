@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuizEngine } from '../hooks/useQuizEngine';
+import { hasQuizAnswer, useQuizEngine } from '../hooks/useQuizEngine';
 import QuestionRenderer from '../components/quiz/QuestionRenderer';
 import { getQuestionTypeLabel } from '../components/quiz/questionTypeMeta';
 import Icon from '../components/Icon';
@@ -144,7 +144,7 @@ export default function Quiz() {
             onPrevious={handlePrev}
             onNextOrSubmit={handleNextOrSubmit}
             submitting={submitting}
-            hasAnsweredCurrent={!!answers[currentQuestion.id]}
+            hasAnsweredCurrent={hasQuizAnswer(answers[currentQuestion.id])}
           />
         </div>
       </main>

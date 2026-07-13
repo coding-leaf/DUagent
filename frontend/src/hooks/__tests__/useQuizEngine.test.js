@@ -116,4 +116,30 @@ describe('useQuizEngine', () => {
 
     expect(result.current.answers).toEqual({ q1: ['B'] });
   });
+
+  it('does not submit when any question is unanswered', async () => {
+    quizService.getQuestions.mockResolvedValue({
+      code: 200,
+      data: {
+        quiz_id: 'quiz-partial',
+        questions: [
+          { id: 'q1', type: 'single_choice', content: 'Q1' },
+          { id: 'q2', type: 'single_choice', content: 'Q2' }
+        ]
+      }
+    });
+    const navigate = vi.fn();
+    const { result } = renderHook(() => useQuizEngine({
+      nodeId: 'node-partial',
+      onNavigate: navigate,
+    }));
+    await act(async () => Promise.resolve());
+
+    await act(async () => result.current.handleNextOrSubmit());
+    act(() => result.current.handleAnswerChange('A'));
+    await act(async () => result.current.handleNextOrSubmit());
+
+    expect(quizService.submitQuiz).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
 });

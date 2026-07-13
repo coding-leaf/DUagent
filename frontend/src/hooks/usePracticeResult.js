@@ -134,7 +134,7 @@ export function usePracticeResult({ courseId, initialResultData, quizContext, na
     } else if (contextNodeId) {
       params.set('node_id', contextNodeId);
     }
-    navigate(`/quiz?${params.toString()}`);
+    navigate(`/quiz?${params.toString()}`, { replace: true });
   }, [courseId, contextSource, contextKp, contextNodeId, navigate]);
 
   return {

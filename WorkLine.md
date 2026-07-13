@@ -3198,3 +3198,25 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **遗留问题：**
 - RAG 工具返回 `citations`，公共资源生成器读取 `sources`，烟雾测试生成内容正常但来源列表为空；本次未扩大范围处理该既有元数据映射问题。
+
+---
+
+### 2026-07-13 — 修复共享资源失败任务无法收口
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/generators/public_resource_flow.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 资源生成异常文本为空时，失败 Webhook 自动使用异常类型名，避免 Backend 因空 `error_message` 拒绝回调。
+2. 失败 Webhook 自身异常时记录完整日志并结束后台协程，避免产生 `Task exception was never retrieved`。
+
+**验证结果：**
+- 现有公共资源生成定向测试：8 passed。
+- Python `py_compile` 与 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化。
+
+**说明：**
+- 未修改历史任务数据；已经停在 96% 的任务仍需单独结算或重新触发。

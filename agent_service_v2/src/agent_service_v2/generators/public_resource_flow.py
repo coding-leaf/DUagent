@@ -56,13 +56,25 @@ async def run_public_resource_generation(
         return resources
     except Exception as exc:
         logger.exception("Public resource generation failed: task_id=%s", task_id)
-        await _post_failed_webhook(
-            webhook_url,
-            settings,
-            task_id=task_id,
-            error_message=str(exc)[:500],
-        )
+        try:
+            await _post_failed_webhook(
+                webhook_url,
+                settings,
+                task_id=task_id,
+                error_message=_format_error_message(exc),
+            )
+        except Exception:
+            # Background tasks have no caller to retrieve a second webhook exception.
+            logger.exception(
+                "Failed to report public resource generation failure: task_id=%s",
+                task_id,
+            )
         return []
+
+
+def _format_error_message(exc: Exception) -> str:
+    message = str(exc).strip() or type(exc).__name__
+    return message[:500]
 
 
 async def _post_failed_webhook(

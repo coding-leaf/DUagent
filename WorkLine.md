@@ -3537,3 +3537,24 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Client API：普通 Quiz 题型由历史文档的四种收紧为 `single_choice/multi_choice`；编程题明确使用独立 CodeProblem/OJ 链路。
 - Agent API：知识题生成 `question_types` 收紧为 `single_choice/multi_choice`。
 - 新增 Backend internal `POST /internal/ai-chat/choice-quizzes`，不直接暴露给前端。
+
+---
+
+### 2026-07-13 — 移除全局 Dev Console 浮窗
+
+**涉及文件：**
+- `frontend/src/App.jsx`
+- 删除 `frontend/src/components/dev/DeveloperConsoleFloatingPanel.jsx`
+- 删除 `frontend/src/components/dev/DeveloperConsoleFloatingPanel.test.jsx`
+- `WorkLine.md`
+
+**根因与改动：**
+1. `DeveloperConsoleFloatingPanel` 在开发环境被全局挂载，导致所有页面右下角长期出现 Dev 浮窗。
+2. 移除全局挂载并删除废弃组件及其测试；底层 `runLogs/debug_log` 采集保持不变，不影响 AI Chat 流式事件和工具追踪。
+
+**验证结果：**
+- Frontend 全量单元测试、lint 与生产构建通过。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化。

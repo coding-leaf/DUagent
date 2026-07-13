@@ -2,6 +2,10 @@ export const isExecutionFailure = (result) => {
   return Boolean(result && result.status && !['success', 'degraded'].includes(result.status));
 };
 
+export const isCompilationFailure = (result) => {
+  return result?.status === 'compilation_error' || result?.compile_status === 'Compilation Error';
+};
+
 export const getResultBadge = (result) => {
   if (result.status === 'accepted') {
     return {
@@ -21,7 +25,7 @@ export const getResultBadge = (result) => {
       label: '容错分析模式',
     };
   }
-  if (result.compile_status === 'Compilation Error') {
+  if (isCompilationFailure(result)) {
     return {
       className: 'bg-rose-50 text-rose-700 border-rose-200',
       label: '编译失败',
@@ -43,7 +47,7 @@ export const getRunToastMessage = (result) => {
   if (result.status === 'degraded') {
     return '评测机不可用，已启用静态分析容错';
   }
-  if (result.compile_status === 'Compilation Error') {
+  if (isCompilationFailure(result)) {
     return '编译失败，请检查语法错误';
   }
   if (isExecutionFailure(result)) {
@@ -67,7 +71,7 @@ export const buildAskAIPrompt = ({ code, language, stdin, result }) => {
   if (result) {
     if (result.status === 'degraded') {
       debugDetails = `【评测环境状态】：沙箱暂时不可用 (原因: ${result.message})\n`;
-    } else if (result.compile_status === 'Compilation Error') {
+    } else if (isCompilationFailure(result)) {
       debugDetails = `【编译错误信息】：\n${result.compile_output}\n`;
     } else if (result.execution) {
       debugDetails = `【标准输出 (stdout)】：\n${result.execution.stdout}\n`;

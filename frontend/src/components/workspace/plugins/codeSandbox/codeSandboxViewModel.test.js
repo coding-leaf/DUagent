@@ -4,7 +4,8 @@ import {
   getSourceFilename,
   getResultBadge,
   getRunToastMessage,
-  isExecutionFailure
+  isCompilationFailure,
+  isExecutionFailure,
 } from './codeSandboxViewModel';
 
 describe('codeSandboxViewModel', () => {
@@ -43,6 +44,17 @@ describe('codeSandboxViewModel', () => {
   test('labels fixed-case verdicts without treating wrong answers as runtime failures', () => {
     expect(getResultBadge({ status: 'accepted' }).label).toBe('全部通过');
     expect(getResultBadge({ status: 'wrong_answer' }).label).toBe('用例未通过');
+  });
+
+  test('recognizes fixed-case compilation errors without compile_status', () => {
+    const result = {
+      status: 'compilation_error',
+      compile_output: "main.c: error: ‘MAX_STUDENTS’ undeclared",
+    };
+
+    expect(isCompilationFailure(result)).toBe(true);
+    expect(getResultBadge(result).label).toBe('编译失败');
+    expect(getRunToastMessage(result)).toBe('编译失败，请检查语法错误');
   });
 
   test('builds ask-ai prompt with current code and execution details', () => {

@@ -1,4 +1,4 @@
-import { getResultBadge } from './codeSandboxViewModel';
+import { getResultBadge, isCompilationFailure } from './codeSandboxViewModel';
 
 export default function CodeSandboxConsole({ result, isRunning }) {
   const badge = result ? getResultBadge(result) : null;
@@ -37,13 +37,13 @@ export default function CodeSandboxConsole({ result, isRunning }) {
               </div>
             )}
 
-            {result.compile_status === 'Compilation Error' && (
+            {isCompilationFailure(result) && (
               <div className="text-rose-400 whitespace-pre-wrap font-mono">
-                {result.compile_output}
+                {result.compile_output || '编译失败，但评测机未返回具体错误信息。'}
               </div>
             )}
 
-            {result.compile_status === 'OK' && result.execution && (
+            {!isCompilationFailure(result) && result.compile_status === 'OK' && result.execution && (
               <div className="space-y-1">
                 {result.execution.stdout ? (
                   <div className="text-slate-100 whitespace-pre-wrap">{result.execution.stdout}</div>

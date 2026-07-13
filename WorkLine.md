@@ -3292,3 +3292,27 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 无变化。
 - Agent API 无变化。
+
+---
+
+### 2026-07-13 — 修复固定代码题编译错误终端空白
+
+**涉及文件：**
+- `frontend/src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.js`
+- `frontend/src/components/workspace/plugins/codeSandbox/CodeSandboxConsole.jsx`
+- `frontend/src/components/workspace/plugins/codeSandbox/codeSandboxViewModel.test.js`
+- `frontend/src/components/workspace/plugins/CodeSandboxCard.test.jsx`
+- `WorkLine.md`
+
+**根因与改动：**
+1. 固定题判题结果使用 `status=compilation_error` 并携带 `compile_output`，前端旧逻辑却只识别自由沙箱的 `compile_status=Compilation Error`，导致结果被标记为“运行失败”且终端不显示已有编译信息。
+2. 视图模型统一识别两种编译失败表达；终端展示固定题返回的 `compile_output`，缺少详情时显示明确兜底文本。
+
+**验证结果：**
+- CodeSandbox 定向测试：10 passed。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent API 无变化。

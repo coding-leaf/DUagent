@@ -108,6 +108,38 @@ test('uses fixed cases for persisted problems without exposing stdin input', asy
   expect(screen.queryByText('hidden input')).toBeNull();
 });
 
+test('shows compile output returned by fixed-case judging', async () => {
+  getCodeProblem.mockResolvedValue({
+    data: {
+      title: '成绩统计',
+      statement: '补全成绩统计程序。',
+      language: 'c',
+      starter_code: 'int main(void) { int scores[MAX_STUDENTS]; }',
+      public_cases: [],
+    },
+  });
+  submitCodeProblem.mockResolvedValue({ data: { task_id: 'compile-task' } });
+  taskService.getTaskStatus.mockResolvedValue({
+    data: {
+      status: 'completed',
+      result: {
+        status: 'compilation_error',
+        passed_cases: 0,
+        total_cases: 5,
+        compile_output: "main.c: error: ‘MAX_STUDENTS’ undeclared",
+      },
+    },
+  });
+
+  render(<CodeSandboxCard problem_id="problem-compile" language="c" />);
+
+  await screen.findByText('补全成绩统计程序。');
+  fireEvent.click(screen.getByText('🚀 提交评测'));
+
+  expect(await screen.findByText('编译失败')).toBeInTheDocument();
+  expect(screen.getByText(/MAX_STUDENTS.*undeclared/)).toBeInTheDocument();
+});
+
 test('supports language selection in free sandbox mode', async () => {
   render(
     <CodeSandboxCard

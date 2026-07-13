@@ -3885,3 +3885,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API、Agent HTTP 路径、请求响应字段和 SSE 事件类型均无变化。
 - `reset_tools` 仍使用 AgentScope 2.0.3 原生最终状态语义，但其可管理范围收窄为两个可选发布组；未修改框架包，未新增依赖。
+
+---
+
+### 2026-07-14 — 阻断 AI Chat 工具 Schema 整段泄漏
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/safety/internal_disclosure_filter.py`
+- `agent_service_v2/src/agent_service_v2/safety/internal_disclosure_policy.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/tests/test_internal_disclosure_policy.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 新增工具、参数、Schema、内部能力和系统提示词探查识别；普通“用工具完成任务”及代码函数参数问题不进入探查门禁。
+2. 探查类请求暂存 AgentScope 文本事件，在 `ReplyEnd` 前检查过滤前原文；发现原始工具标识、内部接口、参数表或多个已知 Schema 字段时，整段替换为固定的高层能力摘要。
+3. 合规的高层能力说明正常放行；系统提示词索取无条件返回安全摘要。普通学习请求继续使用原流式敏感词与内部标识过滤。
+4. 系统提示词补充能力询问正反例，禁止以表格、JSON、代码块或分项清单披露工具名称、参数、枚举、默认值和数量限制。
+
+**验证结果：**
+- TDD RED：新策略模块实现前无法导入；既有 Session 会输出标题和带脱敏占位符的参数表；提示词缺少正反例；简单工具询问与系统提示词索取边界测试随后确认旧逻辑未覆盖。
+- 安全策略、过滤、提示词和 Session 定向测试：14 passed；补充边界测试：6 passed。
+- Agent Service v2 全量：192 passed，保留 1 条第三方 TestClient 弃用告警。
+- 修改 Python 文件 `py_compile`、OpenAPI 路径导入和 `git diff --check` 通过；仍为 10 条 `/agent/v2/*` 路径。
+
+**接口漂移：**
+- Client API、Agent HTTP 路径、请求响应字段和 SSE 事件类型均无变化。
+- 仅工具/提示词探查类请求的 `text_delta` 改为审查后一次性发送；普通对话和工具事件继续流式，未新增依赖。
+
+**遗留边界：**
+- 门禁使用确定性探查与 Schema 特征，覆盖已知直接和常见变体；未知的隐晦语义提取仍需通过对抗样例持续扩充，不构成对所有提示注入的绝对保证。

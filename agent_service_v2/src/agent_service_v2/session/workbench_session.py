@@ -24,7 +24,7 @@ from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
-from agent_service_v2.safety.internal_disclosure_filter import StudentOutputFilter
+from agent_service_v2.safety.internal_disclosure_policy import StudentTextOutputGate
 from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
 from agent_service_v2.workspaces.workbench_workspace_manager import (
@@ -188,9 +188,10 @@ class WorkbenchSession:
             context=context,
         )
         raw_assistant_chunks: list[str] = []
-        stream_filter = StudentOutputFilter(
+        text_output_gate = StudentTextOutputGate(
+            request=message,
             protected_identifiers=SAFE_WORKBENCH_TOOLS,
-        ).stream()
+        )
         last_text_event = None
         pending_filtered = ""
         pending_text_event = None
@@ -200,7 +201,7 @@ class WorkbenchSession:
                 if isinstance(agent_event, TextBlockDeltaEvent):
                     raw_assistant_chunks.append(agent_event.delta)
                     last_text_event = agent_event
-                    filtered_delta = stream_filter.feed(agent_event.delta)
+                    filtered_delta = text_output_gate.feed(agent_event.delta)
                     if not filtered_delta:
                         continue
                     if pending_filtered and pending_text_event is not None:
@@ -214,7 +215,7 @@ class WorkbenchSession:
                     pending_text_event = agent_event
                     continue
                 if isinstance(agent_event, ExceedMaxItersEvent) and last_text_event is not None:
-                    final_delta = pending_filtered + stream_filter.finish()
+                    final_delta = pending_filtered + text_output_gate.finish()
                     if final_delta:
                         tail_event = (pending_text_event or last_text_event).model_copy(
                             update={"delta": final_delta}
@@ -229,7 +230,7 @@ class WorkbenchSession:
                     and not failed
                     and last_text_event is not None
                 ):
-                    tail = stream_filter.finish()
+                    tail = text_output_gate.finish()
                     final_delta = pending_filtered + tail
                     if final_delta:
                         tail_event = (pending_text_event or last_text_event).model_copy(

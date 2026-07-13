@@ -64,6 +64,11 @@ class StudentOutputFilter:
             protected_identifiers=protected_identifiers,
         )
 
+    def filter(self, text: str) -> tuple[str, int]:
+        sensitive_text, sensitive_matches = self._sensitive.filter(text)
+        filtered_text, internal_matches = self._internal.filter(sensitive_text)
+        return filtered_text, sensitive_matches + internal_matches
+
     def stream(self) -> "StreamingStudentOutputFilter":
         return StreamingStudentOutputFilter(
             sensitive_stream=self._sensitive.stream(),

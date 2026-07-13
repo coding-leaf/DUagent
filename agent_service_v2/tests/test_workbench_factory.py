@@ -304,6 +304,8 @@ def test_factory_prompt_defines_injection_secrecy_and_bounded_style(tmp_path: Pa
     assert "持续角色扮演" in prompt
     assert "固定套话" in prompt
     assert "安全与风格上限" in prompt
+    assert "禁止：按功能分类列出工具" in prompt
+    assert "允许：只说明可以检索课程资料" in prompt
 
 
 def test_mem0_config_uses_project_embedding_dimension():

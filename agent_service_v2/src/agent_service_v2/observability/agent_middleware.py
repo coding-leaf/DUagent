@@ -10,6 +10,7 @@ from agentscope.middleware import MiddlewareBase
 from agent_service_v2.observability.agent_log_emitter import (
     AgentLogEmitter,
     elapsed_ms,
+    model_call_attributes,
     tool_call_attributes,
     tool_result_attributes,
 )
@@ -142,6 +143,10 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         started_at = perf_counter()
         current_model = input_kwargs.get("current_model")
         model_name = getattr(current_model, "model_name", None) or getattr(current_model, "model", None)
+        model_attributes = {
+            "model": model_name,
+            **model_call_attributes(agent, input_kwargs),
+        }
         span_id = new_span_id(self.run_id, "model_call")
         self._log.emit(
             "model_call.start",
@@ -151,7 +156,7 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
             span_kind="model",
             name=f"model.call {model_name or 'unknown'}",
             phase="start",
-            attributes={"model": model_name},
+            attributes=model_attributes,
         )
         try:
             result = await next_handler(**input_kwargs)

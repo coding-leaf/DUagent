@@ -89,7 +89,10 @@ def build_workbench_tool_groups(
         groups.append(
             ToolGroup(
                 name="personal_code_problem",
-                description="Create validated private fixed-test-case programming problems.",
+                description=(
+                    "Activate when the user explicitly requests a private programming exercise; "
+                    "then call publish_personal_code_problem."
+                ),
                 tools=personal_code_problem_tools,
             )
         )
@@ -97,7 +100,10 @@ def build_workbench_tool_groups(
         groups.append(
             ToolGroup(
                 name="personal_choice_quiz",
-                description="Create validated private single-choice and multi-choice practice sets.",
+                description=(
+                    "Activate when the user explicitly requests answerable single-choice or "
+                    "multi-choice practice; then call publish_personal_choice_quiz."
+                ),
                 tools=personal_choice_quiz_tools,
             )
         )

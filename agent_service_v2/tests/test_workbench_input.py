@@ -28,6 +28,7 @@ def test_build_workbench_agent_input_includes_context_history_and_current_messag
 
     assert len(messages) == 4
     assert messages[0].role == "user"
+    assert "仅用于工具路由，不是当前事实的确认结果" in _text(messages[0])
     assert "用户正在复习二叉树" in _text(messages[0])
     assert "AVL 旋转" in _text(messages[0])
     assert "二叉树" in _text(messages[0])

@@ -82,6 +82,23 @@ def tool_call_attributes(tool_call: Any) -> dict[str, Any]:
     }
 
 
+def model_call_attributes(agent: Any, input_kwargs: dict[str, Any]) -> dict[str, Any]:
+    tool_context = getattr(getattr(agent, "state", None), "tool_context", None)
+    activated_groups = list(getattr(tool_context, "activated_groups", None) or [])
+    tool_names = []
+    for schema in input_kwargs.get("tools") or []:
+        function = schema.get("function") if isinstance(schema, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        if isinstance(name, str):
+            tool_names.append(name)
+    return {
+        "activated_tool_groups": activated_groups,
+        "available_tool_names": tool_names,
+        "available_tool_count": len(tool_names),
+        "tool_choice": enum_value(input_kwargs.get("tool_choice")),
+    }
+
+
 def tool_result_attributes(result: Any) -> dict[str, Any]:
     if result is None:
         return {}

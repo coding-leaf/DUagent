@@ -77,7 +77,10 @@ def test_workbench_tool_groups_include_personal_code_problem_group_when_tools_ex
         run_id="run-1",
     )
 
-    assert "personal_code_problem" in [group.name for group in groups]
+    group = next(group for group in groups if group.name == "personal_code_problem")
+
+    assert "explicitly requests" in group.description
+    assert "publish_personal_code_problem" in group.description
 
 
 def test_workbench_tool_groups_include_personal_choice_quiz_group_when_tools_exist():
@@ -93,4 +96,7 @@ def test_workbench_tool_groups_include_personal_choice_quiz_group_when_tools_exi
         run_id="run-1",
     )
 
-    assert "personal_choice_quiz" in [group.name for group in groups]
+    group = next(group for group in groups if group.name == "personal_choice_quiz")
+
+    assert "explicitly requests" in group.description
+    assert "publish_personal_choice_quiz" in group.description

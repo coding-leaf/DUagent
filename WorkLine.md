@@ -3801,3 +3801,27 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API、Agent HTTP API 和 SSE 字段均无变化。
 - Agent 内部 `add_memory` 工具新增必填 `memory_type` 白名单枚举；编程题工具仅收紧到既有 Backend 契约。
+
+---
+
+### 2026-07-14 — 强化 AI Chat 工具路由与可观测性
+
+**涉及范围：**
+- Agent Workbench 系统提示词、默认 ToolGroup、Backend 上下文提示语义与模型调用诊断日志。
+- 私人选择题和编程题继续动态激活；未把大体积发布工具 Schema 常驻到每轮模型请求。
+
+**核心改动：**
+1. 真实学习数据、教材依据、代码执行、长期记忆、资源操作、工作区成果和练习发布改为必须调用对应工具；普通通用知识问答仍可直接回答。
+2. Backend 注入的摘要、画像、薄弱点和课程节点明确为路由提示，未经本轮工具确认不得声称是当前事实或已完成外部操作。
+3. `planning` 默认激活，复杂任务要求使用 AgentScope Task 工具；私人练习通过 `reset_tools` 精确激活发布组与恢复组，默认激活组禁止多余重置。
+4. `model_call.start` 日志新增激活工具组、可见工具名、工具数量和 `tool_choice`，不记录工具参数或完整 Schema。
+
+**验证结果：**
+- TDD RED：新增路由、默认激活、上下文和日志断言初始 6 failed；实现后定向测试 25 passed。
+- Agent Service v2 全量：176 passed，保留 1 条第三方 TestClient 弃用告警；修改文件 `py_compile` 与 `git diff --check` 通过。
+- AgentScope 2.0.3 工具面探针确认首轮可见 `TaskCreate/TaskGet/TaskList/TaskUpdate`，私人选择题和编程题发布工具仍保持隐藏。
+- 禁用 Memory 的真实模型烟雾中出现 `read_learning_progress` 工具调用；隔离测试用户无业务写入，Backend 对不存在用户返回失败不影响路由验收。
+
+**接口漂移：**
+- Client API、Agent HTTP 路径及业务 SSE 事件类型无变化。
+- `debug_log.attributes` 仅新增向后兼容的工具面诊断字段；未新增依赖。

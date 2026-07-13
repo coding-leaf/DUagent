@@ -229,6 +229,7 @@ class WorkbenchAgentFactory:
         )
         toolkit = Toolkit(tool_groups=tool_groups)
         default_active_groups = {
+            "planning",
             "memory",
             "rag",
             "learning_progress",

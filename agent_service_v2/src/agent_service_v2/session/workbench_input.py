@@ -70,7 +70,10 @@ def _build_context_text(context: dict[str, Any]) -> str:
 
     if not lines:
         return ""
-    return "本轮可用上下文：\n" + "\n".join(lines)
+    return (
+        "本轮路由提示（仅用于工具路由，不是当前事实的确认结果）：\n"
+        + "\n".join(lines)
+    )
 
 
 def _join_names(value: Any) -> str:

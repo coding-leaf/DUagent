@@ -307,7 +307,8 @@ def test_workbench_session_passes_context_messages_to_agent(tmp_path: Path):
     asyncio.run(_collect(bus, run.run_id))
 
     assert [item.get_text_content() for item in captured_inputs] == [
-        "本轮可用上下文：\n对话摘要：用户正在学习链表。",
+        "本轮路由提示（仅用于工具路由，不是当前事实的确认结果）：\n"
+        "对话摘要：用户正在学习链表。",
         "我刚才问了链表。",
         "你问了链表的插入。",
         "刚才的问题是什么？",

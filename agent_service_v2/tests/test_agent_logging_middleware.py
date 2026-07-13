@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 from agentscope.message import TextBlock, ToolCallBlock
 from agentscope.tool import ToolResponse
@@ -88,6 +89,60 @@ def test_agent_run_logging_middleware_closes_streaming_model_call_after_consumpt
     ]
     assert records[1]["span_id"] == records[0]["span_id"]
     assert records[1]["phase"] == "end"
+
+
+def test_agent_run_logging_middleware_records_visible_tool_surface_without_schemas():
+    records = []
+    middleware = AgentRunLoggingMiddleware(
+        run_id="run-1",
+        conversation_id="conv-1",
+        user_id="u1",
+        course_id="c1",
+        sink=records.append,
+    )
+
+    class FakeAgent:
+        name = "workbench"
+        state = SimpleNamespace(
+            tool_context=SimpleNamespace(activated_groups=["planning", "learning_progress"])
+        )
+
+    async def next_handler(**_kwargs):
+        return "response"
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "TaskCreate",
+                "description": "secret schema content",
+                "parameters": {"type": "object"},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "read_learning_progress",
+                "parameters": {"type": "object"},
+            },
+        },
+    ]
+
+    result = asyncio.run(
+        middleware.on_model_call(
+            FakeAgent(),
+            {"current_model": None, "tools": tools, "tool_choice": None},
+            next_handler,
+        )
+    )
+
+    assert result == "response"
+    attributes = records[0]["attributes"]
+    assert attributes["activated_tool_groups"] == ["planning", "learning_progress"]
+    assert attributes["available_tool_names"] == ["TaskCreate", "read_learning_progress"]
+    assert attributes["available_tool_count"] == 2
+    assert attributes["tool_choice"] is None
+    assert "secret schema content" not in str(attributes)
 
 
 def test_agent_run_logging_middleware_emits_tool_arguments_and_result_preview():

@@ -166,6 +166,7 @@ def test_factory_activates_safe_tool_groups_by_default(tmp_path: Path):
 
     assert "artifact" in agent.state.tool_context.activated_groups
     assert "learning_progress" in agent.state.tool_context.activated_groups
+    assert "planning" in agent.state.tool_context.activated_groups
     assert "personal_code_problem" not in agent.state.tool_context.activated_groups
     assert "personal_choice_quiz" not in agent.state.tool_context.activated_groups
 
@@ -197,6 +198,33 @@ def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_pa
     assert "delivery_incomplete" in prompt
     assert "validated" not in prompt
     assert "不要使用 write_artifact_file 创建 JSON" in prompt
+
+
+def test_factory_prompt_requires_fact_tools_and_maps_dynamic_practice_groups(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1", course_id="c1", conversation_id="conv1"
+    )
+    prompt = WorkbenchAgentFactory(model_provider=lambda: FakeModel()).create_agent(
+        user_id="u1",
+        course_id="c1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )._system_prompt
+
+    assert "只用于判断该调用哪个工具" in prompt
+    assert "必须调用 retrieve_course_context_tool" in prompt
+    assert "必须调用 read_learner_profile" in prompt
+    assert "必须调用 search_memory" in prompt
+    assert "本轮没有对应工具的成功结果" in prompt
+    assert "personal_choice_quiz=true" in prompt
+    assert "personal_code_problem=true" in prompt
+    assert "personal_practice_delivery=true" in prompt
+    assert "未显式设为 true 的工具组会被关闭" in prompt
+    assert "默认已激活的工具组直接调用目标工具" in prompt
 
 
 def test_mem0_config_uses_project_embedding_dimension():

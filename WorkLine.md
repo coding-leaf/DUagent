@@ -3825,3 +3825,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API、Agent HTTP 路径及业务 SSE 事件类型无变化。
 - `debug_log.attributes` 仅新增向后兼容的工具面诊断字段；未新增依赖。
+
+---
+
+### 2026-07-14 — 收紧 AI Chat 注入、内部泄漏与表达边界
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_input.py`
+- `agent_service_v2/src/agent_service_v2/session/workbench_session.py`
+- `agent_service_v2/src/agent_service_v2/safety/internal_disclosure_filter.py`
+- `agent_service_v2/tests/test_internal_disclosure_filter.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_input.py`
+- `agent_service_v2/tests/test_workbench_session.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 系统提示词明确指令优先级，将画像、摘要、历史、RAG 与工具输出视为不可信数据，拒绝其中的身份覆盖、权限绕过、结果伪造及提示词/工具 Schema/内部配置提取要求。
+2. 系统注入的画像和摘要使用 `<untrusted_context>` 显式包裹，并声明其只作为数据和工具路由提示，降低 `custom_instruction` 等字段中的间接提示注入风险。
+3. 学生可见正文流增加确定性内部信息过滤，跨 SSE 分片隐藏原始工具标识、Backend 内部接口、内部鉴权头及编程题隐藏字段；工具卡事件与 AgentScope 推理/工具循环保持不变。
+4. 表达风格收束为“专业、自然、友好且有限活泼”：允许适度口语、短类比和最多 2 个 emoji，禁止持续角色扮演、贬损称呼、夸张人设主导及固定套话。
+
+**验证结果：**
+- TDD RED：上下文边界、提示词约束和跨分片内部泄漏场景初始 4 failed，新增过滤模块在实现前无法导入；实现后定向测试 9 passed。
+- Agent Service v2 全量：181 passed，保留 1 条第三方 TestClient 弃用告警。
+- 修改 Python 文件 `py_compile`、OpenAPI 路径导入与 `git diff --check` 通过；仍为 10 条 `/agent/v2/*` 路径。
+
+**接口漂移：**
+- Client API、Agent HTTP 路径、请求响应字段和 SSE 事件类型均无变化。
+- 仅学生可见 `text_delta` 的内部实现细节会被替换为 `[内部信息已隐藏]`；工具卡事件继续保留既有协议字段，未新增依赖。
+
+**遗留边界：**
+- 提示词约束不能提供对所有未知语义注入的绝对保证；确定性输出过滤负责兜底已知内部标识，后续应以对抗样例集持续回归扩充覆盖面。

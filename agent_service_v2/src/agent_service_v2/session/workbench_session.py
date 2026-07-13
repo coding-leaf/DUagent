@@ -14,6 +14,7 @@ from agent_service_v2.agents.workbench_factory import (
     MissingModelConfigError,
     WorkbenchAgentFactory,
 )
+from agent_service_v2.agents.permissions import SAFE_WORKBENCH_TOOLS
 from agent_service_v2.observability.logging import (
     build_log_record,
     build_agentscope_event_log,
@@ -23,7 +24,7 @@ from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
-from agent_service_v2.safety.local_wordlist import LocalSensitiveWordFilter
+from agent_service_v2.safety.internal_disclosure_filter import StudentOutputFilter
 from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
 from agent_service_v2.workspaces.workbench_workspace_manager import (
@@ -187,7 +188,9 @@ class WorkbenchSession:
             context=context,
         )
         raw_assistant_chunks: list[str] = []
-        stream_filter = LocalSensitiveWordFilter().stream()
+        stream_filter = StudentOutputFilter(
+            protected_identifiers=SAFE_WORKBENCH_TOOLS,
+        ).stream()
         last_text_event = None
         pending_filtered = ""
         pending_text_event = None

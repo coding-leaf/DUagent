@@ -5,6 +5,38 @@
 
 ---
 
+### 2026-07-13 — 修复 AI Chat 共享库节点错题查询
+
+**涉及文件：**
+- `backend/app/services/course_knowledge_graphs.py`
+- `backend/app/services/knowledge_progress.py`
+- `backend/app/services/ai_chat_learning_context.py`
+- `backend/tests/test_ai_chat_learning_context.py`
+- `backend/tests/test_ai_chat_shared_catalog.py`
+- `agent_service_v2/src/agent_service_v2/runtime/protocol_adapter.py`
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/tests/test_protocol_adapter.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `WorkLine.md`
+
+**根因与改动：**
+1. 学习进度支持从教学班回退到共享资源库宿主课程 KG，但错题工具仅查询教学班自身 KG；同一个 `node_id` 因此在进度中存在、在错题查询中却返回 `node_not_found`。
+2. 新增统一的有效 KG 解析入口，学习进度和错题节点解析都按“当前课程 active KG → 共享资源库宿主课程 active KG”处理。
+3. 工具事件摘要区分 `not_found` 与 `empty`，分别显示“未找到对应知识节点”和“暂无符合条件的作答记录”，不再统一伪装为“返回 0 条学习记录”。
+4. Workbench Prompt 明确禁止在错题工具返回 `not_found/empty` 后声称数据齐全或推测具体错误原因。
+
+**验证结果：**
+- RED：共享库节点 `constants` 原先返回 `not_found`；协议两种空状态均错误显示“返回 0 条学习记录”；Prompt 缺少空证据约束。
+- Backend AI Chat、内部接口、KG 与学习进度相关回归：25 passed、1 skipped、1 条第三方弃用告警。
+- Agent Service v2 全量测试：144 passed、1 条第三方 TestClient 弃用告警。
+- Python `py_compile` 与 `git diff --check` 通过。
+- 真实数据只读复测：用户 `0ec43e6e57eb4357`、课程 `391cdec456914f20`、节点 `constants` 返回 `status=available`，解析为“常量与字面量”，返回 8 条错题。
+
+**接口漂移：**
+- Backend 与 Agent API 路径、请求、响应字段和状态枚举均无变化；仅修正内部 KG 解析和已有状态的展示摘要。
+
+---
+
 ### 2026-07-13 — 修复 AI Chat 图解尺寸失控
 
 **涉及文件：**

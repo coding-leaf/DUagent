@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.others import CourseKnowledgeGraph
 
 
@@ -26,6 +27,31 @@ async def get_active_knowledge_graph(
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def get_effective_knowledge_graph(
+    db: AsyncSession,
+    course_id: str,
+) -> CourseKnowledgeGraph | None:
+    """Teaching classes inherit the catalog host KG so all learning tools share node IDs."""
+    graph = await get_active_knowledge_graph(db, course_id)
+    if graph is not None:
+        return graph
+
+    host_result = await db.execute(
+        select(CourseCatalog.kg_host_course_id)
+        .join(CourseOffering, CourseOffering.catalog_id == CourseCatalog.id)
+        .where(
+            CourseOffering.id == course_id,
+            CourseOffering.is_deleted.is_(False),
+            CourseCatalog.is_deleted.is_(False),
+        )
+        .limit(1)
+    )
+    host_course_id = host_result.scalar_one_or_none()
+    if not host_course_id:
+        return None
+    return await get_active_knowledge_graph(db, host_course_id)
 
 
 async def next_knowledge_graph_version(db: AsyncSession, course_id: str) -> int:

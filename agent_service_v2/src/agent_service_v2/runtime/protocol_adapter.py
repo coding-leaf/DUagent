@@ -160,7 +160,13 @@ class EDUProtocolAdapter:
                 returned_count = summary.get("returned_count")
                 if returned_count is not None:
                     payload["returned_count"] = returned_count
-                    payload["output_summary"] = f"返回 {returned_count} 条学习记录"
+                    if payload.get("tool_name") == "read_recent_answers" and returned_count == 0:
+                        payload["output_summary"] = {
+                            "not_found": "未找到对应知识节点",
+                            "empty": "暂无符合条件的作答记录",
+                        }.get(payload.get("status"), "返回 0 条学习记录")
+                    else:
+                        payload["output_summary"] = f"返回 {returned_count} 条学习记录"
                 elif "status" in payload:
                     payload["output_summary"] = f"工具状态：{payload['status']}"
             return EduEventType.TOOL_COMPLETED, payload

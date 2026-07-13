@@ -178,6 +178,37 @@ def test_protocol_adapter_passes_learning_tool_result_summary():
     assert "3" in event.payload["output_summary"]
 
 
+@pytest.mark.parametrize(
+    ("status", "expected_summary"),
+    [
+        ("not_found", "未找到对应知识节点"),
+        ("empty", "暂无符合条件的作答记录"),
+    ],
+)
+def test_protocol_adapter_distinguishes_missing_node_from_empty_answers(status, expected_summary):
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    adapter.adapt(ToolCallStartEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        tool_call_name="read_recent_answers",
+    ))
+    adapter.adapt(ToolResultTextDeltaEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        delta=json.dumps({"status": status, "summary": {"returned_count": 0}}),
+    ))
+
+    event = adapter.adapt(ToolResultEndEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        state=ToolResultState.SUCCESS,
+    ))
+
+    assert event.payload["status"] == status
+    assert event.payload["returned_count"] == 0
+    assert event.payload["output_summary"] == expected_summary
+
+
 @pytest.mark.parametrize("tool_name", ["write_artifact_file", "create_code_sandbox_card"])
 def test_protocol_adapter_emits_artifact_after_artifact_tool_success(tool_name):
     publisher = FakeArtifactPublisher()

@@ -3,10 +3,9 @@ from collections import defaultdict
 from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.catalog import CourseCatalog, CourseOffering
-from app.models.others import CourseKnowledgeGraph, LearningActivity
+from app.models.others import LearningActivity
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
-from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.course_knowledge_graphs import get_effective_knowledge_graph
 from app.services.resource_scope import resolve_course_resource_scope
 
 logger = logging.getLogger(__name__)
@@ -21,32 +20,6 @@ def _mastery_label(score: float | None) -> str:
     if score >= 60:
         return "C"
     return "需复习"
-
-async def _resolve_evaluation_kg(db: AsyncSession, course_id: str) -> CourseKnowledgeGraph | None:
-    kg = await get_active_knowledge_graph(db, course_id)
-    if kg is not None:
-        return kg
-
-    offering_result = await db.execute(
-        select(CourseOffering).where(
-            CourseOffering.id == course_id,
-            CourseOffering.is_deleted == False,
-        )
-    )
-    offering = offering_result.scalar_one_or_none()
-    if offering is None:
-        return None
-
-    catalog_result = await db.execute(
-        select(CourseCatalog).where(
-            CourseCatalog.id == offering.catalog_id,
-            CourseCatalog.is_deleted == False,
-        )
-    )
-    catalog = catalog_result.scalar_one_or_none()
-    if catalog is None or not catalog.kg_host_course_id:
-        return None
-    return await get_active_knowledge_graph(db, catalog.kg_host_course_id)
 
 def evaluate_mastery_state(
     score: float | None, 
@@ -124,7 +97,7 @@ def summarize_attempt_answers(rows: list[tuple[str, bool, str, int, datetime | N
 
 
 async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSession) -> list[dict]:
-    kg = await _resolve_evaluation_kg(db, course_id)
+    kg = await get_effective_knowledge_graph(db, course_id)
     nodes = kg.nodes if kg and isinstance(kg.nodes, list) else []
     if not nodes:
         return []

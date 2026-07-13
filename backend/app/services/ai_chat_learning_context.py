@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.others import LearningActivity
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
-from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.course_knowledge_graphs import get_effective_knowledge_graph
 from app.services.knowledge_progress import build_node_progress_rows
 from app.services.learning_path_service import LearningPathService
 
@@ -44,7 +44,7 @@ async def resolve_node_knowledge_point(
     course_id: str,
     node_id: str,
 ) -> str | None:
-    kg = await get_active_knowledge_graph(db, course_id)
+    kg = await get_effective_knowledge_graph(db, course_id)
     nodes = kg.nodes if kg and isinstance(kg.nodes, list) else []
     for node in nodes:
         if not isinstance(node, dict):

@@ -145,6 +145,7 @@ def test_factory_prompt_mentions_learning_progress_tools(tmp_path: Path):
     assert "read_learning_progress" in prompt
     assert "read_recent_answers" in prompt
     assert "do not fabricate" in prompt.lower()
+    assert "not_found 或 empty" in prompt
 
 
 def test_factory_activates_safe_tool_groups_by_default(tmp_path: Path):

@@ -94,7 +94,9 @@ def input_preview(value: Any) -> str:
 
 
 def output_preview(value: Any) -> str:
-    return _truncate(_serialize_preview(value))
+    from agent_service_v2.safety.local_wordlist import LocalSensitiveWordFilter
+
+    return _truncate(LocalSensitiveWordFilter().filter(_serialize_preview(value))[0])
 
 
 def enum_value(value: Any) -> str:

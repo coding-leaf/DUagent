@@ -49,6 +49,14 @@ Workbench 保持 AgentScope 2.x `Agent.reply_stream + Toolkit + ToolGroup` 的�
 - AgentScope `ToolResultState.ERROR` 直接映射为 `tool_failed`。`tool_started` 携带 `tool_title/tool_category/read_only`。
 - RAG 引用只使用 `payload.sources[]`，每项为 `source_file/snippet/score`；不再交叉使用 `citations`。
 - 长期记忆只保存用户明确表达的长期偏好、目标和稳定事实；禁止保存推断掌握度、诊断、答案、敏感内容或工具原文。写入前去重，工具卡可见，审计日志不记忆正文。
+- `artifact_created` 支持 `PersonalizedResourceCard`：已有推荐使用 `props.resources[]`，异步生成使用 `props.task_id/course_id/resource_type/goal`。任务卡只表示已启动，不表示已审核或发布。
+- AI 输出使用本地 UTF-8 词表进行流式敏感内容过滤，跨分片命中统一替换为 `[内容已屏蔽]`。`content_safety_reviewed` 返回 `reviewer=local_wordlist`、`action=flag` 与 `match_count`，不泄露原词。该能力不是事实防幻觉审查。
+
+### AI Chat 画像与精准资源内部工具
+
+- `read_learner_profile` / `update_learner_profile_from_dialogue` 通过 Backend internal API 读取六维画像并更新用户明确表达的稳定事实；可信身份不暴露给模型。
+- `recommend_personalized_resources` 最多推荐 3 个课程权限内已有资源；`generate_personalized_resource` 仅在无有效推荐时启动一个非视频资源任务。
+- 每个 Workbench run 最多启动一个资源任务；任务 ID 由 user/course/conversation/run/goal/resource_type 稳定派生。
 
 ### AI Chat 互动练习内部发布
 

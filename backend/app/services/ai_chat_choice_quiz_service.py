@@ -9,6 +9,7 @@ from app.models.course import CourseEnrollment
 from app.models.others import UserPersonalizedResource
 from app.models.quiz import QuizQuestion
 from app.schemas.internal_ai_chat import ChoiceQuestionDraft
+from app.services.content_safety import ensure_student_visible_content_safe
 
 
 class ChoiceQuizValidationError(ValueError):
@@ -57,6 +58,11 @@ async def persist_personal_choice_questions(
     source_type: str,
     questions: list[ChoiceQuestionDraft],
 ) -> list[str]:
+    ensure_student_visible_content_safe({
+        "chapter": chapter,
+        "knowledge_point": knowledge_point,
+        "questions": questions,
+    })
     question_ids: list[str] = []
     for draft in questions:
         answer = (

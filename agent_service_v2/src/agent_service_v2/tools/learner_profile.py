@@ -66,9 +66,14 @@ def build_learner_profile_tools(
             "run_id": run_id,
         })
         try:
-            return normalize_tool_result(await client.post_json(
+            result = await client.post_json(
                 "/internal/ai-chat/learner-profile/update", payload
-            ))
+            )
+            if result.get("result") == "unchanged":
+                return edu_tool_result(status="empty", data=result)
+            if result.get("result") == "rejected":
+                return edu_tool_result(status="rejected", reason=result.get("reason"), data=result)
+            return normalize_tool_result(result)
         except BackendLearningClientError as exc:
             return _unavailable(exc.reason)
 

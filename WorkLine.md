@@ -3689,3 +3689,27 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Client API 路径无变化。
 - Agent HTTP 路径无变化；Workbench SSE artifact 新增 `PersonalizedResourceCard`。
 - Backend internal AI Chat 新增 `/personalized-resources/recommend|generate`，Agent 调用点已同步。
+
+---
+
+### 2026-07-13 — 本地敏感内容过滤与发布门禁（第三批）
+
+**涉及范围：**
+- 根目录版本化 UTF-8 敏感词表。
+- Agent Workbench 流式输出、内容审查、日志预览与 Workspace artifact 写入门禁。
+- Backend 普通个性化资源、选择题、编程题和对话画像学生可见内容门禁。
+
+**核心改动：**
+1. 流式过滤使用滚动窗口处理跨分片命中，统一替换为 `[内容已屏蔽]`；未过滤正文不进入 EDU SSE、run event、Agent 工具输出日志或 Workspace artifact。
+2. `content_safety_reviewed` 使用 `reviewer=local_wordlist`、`action=flag` 与命中数量，不返回命中原词。
+3. 资源、选择题和编程题在发布前读取同一词表检查，命中时拒绝写入学生可见实体；画像敏感事实同样拒绝更新。
+4. 功能名称固定为“敏感内容过滤”，不代表事实防幻觉审查。
+
+**验证结果：**
+- Agent Service v2 全量：171 passed，1 条第三方 TestClient 弃用告警；运行时 OpenAPI 导入通过且仍为 10 条 `/agent/v2/*` 路径。
+- Frontend 全量 Vitest：39 files、145 passed；lint 与生产构建通过，保留既有大 chunk 提示。
+- Backend 无状态/mock 相关测试：29 passed，相关文件 `py_compile` 通过。首次受影响服务定向测试通过；重复运行一个真实 MySQL 旧选择题测试时因固定用户名残留产生 duplicate key，未修改数据库数据。
+
+**接口漂移：**
+- Client API 与 Agent HTTP 路径无变化。
+- Agent SSE `content_safety_reviewed` 在本地审查时新增 `match_count`，`artifact_created` 新增 `PersonalizedResourceCard` 类型。

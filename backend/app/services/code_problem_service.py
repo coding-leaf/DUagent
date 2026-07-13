@@ -11,6 +11,7 @@ from app.models.course import CourseEnrollment
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 from app.services.personalized_resource_generation_service import link_published_generation
 from app.schemas.code_problem import CodeProblemDraft
+from app.services.content_safety import ensure_student_visible_content_safe
 
 
 class CodeProblemValidationError(ValueError):
@@ -156,6 +157,9 @@ async def _create_problem_from_generation(
     generation: PersonalizedResourceGeneration,
 ) -> CreatedCodeProblem:
     draft = generation.draft
+    ensure_student_visible_content_safe({
+        key: draft.get(key) for key in ("title", "statement", "starter_code")
+    })
     test_inputs = draft["test_inputs"]
     outputs = draft["expected_outputs"]
     problem = CodeProblem(

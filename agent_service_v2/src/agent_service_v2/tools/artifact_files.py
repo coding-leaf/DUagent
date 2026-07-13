@@ -17,6 +17,7 @@ from agent_service_v2.artifacts.schemas import (
 from agent_service_v2.artifacts.validation import validate_json_artifact_payload
 from agent_service_v2.workspaces.run_store import WorkbenchRunStore
 from agent_service_v2.tools.contracts import edu_tool_result
+from agent_service_v2.safety.local_wordlist import LocalSensitiveWordFilter
 
 
 def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Callable[..., dict]:
@@ -131,6 +132,8 @@ def build_create_quiz_practice_card(
 def _persist_artifact(
     *, artifact_dir: Path, filename: str, content: str, artifact_type: str, title: str
 ) -> dict:
+    if LocalSensitiveWordFilter().matches(f"{title}\n{content}"):
+        raise ArtifactValidationError("sensitive_content_detected")
     safe_filename = _validate_filename(filename)
     if artifact_type not in SUPPORTED_ARTIFACT_TYPES:
         raise ArtifactValidationError(f"unsupported artifact type: {artifact_type}")

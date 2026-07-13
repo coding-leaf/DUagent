@@ -10,6 +10,7 @@ from app.infrastructure.locks import profile_lock
 from app.models.others import OperationLog, UserProfile
 from app.services.profile_presenters import DEFAULT_PROFILE, profile_data
 from app.services.profile_service import ProfileService
+from app.services.content_safety import count_sensitive_matches
 
 
 _PREFERENCE_FIELDS = {
@@ -47,6 +48,17 @@ async def update_dialogue_learner_profile(
     learning_habits: dict[str, str] | None = None,
 ) -> dict:
     del conversation_id  # Conversation text and identifiers are deliberately absent from audit data.
+    if count_sensitive_matches({
+        "learning_goal": learning_goal,
+        "custom_instruction": custom_instruction,
+        "learning_habits": learning_habits,
+    }):
+        return {
+            "outcome": "failure",
+            "result": "rejected",
+            "reason": "sensitive_content",
+            "updated_fields": [],
+        }
     async with profile_lock(db, user_id, course_id):
         profile = await ProfileService(db).get_or_create_profile(user_id, course_id)
         updated_fields: list[str] = []

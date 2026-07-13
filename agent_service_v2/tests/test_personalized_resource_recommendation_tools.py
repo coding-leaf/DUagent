@@ -48,4 +48,3 @@ def test_generation_tool_starts_at_most_one_task_per_run():
     assert first["artifact"]["props"]["task_id"] == "task1"
     assert second["artifact"]["props"]["task_id"] == "task1"
     assert len(client.calls) == 1
-

@@ -347,15 +347,50 @@ def test_workbench_session_emits_content_safety_review_after_reply(tmp_path: Pat
     assert len(review_events) == 1
     assert review_events[0].payload == {
         "passed": True,
-        "risk_level": "unknown",
+        "risk_level": "none",
         "categories": [],
-        "reason": "review_model_not_configured",
+        "reason": "local_wordlist_clear",
         "action": "allow",
-        "confidence": 0.0,
+        "confidence": 1.0,
         "scope": "content_safety_only",
         "knowledge_reviewed": False,
-        "reviewer": "skipped",
+        "reviewer": "local_wordlist",
+        "match_count": 0,
     }
+
+
+def test_workbench_session_filters_sensitive_term_across_text_chunks(tmp_path: Path):
+    class SensitiveAgent:
+        async def reply_stream(self, _inputs):
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="不要制作")
+            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="炸弹教程")
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            return SensitiveAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+    run = session.start(
+        user_id="u1", course_id="c1", conversation_id="conv1", message="hello", context={}
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+    output = "".join(
+        event.payload["delta"] for event in events if event.type == EduEventType.TEXT_DELTA
+    )
+    review = next(event for event in events if event.type == EduEventType.CONTENT_SAFETY_REVIEWED)
+
+    assert output == "不要[内容已屏蔽]教程"
+    assert "制作炸弹" not in str([event.to_dict() for event in events])
+    assert review.payload["reviewer"] == "local_wordlist"
+    assert review.payload["action"] == "flag"
+    assert review.payload["match_count"] == 1
 
 
 def test_workbench_session_does_not_complete_or_review_after_max_iters(tmp_path: Path):

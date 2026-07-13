@@ -14,6 +14,7 @@ class ContentSafetyReview:
     scope: str = "content_safety_only"
     knowledge_reviewed: bool = False
     reviewer: str = "external_model"
+    match_count: int = 0
 
     @classmethod
     def skipped(cls, reason: str) -> "ContentSafetyReview":
@@ -45,10 +46,11 @@ class ContentSafetyReview:
             scope="content_safety_only",
             knowledge_reviewed=False,
             reviewer=self.reviewer or "external_model",
+            match_count=max(0, int(self.match_count or 0)),
         )
 
     def to_payload(self) -> dict:
-        return {
+        payload = {
             "passed": self.passed,
             "risk_level": self.risk_level,
             "categories": self.categories,
@@ -59,6 +61,9 @@ class ContentSafetyReview:
             "knowledge_reviewed": self.knowledge_reviewed,
             "reviewer": self.reviewer,
         }
+        if self.reviewer == "local_wordlist":
+            payload["match_count"] = self.match_count
+        return payload
 
 
 _RISK_LEVELS = {"none", "low", "medium", "high", "critical", "unknown"}

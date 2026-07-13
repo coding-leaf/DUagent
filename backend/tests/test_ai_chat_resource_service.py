@@ -44,4 +44,3 @@ def test_resource_ranking_combines_goal_weak_point_and_preference():
     assert diagram_score > unrelated_score
     assert "匹配当前知识点" in reasons
     assert "符合资源偏好" in reasons
-

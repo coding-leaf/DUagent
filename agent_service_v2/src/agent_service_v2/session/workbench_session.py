@@ -23,6 +23,7 @@ from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
+from agent_service_v2.safety.local_wordlist import LocalSensitiveWordFilter
 from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
 from agent_service_v2.workspaces.workbench_workspace_manager import (
@@ -185,12 +186,55 @@ class WorkbenchSession:
             message=message,
             context=context,
         )
-        assistant_chunks: list[str] = []
+        raw_assistant_chunks: list[str] = []
+        stream_filter = LocalSensitiveWordFilter().stream()
+        last_text_event = None
+        pending_filtered = ""
+        pending_text_event = None
         failed = False
         try:
             async for agent_event in agent.reply_stream(agent_inputs):
                 if isinstance(agent_event, TextBlockDeltaEvent):
-                    assistant_chunks.append(agent_event.delta)
+                    raw_assistant_chunks.append(agent_event.delta)
+                    last_text_event = agent_event
+                    filtered_delta = stream_filter.feed(agent_event.delta)
+                    if not filtered_delta:
+                        continue
+                    if pending_filtered and pending_text_event is not None:
+                        buffered_event = pending_text_event.model_copy(
+                            update={"delta": pending_filtered}
+                        )
+                        for edu_event in adapter.adapt_many(buffered_event):
+                            published_event = self._run_bus.publish_event(edu_event)
+                            run_store.append_event(run.run_id, published_event.to_dict())
+                    pending_filtered = filtered_delta
+                    pending_text_event = agent_event
+                    continue
+                if isinstance(agent_event, ExceedMaxItersEvent) and last_text_event is not None:
+                    final_delta = pending_filtered + stream_filter.finish()
+                    if final_delta:
+                        tail_event = (pending_text_event or last_text_event).model_copy(
+                            update={"delta": final_delta}
+                        )
+                        for edu_event in adapter.adapt_many(tail_event):
+                            published_event = self._run_bus.publish_event(edu_event)
+                            run_store.append_event(run.run_id, published_event.to_dict())
+                    pending_filtered = ""
+                    last_text_event = None
+                if (
+                    isinstance(agent_event, ReplyEndEvent)
+                    and not failed
+                    and last_text_event is not None
+                ):
+                    tail = stream_filter.finish()
+                    final_delta = pending_filtered + tail
+                    if final_delta:
+                        tail_event = (pending_text_event or last_text_event).model_copy(
+                            update={"delta": final_delta}
+                        )
+                        for edu_event in adapter.adapt_many(tail_event):
+                            published_event = self._run_bus.publish_event(edu_event)
+                            run_store.append_event(run.run_id, published_event.to_dict())
                 debug_record = build_agentscope_event_log(
                     agent_event,
                     run_id=run.run_id,
@@ -259,7 +303,7 @@ class WorkbenchSession:
                     await self._publish_content_safety_review(
                         run=run,
                         run_store=run_store,
-                        content="".join(assistant_chunks),
+                        content="".join(raw_assistant_chunks),
                     )
             if failed:
                 run_store.write_state(run.run_id, {"status": "failed", "conversation_id": run.conversation_id})

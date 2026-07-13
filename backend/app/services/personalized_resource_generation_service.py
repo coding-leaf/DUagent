@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
+from app.services.content_safety import ensure_student_visible_content_safe
 
 
 _ALLOWED_TRANSITIONS = {
@@ -118,6 +119,11 @@ class PersonalizedResourceGenerationService:
         validate_generation_transition(generation.status, "published")
 
         draft = generation.draft
+        ensure_student_visible_content_safe({
+            key: draft.get(key) for key in (
+                "title", "description", "content", "chapter", "knowledge_point", "tags"
+            )
+        })
         resource = Resource(
             course_id=generation.course_id,
             title=str(draft.get("title") or "个性化学习资料"),

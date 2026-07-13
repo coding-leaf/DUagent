@@ -148,6 +148,8 @@ async def _recompute_parent_resource_generation_task(
 
     finished_count = completed_count + failed_count
     if finished_count < total_count:
+        if total_count > 0:
+            parent.progress = min(99, 10 + int(finished_count * 90 / total_count))
         parent.result = updated_result
         return
 

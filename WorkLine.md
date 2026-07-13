@@ -3141,3 +3141,32 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **遗留问题：**
 - `outline_text` 旧路径仍由 Backend 直接调用 LLM，本次仅修复触发故障的 `catalog_chunks` 主链路，后续可单独迁移以完全收口 Agent 边界。
+
+---
+
+### 2026-07-13 — 降低共享资源生成并发并合并节点级模型调用
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/generators/public_resources.py`
+- `agent_service_v2/src/agent_service_v2/generators/public_resource_flow.py`
+- `agent_service_v2/tests/test_public_resource_generation.py`
+- `backend/app/api/v1/webhooks.py`
+- `backend/tests/test_admin_catalog_resource_generation.py`
+
+**核心改动：**
+1. 同一 KG 节点的多个资源类型共享一次课程 RAG 检索，并通过一次结构化模型调用生成；仅当首轮 JSON 或类型结构不合法时允许一次修复重试。
+2. 公共资源节点生成并发固定为 2，避免全量 KG 节点同时占用模型与重排服务。
+3. 提示词约束请求类型必须各返回一次，课程术语与代码语言必须一致，图解必须输出可展示的 Mermaid 源码。
+4. 失败回调错误码缩短为 `resource_gen_failed`，适配 `async_tasks.error_code` 的 20 字符限制。
+5. 父任务在每个子任务完成或失败后按 10%～99% 区间更新进度，全部结束后归 100%，避免长时间停留在 10%。
+
+**验证结果：**
+- TDD RED：旧生成器没有 `generate_many`，并发测试无法进入两个受控节点；父任务完成 1/4 子任务后仍为 10%。
+- Agent v2 定向测试：8 passed；全量测试：141 passed。
+- Backend 父任务聚合定向回归：4 passed；SQLite 锁竞争用例单独复跑 1 passed。
+- Backend 资源库整文件回归：29 passed、1 failed；失败发生在既有保底题库测试的 `_reset_db()`，原因是 SQLite `database is locked`，未进入本轮资源生成代码，单独复跑通过。
+- Python `py_compile` 与 `git diff --check` 通过。Agent v2 未安装 coverage/pytest-cov，未为覆盖率检查引入新依赖。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent API 无变化；请求、202 响应与 Webhook 结构保持不变。

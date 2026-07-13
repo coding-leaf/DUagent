@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import importlib.util
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -81,34 +83,138 @@ def test_normalize_public_asset_uses_one_webhook_shape(
 
 
 @pytest.mark.anyio
-async def test_generator_uses_course_rag_and_returns_normalized_asset():
+async def test_generator_reuses_one_course_rag_and_model_call_for_selected_types():
     module = _load_module()
     response = MagicMock()
-    response.text = '{"title":"变量讲义","content":"# 变量\\n\\n基于课程原文。"}'
+    response.text = """{
+      "resources": [
+        {"type":"lesson","title":"变量讲义","content":"# 变量\\n\\n基于课程原文。"},
+        {"type":"diagram","title":"变量图解","content":"flowchart TD\\nA[声明] --> B[使用]","diagram_kind":"flowchart"},
+        {"type":"example","title":"变量示例","content":"# 示例\\n\\n```c\\nint value = 1;\\n```"}
+      ]
+    }"""
     model = AsyncMock(return_value=response)
     generator = module.PublicResourceGenerator(model=model)
+    retrieve = AsyncMock(
+        return_value={
+            "context_text": "教材中的变量定义",
+            "sources": [{"chunk_id": "chunk-1"}],
+        }
+    )
 
     with patch(
         f"{MODULE_NAME}.retrieve_course_context",
-        new=AsyncMock(
-            return_value={
-                "context_text": "教材中的变量定义",
-                "sources": [{"chunk_id": "chunk-1"}],
-            }
-        ),
+        new=retrieve,
     ):
-        asset = await generator.generate(
-            "lesson",
+        assets = await generator.generate_many(
+            ["lesson", "diagram", "example"],
+            chapter="第一章",
+            knowledge_point="变量",
+            course_id="catalog-1",
+            course_title="C语言",
+        )
+
+    assert [asset["type"] for asset in assets] == ["lesson", "diagram", "example"]
+    assert all(asset["sources"] == [{"chunk_id": "chunk-1"}] for asset in assets)
+    retrieve.assert_awaited_once()
+    model.assert_awaited_once()
+    messages = model.await_args.args[0]
+    assert len(messages) == 1
+    assert "教材中的变量定义" in messages[0].content[0].text
+    assert "C语言" in messages[0].content[0].text
+    assert "每种类型恰好返回一项" in messages[0].content[0].text
+
+
+@pytest.mark.anyio
+async def test_generator_retries_invalid_structure_once_without_repeating_rag():
+    module = _load_module()
+    invalid_response = MagicMock(text='{"resources": []}')
+    valid_response = MagicMock(
+        text='{"resources":[{"type":"lesson","title":"变量讲义","content":"# 变量"}]}'
+    )
+    model = AsyncMock(side_effect=[invalid_response, valid_response])
+    retrieve = AsyncMock(return_value={"context_text": "变量定义", "sources": []})
+    generator = module.PublicResourceGenerator(model=model)
+
+    with patch(f"{MODULE_NAME}.retrieve_course_context", new=retrieve):
+        assets = await generator.generate_many(
+            ["lesson"],
             chapter="第一章",
             knowledge_point="变量",
             course_id="catalog-1",
         )
 
-    assert asset["type"] == "lesson"
-    assert asset["sources"] == [{"chunk_id": "chunk-1"}]
-    messages = model.await_args.args[0]
-    assert len(messages) == 1
-    assert "教材中的变量定义" in messages[0].content[0].text
+    assert [asset["type"] for asset in assets] == ["lesson"]
+    retrieve.assert_awaited_once()
+    assert model.await_count == 2
+    retry_messages = model.await_args_list[1].args[0]
+    assert "上一次输出未通过结构校验" in retry_messages[0].content[0].text
+
+
+@pytest.mark.anyio
+async def test_public_resource_flow_limits_node_generation_concurrency_and_uses_short_error_code():
+    from agent_service_v2.generators import public_resource_flow as flow
+
+    active = 0
+    max_active = 0
+    first_two_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def generate_many(*_args, **_kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        if active == 2:
+            first_two_started.set()
+        await release.wait()
+        active -= 1
+        return [{"type": "lesson"}]
+
+    fake_generator = MagicMock()
+    fake_generator.generate_many = AsyncMock(side_effect=generate_many)
+    settings = SimpleNamespace(WEBHOOK_SECRET="")
+
+    with (
+        patch.object(flow, "build_chat_model_from_settings", return_value=MagicMock()),
+        patch.object(flow, "PublicResourceGenerator", return_value=fake_generator),
+        patch.object(flow, "_post_webhook", new=AsyncMock()),
+    ):
+        tasks = [
+            asyncio.create_task(
+                flow.run_public_resource_generation(
+                    settings=settings,
+                    task_id=f"task-{index}",
+                    course_id="catalog-1",
+                    chapter="第一章",
+                    knowledge_point=f"知识点-{index}",
+                    resource_types=["lesson"],
+                    webhook_url="http://backend.test/webhook",
+                )
+            )
+            for index in range(3)
+        ]
+        await asyncio.wait_for(first_two_started.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert max_active == 2
+        assert fake_generator.generate_many.await_count == 2
+        release.set()
+        await asyncio.gather(*tasks)
+
+        fake_generator.generate_many.side_effect = RuntimeError("model failed")
+        with pytest.raises(RuntimeError, match="model failed"):
+            await flow.run_public_resource_generation(
+                settings=settings,
+                task_id="task-failed",
+                course_id="catalog-1",
+                chapter="第一章",
+                knowledge_point="失败节点",
+                resource_types=["lesson"],
+                webhook_url="http://backend.test/webhook",
+            )
+
+        failure_payload = flow._post_webhook.await_args.args[2]
+        assert failure_payload["error_code"] == "resource_gen_failed"
+        assert len(failure_payload["error_code"]) <= 20
 
 
 def test_resource_generation_api_accepts_only_truthful_public_types():

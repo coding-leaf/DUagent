@@ -13,6 +13,20 @@ from agent_service_v2.tools.rag import retrieve_course_context
 
 
 PUBLIC_RESOURCE_TYPES = {"lesson", "diagram", "example"}
+PUBLIC_RESOURCE_INSTRUCTIONS = {
+    "lesson": (
+        "lesson：标准 Markdown 讲义，包含概念、原理、易错点、课程范围内示例和小结。"
+    ),
+    "diagram": (
+        "diagram：选择最适合的 Mermaid 图；content 只放 Mermaid 源码，并填写 "
+        "diagram_kind。节点标签含括号、引号、数组下标或特殊标点时必须整体用双引号包裹，"
+        "内部双引号改为单引号，避免 Mermaid 语法冲突。"
+    ),
+    "example": (
+        "example：讲解型代码示例 Markdown，包含目标、完整代码、运行结果、逐段解释和常见错误；"
+        "不要生成可判题练习。代码语言必须与课程一致，不得默认使用 Python。"
+    ),
+}
 
 
 class PublicResourceGenerator:
@@ -30,30 +44,60 @@ class PublicResourceGenerator:
         course_id: str,
         course_title: str | None = None,
     ) -> dict[str, Any]:
+        resources = await self.generate_many(
+            [resource_type],
+            chapter=chapter,
+            knowledge_point=knowledge_point,
+            course_id=course_id,
+            course_title=course_title,
+        )
+        return resources[0]
+
+    async def generate_many(
+        self,
+        resource_types: list[str],
+        *,
+        chapter: str,
+        knowledge_point: str,
+        course_id: str,
+        course_title: str | None = None,
+    ) -> list[dict[str, Any]]:
+        requested_types = _validate_requested_types(resource_types)
         retrieval = await retrieve_course_context(
             query=knowledge_point,
             course_id=course_id,
             limit=4,
         )
         context = str(retrieval.get("context_text") or "").strip()
-        prompt = build_public_resource_prompt(
-            resource_type,
+        prompt = build_public_resources_prompt(
+            requested_types,
             chapter,
             knowledge_point,
             context,
             course_title=course_title,
         )
-        response = await self._model(
-            [UserMsg(name="public_resource_generator", content=prompt)]
-        )
-        payload = json.loads(_strip_json_fence(_response_text(response)))
-        return normalize_public_asset(
-            resource_type,
-            payload,
-            chapter=chapter,
-            knowledge_point=knowledge_point,
-            sources=retrieval.get("sources") or [],
-        )
+        for attempt in range(2):
+            response = await self._model(
+                [UserMsg(name="public_resource_generator", content=prompt)]
+            )
+            try:
+                payload = json.loads(_strip_json_fence(_response_text(response)))
+                return normalize_public_assets(
+                    requested_types,
+                    payload,
+                    chapter=chapter,
+                    knowledge_point=knowledge_point,
+                    sources=retrieval.get("sources") or [],
+                )
+            except (json.JSONDecodeError, ValueError) as exc:
+                if attempt == 1:
+                    raise
+                prompt = (
+                    f"{prompt}\n\n上一次输出未通过结构校验（{type(exc).__name__}）。"
+                    "重新生成完整 JSON；不要解释、不要使用代码围栏。"
+                )
+
+        raise RuntimeError("public_resource_generation_unreachable")
 
 
 def build_public_resource_prompt(
@@ -63,25 +107,30 @@ def build_public_resource_prompt(
     course_context: str,
     course_title: str | None = None,
 ) -> str:
-    if resource_type not in PUBLIC_RESOURCE_TYPES:
-        raise ValueError(f"unsupported_public_resource_type:{resource_type}")
+    return build_public_resources_prompt(
+        [resource_type],
+        chapter,
+        knowledge_point,
+        course_context,
+        course_title=course_title,
+    )
+
+
+def build_public_resources_prompt(
+    resource_types: list[str],
+    chapter: str,
+    knowledge_point: str,
+    course_context: str,
+    course_title: str | None = None,
+) -> str:
+    requested_types = _validate_requested_types(resource_types)
 
     course_info = f"课程名称：{course_title}" if course_title else "课程：通用课程"
-
-    instructions = {
-        "lesson": (
-            "生成标准课程讲义，使用 Markdown，包含概念、原理、易错点、"
-            "小结和课程范围内的示例。整个讲义、示例和语法细节必须完全针对该课程所使用的编程语言或技术环境。"
-        ),
-        "diagram": (
-            "选择 flowchart、sequence、mindmap、class 或 state 中最适合的一种 "
-            "Mermaid 图。content 只放 Mermaid 源码，并返回 diagram_kind。注意：Mermaid 节点的文本绝不能直接包含中括号 `[`、`]`、圆括号 `()` 或双引号等 Mermaid 的语法保留操作符；如果文本中必须带有空格、数组中括号（例如 arr[i]）或特殊标点符号，必须将整个节点标签文本用双引号包围（例如 ID[\"label text with arr['i']\"]），并将所有内部双引号替换为单引号 `'`，严禁产生未转义、未包裹的括号嵌套冲突。图表的结构、术语和概念表达必须与课程技术环境（如C语言）完美契合。"
-        ),
-        "example": (
-            "生成讲解型代码示例 Markdown，包含目标、完整代码、运行结果、"
-            "逐段解释和常见错误；不要生成可判题练习。生成的代码示例和说明文字必须完全使用课程对应的主流编程语言（例如C语言），绝对不要使用其他不相干语言（如 Python）。"
-        ),
-    }[resource_type]
+    requested_instructions = "\n".join(
+        f"- {PUBLIC_RESOURCE_INSTRUCTIONS[resource_type]}"
+        for resource_type in requested_types
+    )
+    requested_json = ", ".join(f'"{item}"' for item in requested_types)
     return f"""你是课程公共资源生成器。
 
 {course_info}
@@ -89,20 +138,69 @@ def build_public_resource_prompt(
 知识点：{knowledge_point}
 
 课程原文：
-{course_context or '没有检索到可用课程原文；不要编造超出课程范围的事实。在没有检索到原文时，必须严格基于课程名称的主题环境（例如：若课程名称为“C语言”，则所有代码示例、图表、讲义概念必须 100% 使用C语言编写和讲解，绝对不能使用 Python、Java 等其他编程语言的任何内容）来进行合理的基础教学资源生成。'}
+{course_context or '没有检索到课程原文。只生成课程名称与知识点能确定的基础内容，明确避免无法从上下文确认的细节。'}
 
-任务：{instructions}
+生成类型：[{requested_json}]
+{requested_instructions}
+
+质量要求：
+1. 只依据课程原文、课程名称、章节和知识点，不扩展无依据事实。
+2. 术语、代码语言和技术环境必须与课程一致。
+3. resources 必须只包含请求类型，每种类型恰好返回一项，不得缺失或重复。
+4. title、description、tags 使用简洁中文；content 提供可直接展示的完整内容。
 
 只输出 JSON：
 {{
-  "title": "中文标题",
-  "content": "完整内容",
-  "description": "一句话说明",
-  "tags": ["标签"],
-  "diagram_kind": null
+  "resources": [
+    {{
+      "type": "lesson | diagram | example",
+      "title": "中文标题",
+      "content": "完整内容",
+      "description": "一句话说明",
+      "tags": ["标签"],
+      "diagram_kind": null
+    }}
+  ]
 }}
 非 diagram 类型的 diagram_kind 必须为 null。不要输出 Markdown JSON 围栏。
 """
+
+
+def normalize_public_assets(
+    resource_types: list[str],
+    payload: dict[str, Any],
+    *,
+    chapter: str,
+    knowledge_point: str,
+    sources: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    requested_types = _validate_requested_types(resource_types)
+    raw_resources = payload.get("resources") if isinstance(payload, dict) else None
+    if not isinstance(raw_resources, list):
+        raise ValueError("public_resources_list_required")
+
+    resources_by_type: dict[str, dict[str, Any]] = {}
+    for raw_resource in raw_resources:
+        if not isinstance(raw_resource, dict):
+            raise ValueError("public_resource_object_required")
+        resource_type = str(raw_resource.get("type") or "")
+        if resource_type in resources_by_type:
+            raise ValueError("public_resource_type_duplicated")
+        resources_by_type[resource_type] = raw_resource
+
+    if set(resources_by_type) != set(requested_types):
+        raise ValueError("public_resource_types_mismatch")
+
+    return [
+        normalize_public_asset(
+            resource_type,
+            resources_by_type[resource_type],
+            chapter=chapter,
+            knowledge_point=knowledge_point,
+            sources=sources,
+        )
+        for resource_type in requested_types
+    ]
 
 
 def normalize_public_asset(
@@ -129,6 +227,19 @@ def normalize_public_asset(
         diagram_kind=draft.diagram_kind,
     )
     return asset.model_dump()
+
+
+def _validate_requested_types(resource_types: list[str]) -> list[str]:
+    if not resource_types:
+        raise ValueError("public_resource_types_required")
+    if len(set(resource_types)) != len(resource_types):
+        raise ValueError("public_resource_type_duplicated")
+    unsupported = set(resource_types) - PUBLIC_RESOURCE_TYPES
+    if unsupported:
+        raise ValueError(
+            f"unsupported_public_resource_type:{sorted(unsupported)[0]}"
+        )
+    return list(resource_types)
 
 
 def _response_text(response: Any) -> str:

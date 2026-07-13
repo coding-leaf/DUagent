@@ -1097,6 +1097,58 @@ async def test_webhook_kg_node_child_overrides_agent_metadata_and_updates_parent
 
 
 @pytest.mark.asyncio
+async def test_webhook_parent_updates_progress_after_each_finished_child():
+    await _reset_db()
+    await _seed_user("admin-progress", "admin")
+    async with async_session_factory() as db:
+        parent = AsyncTask(
+            id="parent-progress",
+            task_type="resource_generation",
+            status="processing",
+            progress=10,
+            user_id="admin-progress",
+            result={"mode": "kg_node_targets", "total_child_count": 4},
+        )
+        children = [
+            AsyncTask(
+                id=f"child-progress-{index}",
+                task_type="resource_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-progress",
+                result={
+                    "mode": "kg_node_target",
+                    "parent_task_id": "parent-progress",
+                },
+            )
+            for index in range(4)
+        ]
+        db.add_all([parent, *children])
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/webhooks/agent",
+            headers=_webhook_headers(),
+            json={
+                "task_id": "child-progress-0",
+                "task_type": "resource_generation",
+                "status": "failed",
+                "error_code": "agent_error",
+                "error_message": "model failed",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, "parent-progress")
+        assert parent.status == "processing"
+        assert parent.progress == 32
+        assert parent.result["failed_child_count"] == 1
+        assert parent.result["processing_child_count"] == 3
+
+
+@pytest.mark.asyncio
 async def test_webhook_parent_aggregation_marks_degraded_when_one_child_failed():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")

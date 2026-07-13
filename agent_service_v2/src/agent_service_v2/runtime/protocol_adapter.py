@@ -161,8 +161,8 @@ class EDUProtocolAdapter:
                 if returned_count is not None:
                     payload["returned_count"] = returned_count
                     payload["output_summary"] = f"返回 {returned_count} 条学习记录"
-                elif parsed.get("status"):
-                    payload["output_summary"] = f"工具状态：{parsed['status']}"
+                elif "status" in payload:
+                    payload["output_summary"] = f"工具状态：{payload['status']}"
             return EduEventType.TOOL_COMPLETED, payload
         if isinstance(event, ReplyEndEvent):
             return EduEventType.WORKFLOW_COMPLETED, {"reply_id": event.reply_id}
@@ -236,7 +236,11 @@ class EDUProtocolAdapter:
 
     def _is_successful_artifact_tool_result(self, event: ToolResultEndEvent) -> bool:
         state = getattr(event.state, "value", event.state)
-        return state != "error" and self._tool_names.get(event.tool_call_id) == "write_artifact_file"
+        tool_name = self._tool_names.get(event.tool_call_id)
+        return state != "error" and tool_name in {
+            "write_artifact_file",
+            "create_code_sandbox_card",
+        }
 
     def _build_artifact_events(self) -> list[EduEvent]:
         if self._artifact_publisher is None:

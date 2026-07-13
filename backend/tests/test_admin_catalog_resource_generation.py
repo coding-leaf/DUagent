@@ -364,6 +364,7 @@ async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_
             await db.commit()
 
     assert result["status"] == "completed"
+    assert mock_agent.await_args.args[0] == "/agent/v2/knowledge/quiz/generations"
     payload = mock_agent.await_args.args[1]
     assert payload["course_id"] == catalog_id
     async with async_session_factory() as db:

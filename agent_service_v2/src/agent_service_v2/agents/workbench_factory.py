@@ -176,17 +176,26 @@ class WorkbenchAgentFactory:
             except Exception as exc:
                 logger.exception("Memory middleware initialization disabled: %s", exc)
 
-        toolkit = Toolkit(
-            tool_groups=build_workbench_tool_groups(
-                memory_tools=memory_tools,
-                rag_tools=rag_tools,
-                learning_progress_tools=learning_progress_tools,
-                oj_execution_tools=oj_execution_tools,
-                personal_code_problem_tools=personal_code_problem_tools,
-                workspace=workspace,
-                run_id=run_id,
-            )
+        tool_groups = build_workbench_tool_groups(
+            memory_tools=memory_tools,
+            rag_tools=rag_tools,
+            learning_progress_tools=learning_progress_tools,
+            oj_execution_tools=oj_execution_tools,
+            personal_code_problem_tools=personal_code_problem_tools,
+            workspace=workspace,
+            run_id=run_id,
         )
+        toolkit = Toolkit(tool_groups=tool_groups)
+        default_active_groups = {
+            "memory",
+            "rag",
+            "learning_progress",
+            "oj_execution",
+            "artifact",
+        }
+        activated_groups = [
+            group.name for group in tool_groups if group.name in default_active_groups
+        ]
 
         if run_id and log_sink:
             middlewares.append(
@@ -205,10 +214,13 @@ class WorkbenchAgentFactory:
             model=model,
             toolkit=toolkit,
             middlewares=middlewares,
-            state=AgentState(permission_context=build_workbench_permission_context()),
+            state=AgentState(
+                permission_context=build_workbench_permission_context(),
+                tool_context={"activated_groups": activated_groups},
+            ),
             offloader=workspace,
             context_config=ContextConfig(tool_result_limit=20000),
-            react_config=ReActConfig(max_iters=12),
+            react_config=ReActConfig(max_iters=20),
         )
 
 

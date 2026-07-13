@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_download_user
 from app.models.user import User
 from app.schemas.operations import TutoringChatRequest
 from app.services.tutoring_payload_builder import TutoringPayloadBuilder
@@ -16,6 +18,11 @@ from app.services.tutoring_service import (
     TutoringService,
 )
 from app.services.tutoring_stream_adapter import TutoringStreamAdapter
+from app.services.tutoring_artifact_service import (
+    TutoringArtifactNotFoundError,
+    TutoringArtifactService,
+)
+from app.services.agent_client import AgentServiceError
 
 router = APIRouter(prefix="/api/v1/tutoring", tags=["tutoring"])
 
@@ -201,3 +208,37 @@ async def delete_conversation(
         await db.rollback()
         raise
     return {"code": 200, "message": "success", "data": None}
+
+
+@router.get("/conversations/{conversation_id}/files/{filename}")
+async def download_session_file(
+    conversation_id: str,
+    filename: str,
+    current_user: User = Depends(get_download_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        artifact = await TutoringArtifactService(db).download(
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            filename=filename,
+        )
+    except TutoringArtifactNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40404, "message": "请求的文件不存在", "data": None},
+        ) from exc
+    except AgentServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": 50200, "message": exc.message, "data": None},
+        ) from exc
+    return Response(
+        content=artifact.content,
+        media_type=artifact.media_type,
+        headers={
+            "Content-Disposition": (
+                "attachment; filename*=UTF-8''" + quote(artifact.filename)
+            )
+        },
+    )

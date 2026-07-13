@@ -36,10 +36,11 @@ class AgentModelSettings(BaseSettings):
     RERANKER_API_KEY: str | None = None
 
     QDRANT_URL: str | None = None
+    QDRANT_API_KEY: str | None = None
     QDRANT_PATH: str | None = None
     QDRANT_COURSE_KNOWLEDGE_COLLECTION: str = "course_knowledge_v1_1024"
 
-    COURSE_CATALOG_STORAGE_ROOT: str = "/home/yezisama/workspace/workflow/EDUagent/backend/storage/course_catalogs"
+    COURSE_CATALOG_STORAGE_ROOT: str = "../backend/storage/course_catalogs"
 
 
 def build_chat_model_from_settings(

@@ -8,6 +8,8 @@ from typing import Any
 
 class EduEventType(StrEnum):
     WORKFLOW_STARTED = "workflow_started"
+    AGENT_STARTED = "agent_started"
+    AGENT_MESSAGE = "agent_message"
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
     TOOL_FAILED = "tool_failed"

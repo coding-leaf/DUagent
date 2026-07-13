@@ -30,15 +30,20 @@ class AgentClient:
     路由层不要散落 httpx 调用，统一走此类，方便后续加日志、超时、重试和熔断。
     """
 
-    def __init__(self, timeout: float = 60.0):
+    def __init__(
+        self,
+        timeout: float = 60.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.base_url: str = settings.AGENT_SERVICE_URL.rstrip("/")
         self.timeout: float = timeout
+        self.transport = transport
 
     async def post_json(self, path: str, payload: dict) -> dict:
         """POST JSON 到 Agent Service，校验响应包装并返回 data 字段。
 
         Args:
-            path: Agent 接口路径，如 "/agent/v1/profile/generate"
+            path: Agent 接口路径，如 "/agent/v2/evaluation/generations"
             payload: 请求体
 
         Returns:
@@ -49,7 +54,10 @@ class AgentClient:
         """
         url = f"{self.base_url}{path}"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
                 resp = await client.post(url, json=payload)
         except httpx.TimeoutException:
             raise AgentServiceError("Agent Service 响应超时", status_code=504)
@@ -78,6 +86,29 @@ class AgentClient:
 
         return body.get("data", {})
 
+    async def get_bytes(self, path: str, params: dict) -> bytes:
+        url = f"{self.base_url}{path}"
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.get(url, params=params)
+        except httpx.TimeoutException as exc:
+            raise AgentServiceError("Agent Service 响应超时", status_code=504) from exc
+        except httpx.ConnectError as exc:
+            raise AgentServiceError("无法连接 Agent Service", status_code=503) from exc
+
+        if response.status_code >= 400:
+            try:
+                message = response.json().get("message", "Agent 产物读取失败")
+            except Exception:
+                message = "Agent 产物读取失败"
+            raise AgentServiceError(message, status_code=response.status_code)
+        if len(response.content) > 50 * 1024 * 1024:
+            raise AgentServiceError("Agent 产物超过下载大小限制", status_code=502)
+        return response.content
+
     async def stream_sse(self, path: str, payload: dict) -> AsyncIterator[bytes]:
         """POST 到 Agent Service 并返回 SSE 流迭代器（异步生成器）。
 
@@ -96,7 +127,10 @@ class AgentClient:
         """
         url = f"{self.base_url}{path}"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as http_client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as http_client:
                 async with http_client.stream("POST", url, json=payload) as resp:
                     if resp.status_code >= 400:
                         await resp.aread()

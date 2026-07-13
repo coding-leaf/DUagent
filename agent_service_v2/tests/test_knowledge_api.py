@@ -141,6 +141,7 @@ def test_quiz_generation_api_personalized_success() -> None:
             "chapter 1",
             "pointers",
             course_id="c1",
+            course_title=None,
             count=1,
             question_types=["single_choice"],
             difficulty=None,

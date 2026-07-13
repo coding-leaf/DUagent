@@ -358,7 +358,7 @@ def build_baseline_quiz_payload(
 
 async def request_baseline_quiz_questions(payload: dict) -> list[dict]:
     data = await quiz_agent_client.post_json(
-        "/agent/v1/assessment/generate-questions",
+        "/agent/v2/knowledge/quiz/generations",
         payload,
     )
     questions = data.get("questions") if isinstance(data, dict) else []

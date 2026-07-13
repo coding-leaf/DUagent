@@ -199,6 +199,11 @@ async def test():
             chk("submit -> total_count", data.get("total_count") == 3)
 
             await asyncio.sleep(0.5)
+            chk(
+                "diagnosis -> Agent v2 path",
+                mock_agent.await_args.args[0]
+                == "/agent/v2/evaluation/quiz/diagnose",
+            )
 
         # =============================================
         # 2. background diagnosis_json written

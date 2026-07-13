@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx
+from collections.abc import Awaitable, Callable
 from agentscope.message import UserMsg
 
 from agent_service_v2.agents.model_provider import AgentModelSettings
@@ -21,9 +22,11 @@ class OfficialTeamRuntimeClient:
         *,
         settings: AgentModelSettings,
         transport: httpx.AsyncBaseTransport,
+        grant_permissions: Callable[[str, str, str], Awaitable[None]] | None = None,
     ) -> None:
         self.settings = settings
         self.transport = transport
+        self.grant_permissions = grant_permissions
 
     async def start(self, request: ResourceTeamRequest) -> dict:
         self._require_model_settings()
@@ -70,6 +73,12 @@ class OfficialTeamRuntimeClient:
                     },
                 },
             )
+            if self.grant_permissions:
+                await self.grant_permissions(
+                    request.user_id,
+                    agent["agent_id"],
+                    session["session_id"],
+                )
             message = UserMsg(
                 name="student_request",
                 content=build_resource_team_user_message(request),
@@ -89,7 +98,6 @@ class OfficialTeamRuntimeClient:
             "status": "started",
             "agent_id": agent["agent_id"],
             "session_id": session_id,
-            "stream_path": f"/agent/v2/team-runtime/sessions/{session_id}/stream",
         }
 
     async def _post(

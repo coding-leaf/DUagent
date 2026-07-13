@@ -53,7 +53,6 @@ def test_official_runtime_client_provisions_leader_session_and_triggers_chat():
         "status": "started",
         "agent_id": "leader-1",
         "session_id": "session-1",
-        "stream_path": "/agent/v2/team-runtime/sessions/session-1/stream",
     }
     leader_prompt = calls[1][1]["system_prompt"]
     assert "resource_generator" in leader_prompt
@@ -71,7 +70,6 @@ def test_product_api_returns_only_edu_runtime_coordinates(monkeypatch):
             "status": "started",
             "agent_id": "leader-1",
             "session_id": "session-1",
-            "stream_path": "/agent/v2/team-runtime/sessions/session-1/stream",
         }
 
     monkeypatch.setattr(module.OfficialTeamRuntimeClient, "start", fake_start)
@@ -93,4 +91,8 @@ def test_product_api_returns_only_edu_runtime_coordinates(monkeypatch):
 
     assert response.status_code == 202
     assert response.json()["data"]["status"] == "started"
+    assert response.json()["data"]["event_path"] == (
+        "/agent/v2/personalized-resources/generations/session-1/events"
+    )
+    assert "team-runtime" not in response.text
     assert "AgentEvent" not in response.text

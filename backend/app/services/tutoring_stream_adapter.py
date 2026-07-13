@@ -22,6 +22,18 @@ PersistResult = Callable[
 ]
 
 
+@dataclass(frozen=True, slots=True)
+class AgentLogRecord:
+    endpoint: str
+    latency_ms: int
+    tokens_used: int
+    status: str
+    error_message: str | None
+
+
+RecordAgentLog = Callable[[AgentLogRecord], Awaitable[None]]
+
+
 @dataclass(slots=True)
 class StreamState:
     conversation_id: str
@@ -64,6 +76,23 @@ async def persist_tutoring_result(
         await db.commit()
 
 
+async def persist_agent_log(record: AgentLogRecord) -> None:
+    from app.models.others import AgentLog
+
+    async with async_session_factory() as db:
+        db.add(
+            AgentLog(
+                agent_type="edu_ai",
+                endpoint=record.endpoint,
+                latency_ms=record.latency_ms,
+                tokens_used=record.tokens_used,
+                status=record.status,
+                error_message=record.error_message,
+            )
+        )
+        await db.commit()
+
+
 class TutoringStreamAdapter:
     """Buffer arbitrary byte chunks, adapt events, and persist final state."""
 
@@ -71,9 +100,11 @@ class TutoringStreamAdapter:
         self,
         stream_sse: StreamSSE | None = None,
         persist_result: PersistResult | None = None,
+        record_agent_log: RecordAgentLog | None = None,
     ):
         self._stream_sse = stream_sse or agent_client.stream_sse
         self._persist_result = persist_result or persist_tutoring_result
+        self._record_agent_log = record_agent_log or persist_agent_log
 
     @staticmethod
     def _adapt_data(data_str: str, state: StreamState) -> str | None:
@@ -101,7 +132,15 @@ class TutoringStreamAdapter:
         elif event_type == "artifact_created":
             artifact = payload.get("artifact")
             if isinstance(artifact, dict):
-                state.artifacts.append(artifact)
+                artifact_id = artifact.get("id")
+                if artifact_id:
+                    existing_idx = next((i for i, a in enumerate(state.artifacts) if a.get("id") == artifact_id), None)
+                    if existing_idx is not None:
+                        state.artifacts[existing_idx] = artifact
+                    else:
+                        state.artifacts.append(artifact)
+                else:
+                    state.artifacts.append(artifact)
                 state.meta["artifacts"] = state.artifacts
 
         parsed["conversation_id"] = state.conversation_id
@@ -152,6 +191,10 @@ class TutoringStreamAdapter:
         decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         text_buffer = ""
 
+        start_time = datetime.now(timezone.utc)
+        status_val = "success"
+        error_message = None
+
         try:
             async for raw_bytes in self._stream_sse(
                 "/agent/v2/workbench/chat",
@@ -169,7 +212,9 @@ class TutoringStreamAdapter:
                 event = self._adapt_line(text_buffer.rstrip("\r"), state)
                 if event is not None:
                     yield event
-        except AgentServiceError:
+        except AgentServiceError as e:
+            status_val = "error"
+            error_message = "AgentServiceError: Agent 服务不可用"
             if not state.done_sent:
                 yield {
                     "event": "message",
@@ -190,12 +235,22 @@ class TutoringStreamAdapter:
                         ensure_ascii=False,
                     ),
                 }
+        except Exception as e:
+            status_val = "error"
+            error_message = f"UnexpectedError: {str(e)}"
+            raise e
         finally:
+            latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+            full_text = "".join(state.chunks)
+            if not full_text and not state.artifacts and status_val == "success":
+                status_val = "error"
+                error_message = "No output generated"
+
             try:
                 await self._persist_result(
                     assistant_message_id,
                     conversation_id,
-                    "".join(state.chunks),
+                    full_text,
                     state.diagrams,
                     state.knowledge_points,
                     state.meta,
@@ -208,3 +263,16 @@ class TutoringStreamAdapter:
                         "message_id": assistant_message_id,
                     },
                 )
+
+            try:
+                await self._record_agent_log(
+                    AgentLogRecord(
+                        endpoint="/agent/v2/workbench/chat",
+                        latency_ms=latency_ms,
+                        tokens_used=0,
+                        status=status_val,
+                        error_message=error_message,
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to save real AgentLog in DB")

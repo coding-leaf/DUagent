@@ -35,9 +35,11 @@ async def test_stream_adapter_forwards_v2_events_with_backend_envelope():
         yield b'data: {"type":"workflow_completed","run_id":"run-1","conversation_id":"agent-conv","seq":3,"timestamp":"t3","agent":"workbench","payload":{"reply_id":"r1"}}\n\n'
 
     persisted = AsyncMock()
+    recorded_log = AsyncMock()
     adapter = TutoringStreamAdapter(
         stream_sse=source,
         persist_result=persisted,
+        record_agent_log=recorded_log,
     )
     events = [
         event
@@ -67,6 +69,11 @@ async def test_stream_adapter_forwards_v2_events_with_backend_envelope():
     assert decoded[1]["message_id"] == "msg-1"
     assert decoded[1]["run_id"] == "run-1"
     persisted.assert_awaited_once_with("msg-1", "conv-1", "hello", [], [], {})
+    recorded_log.assert_awaited_once()
+    record = recorded_log.await_args.args[0]
+    assert record.endpoint == "/agent/v2/workbench/chat"
+    assert record.status == "success"
+    assert record.tokens_used == 0
 
 
 @pytest.mark.asyncio

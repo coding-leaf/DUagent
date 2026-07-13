@@ -143,7 +143,7 @@ async def run_catalog_ingestion_background(task_id: str) -> None:
 
             try:
                 agent_data = await ingestion_agent_client.post_json(
-                    "/agent/v1/knowledge/ingestions",
+                    "/agent/v2/knowledge/ingestions",
                     payload,
                 )
             except AgentServiceError as exc:

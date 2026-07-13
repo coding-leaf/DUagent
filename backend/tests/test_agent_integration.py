@@ -840,6 +840,10 @@ class TestQuizGenerateIntegration:
                 })
 
             assert r.status_code == 202
+            assert (
+                mock_agent.await_args.args[0]
+                == "/agent/v2/knowledge/quiz/generations"
+            )
             payload = mock_agent.await_args.args[1]
             assert payload["course_id"] == catalog_id
             assert payload["class_course_id"] == course_id

@@ -153,7 +153,7 @@ async def generate_questions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """生成个性化题目。调用 Agent /assessment/generate-questions，校验后写入 quiz_questions。"""
+    """生成个性化题目。调用 Agent v2，校验后写入 quiz_questions。"""
     catalog_context = await resolve_generation_catalog(db, req.course_id)
 
     task = AsyncTask(
@@ -175,7 +175,7 @@ async def generate_questions(
             req,
             db,
         )
-        data = await agent_client.post_json("/agent/v1/assessment/generate-questions", payload)
+        data = await agent_client.post_json("/agent/v2/knowledge/quiz/generations", payload)
     except AgentServiceError as e:
         task.status = "failed"
         task.error_code = str(e.agent_code or "agent_error")

@@ -110,9 +110,9 @@ async def run_diagnosis_background(
     agent_questions: list[dict],
     agent_answers: list[dict],
 ) -> None:
-    """后台异步调用 Agent /assessment/evaluate 并将 LLM 诊断写入 QuizSession.diagnosis_json。"""
+    """后台异步调用 Agent v2 并将 LLM 诊断写入 QuizSession.diagnosis_json。"""
     try:
-        data = await agent_client.post_json("/agent/v1/assessment/evaluate", {
+        data = await agent_client.post_json("/agent/v2/evaluation/quiz/diagnose", {
             "user_id": user_id,
             "course_id": course_id,
             "quiz_id": quiz_id,

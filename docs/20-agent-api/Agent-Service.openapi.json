@@ -194,6 +194,26 @@
         }
       }
     },
+    "/agent/v2/workbench/artifacts": {
+      "get": {
+        "tags": ["Workbench"],
+        "summary": "读取 Workbench 会话产物",
+        "description": "仅供 Backend 在完成用户与会话归属校验后读取 Agent workspace 产物。",
+        "parameters": [
+          { "name": "user_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "conversation_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "filename", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "course_id", "in": "query", "required": false, "schema": { "type": "string", "nullable": true } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workbench 产物文件",
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "404": { "description": "产物不存在或文件名不安全" }
+        }
+      }
+    },
     "/agent/v2/knowledge/resources/generations": {
       "post": {
         "tags": ["Resources"],
@@ -302,7 +322,8 @@
               "guidance_level": { "type": "string", "description": "引导粒度：L1 / L2 / L3" },
               "modal_preference": { "type": "object", "description": "模态偏好" },
               "knowledge_mastered": { "type": "array", "items": { "type": "string" }, "description": "已掌握知识点名称列表" },
-              "knowledge_weak": { "type": "array", "items": { "type": "string" }, "description": "薄弱知识点名称列表" }
+              "knowledge_weak": { "type": "array", "items": { "type": "string" }, "description": "薄弱知识点名称列表" },
+              "custom_instruction": { "type": "string", "description": "用户个性化偏好，注入 AI 对话 system prompt" }
             }
           },
           "active_kg_nodes": {
@@ -764,9 +785,10 @@
       },
       "ResourceGenerateRequest": {
         "type": "object",
-        "required": ["task_id", "course_id", "resource_types", "webhook_url"],
+        "required": ["task_id", "user_id", "course_id", "webhook_url"],
         "properties": {
           "task_id": { "type": "string", "description": "Backend 预先创建的任务 ID，Agent 返回和回调时原样带回" },
+          "user_id": { "type": "string", "description": "触发教师用户 ID" },
           "course_id": { "type": "string", "description": "课程 ID" },
           "webhook_url": { "type": "string", "description": "完成回调 URL" },
           "chapter": { "type": "string", "description": "章节" },

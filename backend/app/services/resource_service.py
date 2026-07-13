@@ -112,7 +112,7 @@ class ResourceService:
 
         try:
             # 调用 Agent（异步，立即返回 202）
-            await agent_client.post_json("/agent/v1/resources/generate", payload)
+            await agent_client.post_json("/agent/v2/knowledge/resources/generations", payload)
         except AgentServiceError as e:
             task.status = "failed"
             task.error_code = str(e.agent_code or "agent_error")

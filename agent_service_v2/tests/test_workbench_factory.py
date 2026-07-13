@@ -85,10 +85,10 @@ def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
     allow_rules = agent.state.permission_context.allow_rules
 
     assert "reset_tools" in allow_rules
-    assert "read_learning_state" in allow_rules
     assert "read_learning_progress" in allow_rules
     assert "read_recent_answers" in allow_rules
     assert "write_artifact_file" in allow_rules
+    assert "create_code_sandbox_card" in allow_rules
     assert "draft_study_artifact" not in allow_rules
     assert "TaskCreate" in allow_rules
     assert "run_code_in_oj" in allow_rules
@@ -120,7 +120,7 @@ def test_factory_allows_long_enough_workbench_tool_runs(tmp_path: Path):
         run_id="run-1",
     )
 
-    assert agent.react_config.max_iters >= 12
+    assert agent.react_config.max_iters >= 20
 
 
 def test_factory_prompt_mentions_learning_progress_tools(tmp_path: Path):
@@ -145,6 +145,49 @@ def test_factory_prompt_mentions_learning_progress_tools(tmp_path: Path):
     assert "read_learning_progress" in prompt
     assert "read_recent_answers" in prompt
     assert "do not fabricate" in prompt.lower()
+
+
+def test_factory_activates_safe_tool_groups_by_default(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1", course_id="c1", conversation_id="conv1"
+    )
+    agent = WorkbenchAgentFactory(model_provider=lambda: FakeModel()).create_agent(
+        user_id="u1",
+        course_id="c1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )
+
+    assert "artifact" in agent.state.tool_context.activated_groups
+    assert "learning_progress" in agent.state.tool_context.activated_groups
+    assert "personal_code_problem" not in agent.state.tool_context.activated_groups
+
+
+def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1", course_id="c1", conversation_id="conv1"
+    )
+    prompt = WorkbenchAgentFactory(model_provider=lambda: FakeModel()).create_agent(
+        user_id="u1",
+        course_id="c1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )._system_prompt
+
+    assert "智慧学习辅助教学 AI" in prompt
+    assert "三个或更多" in prompt
+    assert "published" in prompt
+    assert "problem_id" in prompt
+    assert "validated" not in prompt
+    assert "不要使用 write_artifact_file 创建 JSON" in prompt
 
 
 def test_mem0_config_uses_project_embedding_dimension():

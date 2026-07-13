@@ -20,6 +20,7 @@ async def run_public_resource_generation(
     settings: AgentModelSettings,
     task_id: str,
     course_id: str,
+    course_title: str | None = None,
     chapter: str | None,
     knowledge_point: str | None,
     resource_types: list[str],
@@ -36,6 +37,7 @@ async def run_public_resource_generation(
                 chapter=normalized_chapter,
                 knowledge_point=normalized_knowledge_point,
                 course_id=course_id,
+                course_title=course_title,
             )
             for resource_type in resource_types
         ]

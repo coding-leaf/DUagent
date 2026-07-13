@@ -185,6 +185,7 @@ class KGGenerationRequest(BaseModel):
 class ResourceGenerationRequest(BaseModel):
     task_id: str = Field(..., description="Asynchronous task ID tracking this generation")
     course_id: str = Field(..., description="Associated host course entity")
+    course_title: str | None = Field(None, description="Course title name to auto-inject into prompts")
     chapter: str | None = Field(None, description="Target syllabus chapter folder")
     knowledge_point: str | None = Field(None, description="Core pedagogical topic")
     resource_types: list[Literal["lesson", "diagram", "example"]] = Field(
@@ -198,6 +199,7 @@ class ResourceGenerationRequest(BaseModel):
 class QuizGenerationRequest(BaseModel):
     task_id: str | None = Field(None, description="Task UUID")
     course_id: str = Field(..., description="Host entity")
+    course_title: str | None = Field(None, description="Course title name to auto-inject into prompts")
     chapter: str | None = Field(None, description="Chapter")
     knowledge_point: str | None = Field(None, description="Pedagogical topic")
     question_types: list[str] = Field(default=["single_choice", "multi_choice", "code"])
@@ -285,6 +287,7 @@ async def generate_v2_course_resources(request: ResourceGenerationRequest):
             settings=settings,
             task_id=request.task_id,
             course_id=request.course_id,
+            course_title=request.course_title,
             chapter=request.chapter,
             knowledge_point=request.knowledge_point,
             resource_types=list(request.resource_types),
@@ -313,6 +316,7 @@ async def generate_v2_quiz_questions(request: QuizGenerationRequest):
             request.chapter or "",
             request.knowledge_point or "",
             course_id=request.course_id,
+            course_title=request.course_title,
             count=request.count,
             question_types=request.question_types,
             difficulty=request.difficulty,

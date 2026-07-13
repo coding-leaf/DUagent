@@ -1,11 +1,12 @@
 import sys
 import os
+from pathlib import Path
 
 # Add virtual environment site-packages to sys.path
 sys.path.insert(0, "/home/yezisama/workspace/workflow/EDUagent/.venv/lib/python3.12/site-packages")
 
 # Also add the backend directory to sys.path
-sys.path.insert(0, "/home/yezisama/workspace/workflow/EDUagent/backend")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def pytest_configure(config):
     if not config.pluginmanager.hasplugin("asyncio"):
@@ -76,10 +77,5 @@ def configure_and_cleanup_db(request):
             setattr(m, "async_engine", db_session.engine)
             
     yield
-
-
-
-
-
 
 

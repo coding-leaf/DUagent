@@ -3065,6 +3065,29 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+---
 
+### 2026-07-13 — 将 collaboration-package 已验证的 Agent v2 闭环迁移至主开发分支
+
+**迁移来源：**
+- 参考 `share/collaboration-package` 的已验证实现与提交 `da32546`，逐文件迁移到 `ai-dev/agentscope-v2`，未整体合并 `6c15327` 混合提交。
+
+**核心改动：**
+1. Backend 教材入库、题目生成、作答诊断、资源生成统一调用已有 `/agent/v2/...` 路由，修复 v2 服务对残留 v1 路径返回 404 后任务被标记为 `agent_failed` 的问题。
+2. AI Chat 产物下载改为 Backend 完成用户与对话鉴权后，通过 HTTP 请求 Agent v2 工作区产物接口；增加路径穿越、重复编码、控制字符和 50 MB 大小限制。
+3. 强化工作台事件与产物去重，Agent 日志持久化从流适配器中提取为可注入边界。
+4. 迁移资源团队事件适配、模型配置、Team Runtime 生命周期以及对应 AgentScope 2.x 测试。
+5. 同步 Agent 内部接口文档与 OpenAPI，新增 `GET /agent/v2/workbench/artifacts`。
+
+**验证结果：**
+- AgentScope 版本：2.0.3。
+- Agent v2 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest -q`，139 passed。
+- Backend 相关测试：63 passed；新增 v2 路径断言定向复测 3 passed。
+- Backend 与 Agent 修改文件 `py_compile` 通过；OpenAPI JSON 解析和 `git diff --check` 通过。
+- 前端 `npm run lint`：0 error、1 个既有 warning；`npm run build` 通过，保留既有大 chunk 提示。
+
+**接口漂移：**
+- Backend→Agent 内部调用由 v1 路径迁移到已有 v2 路径。
+- Agent 内部接口新增 `GET /agent/v2/workbench/artifacts`；Frontend→Backend 客户端契约不变。
 
 

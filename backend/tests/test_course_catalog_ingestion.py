@@ -672,6 +672,10 @@ async def _api_test_start_catalog_ingestion_success(tmp_path, monkeypatch):
                     headers=admin_headers,
                 )
                 assert response.status_code == 202, response.text
+                assert (
+                    mock_agent.await_args.args[0]
+                    == "/agent/v2/knowledge/ingestions"
+                )
                 task_id = response.json()["data"]["task_id"]
 
             task_data = await _wait_for_task_status(client, admin_headers, task_id, {"completed"})
@@ -1109,5 +1113,4 @@ def test_incremental_catalog_ingestion_unexpected_exception_keeps_catalog_ready_
             initial=False,
         )
     )
-
 

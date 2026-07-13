@@ -27,6 +27,7 @@ from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course
 from app.models.user import RegistrationCode
 from app.models.others import AsyncTask, Resource
+from app.core.config import settings
 from sqlalchemy import func, select
 
 
@@ -118,7 +119,8 @@ async def _count_resource_generation_tasks(course_id, user_id):
 
 
 @pytest.mark.asyncio
-async def test():
+async def test(monkeypatch):
+    monkeypatch.setattr(settings, "WEBHOOK_SECRET", "duagent-webhook-dev-secret")
     transport = ASGITransport(app=app)
     ok = fail = 0
 
@@ -204,6 +206,11 @@ async def test():
             chk("partial catalog → 202", r.status_code == 202)
             partial_task_id = r.json()["data"]["task_id"]
             chk("partial catalog → task_id present", bool(partial_task_id))
+            chk(
+                "partial catalog → v2 resource route",
+                mock_agent.await_args.args[0]
+                == "/agent/v2/knowledge/resources/generations",
+            )
             partial_payload = mock_agent.await_args.args[1]
             chk("partial catalog → agent receives catalog_id",
                 partial_payload["course_id"] == partial_context["catalog_id"])
@@ -228,6 +235,11 @@ async def test():
             chk("generate → 202", r.status_code == 202)
             task_id = r.json()["data"]["task_id"]
             chk("generate → task_id present", bool(task_id))
+            chk(
+                "generate → v2 resource route",
+                mock_agent.await_args.args[0]
+                == "/agent/v2/knowledge/resources/generations",
+            )
             success_payload = mock_agent.await_args.args[1]
             chk("generate → agent receives catalog_id",
                 success_payload["course_id"] == course_context["catalog_id"])
@@ -247,10 +259,10 @@ async def test():
             "status": "completed",
             "result": {
                 "resources": [
-                    {"title": "Test Doc", "type": "document", "chapter": "ch1",
+                        {"title": "Test Lesson", "type": "lesson", "chapter": "ch1",
                      "knowledge_point": "kp1", "description": "doc description",
                      "content": "content here", "tags": []},
-                    {"title": "Test Code", "type": "code", "chapter": "ch2",
+                        {"title": "Test Example", "type": "example", "chapter": "ch2",
                      "knowledge_point": "kp2", "description": "code description",
                      "content": "print(1)", "tags": []},
                 ]
@@ -340,7 +352,7 @@ async def test():
             "task_id": auth_task_id,
             "task_type": "resource_generation",
             "status": "completed",
-            "result": {"resources": [{"title": "Auth Test", "type": "document",
+                "result": {"resources": [{"title": "Auth Test", "type": "lesson",
                                       "chapter": "ch1", "knowledge_point": "kp1",
                                       "description": "auth description",
                                       "content": "x", "tags": []}]},

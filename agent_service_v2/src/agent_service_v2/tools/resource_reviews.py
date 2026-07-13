@@ -5,6 +5,14 @@ from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClientError,
 )
 
+ALLOWED_HARD_FAILURES = {
+    "privacy_leak",
+    "unsafe_content",
+    "grounding_missing",
+    "deterministic_validation_failed",
+    "goal_mismatch",
+}
+
 
 def build_resource_review_tools(client: BackendLearningClient) -> list[FunctionTool]:
     async def review_personalized_resource(
@@ -15,9 +23,16 @@ def build_resource_review_tools(client: BackendLearningClient) -> list[FunctionT
         warnings: list[str],
         summary: str,
     ) -> dict:
+        accepted_failures = [
+            failure for failure in hard_failures if failure in ALLOWED_HARD_FAILURES
+        ]
+        demoted_advice = [
+            failure for failure in hard_failures if failure not in ALLOWED_HARD_FAILURES
+        ]
+        warnings = [*warnings, *demoted_advice]
         decision = (
             "rejected"
-            if hard_failures
+            if accepted_failures
             else "approved_with_advice"
             if warnings
             else "approved"
@@ -29,7 +44,7 @@ def build_resource_review_tools(client: BackendLearningClient) -> list[FunctionT
                 "user_id": user_id,
                 "course_id": course_id,
                 "decision": decision,
-                "hard_failures": hard_failures,
+                "hard_failures": accepted_failures,
                 "warnings": warnings,
                 "summary": summary,
             },

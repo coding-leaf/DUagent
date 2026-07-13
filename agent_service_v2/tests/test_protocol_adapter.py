@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from agentscope.event import (
     DataBlockDeltaEvent,
     ExceedMaxItersEvent,
@@ -176,7 +178,8 @@ def test_protocol_adapter_passes_learning_tool_result_summary():
     assert "3" in event.payload["output_summary"]
 
 
-def test_protocol_adapter_emits_artifact_after_artifact_tool_success():
+@pytest.mark.parametrize("tool_name", ["write_artifact_file", "create_code_sandbox_card"])
+def test_protocol_adapter_emits_artifact_after_artifact_tool_success(tool_name):
     publisher = FakeArtifactPublisher()
     adapter = EDUProtocolAdapter(
         run_id="run-1",
@@ -186,7 +189,7 @@ def test_protocol_adapter_emits_artifact_after_artifact_tool_success():
     )
 
     raw_events = [
-        ToolCallStartEvent(reply_id="reply-1", tool_call_id="tool-1", tool_call_name="write_artifact_file"),
+        ToolCallStartEvent(reply_id="reply-1", tool_call_id="tool-1", tool_call_name=tool_name),
         ToolResultEndEvent(reply_id="reply-1", tool_call_id="tool-1", state=ToolResultState.SUCCESS),
     ]
 

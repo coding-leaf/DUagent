@@ -16,6 +16,14 @@ def test_generator_and_reviewer_permissions_are_role_isolated():
     assert "run_code_in_oj" not in reviewer
     assert "publish_personalized_resource" not in reviewer
 
+    from agent_service_v2.agents.team_permissions import build_leader_permission_context
+
+    leader = build_leader_permission_context().allow_rules
+    assert "AgentCreate" in leader
+    assert "TeamDelete" in leader
+    assert "publish_personalized_resource" in leader
+    assert "Bash" not in leader
+
 
 def test_every_role_tool_is_explicitly_whitelisted():
     from agent_service_v2.agents.team_permissions import ROLE_TOOL_NAMES, build_role_permissions

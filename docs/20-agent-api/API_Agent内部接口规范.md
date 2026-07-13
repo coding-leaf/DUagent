@@ -99,6 +99,14 @@ POST /agent/v2/workbench/chat
 
 Backend 会把 SQL 权威上下文放入 `context` 字段，Agent Service v2 将 `conversation_summary`、`recent_messages`、`user_profile`、`active_kg_nodes` 转换为 AgentScope `Msg` 列表后交给单 Agent 的 `reply_stream()`。Agent Service v2 不写 MySQL，运行状态和外审结果仅写入本地 workspace，最终业务落库仍由 Backend 完成。
 
+Workbench 产物由 Agent Service v2 的 workspace 管理。前端仍通过 Backend 的会话文件接口下载；Backend 完成用户与会话归属校验后，通过以下内部接口读取文件，不直接访问 `agent_service_v2/workspaces`：
+
+```
+GET /agent/v2/workbench/artifacts
+```
+
+Query 参数：`user_id`、`conversation_id`、`filename` 必填，`course_id` 可选。成功返回二进制文件；不存在或文件名不安全时返回 404。
+
 **SSE 事件类型：**
 
 | type | 说明 |

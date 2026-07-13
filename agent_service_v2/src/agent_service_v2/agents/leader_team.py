@@ -112,6 +112,7 @@ class ResourceWorkerAgent:
         knowledge_point: str,
         *,
         course_id: str | None = None,
+        course_title: str | None = None,
         count: int = 3,
         question_types: list[str] | None = None,
         difficulty: str | None = None,
@@ -136,6 +137,8 @@ class ResourceWorkerAgent:
         course_reference_section = ""
         if rag_context:
             course_reference_section = f"\n=== COURSE REFERENCE MATERIAL CHUNKS (RAG) ===\n{rag_context}\n"
+
+        course_info = f"Course Title: {course_title}" if course_title else "Course Title: C Programming Language"
 
         if resource_type == "quiz":
             q_types_str = ", ".join(question_types) if question_types else "single_choice, multi_choice, code"
@@ -168,7 +171,7 @@ class ResourceWorkerAgent:
                     "Make the explanations highly encouraging, educational, and scaffolded.\n"
                 )
 
-            prompt = f"""You are a C Programming Assessment Specialist.
+            prompt = f"""You are a C Programming Assessment Specialist (or specialist for {course_title or 'C Programming'}).
 Please generate exactly {count} high-quality questions for the topic:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
@@ -177,6 +180,9 @@ Allowed Question Types: {q_types_str}
 {personalization_prompt}
 {course_reference_section}
 Ensure the questions are precise and cover critical syllabus concepts.
+
+{course_info}
+If the course title specifies a particular language (e.g. C/C++), you MUST generate all questions, coding challenges, solutions, options and explanations for that exact language. Absolutely never default to Python, Java, or other programming languages.
 
 Your output MUST be a strict JSON object with this structure:
 {{
@@ -233,18 +239,19 @@ Your output MUST be a strict JSON object with this structure:
   ]
 }}
 
-Language Requirements:
+Language & Technology Requirements:
 1. ALL descriptive textual fields (including: "title", "content", options' "text", "explanation", "description") MUST be generated in Simplified Chinese (简体中文).
-2. Keep only the C programming source codes and their compilable format. The comments inside code blocks should also be in Simplified Chinese.
+2. Keep only the C programming source codes and their compilable format (or corresponding language specified in the course title). The comments inside code blocks should also be in Simplified Chinese. Absolutely never default to Python.
 """
         elif resource_type == "document":
-            prompt = f"""You are a C Programming Lecturer.
+            prompt = f"""You are a {course_title or 'C Programming'} Lecturer.
 Please generate an HTML-based interactive presentation slide deck (rich tutorial notes) for:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
+{course_info}
 {course_reference_section}
-Include code block examples and thorough explanations. 
+Include code block examples and thorough explanations. All code examples, structural analysis, and concepts must be written in the specified course language (e.g., C Language). Absolutely never default to Python or other unrelated programming languages.
 Output format MUST be a strict JSON:
 {{
   "title": "Presentation Title in Simplified Chinese",
@@ -255,12 +262,14 @@ Language Requirements:
 1. "title" and the inner HTML content in "html_content" (including slide headers, explanations, paragraph texts) MUST be fully generated in Simplified Chinese (简体中文).
 """
         elif resource_type == "mindmap":
-            prompt = f"""You are a Knowledge-mapping assistant.
+            prompt = f"""You are a {course_title or 'C Programming'} Knowledge-mapping assistant.
 Generate a structured Mermaid.js mindmap source string for:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
+{course_info}
 {course_reference_section}
+Ensure all mindmap nodes and concepts match the course topic and technical environment (e.g., C programming terminology, NOT Python concepts).
 Output format MUST be a strict JSON:
 {{
   "title": "Mindmap title in Simplified Chinese",
@@ -275,7 +284,9 @@ Language Requirements:
             # Fallback reading
             prompt = f"""Generate rich, deep reading notes for {knowledge_point or "General"} inside {chapter or "General"}.
 
+{course_info}
 {course_reference_section}
+Ensure all descriptions, tutorial chapters, code snippets, and explanations are written in the exact language of the course (e.g., C language). Absolutely never default to Python.
 Output MUST be JSON:
 {{
   "title": "Extra Reading in Simplified Chinese",

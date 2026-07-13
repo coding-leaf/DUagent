@@ -74,10 +74,30 @@ def test_reviewer_only_rejects_when_hard_failures_exist():
             generation_id="g1",
             user_id="u1",
             course_id="c1",
-            hard_failures=["OJ validation failed"],
+            hard_failures=["deterministic_validation_failed"],
             warnings=[],
             summary="确定性验证未通过。",
         )
     )
 
     assert _result(response)["decision"] == "rejected"
+
+
+def test_reviewer_cannot_treat_test_coverage_advice_as_hard_failure():
+    client = FakeClient()
+    tools = {tool.name: tool for tool in build_resource_review_tools(client)}
+
+    response = asyncio.run(
+        tools["review_personalized_resource"].call(
+            generation_id="g1",
+            user_id="u1",
+            course_id="c1",
+            hard_failures=["测试用例不够充分"],
+            warnings=[],
+            summary="建议增加更多测试。",
+        )
+    )
+
+    assert _result(response)["decision"] == "approved_with_advice"
+    assert client.calls[-1][1]["hard_failures"] == []
+    assert client.calls[-1][1]["warnings"] == ["测试用例不够充分"]

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Header, Request, status
+from fastapi import Depends, HTTPException, Header, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,38 @@ async def get_current_user(
         )
     user_id = payload.get("sub")
     result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40100, "message": "用户不存在或已被禁用", "data": None},
+        )
+    return user
+
+
+async def get_download_user(
+    token: str | None = Query(None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    resolved_token = credentials.credentials if credentials else token
+    if not resolved_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40100, "message": "未提供认证令牌", "data": None},
+        )
+    payload = decode_token(resolved_token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40100, "message": "Token 无效或已过期", "data": None},
+        )
+    result = await db.execute(
+        select(User).where(
+            User.id == payload.get("sub"),
+            User.is_deleted == False,
+        )
+    )
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(

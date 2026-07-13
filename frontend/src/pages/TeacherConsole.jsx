@@ -59,9 +59,7 @@ export default function TeacherConsole() {
         setPendingCreatedClassId(null);
         /* eslint-enable react-hooks/set-state-in-effect */
       } else {
-         
         setActiveClass(classes[0].id);
-         
       }
     }
   }, [classes, activeClass, pendingCreatedClassId]);
@@ -159,68 +157,69 @@ export default function TeacherConsole() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-on-background font-body-md">
-      {/* Top Header */}
-      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-gutter h-20 bg-white border-b border-outline-variant shadow-sm font-['Public_Sans'] antialiased">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold tracking-tight text-on-surface">数据结构 (Data Structures)</h1>
-          <span className="px-2 py-1 bg-surface-container-high text-primary font-bold text-xs rounded uppercase">教学控制台</span>
-        </div>
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-600 flex items-center justify-center border border-cyan-500/30 font-bold text-sm">
-              {(user?.real_name || user?.username || '教').charAt(0)}
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur-md font-['Public_Sans'] antialiased">
+        <div className="mx-auto flex min-h-20 max-w-[1280px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">
+              <Icon name="school" className="material-symbols-outlined text-base" />
+              教学控制台
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-on-surface">{user?.real_name || user?.username || '教师'}</span>
-              <span className="text-[10px] text-outline uppercase tracking-wider">
-                {roleLabelMap[user?.role] || '教师'}
+            <div className="flex min-w-0 items-baseline gap-3">
+              <h1 data-testid="teacher-console-title" className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                {activeClassInfo?.name || '教学班管理'}
+              </h1>
+              <span className="hidden truncate text-sm text-slate-500 lg:inline">
+                {activeClassInfo?.catalog_title || '课程教学管理'}
               </span>
             </div>
           </div>
-          <div className="h-8 w-[1px] bg-outline-variant"></div>
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors"
-          >
-            <Icon name="add" className="material-symbols-outlined text-sm"/>
-            创建教学班
-          </button>
-          <div className="h-8 w-[1px] bg-outline-variant"></div>
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-error hover:bg-error-container/20 rounded-lg transition-colors" onClick={() => navigate('/')}>
-            <Icon name="logout" className="material-symbols-outlined text-sm"/>
-            退出登入
-          </button>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="hidden items-center gap-2 rounded-full bg-slate-50 py-1.5 pl-1.5 pr-3 md:flex">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-200 bg-cyan-100 text-sm font-bold text-cyan-700">
+                {(user?.real_name || user?.username || '教').charAt(0)}
+              </div>
+              <div className="leading-tight">
+                <p className="text-xs font-bold text-slate-800">{user?.real_name || user?.username || '教师'}</p>
+                <p className="text-[10px] text-slate-500">{roleLabelMap[user?.role] || '教师'}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCreateDialog(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 sm:px-4 sm:text-sm"
+            >
+              <Icon name="add" className="material-symbols-outlined text-sm"/>
+              <span className="hidden sm:inline">创建教学班</span>
+            </button>
+            <button
+              aria-label="退出登录"
+              title="退出登录"
+              className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              onClick={() => navigate('/')}
+            >
+              <Icon name="logout" className="material-symbols-outlined text-sm"/>
+              <span className="hidden lg:inline">退出登录</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 pt-20 px-gutter pb-xl overflow-y-auto">
-        <div className="max-w-[1280px] mx-auto py-margin">
-          
-          {/* Class Selection Row */}
-          <ClassSelectorRow 
-            classes={classes} 
-            activeClass={activeClass} 
-            setActiveClass={setActiveClass} 
-            activeClassInfo={activeClassInfo} 
-          />
-
-          {/* Class Learning Resources */}
-          <TeacherResourceSection
+      <main className="flex-1 px-4 pb-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1280px] py-6 sm:py-8">
+          <ClassSelectorRow
+            classes={classes}
+            activeClass={activeClass}
+            setActiveClass={setActiveClass}
             activeClassInfo={activeClassInfo}
-            resourcesLoading={resourcesLoading}
-            resourcesError={resourcesError}
-            resources={resources}
-            groupedResources={groupedResources}
-            expandedChapter={expandedChapter}
-            setExpandedChapter={setExpandedChapter}
-            handleCopyCourseCode={handleCopyCourseCode}
-            copiedCourseCode={copiedCourseCode}
-            navigate={navigate}
-            onResourceClick={handleResourceClick}
           />
 
-          {/* Student Monitoring Table */}
+          <ClassInsightsSection
+            insightsLoading={insightsLoading}
+            insightsError={insightsError}
+            insights={insights}
+            studentCount={students.length}
+            resourceCount={resources.length}
+          />
+
           <StudentMonitoringSection
             activeClassInfo={activeClassInfo}
             activeClass={activeClass}
@@ -239,13 +238,19 @@ export default function TeacherConsole() {
             isMockMode={isMockMode}
           />
 
-          {/* Class Statistics Section */}
-          <ClassInsightsSection
-            insightsLoading={insightsLoading}
-            insightsError={insightsError}
-            insights={insights}
+          <TeacherResourceSection
+            activeClassInfo={activeClassInfo}
+            resourcesLoading={resourcesLoading}
+            resourcesError={resourcesError}
+            resources={resources}
+            groupedResources={groupedResources}
+            expandedChapter={expandedChapter}
+            setExpandedChapter={setExpandedChapter}
+            handleCopyCourseCode={handleCopyCourseCode}
+            copiedCourseCode={copiedCourseCode}
+            navigate={navigate}
+            onResourceClick={handleResourceClick}
           />
-
         </div>
       </main>
 

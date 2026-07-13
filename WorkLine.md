@@ -5,6 +5,33 @@
 
 ---
 
+### 2026-07-13 — 优化教师教学控制台首页信息层级
+
+**涉及文件：**
+- `frontend/src/pages/TeacherConsole.jsx`
+- `frontend/src/pages/TeacherConsole.test.jsx`
+- `frontend/src/components/teacher/ClassSelectorRow.jsx`
+- `frontend/src/components/teacher/ClassInsightsSection.jsx`
+- `frontend/src/components/teacher/StudentMonitoringSection.jsx`
+- `WorkLine.md`
+
+**问题与改动：**
+1. 首页标题原先硬编码为“数据结构 (Data Structures)”，现改为当前教学班名称和绑定资源库标题，切换班级后同步更新。
+2. 页面调整为“教学班切换 → 班级概览 → 学生学情与名单 → 本班学习资源”，把学生数、资源数、平均练习分、练习次数和路径分布前置。
+3. 教学班切换卡、页头操作、学生搜索和名单卡片补齐移动端布局、键盘焦点及无障碍标签；“学生实时监控”改为与真实数据能力一致的“学生学情与名单”。
+4. 班级统计对缺失的薄弱点和路径字段做安全展示，避免新建班级暂无统计时页面异常。
+
+**验证结果：**
+- 新增教师控制台布局回归测试：1 passed。
+- Frontend 全量单元测试：38 files、139 passed。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化，仅调整现有数据的前端呈现。
+
+---
+
 ## 写入规范
 
 每条记录格式如下：

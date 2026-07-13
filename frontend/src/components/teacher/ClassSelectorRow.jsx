@@ -2,41 +2,42 @@ import Icon from '../Icon';
 
 export default function ClassSelectorRow({ classes, activeClass, setActiveClass, activeClassInfo }) {
   return (
-    <section className="mb-margin">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-h3 text-xl text-on-surface">教学班选择</h3>
-        <span className="text-sm text-outline">当前：{activeClassInfo?.name || activeClass}</span>
+    <section className="mb-6" aria-labelledby="class-selector-title">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 id="class-selector-title" className="text-base font-bold text-slate-900">切换教学班</h2>
+          <p className="mt-0.5 text-xs text-slate-500">选择后同步更新学生、资源和班级统计</p>
+        </div>
+        <span className="hidden text-xs font-medium text-slate-500 sm:block">共 {classes.length} 个教学班</span>
       </div>
-      <div className="flex gap-gutter overflow-x-auto pb-2 scrollbar-hide">
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide" role="list">
         {classes.map((cls) => (
           <button
             key={cls.id}
+            type="button"
+            aria-pressed={activeClass === cls.id}
             onClick={() => setActiveClass(cls.id)}
-            className={`min-w-[240px] flex-shrink-0 bg-white rounded-xl p-md text-left transition-all ${
+            className={`min-w-[200px] flex-shrink-0 cursor-pointer rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 ${
               activeClass === cls.id 
-                ? 'border-2 border-primary shadow-md ring-4 ring-primary/10' 
-                : 'border border-outline-variant hover:border-primary/50 hover:shadow-lg'
+                ? 'border-cyan-500 bg-cyan-50 text-cyan-950'
+                : 'border-slate-200 bg-white text-slate-800 hover:border-cyan-300 hover:bg-slate-50'
             }`}
           >
-            <div className="flex justify-between items-center mb-2">
-              <span className={`text-xs font-bold uppercase ${activeClass === cls.id ? 'text-primary' : 'text-outline'}`}>
-                {cls.name}
-              </span>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="truncate text-sm font-bold">{cls.name}</span>
               {activeClass === cls.id && (
-                <Icon name="check_circle" className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: '"FILL" 1' }}/>
+                <Icon name="check_circle" className="material-symbols-outlined shrink-0 text-lg text-cyan-600"/>
               )}
             </div>
-            <p className="font-h3 text-lg text-on-surface mb-1">{cls.topic}</p>
-            {cls.catalog_title && (
-              <p className="text-xs text-outline mb-1 line-clamp-1">资源库：{cls.catalog_title}</p>
-            )}
-            {cls.course_code && (
-              <p className="text-xs font-medium text-cyan-700 mb-1">课程码：{cls.course_code}</p>
-            )}
-            <p className="text-sm text-outline">{cls.students} 名学生</p>
+            <p className="truncate text-xs text-slate-500">{cls.catalog_title || '未绑定资源库'}</p>
+            <div className="mt-2 flex items-center gap-3 text-xs font-medium text-slate-600">
+              <span>{cls.students ?? 0} 名学生</span>
+              {cls.course_code && <span>课程码 {cls.course_code}</span>}
+            </div>
           </button>
         ))}
       </div>
+      <span className="sr-only">当前教学班：{activeClassInfo?.name || activeClass}</span>
     </section>
   );
 }

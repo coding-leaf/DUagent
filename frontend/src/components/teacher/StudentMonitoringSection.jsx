@@ -18,32 +18,38 @@ export default function StudentMonitoringSection({
   onStudentClick
 }) {
   return (
-    <section className="mb-margin">
-      <div className="bg-white rounded-xl border border-outline-variant shadow-sm overflow-hidden">
-        <div className="px-md py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
+    <section className="mb-8" aria-labelledby="student-list-title">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <Icon name="monitoring" className="material-symbols-outlined text-primary"/>
-            <h3 className="font-h3 text-xl text-on-surface">{activeClassInfo?.name || activeClass} 学生实时监控</h3>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700">
+              <Icon name="groups" className="material-symbols-outlined"/>
+            </span>
+            <div>
+              <h2 id="student-list-title" className="text-xl font-bold text-slate-900">学生学情与名单</h2>
+              <p className="mt-0.5 text-xs text-slate-500">{activeClassInfo?.name || activeClass} · 共 {totalStudents} 名学生</p>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center bg-surface-container-low rounded-lg px-3 py-1.5 border border-outline-variant">
-              <Icon name="search" className="material-symbols-outlined text-outline text-sm mr-2"/>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <label className="flex min-w-0 flex-1 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 sm:w-56">
+              <Icon name="search" className="material-symbols-outlined mr-2 text-sm text-slate-500"/>
               <input 
-                className="bg-transparent border-none focus:ring-0 text-sm w-32 outline-none" 
+                aria-label="搜索学生"
+                className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
                 placeholder="搜索学生..." 
                 type="text" 
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
               />
-            </div>
-            <button onClick={onRefresh} className="p-2 rounded-lg hover:bg-surface-container transition-colors">
-              <Icon name="refresh" className="material-symbols-outlined text-outline"/>
+            </label>
+            <button onClick={onRefresh} className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-cyan-300 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500">
+              <Icon name="refresh" className="material-symbols-outlined"/>
+              <span className="hidden sm:inline">刷新</span>
             </button>
           </div>
         </div>
         
-        <div className="overflow-x-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-gutter gap-y-4 p-md">
+        <div className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-2 lg:p-5">
             {studentsLoading ? (
               <div className="col-span-1 lg:col-span-2 py-8 flex justify-center">
                 <FeedbackStatus status="loading" title="加载学生列表..." />
@@ -58,72 +64,60 @@ export default function StudentMonitoringSection({
               </div>
             ) : (
               students.map(student => (
-                <div
+                <button
+                  type="button"
                   key={student.user_id}
                   data-testid="student-card"
                   onClick={() => onStudentClick(student.user_id)}
-                  className="flex items-center gap-6 p-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-colors cursor-pointer"
+                  className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-4 text-left transition-colors hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
                 >
-                  <div className="flex items-center gap-3 w-48">
-                    <div className={`w-9 h-9 ${student.avatar_color} rounded-full flex items-center justify-center font-bold`}>
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold ${student.avatar_color}`}>
                       {student.avatar_text}
-                    </div>
-                    <div>
-                      <p className="font-label-sm text-on-surface">{student.username} ({student.english_name})</p>
-                      <p className="text-[10px] text-outline">ID: {student.student_id}</p>
-                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-900">{student.username}{student.english_name ? ` (${student.english_name})` : ''}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">学号：{student.student_id || '—'}</p>
                   </div>
                   {isMockMode ? (
-                    <>
-                      <div className="w-32">
-                        <span className="px-2.5 py-1 bg-surface-container text-on-surface-variant text-[11px] font-medium rounded border border-outline-variant/30">
+                    <div className="hidden min-w-40 sm:block">
+                        <span className="text-xs font-medium text-slate-600">
                           {student.current_path_node}
                         </span>
-                      </div>
-                      <div className="flex-1 flex items-center gap-3">
-                        <div className="flex-1 bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
                           <div className="bg-primary h-full" style={{ width: `${student.overall_mastery * 100}%` }}></div>
                         </div>
-                        <span className="text-xs font-bold text-on-surface">{Math.round(student.overall_mastery * 100)}%</span>
+                        <span className="text-xs font-bold text-slate-700">{Math.round(student.overall_mastery * 100)}%</span>
                       </div>
-                    </>
+                    </div>
                   ) : (
-                    <>
-                      <div className="w-32">
-                        <span className="text-xs text-outline font-medium truncate block max-w-[120px]">
-                          {student.major || '—'}
-                        </span>
-                      </div>
-                      <div className="flex-1 text-right">
-                        <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs rounded border border-outline-variant/20">
-                          {student.grade || '—'}
-                        </span>
-                      </div>
-                    </>
+                    <div className="hidden items-center gap-2 sm:flex">
+                      <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{student.major || '专业未填写'}</span>
+                      <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{student.grade || '年级未填写'}</span>
+                    </div>
                   )}
-                </div>
+                  <Icon name="chevron_right" className="material-symbols-outlined shrink-0 text-slate-400" />
+                </button>
               ))
             )}
-          </div>
         </div>
 
-        {/* Pagination */}
-        <div className="px-md py-4 bg-surface-container-low border-t border-outline-variant flex justify-between items-center">
-          <span className="text-xs font-medium text-outline">
-            当前显示 {activeClassInfo?.name || activeClass} (共 {totalStudents} 名学生，当前第 {currentPage}/{totalPages} 页)
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs font-medium text-slate-500">
+            第 {currentPage}/{totalPages} 页 · 共 {totalStudents} 名学生
           </span>
           <div className="flex gap-1">
             <button 
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage <= 1}
-              className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               上一页
             </button>
             <button 
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage >= totalPages}
-              className="px-3 py-1 bg-white border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               下一页
             </button>

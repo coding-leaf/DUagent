@@ -3753,3 +3753,18 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Frontend 4 个相关测试文件：28 passed；lint、生产构建通过，保留既有大 chunk 提示。
 - Backend 相关测试：10 passed；两个修改服务 `py_compile` 通过。
 - `git diff --check` 通过。
+
+---
+
+### 2026-07-13 — 扩充本地高风险内容短语词表
+
+**涉及范围：**
+- 将版本化词表由 8 条演示短语扩充为 249 条，按爆炸物与枪械、毒品、未成年人性剥削、赌博、诈骗洗钱、网络攻击与隐私、自杀自残、恐怖与仇恨、严重暴力、学术作弊、黑市交易 11 类分段。
+- 增加常见英文高风险短语；继续使用“行为 + 意图”短语，不加入普通脏话、政治人物名或单个教学术语。
+
+**验证结果：**
+- 词表无重复有效行；Agent 分类覆盖测试 3 passed，Backend 发布门禁测试 3 passed。
+- Agent Service v2 全量：172 passed，保留 1 条第三方 TestClient 弃用告警。
+
+**接口漂移：**
+- Client API、Agent API 与 SSE 字段均无变化；仅扩大本地精确短语匹配覆盖面。

@@ -16,3 +16,25 @@ def test_stream_filter_matches_across_chunks():
     output = "".join(parts)
     assert output == "不要[内容已屏蔽]教程"
     assert stream.match_count == 1
+
+
+def test_expanded_wordlist_covers_major_high_risk_categories():
+    checker = LocalSensitiveWordFilter()
+    samples = [
+        "枪支交易",
+        "制毒教程",
+        "未成年人色情",
+        "赌博平台代理",
+        "杀猪盘话术",
+        "钓鱼网站搭建",
+        "无痛自杀",
+        "恐怖组织招募",
+        "雇凶杀人",
+        "论文代写",
+        "买卖公民信息",
+        "child pornography",
+    ]
+
+    for sample in samples:
+        assert checker.matches(sample) == 1
+    assert checker.matches("禁毒教育、反诈骗课程与心理健康辅导") == 0

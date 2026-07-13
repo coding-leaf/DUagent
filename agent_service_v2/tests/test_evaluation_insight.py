@@ -83,6 +83,7 @@ def test_rule_fallback_keeps_facts_version_in_empty_insight():
         response = client.post("/agent/v2/evaluation/generations", json=_payload())
 
     assert response.status_code == 200
+    assert response.json()["data"]["summary_text"].startswith("课程覆盖 1 个章节")
     assert response.json()["data"]["insight"] == {
         "strengths": [],
         "weak_points": [],
@@ -90,6 +91,35 @@ def test_rule_fallback_keeps_facts_version_in_empty_insight():
         "next_actions": [],
         "facts_version": "facts-v7",
     }
+
+
+def test_evaluation_keeps_summary_when_learning_preferences_are_objects():
+    model_response = MagicMock()
+    model_response.text = """{
+      "summary_text": "已识别到真实学习行为，建议继续巩固指针传参。",
+      "insight": {
+        "strengths": [],
+        "weak_points": [],
+        "learning_preferences": [
+          {"type": "code_practice", "evidence": "近期完成了代码练习"},
+          {"preference": "lesson", "reason": "阅读过讲义"}
+        ],
+        "next_actions": ["继续完成指针练习"]
+      }
+    }"""
+    model = AsyncMock(return_value=model_response)
+
+    with patch(
+        "agent_service_v2.api.evaluation.build_chat_model_from_settings",
+        return_value=model,
+    ):
+        response = client.post("/agent/v2/evaluation/generations", json=_payload())
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["summary_text"] == "已识别到真实学习行为，建议继续巩固指针传参。"
+    assert data["insight"]["learning_preferences"] == ["code_practice", "lesson"]
+    assert data["insight"]["next_actions"] == ["继续完成指针练习"]
 
 
 def test_text_from_chat_response_with_agentscope_types():
@@ -115,4 +145,3 @@ def test_text_from_chat_response_with_agentscope_types():
     mock_obj.text = "Mock text"
     # hasattr(mock_obj, "content") will be True, but content will be a MagicMock (not list)
     assert _text_from_chat_response(mock_obj) == "Mock text"
-

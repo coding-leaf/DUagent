@@ -3378,3 +3378,27 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 路径、字段、枚举和响应结构均无变化；`modal_preference.video_animation` 仅按已确认的产品语义解释为“AI 交互”。
 - Agent API 无变化。
+
+---
+
+### 2026-07-13 — 修复学习评估因 insight 类型漂移整包降级
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/evaluation.py`
+- `agent_service_v2/tests/test_evaluation_insight.py`
+- `WorkLine.md`
+
+**根因与改动：**
+1. LLM 会把 `learning_preferences` 偶发输出为 `{type/preference, evidence/reason}` 对象数组，而内部 schema 要求字符串数组；旧逻辑整包校验失败后丢弃合法的 `summary_text` 和全部 insight，接口仍返回规则版 200。
+2. 评估结果现按 insight 子字段容错：合法知识点证据逐项校验，行动建议保留合法字符串，偏好兼容字符串及对象中的 `type/preference`，单项异常不再拖垮完整 LLM 总结。
+3. Prompt 明确要求 `learning_preferences` 为字符串数组；规则保底的“已学习 N 个章节”改为事实准确的“课程覆盖 N 个章节”。
+
+**验证结果：**
+- AgentScope 版本：2.0.3。
+- RED：新增真实异常形态测试，原实现因 Pydantic `string_type` 校验失败并回退规则总结。
+- Agent v2 全量测试：142 passed、1 条第三方 TestClient 弃用告警。
+- Python `py_compile` 与 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent API 路径、请求和响应结构无变化，仅增强内部 LLM 输出清洗与保底文案准确性。

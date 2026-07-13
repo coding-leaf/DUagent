@@ -6,10 +6,13 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from pydantic import ValidationError
+
 from agent_service_v2.schemas.evaluation import (
     ChapterProgressItem,
     EvaluationData,
     EvaluationGenerateRequest,
+    InsightPoint,
     LearningInsight,
     TableColumn,
     TableData,
@@ -132,7 +135,7 @@ def _build_summary_text(request: EvaluationGenerateRequest) -> str:
     personalized_total = sum(item.personalized_count or 0 for item in request.quiz_results)
     personalized_text = f"，已进行 {personalized_total} 次个性化强化练习" if personalized_total > 0 else ""
     return (
-        f"已学习 {len(progress_items)} 个章节，"
+        f"课程覆盖 {len(progress_items)} 个章节，"
         f"平均完成率 {average_completion:.1f}%，"
         f"平均练习正确率 {average_quiz_score:.1f}%"
         f"{personalized_text}。"
@@ -166,6 +169,7 @@ def build_evaluation_prompt(request: EvaluationGenerateRequest, rule_result: Eva
         "- 证据不足时明确说明证据不足，不要编造学习记录\n"
         "- strengths 和 weak_points 必须给出 knowledge_point 与 evidence\n"
         "- weak_points 可使用 high、medium、low priority\n"
+        "- learning_preferences 必须是字符串数组，不要输出对象\n"
         "- 只输出包含 summary_text 和 insight 的 JSON 对象"
     )
 
@@ -283,10 +287,44 @@ def _enrich_evaluation_result(
         enriched.summary_text = summary.strip()
     insight = llm_data.get("insight")
     if isinstance(insight, dict):
-        enriched.insight = LearningInsight.model_validate(
-            {**insight, "facts_version": request.facts_version}
+        enriched.insight = LearningInsight(
+            strengths=_normalize_insight_points(insight.get("strengths")),
+            weak_points=_normalize_insight_points(insight.get("weak_points")),
+            learning_preferences=_normalize_preferences(insight.get("learning_preferences")),
+            next_actions=_normalize_strings(insight.get("next_actions")),
+            facts_version=request.facts_version,
         )
     return enriched
+
+
+def _normalize_insight_points(value: Any) -> list[InsightPoint]:
+    points: list[InsightPoint] = []
+    for item in value if isinstance(value, list) else []:
+        try:
+            points.append(InsightPoint.model_validate(item))
+        except ValidationError:
+            continue
+    return points
+
+
+def _normalize_strings(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _normalize_preferences(value: Any) -> list[str]:
+    preferences: list[str] = []
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, str):
+            candidate = item
+        elif isinstance(item, dict):
+            candidate = item.get("type") or item.get("preference")
+        else:
+            candidate = None
+        if isinstance(candidate, str) and candidate.strip() and candidate.strip() not in preferences:
+            preferences.append(candidate.strip())
+    return preferences
 
 
 async def generate_quiz_diagnosis_with_llm(

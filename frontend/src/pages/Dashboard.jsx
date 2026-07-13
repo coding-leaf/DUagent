@@ -45,7 +45,12 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(false);
-      const res = await learningService.getResources({ course_id: activeCourseId, page: 1, page_size: 50 });
+      const res = await learningService.getResources({
+        course_id: activeCourseId,
+        keyword: searchTerm || undefined,
+        page: 1,
+        page_size: 50,
+      });
       if (res.code === 200 && res.data) {
         setAllResources(res.data.resources || []);
       }
@@ -55,7 +60,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [activeCourseId]);
+  }, [activeCourseId, searchTerm]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -66,7 +71,9 @@ export default function Dashboard() {
   const filteredResources = allResources.filter(resource => {
     const safeSearchTerm = (searchTerm || '').toLowerCase();
     const matchesSearch = (resource.title || '').toLowerCase().includes(safeSearchTerm) ||
-                          (resource.description && resource.description.toLowerCase().includes(safeSearchTerm));
+                          (resource.description && resource.description.toLowerCase().includes(safeSearchTerm)) ||
+                          (resource.knowledge_point && resource.knowledge_point.toLowerCase().includes(safeSearchTerm)) ||
+                          (resource.chapter && resource.chapter.toLowerCase().includes(safeSearchTerm));
     const matchesType = selectedType === '全部' || resource.type === selectedType;
     return matchesSearch && matchesType;
   });

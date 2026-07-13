@@ -1,12 +1,13 @@
 import logging
 from collections import defaultdict
 from datetime import datetime
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.others import CourseKnowledgeGraph, LearningActivity
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.resource_scope import resolve_course_resource_scope
 
 logger = logging.getLogger(__name__)
 
@@ -137,10 +138,22 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
     if not node_names:
         return []
 
+    resource_scope = await resolve_course_resource_scope(db, course_id)
+    location_conditions = [and_(QuizQuestion.catalog_id.is_(None), QuizQuestion.course_id == course_id)]
+    if resource_scope.catalog_id:
+        location_conditions.append(QuizQuestion.catalog_id == resource_scope.catalog_id)
+
     questions_result = await db.execute(
         select(QuizQuestion).where(
-            QuizQuestion.course_id == course_id,
+            or_(*location_conditions),
             QuizQuestion.knowledge_point.in_(node_names),
+            or_(
+                QuizQuestion.source.in_(["common", "baseline"]),
+                and_(
+                    QuizQuestion.source == "personalized",
+                    QuizQuestion.owner_user_id == user_id,
+                ),
+            ),
             QuizQuestion.is_deleted == False,
         )
     )

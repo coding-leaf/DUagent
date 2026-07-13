@@ -20,8 +20,10 @@ from app.db.session import async_session_factory, init_db
 asyncio.run(init_db())
 
 from app.main import app
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course
 from app.models.others import CourseKnowledgeGraph, LearningActivity, Resource
+from app.models.quiz import QuizQuestion
 from app.models.user import User
 
 
@@ -165,3 +167,86 @@ async def test_evaluation_node_progress_uses_learning_activity_duration():
     node = next(row for row in rows if row["node_id"] == "node_1")
     assert node["study_duration_seconds"] == 75
     assert node["last_activity_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_evaluation_node_progress_counts_shared_and_owned_questions_only():
+    suffix = uuid.uuid4().hex[:8]
+    teacher = User(
+        id=f"ut{suffix}",
+        username=f"scope_teacher_{suffix}",
+        email=f"scope_teacher_{suffix}@test.local",
+        password_hash="x",
+        role="teacher",
+    )
+    host_course = Course(
+        id=f"ch{suffix}",
+        name="Catalog Host",
+        course_code=f"H{suffix}",
+        teacher_id=teacher.id,
+    )
+    class_course = Course(
+        id=f"cc{suffix}",
+        name="Class Course",
+        course_code=f"C{suffix}",
+        teacher_id=teacher.id,
+    )
+    catalog = CourseCatalog(
+        id=f"cat{suffix}",
+        title="Shared Catalog",
+        status="ready",
+        knowledge_status="ready",
+        kg_host_course_id=host_course.id,
+    )
+    offering = CourseOffering(
+        id=class_course.id,
+        name=class_course.name,
+        catalog_id=catalog.id,
+        teacher_id=teacher.id,
+        class_code=f"O{suffix}",
+    )
+    kg = CourseKnowledgeGraph(
+        id=f"kg{suffix}",
+        course_id=host_course.id,
+        version=1,
+        is_active=True,
+        nodes=[{"id": "node_shared", "name": "变量与数据类型"}],
+        edges=[],
+    )
+
+    def question(question_id, source, owner_user_id=None):
+        return QuizQuestion(
+            id=question_id,
+            course_id=host_course.id if source != "personalized" else class_course.id,
+            catalog_id=catalog.id if source != "personalized" else None,
+            knowledge_point="变量与数据类型",
+            type="single_choice",
+            source=source,
+            personalized=source == "personalized",
+            owner_user_id=owner_user_id,
+            content=question_id,
+            options=[],
+            correct_answer="A",
+        )
+
+    async with async_session_factory() as db:
+        db.add(teacher)
+        await db.flush()
+        db.add_all([host_course, class_course])
+        await db.flush()
+        db.add(catalog)
+        await db.flush()
+        db.add_all([offering, kg])
+        db.add_all([
+            question(f"qb{suffix}", "baseline"),
+            question(f"qc{suffix}", "common"),
+            question(f"qo{suffix}", "personalized", teacher.id),
+            question(f"qx{suffix}", "personalized", "another-user"),
+        ])
+        await db.commit()
+
+    async with async_session_factory() as db:
+        rows = await _build_node_progress_rows(teacher.id, class_course.id, db)
+
+    assert rows[0]["question_count"] == 3
+    assert rows[0]["assessment_state"] == "pending_practice"

@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.others import AsyncTask, Resource
+from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
@@ -36,11 +36,23 @@ class ResourceService:
         query = select(Resource).where(
             resource_scope_clause(course_id, scope.catalog_id),
             Resource.is_deleted == False,
+            ~exists(
+                select(UserPersonalizedResource.id).where(
+                    UserPersonalizedResource.resource_id == Resource.id,
+                )
+            ),
         )
         if type:
             query = query.where(Resource.type == type)
         if keyword:
-            query = query.where(Resource.title.contains(keyword))
+            query = query.where(
+                or_(
+                    Resource.title.contains(keyword),
+                    Resource.description.contains(keyword),
+                    Resource.knowledge_point.contains(keyword),
+                    Resource.chapter.contains(keyword),
+                )
+            )
 
         count_r = await self.db.execute(select(func.count()).select_from(query.subquery()))
         total = count_r.scalar() or 0
@@ -64,17 +76,30 @@ class ResourceService:
         if resource is None:
             raise HTTPException(status_code=404, detail="Resource not found")
 
+        personalized_owner_result = await self.db.execute(
+            select(UserPersonalizedResource.user_id).where(
+                UserPersonalizedResource.resource_id == resource.id,
+            )
+        )
+        personalized_owners = set(personalized_owner_result.scalars().all())
+        if personalized_owners:
+            if current_user.id not in personalized_owners:
+                raise HTTPException(status_code=403, detail="No access to this personalized resource")
+            return resource, self._content_preview(resource)
+
         if resource.catalog_id:
             if not await user_can_access_catalog_resources(self.db, current_user, resource.catalog_id):
                 raise HTTPException(status_code=403, detail="No access to this resource")
         else:
             await ensure_course_resource_access(self.db, current_user, resource.course_id)
 
-        preview = None
-        if resource.type in ("document", "reading") and resource.content:
-            preview = resource.content[:500]
+        return resource, self._content_preview(resource)
 
-        return resource, preview
+    @staticmethod
+    def _content_preview(resource: Resource) -> str | None:
+        if resource.type in ("document", "reading") and resource.content:
+            return resource.content[:500]
+        return None
 
     async def generate_resources(
         self,

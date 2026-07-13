@@ -3316,3 +3316,32 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 无变化。
 - Agent API 无变化。
+
+---
+
+### 2026-07-13 — 对齐路径题目、资源检索与个性化权限范围
+
+**涉及文件：**
+- `backend/app/services/knowledge_progress.py`
+- `backend/app/services/resource_service.py`
+- `backend/tests/test_learning_activities.py`
+- `backend/tests/test_resource_service.py`
+- `frontend/src/pages/Dashboard.jsx`
+- `frontend/src/pages/Dashboard.test.jsx`
+- `WorkLine.md`
+
+**根因与改动：**
+1. 学习路径节点练习按教学班绑定的 catalog 查询共享题目，学习效果统计却只查询教学班本地 `course_id`，导致共享题目被标记为“暂无题目”。统计现与答题接口保持同一范围：catalog 的 `common/baseline` 题目班级共享，`personalized` 题目仅当前 `owner_user_id` 可见。
+2. 资源库共有资源超过前端单页 50 条时，路径节点关键词只在已截断结果中做客户端过滤，较早资源会显示为空。Dashboard 现在把现有 `keyword` 传给 Backend，Backend 先按标题、描述、知识点和章节过滤，再分页。
+3. 公共资源列表排除所有通过 `user_personalized_resources` 标记的个性化 Resource；个性化资源详情仅关联用户本人可访问，避免同班用户通过公共列表或资源 ID读取私有内容。
+
+**验证结果：**
+- 学习活动/共享题目范围：4 passed；真实课程首批节点均识别到 7 道公共题，“常量与字面量”同时保留本人 5 道个性化题。
+- 资源公开检索与私有权限：3 passed；真实课程按“变量与数据类型”检索返回 3 条公共资源，个性化泄漏数为 0。
+- 资源详情独立回归：1 passed；其他相关资源/节点测试 7 passed（组合运行时 `test_resource_detail.py` 因其既有模块级 SQLite 初始化隔离冲突失败，独立运行通过）。
+- Dashboard 定向测试：1 passed；Frontend lint 与生产构建通过，保留既有大 chunk 提示。
+- Python `py_compile` 与 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 路径、字段和参数无变化；仅扩展既有 `keyword` 的服务端匹配语义。
+- Agent API 无变化。

@@ -5,6 +5,29 @@
 
 ---
 
+### 2026-07-13 — 修复 AI Chat 图解尺寸失控
+
+**涉及文件：**
+- `frontend/src/components/common/MarkdownViewer.jsx`
+- `frontend/src/components/common/MarkdownViewer.test.jsx`
+- `WorkLine.md`
+
+**根因与改动：**
+1. AI Chat 直接展示 Mermaid 生成 SVG 的原始画布，只允许横向滚动；节点较多时画布可能达到数千像素，挤占聊天区域且难以整体浏览。
+2. 图解默认按消息宽度适配，并将预览视口限制为合理高度、支持双向滚动。
+3. 增加“适应窗口 / 原始大小”切换；原始大小根据 SVG `viewBox` 恢复画布宽度，便于查看缩小后难辨认的节点文字。
+
+**验证结果：**
+- 新增 Mermaid 尺寸模式回归测试：1 passed。
+- Frontend 全量单元测试：39 files、140 passed。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化；Mermaid 源码和节点内容不变。
+
+---
+
 ### 2026-07-13 — 优化教师教学控制台首页信息层级
 
 **涉及文件：**

@@ -37,6 +37,7 @@ class MermaidErrorBoundary extends React.Component {
 
 function MermaidDiagram({ content }) {
   const source = sanitizeMermaidSource(content);
+  const [viewMode, setViewMode] = useState('fit');
   const [svg, setSvg] = useState(() => {
     const cached = getCachedSvg(source);
     return (cached && cached !== '__FAILED_FALLBACK__') ? cached : '';
@@ -126,7 +127,44 @@ function MermaidDiagram({ content }) {
     return <div className="text-slate-400 text-xs py-4 text-center">正在生成可视化图解...</div>;
   }
 
-  return <div className="mermaid-svg-wrapper overflow-x-auto p-2 bg-white rounded-lg border border-slate-100 shadow-inner" dangerouslySetInnerHTML={{ __html: svg }} />;
+  const viewBoxWidth = Number(svg.match(/\bviewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)/i)?.[1]);
+  const originalWidth = Number.isFinite(viewBoxWidth) ? Math.max(viewBoxWidth, 640) : 960;
+
+  return (
+    <div className="mermaid-svg-wrapper overflow-hidden rounded-lg border border-slate-100 bg-white shadow-inner">
+      <div className="flex justify-end gap-1 border-b border-slate-100 bg-slate-50/80 p-1.5">
+        {[
+          { value: 'fit', label: '适应窗口' },
+          { value: 'original', label: '原始大小' }
+        ].map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={viewMode === option.value}
+            onClick={() => setViewMode(option.value)}
+            className={`cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${
+              viewMode === option.value
+                ? 'bg-white text-cyan-700 shadow-sm'
+                : 'text-slate-500 hover:bg-white hover:text-slate-700'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <div
+        data-testid="mermaid-viewport"
+        data-view-mode={viewMode}
+        className="max-h-[32rem] overflow-auto p-2"
+      >
+        <div
+          className="[&_svg]:!block [&_svg]:!h-auto [&_svg]:!max-w-full [&_svg]:!w-full"
+          style={viewMode === 'original' ? { width: `${originalWidth}px`, maxWidth: 'none' } : undefined}
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      </div>
+    </div>
+  );
 }
 
 const handleCopy = (text) => {

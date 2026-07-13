@@ -192,9 +192,11 @@ log "Docker containers are available"
 
 log "[2/4] Starting Agent Service v2 on port $AGENT_PORT..."
 agent_log="$LOG_DIR/agent_service_v2.log"
-start_service "Agent Service v2" "$ROOT_DIR/agent_service_v2" "$agent_log" ./.venv/bin/uvicorn agent_service_v2.main:app --host "$HOST" --port "$AGENT_PORT"
+web_search_enabled="${WEB_SEARCH_ENABLED:-true}"
+start_service "Agent Service v2" "$ROOT_DIR/agent_service_v2" "$agent_log" env WEB_SEARCH_ENABLED="$web_search_enabled" ./.venv/bin/uvicorn agent_service_v2.main:app --host "$HOST" --port "$AGENT_PORT"
 agent_pid="$LAST_PID"
-wait_for_port "Agent Service v2" "$AGENT_PORT" "$agent_pid" "$agent_log"
+# 首次运行可能需要下载固定版 MCP 包，端口等待需覆盖 30 秒 MCP 启动超时。
+wait_for_port "Agent Service v2" "$AGENT_PORT" "$agent_pid" "$agent_log" 120
 
 log "[3/4] Starting Backend on port $BACKEND_PORT..."
 backend_log="$LOG_DIR/backend.log"

@@ -26,7 +26,7 @@ def test_workbench_chat_returns_sse_failure_when_model_missing(monkeypatch):
     monkeypatch.setattr(
         workbench,
         "create_agent_factory",
-        lambda: WorkbenchAgentFactory(model_provider=lambda: None),
+        lambda **_kwargs: WorkbenchAgentFactory(model_provider=lambda: None),
     )
     client = TestClient(app)
 
@@ -60,7 +60,11 @@ def test_workbench_chat_streams_agent_events(monkeypatch):
         def create_agent(self, **_kwargs):
             return FakeAgent()
 
-    monkeypatch.setattr(workbench, "create_agent_factory", lambda: FakeFactory())
+    monkeypatch.setattr(
+        workbench,
+        "create_agent_factory",
+        lambda **_kwargs: FakeFactory(),
+    )
     client = TestClient(app)
 
     response = client.post(

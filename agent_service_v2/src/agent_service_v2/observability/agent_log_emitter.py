@@ -10,6 +10,7 @@ from agent_service_v2.observability.logging import (
     input_preview,
     output_preview,
 )
+from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
 
 
 class AgentLogEmitter:
@@ -75,11 +76,28 @@ def elapsed_ms(started_at: float) -> float:
 def tool_call_attributes(tool_call: Any) -> dict[str, Any]:
     if tool_call is None:
         return {}
-    return {
+    internal_tool_name = getattr(tool_call, "name", None)
+    attributes = {
         "tool_call_id": getattr(tool_call, "id", None),
-        "tool_name": getattr(tool_call, "name", None),
+        "tool_name": (
+            "web_search"
+            if internal_tool_name == WEB_SEARCH_INTERNAL_TOOL_NAME
+            else internal_tool_name
+        ),
         "tool_input_preview": input_preview(getattr(tool_call, "input", None)),
     }
+    if internal_tool_name in {
+        "search_memory",
+        "add_memory",
+        WEB_SEARCH_INTERNAL_TOOL_NAME,
+    }:
+        attributes.pop("tool_input_preview", None)
+        if internal_tool_name in {"search_memory", "add_memory"}:
+            attributes["memory_content_redacted"] = True
+        else:
+            attributes["tool_input_redacted"] = True
+        attributes["_redact_tool_io"] = True
+    return attributes
 
 
 def model_call_attributes(agent: Any, input_kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -90,7 +108,9 @@ def model_call_attributes(agent: Any, input_kwargs: dict[str, Any]) -> dict[str,
         function = schema.get("function") if isinstance(schema, dict) else None
         name = function.get("name") if isinstance(function, dict) else None
         if isinstance(name, str):
-            tool_names.append(name)
+            tool_names.append(
+                "web_search" if name == WEB_SEARCH_INTERNAL_TOOL_NAME else name
+            )
     return {
         "activated_tool_groups": activated_groups,
         "available_tool_names": tool_names,

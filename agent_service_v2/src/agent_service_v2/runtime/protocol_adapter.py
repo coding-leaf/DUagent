@@ -31,7 +31,9 @@ from agentscope.event import (
 
 from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.runtime.edu_events import EduEvent, EduEventType, utc_now_iso
+from agent_service_v2.runtime.web_search_sources import normalize_web_search_sources
 from agent_service_v2.tools.contracts import outcome_for_status
+from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
 
 
 _TOOL_METADATA = {
@@ -54,6 +56,7 @@ _TOOL_METADATA = {
     "resume_personal_practice_delivery": ("恢复互动练习发布", "practice", False),
     "search_memory": ("检索长期记忆", "memory", True),
     "add_memory": ("保存长期记忆", "memory", False),
+    WEB_SEARCH_INTERNAL_TOOL_NAME: ("联网检索最新资料", "web_search", True),
 }
 
 
@@ -103,7 +106,6 @@ class EDUProtocolAdapter:
             if result_artifact is not None:
                 events.append(self._build_event(EduEventType.ARTIFACT_CREATED, result_artifact))
 
-            # RAG source refs conversion
             source_refs_payload = self._build_source_refs_payload(event)
             if source_refs_payload is not None:
                 events.append(self._build_event(EduEventType.SOURCE_REFS, source_refs_payload))
@@ -114,6 +116,11 @@ class EDUProtocolAdapter:
         if state == "error":
             return None
         tool_name = self._tool_names.get(event.tool_call_id)
+        if tool_name == WEB_SEARCH_INTERNAL_TOOL_NAME:
+            sources = normalize_web_search_sources(
+                _parse_json_value(self._tool_result_text.get(event.tool_call_id, ""))
+            )
+            return {"sources": sources} if sources else None
         if not tool_name or "retrieve_course_context" not in tool_name:
             return None
 
@@ -166,14 +173,16 @@ class EDUProtocolAdapter:
             )
             return EduEventType.TOOL_STARTED, {
                 "tool_call_id": event.tool_call_id,
-                "tool_name": event.tool_call_name,
+                "tool_name": _public_tool_name(event.tool_call_name),
                 "tool_title": title,
                 "tool_category": category,
                 "read_only": read_only,
             }
         if isinstance(event, ToolResultEndEvent):
             framework_state = getattr(event.state, "value", event.state)
-            parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
+            raw_tool_name = self._tool_names.get(event.tool_call_id)
+            result_text = self._tool_result_text.get(event.tool_call_id, "")
+            parsed = _parse_json_object(result_text)
             status = str(parsed.get("status") or ("error" if framework_state == "error" else "success"))
             outcome = str(parsed.get("outcome") or outcome_for_status(
                 status,
@@ -181,15 +190,27 @@ class EDUProtocolAdapter:
             ))
             payload: dict[str, Any] = {
                 "tool_call_id": event.tool_call_id,
-                "tool_name": self._tool_names.get(event.tool_call_id),
+                "tool_name": _public_tool_name(raw_tool_name),
                 "state": framework_state,
                 "outcome": outcome,
             }
+            if raw_tool_name == WEB_SEARCH_INTERNAL_TOOL_NAME:
+                sources = normalize_web_search_sources(_parse_json_value(result_text))
+                if framework_state == "error":
+                    payload["reason"] = "联网检索失败或超时"
+                    payload["output_summary"] = "未能联网核实最新资料"
+                else:
+                    payload["returned_count"] = len(sources)
+                    payload["output_summary"] = (
+                        f"返回 {len(sources)} 条联网来源"
+                        if sources
+                        else "联网检索未返回可用来源"
+                    )
             if parsed:
                 if "status" in parsed:
                     status_val = parsed["status"]
                     payload["status"] = status_val if isinstance(status_val, str) else str(status_val)
-                if "reason" in parsed:
+                if "reason" in parsed and raw_tool_name != WEB_SEARCH_INTERNAL_TOOL_NAME:
                     reason_val = parsed["reason"]
                     if isinstance(reason_val, str):
                         payload["reason"] = reason_val
@@ -199,7 +220,10 @@ class EDUProtocolAdapter:
                         payload["reason"] = str(reason_val)
                 summary = parsed.get("summary") if isinstance(parsed.get("summary"), dict) else {}
                 returned_count = summary.get("returned_count")
-                if returned_count is not None:
+                if (
+                    returned_count is not None
+                    and raw_tool_name != WEB_SEARCH_INTERNAL_TOOL_NAME
+                ):
                     payload["returned_count"] = returned_count
                     if payload.get("tool_name") == "read_recent_answers" and returned_count == 0:
                         payload["output_summary"] = {
@@ -208,7 +232,10 @@ class EDUProtocolAdapter:
                         }.get(payload.get("status"), "返回 0 条学习记录")
                     else:
                         payload["output_summary"] = f"返回 {returned_count} 条学习记录"
-                elif "status" in payload:
+                elif (
+                    "status" in payload
+                    and raw_tool_name != WEB_SEARCH_INTERNAL_TOOL_NAME
+                ):
                     payload["output_summary"] = f"工具状态：{payload['status']}"
                 if isinstance(parsed.get("artifact"), dict):
                     payload["artifact"] = parsed["artifact"]
@@ -359,13 +386,23 @@ class EDUProtocolAdapter:
 
 
 def _parse_json_object(value: str) -> dict[str, Any]:
-    if not value:
-        return {}
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        return {}
+    parsed = _parse_json_value(value)
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _parse_json_value(value: str) -> Any:
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+
+def _public_tool_name(tool_name: str | None) -> str | None:
+    if tool_name == WEB_SEARCH_INTERNAL_TOOL_NAME:
+        return "web_search"
+    return tool_name
 
 
 def _extract_created_task_id(result_text: str) -> str | None:

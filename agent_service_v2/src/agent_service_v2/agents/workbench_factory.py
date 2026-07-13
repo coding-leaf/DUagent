@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from agentscope.agent import Agent, ContextConfig, ReActConfig
+from agentscope.mcp import MCPClient
 from agentscope.state import AgentState
 from agentscope.tool import Toolkit
 from agentscope.workspace import LocalWorkspace
@@ -93,8 +94,13 @@ def _ensure_memory_collection(
 
 
 class WorkbenchAgentFactory:
-    def __init__(self, model_provider: Callable[[], Any]) -> None:
+    def __init__(
+        self,
+        model_provider: Callable[[], Any],
+        web_search_client: MCPClient | None = None,
+    ) -> None:
         self._model_provider = model_provider
+        self._web_search_client = web_search_client
 
     def create_agent(
         self,
@@ -231,7 +237,17 @@ class WorkbenchAgentFactory:
             run_id=run_id,
         )
         basic_tools, dynamic_groups = split_workbench_tool_groups(tool_groups)
-        toolkit = Toolkit(tools=basic_tools, tool_groups=dynamic_groups)
+        mcp_clients = (
+            [self._web_search_client]
+            if self._web_search_client is not None
+            and self._web_search_client.is_connected
+            else []
+        )
+        toolkit = Toolkit(
+            tools=basic_tools,
+            mcps=mcp_clients,
+            tool_groups=dynamic_groups,
+        )
 
         if run_id and log_sink:
             middlewares.append(

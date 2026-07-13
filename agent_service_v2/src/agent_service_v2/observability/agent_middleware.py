@@ -245,10 +245,8 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         started_at = perf_counter()
         tool_call = input_kwargs.get("tool_call")
         tool_extra = tool_call_attributes(tool_call)
+        redact_tool_io = bool(tool_extra.pop("_redact_tool_io", False))
         tool_name = tool_extra.get("tool_name") or "unknown"
-        if tool_name in {"search_memory", "add_memory"}:
-            tool_extra.pop("tool_input_preview", None)
-            tool_extra["memory_content_redacted"] = True
         tool_call_id = tool_extra.get("tool_call_id") or new_span_id(self.run_id, "tool_call")
         span_id = f"span_{self.run_id}_tool_{tool_call_id}"
         self._log.emit(
@@ -267,13 +265,18 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
                 last_item = event
                 yield event
         except Exception as exc:
+            error_message = (
+                "web search tool failed"
+                if tool_name == "web_search"
+                else str(exc)
+            )
             self._log.emit(
                 "tool.call.error",
                 agent=agent,
                 level="error",
                 duration_ms=elapsed_ms(started_at),
                 error=exc.__class__.__name__,
-                error_message=str(exc),
+                error_message=error_message,
                 span_id=span_id,
                 parent_span_id=self.agent_span_id,
                 span_kind="tool",
@@ -281,7 +284,7 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
                 phase="error",
                 attributes={
                     **tool_extra,
-                    "error_message": str(exc),
+                    "error_message": error_message,
                 },
             )
             raise
@@ -299,7 +302,7 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
                     **tool_extra,
                     **(
                         {"tool_output_redacted": True}
-                        if tool_name in {"search_memory", "add_memory"}
+                        if redact_tool_io
                         else tool_result_attributes(last_item)
                     ),
                 },

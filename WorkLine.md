@@ -4004,3 +4004,30 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 与 Agent HTTP 路径、字段及 SSE 事件类型无变化。
 - `content_safety_reviewed` 的本地命中语义由替换后 `flag` 调整为语义复核后的 `allow|block`；阻断时事件顺序变为审核先于完成。
+
+---
+
+### 2026-07-14 — AI Chat 接入 Open-WebSearch MCP
+
+**涉及范围：**
+- Agent Service：Web Search MCP 运行时、FastAPI lifespan、Workbench Toolkit/权限、提示词、EDU 协议适配与可观测性脱敏。
+- 启动与文档：`start_all.sh`、Agent Service README、Agent API 内部接口规范。
+
+**核心改动：**
+1. 基于 AgentScope 2.0.3 stateful `MCPClient + StdioMCPConfig` 接入固定版 `open-websearch@2.1.11`，只启用 `search`，使用 STDIO/request-only 模式，默认百度并限制为百度、搜狗、Bing、CSDN、掘金；单次调用超时 12 秒，启动与工具发现总超时 30 秒。
+2. FastAPI lifespan 统一连接和关闭 MCP，已连接客户端通过 `Toolkit(mcps=[...])` 注入 Workbench Agent。连接、发现、配置或调用异常均安全降级，不阻断原有 Agent Service；代码默认关闭，`start_all.sh` 默认开启并支持外部显式关闭。
+3. 子进程只继承 `PATH/HOME/SYSTEMROOT` 中存在的启动变量及搜索专用配置，不继承 LLM 密钥、Backend Token 或通用代理变量；代理仅由 `WEB_SEARCH_USE_PROXY/WEB_SEARCH_PROXY_URL` 显式启用。
+4. 权限只允许内部 `mcp__web_search__search`；EDU 工具事件和 debug 日志统一显示 `web_search`/“联网检索最新资料”，并对查询与原始结果预览脱敏，不开放或授权任何网页抓取工具。
+5. 提示词约束按需搜索、每轮最多两次、每次最多五条、搜索内容不可信、查询隐私最小化和失败时禁止冒充实时核实。成功结果复用 `source_refs`，最多五项 `title/url/snippet/source/engine`；失败不产生来源。
+
+**验证结果：**
+- AgentScope 版本/API 反射：确认安装版为 2.0.3，Toolkit 使用构造参数 `mcps` 注入 stateful 客户端。
+- Agent Service 全量：214 passed，1 条既有第三方 TestClient 弃用告警。
+- Python `py_compile`：本次修改的 Agent Service Python 文件全部通过。
+- OpenAPI：仍为 10 条既有 `/agent/v2/*` 路径，与 `Agent-Service.openapi.json` 一致。
+- NPX 冒烟：实际启动 `open-websearch@2.1.11`，仅发现 `mcp__web_search__search`。
+- `bash -n start_all.sh`、Frontend `npm run lint && npm run build`、`git diff --check`：全部通过；前端构建保留既有大 chunk 提示。
+
+**接口漂移：**
+- HTTP/SSE 路径、请求字段和事件类型无变化。
+- `source_refs.payload.sources[]` 在教材 RAG 既有结构之外，联网检索结果使用 `title/url/snippet/source/engine`；工具展示名稳定为 `web_search`。

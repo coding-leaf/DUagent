@@ -48,6 +48,8 @@ Workbench 保持 AgentScope 2.x `Agent.reply_stream + Toolkit + ToolGroup` 的�
 - `available/published/ok/success` → `success`，`empty/not_found` → `neutral`，`degraded` → `warning`，`rejected/unavailable/delivery_incomplete/error` → `failure`。
 - AgentScope `ToolResultState.ERROR` 直接映射为 `tool_failed`。`tool_started` 携带 `tool_title/tool_category/read_only`。
 - RAG 引用只使用 `payload.sources[]`，每项为 `source_file/snippet/score`；不再交叉使用 `citations`。
+- 联网检索按需使用固定版 `open-websearch@2.1.11` MCP，只注册 `search`，不开放网页正文抓取工具。内部工具名 `mcp__web_search__search` 在 EDU 事件中稳定映射为 `web_search`，标题为“联网检索最新资料”。
+- 联网成功结果复用 `source_refs`，最多 5 项，每项为 `title/url/snippet/source/engine`。失败或超时只产生友好的 `tool_failed`，不得产生来源或把模型记忆冒充实时结果。
 - 长期记忆只保存用户明确表达的长期偏好、目标和稳定事实；禁止保存推断掌握度、诊断、答案、敏感内容或工具原文。写入前去重，工具卡可见，审计日志不记忆正文。
 - `artifact_created` 支持 `PersonalizedResourceCard`：已有推荐使用 `props.resources[]`，异步生成使用 `props.task_id/course_id/resource_type/goal`。任务卡只表示已启动，不表示已审核或发布。
 - AI Chat 输入先使用本地 UTF-8 高风险短语词表召回候选；只有候选输入复用非流式聊天模型做结构化语义复核，普通输入不增加模型调用。语义审核超时、不可用或输出无效时回退到本地硬词阻断。
@@ -58,6 +60,15 @@ Workbench 保持 AgentScope 2.x `Agent.reply_stream + Toolkit + ToolGroup` 的�
 - `read_learner_profile` / `update_learner_profile_from_dialogue` 通过 Backend internal API 读取六维画像并更新用户明确表达的稳定事实；可信身份不暴露给模型。
 - `recommend_personalized_resources` 最多推荐 3 个课程权限内已有资源；`generate_personalized_resource` 仅在无有效推荐时启动一个非视频资源任务。
 - 每个 Workbench run 最多启动一个资源任务；任务 ID 由 user/course/conversation/run/goal/resource_type 稳定派生。
+
+### AI Chat 联网检索运行配置
+
+- 代码默认 `WEB_SEARCH_ENABLED=false`；根目录 `start_all.sh` 默认注入 `true`。
+- `WEB_SEARCH_PACKAGE` 默认固定为 `open-websearch@2.1.11`。
+- `WEB_SEARCH_DEFAULT_ENGINE` 默认 `baidu`；`WEB_SEARCH_ALLOWED_ENGINES` 默认 `baidu,sogou,bing,csdn,juejin`。
+- `WEB_SEARCH_TIMEOUT` 默认 12 秒；`WEB_SEARCH_USE_PROXY/WEB_SEARCH_PROXY_URL` 控制显式代理，默认不使用。
+- STDIO MCP 启动和工具发现总超时 30 秒。启动失败时不注册搜索工具，Workbench 原有 SSE 主链路继续可用。
+- MCP 子进程仅接收进程启动和搜索所需环境变量，不接收 LLM 密钥、Backend Token、用户或会话标识。
 
 ### AI Chat 互动练习内部发布
 

@@ -307,6 +307,88 @@ def test_protocol_adapter_emits_stable_rag_sources():
     }
 
 
+def test_protocol_adapter_hides_mcp_name_and_normalizes_web_search_sources():
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    results = [
+        {
+            "title": f"结果 {index}",
+            "url": f"https://example.com/{index}",
+            "description": f"摘要 {index}",
+            "source": "Example",
+            "engine": "baidu",
+        }
+        for index in range(6)
+    ]
+    raw_events = [
+        ToolCallStartEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-search",
+            tool_call_name="mcp__web_search__search",
+        ),
+        ToolResultTextDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-search",
+            delta=json.dumps(results),
+        ),
+        ToolResultEndEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-search",
+            state=ToolResultState.SUCCESS,
+        ),
+    ]
+
+    events = [event for raw in raw_events for event in adapter.adapt_many(raw)]
+    started, completed, source_refs = events
+
+    assert started.payload == {
+        "tool_call_id": "tool-search",
+        "tool_name": "web_search",
+        "tool_title": "联网检索最新资料",
+        "tool_category": "web_search",
+        "read_only": True,
+    }
+    assert completed.payload["tool_name"] == "web_search"
+    assert completed.payload["returned_count"] == 5
+    assert len(source_refs.payload["sources"]) == 5
+    assert source_refs.payload["sources"][0] == {
+        "title": "结果 0",
+        "url": "https://example.com/0",
+        "snippet": "摘要 0",
+        "source": "Example",
+        "engine": "baidu",
+    }
+
+
+def test_protocol_adapter_does_not_emit_web_sources_for_failed_search():
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    raw_events = [
+        ToolCallStartEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-search",
+            tool_call_name="mcp__web_search__search",
+        ),
+        ToolResultTextDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-search",
+            delta=json.dumps([{"url": "https://example.com"}]),
+        ),
+        ToolResultEndEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-search",
+            state=ToolResultState.ERROR,
+        ),
+    ]
+
+    events = [event for raw in raw_events for event in adapter.adapt_many(raw)]
+
+    assert [event.type for event in events] == [
+        EduEventType.TOOL_STARTED,
+        EduEventType.TOOL_FAILED,
+    ]
+    assert events[1].payload["tool_name"] == "web_search"
+    assert events[1].payload["reason"] == "联网检索失败或超时"
+
+
 @pytest.mark.parametrize(
     "tool_name",
     [

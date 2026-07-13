@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from agent_service_v2.agents.model_provider import build_chat_model_from_settings
@@ -22,12 +22,14 @@ router = APIRouter(prefix="/agent/v2/workbench", tags=["workbench"])
 
 
 @router.post("/chat")
-async def workbench_chat(req: WorkbenchChatRequest) -> StreamingResponse:
+async def workbench_chat(req: WorkbenchChatRequest, request: Request) -> StreamingResponse:
     run_bus = WorkbenchRunBus()
     session = WorkbenchSession(
         run_bus=run_bus,
         workspace_manager=WorkbenchWorkspaceManager(root_dir=_workspace_root()),
-        agent_factory=create_agent_factory(),
+        agent_factory=create_agent_factory(
+            web_search_client=getattr(request.app.state, "web_search_client", None),
+        ),
         content_reviewer=create_content_reviewer(),
     )
     run = await session.start_async(
@@ -75,8 +77,11 @@ def _workspace_root() -> Path:
     return Path(__file__).resolve().parents[3] / "workspaces"
 
 
-def create_agent_factory() -> WorkbenchAgentFactory:
-    return WorkbenchAgentFactory(model_provider=build_chat_model_from_settings)
+def create_agent_factory(*, web_search_client=None) -> WorkbenchAgentFactory:
+    return WorkbenchAgentFactory(
+        model_provider=build_chat_model_from_settings,
+        web_search_client=web_search_client,
+    )
 
 
 def create_content_reviewer() -> ContentSafetyReviewer:

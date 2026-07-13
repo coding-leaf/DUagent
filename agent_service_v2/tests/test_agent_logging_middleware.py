@@ -5,6 +5,7 @@ from agentscope.message import TextBlock, ToolCallBlock
 from agentscope.tool import ToolResponse
 
 from agent_service_v2.observability.agent_middleware import AgentRunLoggingMiddleware
+from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
 
 
 def test_agent_run_logging_middleware_emits_reply_lifecycle_records():
@@ -126,6 +127,13 @@ def test_agent_run_logging_middleware_records_visible_tool_surface_without_schem
                 "parameters": {"type": "object"},
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": WEB_SEARCH_INTERNAL_TOOL_NAME,
+                "parameters": {"type": "object"},
+            },
+        },
     ]
 
     result = asyncio.run(
@@ -139,8 +147,12 @@ def test_agent_run_logging_middleware_records_visible_tool_surface_without_schem
     assert result == "response"
     attributes = records[0]["attributes"]
     assert attributes["activated_tool_groups"] == ["planning", "learning_progress"]
-    assert attributes["available_tool_names"] == ["TaskCreate", "read_learning_progress"]
-    assert attributes["available_tool_count"] == 2
+    assert attributes["available_tool_names"] == [
+        "TaskCreate",
+        "read_learning_progress",
+        "web_search",
+    ]
+    assert attributes["available_tool_count"] == 3
     assert attributes["tool_choice"] is None
     assert "secret schema content" not in str(attributes)
 
@@ -209,3 +221,48 @@ def test_tool_log_preview_redacts_code_problem_reference_solution_and_hidden_cas
     assert '"test_inputs":"<redacted>"' in preview
     assert "print(secret)" not in preview
     assert "123 456" not in preview
+
+
+def test_web_search_logging_hides_internal_name_query_and_results():
+    records = []
+    middleware = AgentRunLoggingMiddleware(
+        run_id="run-1",
+        conversation_id="conv-1",
+        user_id="u1",
+        course_id="c1",
+        sink=records.append,
+    )
+
+    class FakeAgent:
+        name = "workbench"
+
+    tool_call = ToolCallBlock(
+        id="tool-search",
+        name=WEB_SEARCH_INTERNAL_TOOL_NAME,
+        input='{"query":"private conversation text","limit":5}',
+    )
+
+    async def next_handler(**_kwargs):
+        yield ToolResponse(
+            content=[TextBlock(text='[{"url":"https://example.com"}]')]
+        )
+
+    async def run_middleware():
+        return [
+            item
+            async for item in middleware.on_acting(
+                FakeAgent(),
+                {"tool_call": tool_call},
+                next_handler,
+            )
+        ]
+
+    asyncio.run(run_middleware())
+
+    assert records[0]["name"] == "execute_tool web_search"
+    assert records[0]["attributes"]["tool_name"] == "web_search"
+    assert records[0]["attributes"]["tool_input_redacted"] is True
+    assert "tool_input_preview" not in records[0]["attributes"]
+    assert records[1]["attributes"]["tool_output_redacted"] is True
+    assert "tool_output_preview" not in records[1]["attributes"]
+    assert WEB_SEARCH_INTERNAL_TOOL_NAME not in str(records)

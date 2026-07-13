@@ -15,6 +15,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 from app.db.session import init_db
 from app.main import app
 from app.schemas.internal_ai_chat import PersonalPracticePrepareRequest
+from app.schemas.internal_ai_chat import DialogueProfileUpdateRequest
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -95,6 +96,72 @@ async def test_internal_recent_answers_validates_explicit_scope_and_limit():
     kwargs = mock_service.await_args.kwargs
     assert kwargs["limit"] == 10
     assert kwargs["scope"] == "knowledge_point"
+
+
+@pytest.mark.asyncio
+async def test_internal_learner_profile_returns_six_dimensions():
+    profile = {"profile_dimensions": [{"key": f"dimension_{index}"} for index in range(6)]}
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        with patch(
+            "app.api.v1.internal_ai_chat.read_dialogue_learner_profile",
+            new_callable=AsyncMock,
+            return_value=profile,
+        ) as service:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/internal/ai-chat/learner-profile/read",
+                    headers={"X-Internal-Agent-Token": "secret"},
+                    json={"user_id": "u1", "course_id": "c1"},
+                )
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]["profile_dimensions"]) == 6
+    service.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_internal_dialogue_profile_update_delegates_scoped_facts_only():
+    result = {"outcome": "success", "result": "updated", "updated_fields": ["learning_goal"]}
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        with patch(
+            "app.api.v1.internal_ai_chat.update_dialogue_learner_profile",
+            new_callable=AsyncMock,
+            return_value=result,
+        ) as service:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/internal/ai-chat/learner-profile/update",
+                    headers={"X-Internal-Agent-Token": "secret"},
+                    json={
+                        "user_id": "u1",
+                        "course_id": "c1",
+                        "conversation_id": "conv1",
+                        "run_id": "run1",
+                        "learning_goal": "通过数据结构期末考试",
+                    },
+                )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == result
+    assert service.await_args.kwargs["run_id"] == "run1"
+
+
+def test_dialogue_profile_schema_rejects_diagnostic_fields_and_empty_updates():
+    with pytest.raises(ValueError):
+        DialogueProfileUpdateRequest.model_validate({
+            "user_id": "u1",
+            "course_id": "c1",
+            "conversation_id": "conv1",
+            "run_id": "run1",
+            "mastery_score": 20,
+        })
+    with pytest.raises(ValueError, match="at least one"):
+        DialogueProfileUpdateRequest.model_validate({
+            "user_id": "u1",
+            "course_id": "c1",
+            "conversation_id": "conv1",
+            "run_id": "run1",
+        })
 
 
 def _choice_prepare_payload():

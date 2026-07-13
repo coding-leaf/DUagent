@@ -10,6 +10,8 @@ SAFE_WORKBENCH_TOOLS = [
     "TaskUpdate",
     "read_learning_progress",
     "read_recent_answers",
+    "read_learner_profile",
+    "update_learner_profile_from_dialogue",
     "write_artifact_file",
     "run_code_in_oj",
     "publish_personal_code_problem",

@@ -19,6 +19,7 @@ def build_workbench_tool_groups(
     personal_practice_delivery_tools: list[ToolBase] | None = None,
     workspace: LocalWorkspace,
     run_id: str,
+    learner_profile_tools: list[ToolBase] | None = None,
 ) -> list[ToolGroup]:
     groups = [build_planning_group()]
     if memory_tools:
@@ -48,6 +49,19 @@ def build_workbench_tool_groups(
                     "If the tools return empty or unavailable data, say evidence is insufficient."
                 ),
                 tools=learning_progress_tools,
+            )
+        )
+    if learner_profile_tools:
+        groups.append(
+            ToolGroup(
+                name="learner_profile",
+                description="Read and update explicit stable course learner-profile facts.",
+                instructions=(
+                    "Read the profile before personalized advice. Update it only when the current "
+                    "message explicitly states a stable goal, preference, guidance need, teaching "
+                    "instruction, or learning habit. Never write inferred mastery or weak points."
+                ),
+                tools=learner_profile_tools,
             )
         )
     if oj_execution_tools:

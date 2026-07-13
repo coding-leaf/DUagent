@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.code_problem import CodeProblemDraft
 
@@ -28,6 +28,55 @@ class RecentAnswersRequest(BaseModel):
             raise ValueError("node scope requires only node_id")
         if self.scope == "knowledge_point" and (not self.knowledge_point or self.node_id):
             raise ValueError("knowledge_point scope requires only knowledge_point")
+        return self
+
+
+class LearnerProfileReadRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=32)
+    course_id: str = Field(min_length=1, max_length=32)
+
+
+class DialogueProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=32)
+    course_id: str = Field(min_length=1, max_length=32)
+    conversation_id: str = Field(min_length=1, max_length=32)
+    run_id: str = Field(min_length=1, max_length=80)
+    learning_goal: str | None = Field(default=None, min_length=1, max_length=500)
+    resource_preferences: list[
+        Literal["text_reading", "chart_logic", "code_practice", "practice_reinforcement"]
+    ] | None = Field(default=None, min_length=1, max_length=4)
+    guidance_level: Literal["L1", "L2", "L3"] | None = None
+    custom_instruction: str | None = Field(default=None, min_length=1, max_length=1000)
+    learning_habits: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def validate_stable_facts(self):
+        facts = (
+            self.learning_goal,
+            self.resource_preferences,
+            self.guidance_level,
+            self.custom_instruction,
+            self.learning_habits,
+        )
+        if not any(value is not None for value in facts):
+            raise ValueError("at least one stable profile fact is required")
+        if self.resource_preferences and len(set(self.resource_preferences)) != len(
+            self.resource_preferences
+        ):
+            raise ValueError("resource preferences must be unique")
+        if self.learning_habits is not None:
+            if not self.learning_habits or len(self.learning_habits) > 10:
+                raise ValueError("learning habits must contain 1 to 10 entries")
+            if any(
+                not key.strip()
+                or len(key) > 50
+                or not value.strip()
+                or len(value) > 200
+                for key, value in self.learning_habits.items()
+            ):
+                raise ValueError("learning habit keys or values are invalid")
         return self
 
 

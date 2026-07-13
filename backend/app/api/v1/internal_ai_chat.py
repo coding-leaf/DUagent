@@ -5,11 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.config import settings
 from app.schemas.internal_ai_chat import (
+    DialogueProfileUpdateRequest,
+    LearnerProfileReadRequest,
     LearningProgressRequest,
     OJEvaluationRequest,
     PersonalPracticeDeliveryRequest,
     PersonalPracticePrepareRequest,
     RecentAnswersRequest,
+)
+from app.services.ai_chat_profile_service import (
+    read_dialogue_learner_profile,
+    update_dialogue_learner_profile,
 )
 from app.services.ai_chat_learning_context import (
     build_learning_progress_overview,
@@ -92,6 +98,28 @@ async def read_recent_answers(
         limit=req.limit,
         only_wrong=req.only_wrong,
     )
+    return {"code": 200, "message": "success", "data": data}
+
+
+@router.post("/learner-profile/read")
+async def read_learner_profile(
+    req: LearnerProfileReadRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await read_dialogue_learner_profile(
+        db, user_id=req.user_id, course_id=req.course_id
+    )
+    return {"code": 200, "message": "success", "data": data}
+
+
+@router.post("/learner-profile/update")
+async def update_learner_profile(
+    req: DialogueProfileUpdateRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await update_dialogue_learner_profile(db, **req.model_dump())
     return {"code": 200, "message": "success", "data": data}
 
 

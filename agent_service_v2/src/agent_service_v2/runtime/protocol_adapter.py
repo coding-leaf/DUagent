@@ -35,6 +35,8 @@ from agent_service_v2.tools.contracts import outcome_for_status
 
 
 _TOOL_METADATA = {
+    "read_learner_profile": ("读取课程学习画像", "learner_profile", True),
+    "update_learner_profile_from_dialogue": ("从对话更新学习画像", "learner_profile", False),
     "reset_tools": ("整理工具状态", "system", False),
     "TaskCreate": ("创建计划任务", "planning", False),
     "TaskUpdate": ("更新计划任务", "planning", False),

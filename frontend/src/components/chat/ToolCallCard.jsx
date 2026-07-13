@@ -49,6 +49,8 @@ const TOOL_TITLE_MAP = {
   retrieve_course_context: '检索教材教学上下文',
   read_learning_progress: '分析学情薄弱点',
   read_recent_answers: '调取历史作答轨迹',
+  read_learner_profile: '读取课程学习画像',
+  update_learner_profile_from_dialogue: '从对话更新学习画像',
   validate_personal_code_problem_draft: '编程练习题 OJ 校验',
   publish_personal_code_problem: '发布私有编程练习',
   publish_personal_choice_quiz: '发布私有选择题练习',

@@ -62,6 +62,28 @@ class LearningProgressInput(ToolInputModel):
     limit_nodes: int = Field(default=50, ge=1, le=100, description="Maximum progress nodes.")
 
 
+class DialogueProfileUpdateInput(ToolInputModel):
+    learning_goal: str | None = Field(default=None, min_length=1, max_length=500)
+    resource_preferences: list[
+        Literal["text_reading", "chart_logic", "code_practice", "practice_reinforcement"]
+    ] | None = Field(default=None, min_length=1, max_length=4)
+    guidance_level: Literal["L1", "L2", "L3"] | None = None
+    custom_instruction: str | None = Field(default=None, min_length=1, max_length=1000)
+    learning_habits: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def validate_stable_facts(self):
+        if not any(value is not None for value in (
+            self.learning_goal,
+            self.resource_preferences,
+            self.guidance_level,
+            self.custom_instruction,
+            self.learning_habits,
+        )):
+            raise ValueError("at least one stable profile fact is required")
+        return self
+
+
 class RecentAnswersInput(ToolInputModel):
     scope: Literal["course", "node", "knowledge_point"] = Field(description="Evidence scope.")
     node_id: str | None = Field(default=None, min_length=1, max_length=64, description="Required for node scope.")

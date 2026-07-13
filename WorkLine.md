@@ -3642,3 +3642,25 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Client API 路径与请求保持不变；SSE v2 文档同步四态、工具元信息、`sources` 和 Backend 卡片恢复语义。
 - Agent 公开 `/agent/v2/*` 路径、请求和 OpenAPI 不变；Workbench SSE 事件字段和失败语义按第一批方案执行。
 - Backend internal AI Chat 删除两条旧路由，新增 `/personal-practices/prepare|finalize|resume`；Agent 调用点已同步切换，不保留双轨。
+
+---
+
+### 2026-07-13 — 对话自动更新课程学习画像（第一批）
+
+**涉及范围：**
+- Backend internal AI Chat 新增六维画像读取与稳定事实更新服务，复用 `UserProfile` JSON 字段和画像锁。
+- Agent Workbench 新增默认启用的 `learner_profile` ToolGroup、权限、提示词和工具卡标题。
+
+**核心改动：**
+1. `read_learner_profile` 读取当前课程六维画像；`update_learner_profile_from_dialogue` 仅接受明确目标、四类资源偏好、L1-L3 引导强度、自定义要求和稳定习惯，身份与 run 上下文由闭包注入。
+2. 重复事实返回 `neutral/unchanged`；更新审计只记录字段名、run_id 和结果，不保存对话正文、事实值或 conversation_id。
+3. 推断薄弱点、掌握度、答案和诊断字段不在输入契约内，Backend 额外字段严格拒绝。
+
+**验证结果：**
+- Agent 定向测试：43 passed。
+- Backend internal API 与画像服务：14 passed；相关文件 `py_compile` 通过。
+
+**接口漂移：**
+- Client API 路径无变化。
+- Agent HTTP 路径无变化；Workbench 工具集合与 SSE 工具标题扩展。
+- Backend internal AI Chat 新增 `/learner-profile/read|update`，Agent 调用点已同步。

@@ -4,7 +4,7 @@ import Icon from '../Icon';
  * @param {{ preferences: string[] }} props
  */
 export default function ModalityPreferenceCard({ preferences }) {
-  const modalLabels = { video_animation: '视频/动画', chart_logic: '图表/逻辑', text_analysis: '文本阅读', code_practice: '代码练习', formula_derivation: '公式推导' };
+  const modalLabels = { video_animation: 'AI 交互', chart_logic: '图表/逻辑', text_analysis: '文本阅读', code_practice: '代码练习', formula_derivation: '公式推导' };
   return (
     <div className="bg-white p-6 rounded-2xl border border-outline-variant shadow-sm space-y-4">
       <h3 className="text-base font-bold text-on-surface flex items-center gap-2 border-b border-slate-50 pb-3">

@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Tuple
 from sqlalchemy import func, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.conversation import Conversation, Message
 from app.models.others import LearningActivity, Resource
 from app.models.user import User
 
@@ -10,53 +11,49 @@ def _as_utc(value: datetime) -> datetime:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
-def compute_modal_preference(activities: List[Tuple]) -> Dict[str, int]:
-    modal_durations = {
-        "video_animation": 0, 
+def compute_modal_preference(
+    activities: List[Tuple],
+    ai_interaction_count: int = 0,
+) -> Dict[str, int]:
+    modal_counts = {
+        # 兼容历史存储 key；产品含义已调整为 AI 交互。
+        "video_animation": max(0, int(ai_interaction_count or 0)),
         "chart_logic": 0, 
         "text_analysis": 0, 
         "code_practice": 0, 
         "formula_derivation": 0
     }
-    total_effective_duration = 0
     
     for item in activities:
         if len(item) == 3:
-            res_type, act_type, duration = item
+            res_type, act_type, count = item
         else:
-            res_type, duration = item
+            res_type, count = item
             act_type = None
             
-        duration = int(duration or 0)
-        total_effective_duration += duration
+        count = max(0, int(count or 0))
         
         # 1. 优先判定活动类型
         if act_type == "node_practice_submit":
-            modal_durations["code_practice"] += duration
+            modal_counts["code_practice"] += count
         # 2. 根据资源类型归类
         elif res_type:
-            if res_type == "video":
-                modal_durations["video_animation"] += duration
-            elif res_type in ["mindmap", "diagram"]:
-                modal_durations["chart_logic"] += duration
-            elif res_type in ["document", "reading", "personal_lesson"]:
-                modal_durations["text_analysis"] += duration
-            elif res_type == "code":
-                modal_durations["code_practice"] += duration
+            if res_type in ["mindmap", "diagram"]:
+                modal_counts["chart_logic"] += count
+            elif res_type in ["lesson", "document", "reading", "personal_lesson"]:
+                modal_counts["text_analysis"] += count
+            elif res_type in ["example", "code"]:
+                modal_counts["code_practice"] += count
             elif res_type == "practice":
-                modal_durations["formula_derivation"] += duration
+                modal_counts["formula_derivation"] += count
             
-    modal_preference = {}
-    if total_effective_duration > 0:
-        max_duration = max(modal_durations.values()) if any(modal_durations.values()) else 1
-        if max_duration == 0: 
-            max_duration = 1
-        for k, v in modal_durations.items():
-            modal_preference[k] = int((v / max_duration) * 100)
-    else:
-        modal_preference = {k: 0 for k in modal_durations.keys()}
-        
-    return modal_preference
+    max_count = max(modal_counts.values())
+    if max_count == 0:
+        return {key: 0 for key in modal_counts}
+    return {
+        key: int((count / max_count) * 100)
+        for key, count in modal_counts.items()
+    }
 
 def compute_knowledge_progress(node_progress_rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     knowledge_coordinates = []
@@ -257,7 +254,7 @@ async def compute_profile_fields(
 
     # 1. Resource/Modal Preference
     activities_result = await db.execute(
-        select(Resource.type, LearningActivity.activity_type, func.sum(LearningActivity.duration_seconds))
+        select(Resource.type, LearningActivity.activity_type, func.count(LearningActivity.id))
         .select_from(LearningActivity)
         .join(Resource, LearningActivity.resource_id == Resource.id, isouter=True)
         .where(
@@ -269,7 +266,20 @@ async def compute_profile_fields(
         .group_by(Resource.type, LearningActivity.activity_type)
     )
     activities = list(activities_result.all())
-    modal_preference = compute_modal_preference(activities)
+    ai_interactions_result = await db.execute(
+        select(func.count(Message.id))
+        .select_from(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.user_id == user_id,
+            Conversation.course_id == course_id,
+            Conversation.is_deleted == False,
+            Message.role == "user",
+            Message.is_deleted == False,
+        )
+    )
+    ai_interaction_count = int(ai_interactions_result.scalar() or 0)
+    modal_preference = compute_modal_preference(activities, ai_interaction_count)
 
     # 2. Knowledge Coordinates and Cognitive Blindspots
     knowledge_coordinates, weak_nodes, knowledge_progress_summary = compute_knowledge_progress(node_progress_rows)

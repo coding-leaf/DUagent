@@ -11,30 +11,27 @@ from app.services.profile_rules import (
 
 def test_compute_modal_preference():
     activities = [
-        ("video", 100),
-        ("video", 50),
-        ("mindmap", 100),
-        ("document", 200),
-        ("code", 100),
-        ("video", None),
+        ("mindmap", 2),
+        ("lesson", 4),
+        ("example", 2),
     ]
-    prefs = compute_modal_preference(activities)
-    assert prefs["video_animation"] == 75  # 150/200 * 100
-    assert prefs["chart_logic"] == 50      # 100/200 * 100
-    assert prefs["text_analysis"] == 100   # 200/200 * 100
-    assert prefs["code_practice"] == 50    # 100/200 * 100
+    prefs = compute_modal_preference(activities, ai_interaction_count=3)
+    assert prefs["video_animation"] == 75  # 3/4 * 100
+    assert prefs["chart_logic"] == 50      # 2/4 * 100
+    assert prefs["text_analysis"] == 100   # 4/4 * 100
+    assert prefs["code_practice"] == 50    # 2/4 * 100
     assert prefs["formula_derivation"] == 0
 
 def test_compute_modal_preference_3_tuples_and_new_types():
     activities = [
-        ("personal_lesson", "resource_study", 100),
-        ("practice", "resource_study", 50),
-        (None, "node_practice_submit", 200),
+        ("personal_lesson", "resource_study", 2),
+        ("practice", "resource_study", 1),
+        (None, "node_practice_submit", 4),
     ]
     prefs = compute_modal_preference(activities)
-    assert prefs["text_analysis"] == 50       # 100/200 * 100
-    assert prefs["formula_derivation"] == 25  # 50/200 * 100
-    assert prefs["code_practice"] == 100      # 200/200 * 100
+    assert prefs["text_analysis"] == 50       # 2/4 * 100
+    assert prefs["formula_derivation"] == 25  # 1/4 * 100
+    assert prefs["code_practice"] == 100      # 4/4 * 100
 
 def test_compute_modal_preference_empty():
     prefs = compute_modal_preference([])

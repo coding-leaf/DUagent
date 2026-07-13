@@ -3345,3 +3345,36 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 路径、字段和参数无变化；仅扩展既有 `keyword` 的服务端匹配语义。
 - Agent API 无变化。
+
+---
+
+### 2026-07-13 — 修复模态偏好不更新与共享资源学习归属
+
+**涉及文件：**
+- `backend/app/services/profile_rules.py`
+- `backend/app/services/profile_presenters.py`
+- `backend/tests/test_profile_rules.py`
+- `backend/tests/test_profile_presenters.py`
+- `frontend/src/hooks/useResourceStudyTracking.js`
+- `frontend/src/hooks/__tests__/useResourceStudyTracking.test.js`
+- `frontend/src/pages/ResourceDetail.jsx`
+- `frontend/src/components/report/ModalityPreferenceCard.jsx`
+- `WorkLine.md`
+
+**根因与改动：**
+1. `video_animation` 是兼容历史数据的存储 key，当前产品含义是“AI 交互”；旧规则仍按不存在的视频资源统计，所以真实 AI Chat 使用始终为 0。画像刷新现在统计当前用户、当前课程的用户消息数作为 AI 交互证据，不迁移字段。
+2. 模态偏好统一按有效行为次数计算：AI 用户消息、资源有效学习记录、节点练习提交，再以最高项归一化为 0-100；避免把聊天次数和学习秒数混算。补齐 `lesson/example` 等现行资源类型映射。
+3. 共享资源详情原先使用资源宿主课程 `course_id` 上报，教学班画像查不到。前端现在优先使用当前教学班课程，并在页面隐藏或离开时可靠结算学习时长；成功落库后触发已有画像刷新接口。
+4. 后端画像摘要和教师报告中残留的“视频/动画”统一改为“AI 交互”。
+
+**验证结果：**
+- Backend 画像规则、展示、刷新与异步刷新回归：26 passed；`py_compile` 通过。
+- Frontend 全量单元测试：37 files、138 passed。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- 真实数据只读核验：课程 `391cdec456914f20` 有 9 次 AI 用户消息、1 次文本资源学习、1 次节点练习提交，新口径结果为 AI 交互 100、文本分析 11、代码实操 11。
+- `git diff --check` 通过。
+- 额外检查发现既有 `test_profile_routes_refactored.py` 仍使用失效的依赖函数 patch 和无结构 `AsyncMock`，独立运行 6 个用例失败；该文件未被本次修改，相关业务 service/refresh 回归均通过。
+
+**接口漂移：**
+- Client API 路径、字段、枚举和响应结构均无变化；`modal_preference.video_animation` 仅按已确认的产品语义解释为“AI 交互”。
+- Agent API 无变化。

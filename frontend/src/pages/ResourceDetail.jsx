@@ -1,7 +1,7 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
 import { useResourceDetail } from '../hooks/useResourceDetail';
-import { learningActivityService } from '../api/services/learningActivity';
+import { useResourceStudyTracking } from '../hooks/useResourceStudyTracking';
+import { useCourse } from '../context/CourseContext';
 import Icon from '../components/Icon';
 import MarkdownViewer from '../components/common/MarkdownViewer';
 
@@ -33,44 +33,14 @@ export default function ResourceDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
+  const { activeCourseId } = useCourse();
   const { resource, loading } = useResourceDetail(id);
-  const studyStartRef = useRef(null);
-  const trackingResourceRef = useRef(null);
   const nodeContext = location.state?.node || {};
-
-  useEffect(() => {
-    if (!resource?.id || !resource?.course_id) return undefined;
-
-    const activityContext = {
-      course_id: resource.course_id,
-      resource_id: resource.id,
-      node_id: nodeContext.id || nodeContext.node_id || null,
-      node_name: nodeContext.name || nodeContext.node_name || resource.knowledge_point || null
-    };
-
-    studyStartRef.current = Date.now();
-    trackingResourceRef.current = activityContext;
-    learningActivityService.trackActivity({
-      ...activityContext,
-      activity_type: 'resource_view',
-      metadata: { source: 'resource_detail' }
-    });
-
-    return () => {
-      const startedAt = studyStartRef.current;
-      const trackedResource = trackingResourceRef.current;
-      if (!startedAt || !trackedResource) return;
-      const duration = Math.floor((Date.now() - startedAt) / 1000);
-      if (duration < learningActivityService.minStudySeconds) return;
-      learningActivityService.trackActivity({
-        ...trackedResource,
-        activity_type: 'resource_study',
-        duration_seconds: duration,
-        metadata: { source: 'resource_detail' }
-      });
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resource]);
+  useResourceStudyTracking({
+    courseId: activeCourseId || resource?.course_id,
+    resource,
+    nodeContext
+  });
 
   if (loading) {
     return (

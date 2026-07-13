@@ -39,7 +39,7 @@ def _resource_preference_summary(modal_preference: dict) -> str:
     if not valid_prefs:
         return "偏好均衡"
     pref_mapping = {
-        "video_animation": "视频/动画",
+        "video_animation": "AI 交互",
         "chart_logic": "图表/逻辑",
         "text_analysis": "文本阅读",
         "code_practice": "代码练习",

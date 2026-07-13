@@ -61,13 +61,13 @@ def test_profile_presenters_data_with_objects():
     assert formatted["cognitive_blindspots"] == ["blindspot1"]
 
     # video_animation (75) and text_analysis (80) are >= 70
-    assert formatted["resource_preference_summary"] == "视频/动画、文本阅读"
+    assert formatted["resource_preference_summary"] == "AI 交互、文本阅读"
 
     # profile_dimensions has the correct structure
     dims = {d["key"]: d for d in formatted["profile_dimensions"]}
     assert "learning_goal" in dims
     assert "resource_preference" in dims
-    assert dims["resource_preference"]["value"] == "视频/动画、文本阅读"
+    assert dims["resource_preference"]["value"] == "AI 交互、文本阅读"
 
 def test_resource_preference_summary_balanced():
     pf = UserProfile(
@@ -111,4 +111,3 @@ def test_profile_dimensions_structure():
     assert dims["weak_points"]["source"] == "profile_dialogue"
     assert "指针" in dims["weak_points"]["value"]
     assert dims["guidance_level"]["value"] == "L2"
-

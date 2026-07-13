@@ -22,6 +22,7 @@ from agent_service_v2.tools.oj_execution import build_oj_execution_tools
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
 from agent_service_v2.tools.personal_practice_delivery import build_resume_personal_practice_tools
+from agent_service_v2.tools.personalized_resources import build_personalized_resource_tools
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
 
@@ -144,6 +145,13 @@ class WorkbenchAgentFactory:
             user_id=user_id,
             course_id=course_id,
         )
+        personalized_resource_tools = build_personalized_resource_tools(
+            client=learning_client,
+            user_id=user_id,
+            course_id=course_id,
+            conversation_id=conversation_id,
+            run_id=run_id,
+        )
 
         from agentscope.tool import FunctionTool
         from agent_service_v2.tools.rag import retrieve_course_context
@@ -211,6 +219,7 @@ class WorkbenchAgentFactory:
             rag_tools=rag_tools,
             learning_progress_tools=learning_progress_tools,
             learner_profile_tools=learner_profile_tools,
+            personalized_resource_tools=personalized_resource_tools,
             oj_execution_tools=oj_execution_tools,
             personal_code_problem_tools=personal_code_problem_tools,
             personal_choice_quiz_tools=personal_choice_quiz_tools,
@@ -224,6 +233,7 @@ class WorkbenchAgentFactory:
             "rag",
             "learning_progress",
             "learner_profile",
+            "personalized_resources",
             "oj_execution",
             "artifact",
             "personal_practice_delivery",

@@ -37,6 +37,8 @@ from agent_service_v2.tools.contracts import outcome_for_status
 _TOOL_METADATA = {
     "read_learner_profile": ("读取课程学习画像", "learner_profile", True),
     "update_learner_profile_from_dialogue": ("从对话更新学习画像", "learner_profile", False),
+    "recommend_personalized_resources": ("精准推荐课程资源", "personalized_resource", True),
+    "generate_personalized_resource": ("启动个性化资源生成", "personalized_resource", False),
     "reset_tools": ("整理工具状态", "system", False),
     "TaskCreate": ("创建计划任务", "planning", False),
     "TaskUpdate": ("更新计划任务", "planning", False),
@@ -320,6 +322,8 @@ class EDUProtocolAdapter:
                 "problem_id": artifact.get("problem_id"),
                 "language": artifact.get("language"),
             }
+        elif artifact_type == "PersonalizedResourceCard":
+            props = artifact.get("props") if isinstance(artifact.get("props"), dict) else {}
         else:
             return None
         return {

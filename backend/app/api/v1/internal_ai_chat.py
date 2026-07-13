@@ -12,10 +12,16 @@ from app.schemas.internal_ai_chat import (
     PersonalPracticeDeliveryRequest,
     PersonalPracticePrepareRequest,
     RecentAnswersRequest,
+    PersonalizedResourceRecommendRequest,
+    PersonalizedResourceStartRequest,
 )
 from app.services.ai_chat_profile_service import (
     read_dialogue_learner_profile,
     update_dialogue_learner_profile,
+)
+from app.services.ai_chat_resource_service import (
+    recommend_personalized_resources,
+    start_ai_chat_resource_generation,
 )
 from app.services.ai_chat_learning_context import (
     build_learning_progress_overview,
@@ -120,6 +126,26 @@ async def update_learner_profile(
     db: AsyncSession = Depends(get_db),
 ):
     data = await update_dialogue_learner_profile(db, **req.model_dump())
+    return {"code": 200, "message": "success", "data": data}
+
+
+@router.post("/personalized-resources/recommend")
+async def recommend_resources(
+    req: PersonalizedResourceRecommendRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await recommend_personalized_resources(db, **req.model_dump())
+    return {"code": 200, "message": "success", "data": data}
+
+
+@router.post("/personalized-resources/generate")
+async def generate_resource(
+    req: PersonalizedResourceStartRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await start_ai_chat_resource_generation(db, **req.model_dump())
     return {"code": 200, "message": "success", "data": data}
 
 

@@ -5,6 +5,7 @@ import StudyPlanCard from './plugins/StudyPlanCard';
 import WeakPointsCard from './plugins/WeakPointsCard';
 import PathRecommendationCard from './plugins/PathRecommendationCard';
 import CodeSandboxCard from './plugins/codeSandbox/CodeSandboxCard';
+import PersonalizedResourceCard from './plugins/PersonalizedResourceCard';
 
 export const PluginRegistry = {
   QuizCard,
@@ -13,5 +14,6 @@ export const PluginRegistry = {
   StudyPlanCard,
   WeakPointsCard,
   PathRecommendationCard,
-  CodeSandboxCard
+  CodeSandboxCard,
+  PersonalizedResourceCard
 };

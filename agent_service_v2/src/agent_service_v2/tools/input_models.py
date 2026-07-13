@@ -84,6 +84,17 @@ class DialogueProfileUpdateInput(ToolInputModel):
         return self
 
 
+class PersonalizedResourceRecommendInput(ToolInputModel):
+    target: str = Field(min_length=1, max_length=1000)
+    knowledge_point: str | None = Field(default=None, min_length=1, max_length=100)
+    limit: int = Field(default=3, ge=1, le=3)
+
+
+class PersonalizedResourceGenerateInput(ToolInputModel):
+    goal: str = Field(min_length=1, max_length=2000)
+    resource_type: Literal["personal_lesson", "diagram", "practice", "reading"]
+
+
 class RecentAnswersInput(ToolInputModel):
     scope: Literal["course", "node", "knowledge_point"] = Field(description="Evidence scope.")
     node_id: str | None = Field(default=None, min_length=1, max_length=64, description="Required for node scope.")

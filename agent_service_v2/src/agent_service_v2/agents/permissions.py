@@ -12,6 +12,8 @@ SAFE_WORKBENCH_TOOLS = [
     "read_recent_answers",
     "read_learner_profile",
     "update_learner_profile_from_dialogue",
+    "recommend_personalized_resources",
+    "generate_personalized_resource",
     "write_artifact_file",
     "run_code_in_oj",
     "publish_personal_code_problem",

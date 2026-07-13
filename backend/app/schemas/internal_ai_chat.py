@@ -80,6 +80,23 @@ class DialogueProfileUpdateRequest(BaseModel):
         return self
 
 
+class PersonalizedResourceRecommendRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=32)
+    course_id: str = Field(min_length=1, max_length=32)
+    target: str = Field(min_length=1, max_length=1000)
+    knowledge_point: str | None = Field(default=None, min_length=1, max_length=100)
+    limit: int = Field(default=3, ge=1, le=3)
+
+
+class PersonalizedResourceStartRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=32)
+    course_id: str = Field(min_length=1, max_length=32)
+    conversation_id: str = Field(min_length=1, max_length=32)
+    run_id: str = Field(min_length=1, max_length=80)
+    goal: str = Field(min_length=1, max_length=2000)
+    resource_type: Literal["personal_lesson", "diagram", "practice", "reading"]
+
+
 class OJEvaluationRequest(BaseModel):
     code: str
     language: str

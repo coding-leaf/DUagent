@@ -3664,3 +3664,28 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Client API 路径无变化。
 - Agent HTTP 路径无变化；Workbench 工具集合与 SSE 工具标题扩展。
 - Backend internal AI Chat 新增 `/learner-profile/read|update`，Agent 调用点已同步。
+
+---
+
+### 2026-07-13 — AI Chat 精准资源推荐与自动生成（第二批）
+
+**涉及范围：**
+- Backend internal AI Chat 新增确定性推荐与幂等生成任务启动服务。
+- Agent Workbench 新增默认启用的个性化资源 ToolGroup 与 `PersonalizedResourceCard` artifact。
+- Frontend 新增工作台资源推荐/生成任务卡，复用现有 SWR 个性化资源轮询。
+
+**核心改动：**
+1. 推荐综合目标、知识点、画像资源偏好、薄弱/推荐节点和近期资源行为，只返回课程权限范围内最多 3 个已有资源及理由。
+2. 无有效推荐时可启动 `personal_lesson|diagram|practice|reading` Resource Team 任务；视频和多模态不在枚举中。
+3. 任务 ID 由用户、课程、会话、run、目标和资源类型稳定派生；Backend 与 Agent 双重限制每 run 最多启动一个任务，失败返回工具失败态。
+4. 生成卡通过现有 `/api/v1/tasks/{task_id}` 与个性化资源列表语义恢复；成功仅表示任务启动，审核发布完成后原位显示可打开资源。
+
+**验证结果：**
+- Agent 定向测试：39 passed。
+- Backend internal API、排序与任务 ID：14 passed；相关文件 `py_compile` 通过。
+- Frontend 插件测试 1 passed；lint 与生产构建通过，保留既有大 chunk 提示。
+
+**接口漂移：**
+- Client API 路径无变化。
+- Agent HTTP 路径无变化；Workbench SSE artifact 新增 `PersonalizedResourceCard`。
+- Backend internal AI Chat 新增 `/personalized-resources/recommend|generate`，Agent 调用点已同步。

@@ -12,6 +12,7 @@ SUPPORTED_ARTIFACT_TYPES = {
     "PathRecommendationCard",
     "QuizCard",
     "CodeSandboxCard",
+    "PersonalizedResourceCard",
 }
 SUPPORTED_EXTENSIONS = {".md", ".mmd", ".json"}
 MAX_ARTIFACT_BYTES = 200 * 1024

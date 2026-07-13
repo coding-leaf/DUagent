@@ -20,6 +20,7 @@ def build_workbench_tool_groups(
     workspace: LocalWorkspace,
     run_id: str,
     learner_profile_tools: list[ToolBase] | None = None,
+    personalized_resource_tools: list[ToolBase] | None = None,
 ) -> list[ToolGroup]:
     groups = [build_planning_group()]
     if memory_tools:
@@ -62,6 +63,18 @@ def build_workbench_tool_groups(
                     "instruction, or learning habit. Never write inferred mastery or weak points."
                 ),
                 tools=learner_profile_tools,
+            )
+        )
+    if personalized_resource_tools:
+        groups.append(
+            ToolGroup(
+                name="personalized_resources",
+                description="Recommend existing course resources or start one bounded personalized generation task.",
+                instructions=(
+                    "Recommend existing resources first. Only when no effective recommendation is returned, "
+                    "start one non-video resource generation task for this run. A started task is not published."
+                ),
+                tools=personalized_resource_tools,
             )
         )
     if oj_execution_tools:

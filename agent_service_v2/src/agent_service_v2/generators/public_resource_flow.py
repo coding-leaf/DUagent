@@ -62,7 +62,7 @@ async def run_public_resource_generation(
             task_id=task_id,
             error_message=str(exc)[:500],
         )
-        raise
+        return []
 
 
 async def _post_failed_webhook(

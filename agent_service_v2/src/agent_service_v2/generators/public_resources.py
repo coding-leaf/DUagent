@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from agentscope.message import UserMsg
+from agentscope.model import ChatResponse
 
 from agent_service_v2.schemas.resources import (
     PublicResourceAsset,
@@ -243,6 +244,12 @@ def _validate_requested_types(resource_types: list[str]) -> list[str]:
 
 
 def _response_text(response: Any) -> str:
+    if isinstance(response, ChatResponse):
+        return "".join(
+            block.text
+            for block in response.content
+            if isinstance(getattr(block, "text", None), str)
+        ).strip()
     text = getattr(response, "text", None)
     if isinstance(text, str):
         return text.strip()

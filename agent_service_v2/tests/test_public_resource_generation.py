@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from agentscope.message import TextBlock
+from agentscope.model import ChatResponse
 from fastapi.testclient import TestClient
 
 from agent_service_v2.main import app
@@ -85,14 +87,20 @@ def test_normalize_public_asset_uses_one_webhook_shape(
 @pytest.mark.anyio
 async def test_generator_reuses_one_course_rag_and_model_call_for_selected_types():
     module = _load_module()
-    response = MagicMock()
-    response.text = """{
-      "resources": [
-        {"type":"lesson","title":"变量讲义","content":"# 变量\\n\\n基于课程原文。"},
-        {"type":"diagram","title":"变量图解","content":"flowchart TD\\nA[声明] --> B[使用]","diagram_kind":"flowchart"},
-        {"type":"example","title":"变量示例","content":"# 示例\\n\\n```c\\nint value = 1;\\n```"}
-      ]
-    }"""
+    response = ChatResponse(
+        content=[
+            TextBlock(
+                text="""{
+                  "resources": [
+                    {"type":"lesson","title":"变量讲义","content":"# 变量\\n\\n基于课程原文。"},
+                    {"type":"diagram","title":"变量图解","content":"flowchart TD\\nA[声明] --> B[使用]","diagram_kind":"flowchart"},
+                    {"type":"example","title":"变量示例","content":"# 示例\\n\\n```c\\nint value = 1;\\n```"}
+                  ]
+                }"""
+            )
+        ],
+        is_last=True,
+    )
     model = AsyncMock(return_value=response)
     generator = module.PublicResourceGenerator(model=model)
     retrieve = AsyncMock(
@@ -128,9 +136,17 @@ async def test_generator_reuses_one_course_rag_and_model_call_for_selected_types
 @pytest.mark.anyio
 async def test_generator_retries_invalid_structure_once_without_repeating_rag():
     module = _load_module()
-    invalid_response = MagicMock(text='{"resources": []}')
-    valid_response = MagicMock(
-        text='{"resources":[{"type":"lesson","title":"变量讲义","content":"# 变量"}]}'
+    invalid_response = ChatResponse(
+        content=[TextBlock(text='{"resources": []}')],
+        is_last=True,
+    )
+    valid_response = ChatResponse(
+        content=[
+            TextBlock(
+                text='{"resources":[{"type":"lesson","title":"变量讲义","content":"# 变量"}]}'
+            )
+        ],
+        is_last=True,
     )
     model = AsyncMock(side_effect=[invalid_response, valid_response])
     retrieve = AsyncMock(return_value={"context_text": "变量定义", "sources": []})
@@ -201,17 +217,17 @@ async def test_public_resource_flow_limits_node_generation_concurrency_and_uses_
         await asyncio.gather(*tasks)
 
         fake_generator.generate_many.side_effect = RuntimeError("model failed")
-        with pytest.raises(RuntimeError, match="model failed"):
-            await flow.run_public_resource_generation(
-                settings=settings,
-                task_id="task-failed",
-                course_id="catalog-1",
-                chapter="第一章",
-                knowledge_point="失败节点",
-                resource_types=["lesson"],
-                webhook_url="http://backend.test/webhook",
-            )
+        result = await flow.run_public_resource_generation(
+            settings=settings,
+            task_id="task-failed",
+            course_id="catalog-1",
+            chapter="第一章",
+            knowledge_point="失败节点",
+            resource_types=["lesson"],
+            webhook_url="http://backend.test/webhook",
+        )
 
+        assert result == []
         failure_payload = flow._post_webhook.await_args.args[2]
         assert failure_payload["error_code"] == "resource_gen_failed"
         assert len(failure_payload["error_code"]) <= 20

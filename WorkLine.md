@@ -3170,3 +3170,31 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 无变化。
 - Agent API 无变化；请求、202 响应与 Webhook 结构保持不变。
+
+---
+
+### 2026-07-13 — 修复共享资源无法读取 AgentScope ChatResponse
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/generators/public_resources.py`
+- `agent_service_v2/src/agent_service_v2/generators/public_resource_flow.py`
+- `agent_service_v2/tests/test_public_resource_generation.py`
+
+**核心改动：**
+1. 公共资源生成器按 AgentScope 2.0.3 的真实 `ChatResponse.content` / `TextBlock.text` 读取非流式模型结果，不再访问不存在的顶层 `response.text`。
+2. 后台资源任务完成失败 Webhook 后返回空结果，不再向无人等待的 `asyncio.create_task` 重抛异常，消除 `Task exception was never retrieved`。
+3. 测试使用真实 `ChatResponse` 和 `TextBlock`，避免 `MagicMock.text` 与生产响应结构不一致造成假通过。
+
+**验证结果：**
+- TDD RED：真实 `ChatResponse` 用例稳定复现 `KeyError('text')`；后台失败用例复现异常重抛。
+- 定向测试：`tests/test_public_resource_generation.py` 8 passed。
+- Agent v2 全量测试：141 passed。
+- 真实模型烟雾测试：资源库 `c77233d8680b4ea2` 的“C语言基本语法”成功生成 1 份 lesson，内容长度 1348；未写 Backend 数据库。
+- Python `py_compile` 与 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent API 无变化。
+
+**遗留问题：**
+- RAG 工具返回 `citations`，公共资源生成器读取 `sources`，烟雾测试生成内容正常但来源列表为空；本次未扩大范围处理该既有元数据映射问题。

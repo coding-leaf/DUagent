@@ -2,10 +2,25 @@ export const updateTargetMessage = (messages, targetId, updater) => {
   return messages.map(m => m.id === targetId ? updater(m) : m);
 };
 
-const FAILED_TOOL_STATUSES = new Set(['rejected', 'degraded', 'unavailable']);
+const FAILED_TOOL_STATUSES = new Set([
+  'rejected',
+  'unavailable',
+  'delivery_incomplete',
+  'delivery_failed',
+  'error'
+]);
 
 const isFailedToolResult = (payload = {}) => {
-  return payload.state === 'error' || FAILED_TOOL_STATUSES.has(payload.status);
+  return payload.outcome === 'failure'
+    || payload.state === 'error'
+    || FAILED_TOOL_STATUSES.has(payload.status);
+};
+
+const toolDisplayStatus = (payload = {}) => {
+  if (isFailedToolResult(payload)) return 'error';
+  if (payload.outcome === 'warning' || payload.status === 'degraded') return 'warning';
+  if (payload.outcome === 'neutral') return 'neutral';
+  return 'completed';
 };
 
 const toolOutputSummary = (payload = {}, isFailed = false) => {
@@ -120,6 +135,11 @@ export const reduceAssistantMessageForEvent = (message, event) => {
         const toolCall = {
           id: event.payload?.tool_call_id || `tool-${crypto.randomUUID()}`,
           name: event.payload?.tool_name || '工具调用',
+          ...(event.payload?.tool_title ? { title: event.payload.tool_title } : {}),
+          ...(event.payload?.tool_category ? { category: event.payload.tool_category } : {}),
+          ...(typeof event.payload?.read_only === 'boolean'
+            ? { readOnly: event.payload.read_only }
+            : {}),
           status: 'running'
         };
         return {
@@ -133,7 +153,7 @@ export const reduceAssistantMessageForEvent = (message, event) => {
         const isFailed = isFailedToolResult(event.payload);
         const toolCall = {
           id: event.payload?.tool_call_id || 'unknown',
-          status: isFailed ? 'error' : 'completed',
+          status: toolDisplayStatus(event.payload),
           outputSummary: toolOutputSummary(event.payload, isFailed)
         };
         return {
@@ -147,6 +167,11 @@ export const reduceAssistantMessageForEvent = (message, event) => {
         const toolCall = {
           id: event.payload?.tool_call_id || 'unknown',
           name: event.payload?.tool_name || '工具调用',
+          ...(event.payload?.tool_title ? { title: event.payload.tool_title } : {}),
+          ...(event.payload?.tool_category ? { category: event.payload.tool_category } : {}),
+          ...(typeof event.payload?.read_only === 'boolean'
+            ? { readOnly: event.payload.read_only }
+            : {}),
           status: 'error',
           outputSummary: event.payload?.reason || event.payload?.message
         };

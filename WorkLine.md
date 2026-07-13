@@ -3587,3 +3587,29 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 删除 `POST /api/v1/profile/dialogue-update` 和 `POST /api/v1/learning-path/refresh`。
 - Agent API 删除全部 `/agent/v1/*`，当前只保留 `/agent/v2/*`。
+
+---
+
+### 2026-07-13 — AI Chat Tool 与 SSE 四态契约强修复（第一批）
+
+**涉及范围：**
+- `agent_service_v2`：统一 ToolOutcome、Agent v2 Pydantic 输入模型、RAG sources、事件适配、记忆门禁与审计脱敏
+- `backend`：`read_recent_answers` 显式 scope 与跨字段校验
+- `frontend`：success/neutral/warning/failure 工具卡与服务端标题
+
+**根因与改动：**
+1. AgentScope 工具执行成功只代表函数完成，不代表业务成功；SSE 现按业务 status/outcome 映射，`delivery_incomplete/error` 与 AgentScope ERROR 均输出红色 `tool_failed`，`degraded` 保持黄色完成态。
+2. 工具参数改由 Agent v2 自有 Pydantic 模型生成并在执行时复验，补齐选择题嵌套结构、语言/题型/难度枚举、数量范围和 recent-answer scope 跨字段约束；可信身份仍由闭包注入。
+3. RAG 引用统一为 `payload.sources`，稳定字段为 `source_file/snippet/score`；`tool_started` 增加服务端标题、分类和只读标记。
+4. 长期记忆继续默认开放，但写入仅允许用户明确表达的稳定内容；推断、诊断、答案、敏感内容和工具原文被拒绝，记忆工具日志只记录脱敏审计元数据。
+5. 编程练习工具更名为 `publish_personal_code_problem`；前端旧名称映射暂保留用于历史消息。
+
+**验证结果：**
+- Agent Service v2 全量：162 passed。
+- Backend 学情与 internal API：13 passed。
+- Frontend 工具事件与卡片定向：10 passed。
+
+**接口漂移：**
+- Client API 路径无变化。
+- Agent SSE v2 新增 ToolOutcome、工具元信息并修正失败语义；`source_refs` 统一为 `sources`。
+- Backend internal recent-answers 新增必填 `scope=course|node|knowledge_point`，并严格限制 `limit<=10`。

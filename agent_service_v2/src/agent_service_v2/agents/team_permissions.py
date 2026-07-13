@@ -14,7 +14,7 @@ ROLE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
         "retrieve_course_context_tool",
         "create_personalized_resource_draft",
         "record_personalized_validation",
-        "validate_personal_code_problem_draft",
+        "publish_personal_code_problem",
         "TeamSay",
     ),
     "resource_reviewer": (

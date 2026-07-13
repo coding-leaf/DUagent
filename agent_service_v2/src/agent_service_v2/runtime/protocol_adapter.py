@@ -31,6 +31,25 @@ from agentscope.event import (
 
 from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.runtime.edu_events import EduEvent, EduEventType, utc_now_iso
+from agent_service_v2.tools.contracts import outcome_for_status
+
+
+_TOOL_METADATA = {
+    "reset_tools": ("整理工具状态", "system", False),
+    "TaskCreate": ("创建计划任务", "planning", False),
+    "TaskUpdate": ("更新计划任务", "planning", False),
+    "TaskList": ("查看计划任务", "planning", True),
+    "TaskGet": ("读取计划任务", "planning", True),
+    "retrieve_course_context_tool": ("检索教材教学上下文", "retrieval", True),
+    "read_learning_progress": ("分析学情薄弱点", "learning_progress", True),
+    "read_recent_answers": ("调取历史作答轨迹", "learning_progress", True),
+    "run_code_in_oj": ("在线沙盒编译运行", "execution", True),
+    "write_artifact_file": ("编写工作区课件", "artifact", False),
+    "publish_personal_code_problem": ("发布私有编程练习", "practice", False),
+    "publish_personal_choice_quiz": ("发布私有选择题练习", "practice", False),
+    "search_memory": ("检索长期记忆", "memory", True),
+    "add_memory": ("保存长期记忆", "memory", False),
+}
 
 
 class EDUProtocolAdapter:
@@ -92,11 +111,11 @@ class EDUProtocolAdapter:
 
         result_text = self._tool_result_text.get(event.tool_call_id, "")
         parsed = _parse_json_object(result_text)
-        citations = parsed.get("citations")
-        if not citations:
+        sources = parsed.get("sources")
+        if not sources:
             return None
 
-        return {"citations": citations}
+        return {"sources": sources}
 
     def _build_event(self, event_type: EduEventType, payload: dict[str, Any]) -> EduEvent:
         self._seq += 1
@@ -133,17 +152,31 @@ class EDUProtocolAdapter:
         if isinstance(event, TextBlockDeltaEvent):
             return EduEventType.TEXT_DELTA, {"delta": event.delta}
         if isinstance(event, ToolCallStartEvent):
+            title, category, read_only = _TOOL_METADATA.get(
+                event.tool_call_name,
+                (event.tool_call_name, "other", False),
+            )
             return EduEventType.TOOL_STARTED, {
                 "tool_call_id": event.tool_call_id,
                 "tool_name": event.tool_call_name,
+                "tool_title": title,
+                "tool_category": category,
+                "read_only": read_only,
             }
         if isinstance(event, ToolResultEndEvent):
+            framework_state = getattr(event.state, "value", event.state)
+            parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
+            status = str(parsed.get("status") or ("error" if framework_state == "error" else "success"))
+            outcome = str(parsed.get("outcome") or outcome_for_status(
+                status,
+                framework_error=framework_state == "error",
+            ))
             payload: dict[str, Any] = {
                 "tool_call_id": event.tool_call_id,
                 "tool_name": self._tool_names.get(event.tool_call_id),
-                "state": getattr(event.state, "value", event.state),
+                "state": framework_state,
+                "outcome": outcome,
             }
-            parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
             if parsed:
                 if "status" in parsed:
                     status_val = parsed["status"]
@@ -169,7 +202,16 @@ class EDUProtocolAdapter:
                         payload["output_summary"] = f"返回 {returned_count} 条学习记录"
                 elif "status" in payload:
                     payload["output_summary"] = f"工具状态：{payload['status']}"
-            return EduEventType.TOOL_COMPLETED, payload
+                if isinstance(parsed.get("artifact"), dict):
+                    payload["artifact"] = parsed["artifact"]
+                if isinstance(parsed.get("retryable"), bool):
+                    payload["retryable"] = parsed["retryable"]
+            event_type = (
+                EduEventType.TOOL_FAILED
+                if outcome == "failure"
+                else EduEventType.TOOL_COMPLETED
+            )
+            return event_type, payload
         if isinstance(event, ReplyEndEvent):
             return EduEventType.WORKFLOW_COMPLETED, {"reply_id": event.reply_id}
         if isinstance(event, ExceedMaxItersEvent):
@@ -243,10 +285,15 @@ class EDUProtocolAdapter:
     def _is_successful_artifact_tool_result(self, event: ToolResultEndEvent) -> bool:
         state = getattr(event.state, "value", event.state)
         tool_name = self._tool_names.get(event.tool_call_id)
-        return state != "error" and tool_name in {
+        parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
+        outcome = parsed.get("outcome") or outcome_for_status(
+            parsed.get("status"),
+            framework_error=state == "error",
+        )
+        return outcome == "success" and tool_name in {
             "write_artifact_file",
             "create_code_sandbox_card",
-            "validate_personal_code_problem_draft",
+            "publish_personal_code_problem",
             "publish_personal_choice_quiz",
         }
 

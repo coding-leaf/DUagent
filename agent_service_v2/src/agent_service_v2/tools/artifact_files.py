@@ -16,6 +16,7 @@ from agent_service_v2.artifacts.schemas import (
 )
 from agent_service_v2.artifacts.validation import validate_json_artifact_payload
 from agent_service_v2.workspaces.run_store import WorkbenchRunStore
+from agent_service_v2.tools.contracts import edu_tool_result
 
 
 def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Callable[..., dict]:
@@ -41,12 +42,17 @@ def build_write_artifact_file(*, workspace: LocalWorkspace, run_id: str) -> Call
             raise ArtifactValidationError(
                 "write_artifact_file only supports Markdown and Mermaid with matching extensions"
             )
-        return _persist_artifact(
+        result = _persist_artifact(
             artifact_dir=artifact_dir,
             filename=filename,
             content=content,
             artifact_type=artifact_type,
             title=title,
+        )
+        return edu_tool_result(
+            status="ok",
+            summary=result["summary"],
+            data={key: value for key, value in result.items() if key not in {"status", "summary"}},
         )
 
     return write_artifact_file

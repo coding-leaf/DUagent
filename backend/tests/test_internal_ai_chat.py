@@ -62,7 +62,7 @@ async def test_internal_learning_progress_returns_service_result():
 
 
 @pytest.mark.asyncio
-async def test_internal_recent_answers_caps_request_schema_limit():
+async def test_internal_recent_answers_validates_explicit_scope_and_limit():
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
             "app.api.v1.internal_ai_chat.query_recent_answers",
@@ -83,8 +83,9 @@ async def test_internal_recent_answers_caps_request_schema_limit():
                     json={
                         "user_id": "u1",
                         "course_id": "c1",
+                        "scope": "knowledge_point",
                         "knowledge_point": "AVL 树旋转",
-                        "limit": 99,
+                        "limit": 10,
                         "only_wrong": True,
                     },
                 )
@@ -92,6 +93,7 @@ async def test_internal_recent_answers_caps_request_schema_limit():
     assert response.status_code == 200
     kwargs = mock_service.await_args.kwargs
     assert kwargs["limit"] == 10
+    assert kwargs["scope"] == "knowledge_point"
 
 
 @pytest.mark.asyncio

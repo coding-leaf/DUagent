@@ -20,4 +20,12 @@ describe('ToolCallCard', () => {
     expect(screen.getByText(/识别到 3 个薄弱点/)).toBeDefined();
     expect(screen.queryByText('重试')).toBeNull();
   });
+
+  it('renders warning outcomes in yellow', () => {
+    const { container } = render(
+      <ToolCallCard name="run_code_in_oj" status="warning" outputSummary="OJ 暂不可用" />
+    );
+    expect(screen.getByText('降级')).toBeDefined();
+    expect(container.firstChild.className).toContain('amber');
+  });
 });

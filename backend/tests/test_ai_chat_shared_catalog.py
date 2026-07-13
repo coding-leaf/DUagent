@@ -116,6 +116,7 @@ async def test_query_recent_answers_resolves_node_from_shared_catalog_kg():
             db,
             user_id=user.id,
             course_id=class_course.id,
+            scope="node",
             node_id="constants",
             only_wrong=True,
         )

@@ -92,7 +92,7 @@ def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
     assert "draft_study_artifact" not in allow_rules
     assert "TaskCreate" in allow_rules
     assert "run_code_in_oj" in allow_rules
-    assert "validate_personal_code_problem_draft" in allow_rules
+    assert "publish_personal_code_problem" in allow_rules
     assert "publish_personal_choice_quiz" in allow_rules
 
     deny_rules = agent.state.permission_context.deny_rules

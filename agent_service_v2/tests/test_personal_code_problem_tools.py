@@ -20,6 +20,13 @@ class FakeClient:
             "language": "python",
             "public_case_count": 1,
             "hidden_case_count": 1,
+            "artifact": {
+                "id": "generation-1",
+                "type": "CodeSandboxCard",
+                "title": payload["draft"]["title"],
+                "problem_id": "problem-1",
+                "language": "python",
+            },
         }
 
 
@@ -61,16 +68,10 @@ def test_personal_code_problem_tool_returns_published_private_problem(tmp_path):
     )
     data = json.loads(_text(response))
 
-    assert data == {
-        "status": "published",
-        "generation_id": "generation-1",
-        "problem_id": "problem-1",
-        "language": "python",
-        "public_case_count": 1,
-        "hidden_case_count": 1,
-        "artifact_status": "created",
-        "artifact_filename": "code-problem-problem-1.json",
-    }
+    assert data["outcome"] == "success"
+    assert data["status"] == "published"
+    assert data["problem_id"] == "problem-1"
+    assert data["artifact"]["type"] == "CodeSandboxCard"
     assert client.calls == [
         (
             "/internal/ai-chat/code-problem-validations",
@@ -122,20 +123,12 @@ def test_personal_code_problem_publication_creates_matching_card_without_leaking
     assert data["status"] == "published"
     assert data["generation_id"] == "generation-1"
     assert data["problem_id"] == "problem-1"
-    assert data["artifact_status"] == "created"
+    assert data["artifact"]["type"] == "CodeSandboxCard"
     assert "reference_solution" not in data
-    artifact_path = (
-        tmp_path / "runs" / "run-1" / "artifacts" / "code-problem-problem-1.json"
-    )
-    artifact = json.loads(artifact_path.read_text(encoding="utf-8").split("---\n", 2)[-1])
-    assert artifact == {
-        "type": "CodeSandboxCard",
-        "title": "回显",
-        "props": {"problem_id": "problem-1", "language": "python"},
-    }
+    assert not list(tmp_path.rglob("*.json"))
 
 
-def test_personal_code_problem_tool_requires_workspace_for_atomic_delivery():
+def test_personal_code_problem_tool_does_not_require_agent_workspace():
     tool = build_personal_code_problem_tools(
         client=FakeClient(),
         user_id="student-1",
@@ -156,10 +149,9 @@ def test_personal_code_problem_tool_requires_workspace_for_atomic_delivery():
         )
     )
 
-    assert json.loads(_text(response)) == {
-        "status": "unavailable",
-        "reason": "ai_chat_workspace_not_configured",
-    }
+    data = json.loads(_text(response))
+    assert data["status"] == "published"
+    assert data["artifact"]["type"] == "CodeSandboxCard"
 
 
 def test_personal_code_problem_tool_reports_backend_validation_as_rejected(tmp_path):
@@ -176,7 +168,7 @@ def test_personal_code_problem_tool_reports_backend_validation_as_rejected(tmp_p
         tool.call(
             title="Echo",
             statement="Read and write input.",
-            language="C++",
+            language="cpp",
             starter_code="int main() { return 0; }",
             reference_solution="int main() { return 0; }",
             public_inputs=["shown\n"],
@@ -184,7 +176,7 @@ def test_personal_code_problem_tool_reports_backend_validation_as_rejected(tmp_p
         )
     )
 
-    assert json.loads(_text(response)) == {
-        "status": "rejected",
-        "reason": "conversation_ownership_check_failed",
-    }
+    data = json.loads(_text(response))
+    assert data["outcome"] == "failure"
+    assert data["status"] == "rejected"
+    assert data["reason"] == "conversation_ownership_check_failed"

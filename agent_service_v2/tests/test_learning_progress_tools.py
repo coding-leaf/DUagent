@@ -35,7 +35,7 @@ def test_read_recent_answers_tool_does_not_accept_user_id_from_model():
     tools = build_learning_progress_tools(client=client, user_id="u1", course_id="c1")
     tool = next(item for item in tools if item.name == "read_recent_answers")
 
-    asyncio.run(tool.call(node_id="n-avl", user_id="attacker", limit=99))
+    asyncio.run(tool.call(scope="node", node_id="n-avl", user_id="attacker", limit=10))
 
     path, payload = client.calls[0]
     assert path == "/internal/ai-chat/recent-answers"
@@ -43,6 +43,7 @@ def test_read_recent_answers_tool_does_not_accept_user_id_from_model():
     assert payload["course_id"] == "c1"
     assert payload["node_id"] == "n-avl"
     assert payload["limit"] == 10
+    assert payload["scope"] == "node"
     assert "attacker" not in payload.values()
 
 

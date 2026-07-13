@@ -188,13 +188,14 @@ async def test_query_recent_answers_filters_by_node_and_wrong_only():
             db,
             user_id=user_id,
             course_id=course_id,
+            scope="node",
             node_id="n-avl",
             limit=10,
             only_wrong=True,
         )
 
     assert result["status"] == "available"
-    assert result["scope"] == "knowledge_point"
+    assert result["scope"] == "node"
     assert result["query"]["resolved_knowledge_point"] == "AVL 树旋转"
     assert result["summary"]["returned_count"] == 1
     item = result["items"][0]
@@ -216,6 +217,7 @@ async def test_query_recent_answers_can_include_correct_answers_and_caps_limit()
             db,
             user_id=user_id,
             course_id=course_id,
+            scope="knowledge_point",
             knowledge_point="AVL 树旋转",
             limit=99,
             only_wrong=False,

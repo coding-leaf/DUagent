@@ -62,20 +62,19 @@ def test_retrieve_course_context_with_mocked_kb_and_rerank() -> None:
         )
 
         assert "context_text" in result
-        assert "citations" in result
-        citations = result["citations"]
+        assert result["outcome"] == "success"
+        assert "sources" in result
+        citations = result["sources"]
         
         # 验证返回 2 条引文
         assert len(citations) == 2
         
         # 验证 Reranker 置顶了第二个文档
-        assert citations[0]["citation_index"] == 1
-        assert citations[0]["content"] == "Global variables can be modified inside functions using global keyword."
+        assert citations[0]["snippet"] == "Global variables can be modified inside functions using global keyword."
         assert citations[0]["score"] == 0.9
         
         # 验证第一个文档排在第二位
-        assert citations[1]["citation_index"] == 2
-        assert citations[1]["content"] == "Python variable scopes include local, global, nonlocal."
+        assert citations[1]["snippet"] == "Python variable scopes include local, global, nonlocal."
         assert citations[1]["score"] == 0.1
 
 

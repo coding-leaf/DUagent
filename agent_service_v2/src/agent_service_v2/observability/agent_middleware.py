@@ -241,6 +241,9 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
         tool_call = input_kwargs.get("tool_call")
         tool_extra = tool_call_attributes(tool_call)
         tool_name = tool_extra.get("tool_name") or "unknown"
+        if tool_name in {"search_memory", "add_memory"}:
+            tool_extra.pop("tool_input_preview", None)
+            tool_extra["memory_content_redacted"] = True
         tool_call_id = tool_extra.get("tool_call_id") or new_span_id(self.run_id, "tool_call")
         span_id = f"span_{self.run_id}_tool_{tool_call_id}"
         self._log.emit(
@@ -289,6 +292,10 @@ class AgentRunLoggingMiddleware(MiddlewareBase):
                 phase="end",
                 attributes={
                     **tool_extra,
-                    **tool_result_attributes(last_item),
+                    **(
+                        {"tool_output_redacted": True}
+                        if tool_name in {"search_memory", "add_memory"}
+                        else tool_result_attributes(last_item)
+                    ),
                 },
             )

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.code_problem import CodeProblemDraft
 
@@ -14,15 +14,21 @@ class LearningProgressRequest(BaseModel):
 class RecentAnswersRequest(BaseModel):
     user_id: str
     course_id: str
+    scope: Literal["course", "node", "knowledge_point"]
     node_id: str | None = None
     knowledge_point: str | None = None
-    limit: int = Field(default=10, ge=1)
+    limit: int = Field(default=10, ge=1, le=10)
     only_wrong: bool = True
 
-    @field_validator("limit")
-    @classmethod
-    def cap_limit(cls, value: int) -> int:
-        return min(int(value), 10)
+    @model_validator(mode="after")
+    def validate_scope_fields(self):
+        if self.scope == "course" and (self.node_id or self.knowledge_point):
+            raise ValueError("course scope cannot include node_id or knowledge_point")
+        if self.scope == "node" and (not self.node_id or self.knowledge_point):
+            raise ValueError("node scope requires only node_id")
+        if self.scope == "knowledge_point" and (not self.knowledge_point or self.node_id):
+            raise ValueError("knowledge_point scope requires only knowledge_point")
+        return self
 
 
 class OJEvaluationRequest(BaseModel):

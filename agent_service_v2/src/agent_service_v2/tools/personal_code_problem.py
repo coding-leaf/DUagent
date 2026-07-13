@@ -5,12 +5,12 @@ from typing import Any
 from agentscope.tool import FunctionTool
 from agentscope.workspace import LocalWorkspace
 
-from agent_service_v2.artifacts.schemas import ArtifactValidationError
 from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClient,
     BackendLearningClientError,
 )
-from agent_service_v2.tools.artifact_files import build_create_code_sandbox_card
+from agent_service_v2.tools.contracts import edu_tool_result, normalize_tool_result
+from agent_service_v2.tools.input_models import PersonalCodeProblemInput
 
 
 def _failure_status(reason: str) -> str:
@@ -30,7 +30,7 @@ def build_personal_code_problem_tools(
     run_id: str,
     workspace: LocalWorkspace | None = None,
 ) -> list[FunctionTool]:
-    async def validate_personal_code_problem_draft(
+    async def publish_personal_code_problem(
         title: str,
         statement: str,
         language: str,
@@ -54,30 +54,31 @@ def build_personal_code_problem_tools(
         Returns:
             A published result with generation_id and problem_id, or a rejected/unavailable result.
         """
+        request = PersonalCodeProblemInput(
+            title=title,
+            statement=statement,
+            language=language,
+            starter_code=starter_code,
+            reference_solution=reference_solution,
+            public_inputs=public_inputs,
+            hidden_inputs=hidden_inputs,
+        )
         if client is None or not course_id or not conversation_id:
-            return {
-                "status": "unavailable",
-                "reason": "ai_chat_context_not_configured",
-            }
-        if workspace is None:
-            return {
-                "status": "unavailable",
-                "reason": "ai_chat_workspace_not_configured",
-            }
+            return edu_tool_result(status="unavailable", reason="ai_chat_context_not_configured")
         payload = {
             "user_id": user_id,
             "course_id": course_id,
             "conversation_id": conversation_id,
             "run_id": run_id,
             "draft": {
-                "title": title,
-                "statement": statement,
-                "language": language,
-                "starter_code": starter_code,
-                "reference_solution": reference_solution,
+                "title": request.title,
+                "statement": request.statement,
+                "language": request.language,
+                "starter_code": request.starter_code,
+                "reference_solution": request.reference_solution,
                 "test_inputs": [
-                    *({"stdin": value, "is_public": True} for value in public_inputs),
-                    *({"stdin": value, "is_public": False} for value in hidden_inputs),
+                    *({"stdin": value, "is_public": True} for value in request.public_inputs),
+                    *({"stdin": value, "is_public": False} for value in request.hidden_inputs),
                 ],
             },
         }
@@ -86,50 +87,18 @@ def build_personal_code_problem_tools(
                 "/internal/ai-chat/code-problem-validations", payload
             )
         except BackendLearningClientError as exc:
-            return {
-                "status": _failure_status(exc.reason),
-                "reason": exc.detail_reason or exc.reason,
-            }
-        if data.get("status") != "published":
-            return data
-
-        problem_id = data.get("problem_id")
-        published_language = data.get("language")
-        if not isinstance(problem_id, str) or not problem_id:
-            return {
-                "status": "delivery_incomplete",
-                "reason": "published_problem_id_missing",
-            }
-        if not isinstance(published_language, str) or not published_language:
-            return {
-                "status": "delivery_incomplete",
-                "reason": "published_problem_language_missing",
-                "problem_id": problem_id,
-            }
-
-        create_card = build_create_code_sandbox_card(workspace=workspace, run_id=run_id)
-        try:
-            artifact = create_card(
-                problem_id=problem_id,
-                language=published_language,
-                title=title,
+            status = _failure_status(exc.reason)
+            return edu_tool_result(
+                status=status,
+                reason=exc.detail_reason or exc.reason,
+                retryable=status == "unavailable",
             )
-        except (ArtifactValidationError, OSError):
-            return {
-                "status": "delivery_incomplete",
-                "reason": "code_sandbox_card_creation_failed",
-                "problem_id": problem_id,
-            }
-        return {
-            **data,
-            "artifact_status": "created",
-            "artifact_filename": artifact["filename"],
-        }
+        return normalize_tool_result(data, default_status="published")
 
-    return [
+    tools = [
         FunctionTool(
-            validate_personal_code_problem_draft,
-            name="validate_personal_code_problem_draft",
+            publish_personal_code_problem,
+            name="publish_personal_code_problem",
             description=(
                 "Validate and immediately publish one private fixed-test-case programming problem for the current student. "
                 "Supported canonical languages are c, cpp, python, java, go, and javascript. "
@@ -140,3 +109,5 @@ def build_personal_code_problem_tools(
             is_read_only=False,
         )
     ]
+    tools[0].input_schema = PersonalCodeProblemInput.tool_schema()
+    return tools

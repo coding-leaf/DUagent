@@ -224,7 +224,16 @@ async def retrieve_course_context(
     # 限制检索上限
     raw_results = await kb.search(queries=[query], top_k=limit * 2)
     if not raw_results:
-        return {"context_text": "", "citations": []}
+        return {
+            "outcome": "neutral",
+            "status": "empty",
+            "reason": None,
+            "summary": "No relevant course material found.",
+            "retryable": False,
+            "data": {"context_text": ""},
+            "context_text": "",
+            "sources": [],
+        }
 
     # 2. 提取文本，进行语义重排（Rerank）提升质量
     reranker = build_reranker_model_from_settings(settings)
@@ -249,7 +258,7 @@ async def retrieve_course_context(
 
     # 3. 组装最终检索结果和引文 citations
     context_parts: list[str] = []
-    citations: list[dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
 
     for idx, (res, score) in enumerate(filtered_results):
         chunk = res.chunk
@@ -257,16 +266,22 @@ async def retrieve_course_context(
         filename = payload.get("filename") or chunk.source or "unknown_textbook"
         
         context_parts.append(f"[{idx+1}] File: {filename}\nContent: {chunk.content.text}\n")
-        citations.append(
+        sources.append(
             {
-                "citation_index": idx + 1,
                 "source_file": filename,
-                "content": chunk.content.text,
+                "snippet": chunk.content.text,
                 "score": float(score),
             }
         )
 
+    context_text = "\n".join(context_parts)
     return {
-        "context_text": "\n".join(context_parts),
-        "citations": citations,
+        "outcome": "success",
+        "status": "available",
+        "reason": None,
+        "summary": {"returned_count": len(sources)},
+        "retryable": False,
+        "data": {"context_text": context_text},
+        "context_text": context_text,
+        "sources": sources,
     }

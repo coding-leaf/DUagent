@@ -8,6 +8,8 @@ from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClient,
     BackendLearningClientError,
 )
+from agent_service_v2.tools.contracts import edu_tool_result, normalize_tool_result
+from agent_service_v2.tools.input_models import LearningProgressInput, RecentAnswersInput
 
 
 def _bounded_recent_limit(limit: int) -> int:
@@ -27,10 +29,12 @@ def _bounded_node_limit(limit: int) -> int:
 
 
 def _error_result(reason: str, status_code: int | None = None) -> dict[str, Any]:
-    result: dict[str, Any] = {"status": "unavailable", "reason": reason}
-    if status_code is not None:
-        result["status_code"] = status_code
-    return result
+    return edu_tool_result(
+        status="unavailable",
+        reason=reason,
+        retryable=status_code is None or status_code >= 500,
+        data={"status_code": status_code} if status_code is not None else {},
+    )
 
 
 def build_learning_progress_tools(
@@ -45,23 +49,26 @@ def build_learning_progress_tools(
         Args:
             limit_nodes: Maximum progress nodes to return, from 1 through 100.
         """
+        request = LearningProgressInput(limit_nodes=limit_nodes)
         if client is None:
             return _error_result("backend_learning_client_not_configured")
         if not course_id:
             return _error_result("course_context_missing")
         try:
-            return await client.post_json(
+            result = await client.post_json(
                 "/internal/ai-chat/learning-progress",
                 {
                     "user_id": user_id,
                     "course_id": course_id,
-                    "limit_nodes": _bounded_node_limit(limit_nodes),
+                    "limit_nodes": request.limit_nodes,
                 },
             )
+            return normalize_tool_result(result)
         except BackendLearningClientError as exc:
             return _error_result(exc.reason, exc.status_code)
 
     async def read_recent_answers(
+        scope: str,
         node_id: str | None = None,
         knowledge_point: str | None = None,
         limit: int = 10,
@@ -76,26 +83,35 @@ def build_learning_progress_tools(
             limit: Maximum records to return, from 1 through 10.
             only_wrong: Whether to return only incorrect answers.
         """
+        request = RecentAnswersInput(
+            scope=scope,
+            node_id=node_id,
+            knowledge_point=knowledge_point,
+            limit=limit,
+            only_wrong=only_wrong,
+        )
         if client is None:
             return _error_result("backend_learning_client_not_configured")
         if not course_id:
             return _error_result("course_context_missing")
         try:
-            return await client.post_json(
+            result = await client.post_json(
                 "/internal/ai-chat/recent-answers",
                 {
                     "user_id": user_id,
                     "course_id": course_id,
-                    "node_id": node_id,
-                    "knowledge_point": knowledge_point,
-                    "limit": _bounded_recent_limit(limit),
-                    "only_wrong": bool(only_wrong),
+                    "scope": request.scope,
+                    "node_id": request.node_id,
+                    "knowledge_point": request.knowledge_point,
+                    "limit": request.limit,
+                    "only_wrong": request.only_wrong,
                 },
             )
+            return normalize_tool_result(result)
         except BackendLearningClientError as exc:
             return _error_result(exc.reason, exc.status_code)
 
-    return [
+    tools = [
         FunctionTool(
             read_learning_progress,
             name="read_learning_progress",
@@ -109,3 +125,6 @@ def build_learning_progress_tools(
             is_read_only=True,
         ),
     ]
+    tools[0].input_schema = LearningProgressInput.tool_schema()
+    tools[1].input_schema = RecentAnswersInput.tool_schema()
+    return tools

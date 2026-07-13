@@ -23,15 +23,10 @@ def test_write_artifact_file_writes_markdown_with_frontmatter(tmp_path):
     )
 
     path = tmp_path / "runs" / "run-1" / "artifacts" / "001-functions.md"
-    assert result == {
-        "status": "ok",
-        "tool": "write_artifact_file",
-        "filename": "001-functions.md",
-        "artifact_type": "Markdown",
-        "title": "函数资料",
-        "bytes_written": len(path.read_bytes()),
-        "summary": "artifact file written: 001-functions.md",
-    }
+    assert result["outcome"] == "success"
+    assert result["status"] == "ok"
+    assert result["filename"] == "001-functions.md"
+    assert result["bytes_written"] == len(path.read_bytes())
     assert path.read_text(encoding="utf-8") == (
         "---\n"
         "type: Markdown\n"

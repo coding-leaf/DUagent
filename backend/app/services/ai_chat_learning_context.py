@@ -158,6 +158,7 @@ async def query_recent_answers(
     *,
     user_id: str,
     course_id: str,
+    scope: str = "course",
     node_id: str | None = None,
     knowledge_point: str | None = None,
     limit: int = 10,
@@ -166,9 +167,9 @@ async def query_recent_answers(
     bounded_limit = _bounded_limit(limit, default=10, maximum=MAX_RECENT_ANSWERS)
     warnings: list[str] = []
     resolved_knowledge_point = str(knowledge_point or "").strip() or None
-    scope = "course_recent"
+    result_scope = "course"
 
-    if node_id:
+    if scope == "node" and node_id:
         node_knowledge_point = await resolve_node_knowledge_point(db, course_id, node_id)
         if node_knowledge_point is None:
             return {
@@ -187,9 +188,9 @@ async def query_recent_answers(
         if resolved_knowledge_point and resolved_knowledge_point != node_knowledge_point:
             warnings.append("node_id resolved knowledge_point overrides provided knowledge_point")
         resolved_knowledge_point = node_knowledge_point
-        scope = "knowledge_point"
-    elif resolved_knowledge_point:
-        scope = "knowledge_point"
+        result_scope = "node"
+    elif scope == "knowledge_point" and resolved_knowledge_point:
+        result_scope = "knowledge_point"
 
     stmt = (
         select(QuizAnswer, QuizSession, QuizQuestion)
@@ -235,7 +236,7 @@ async def query_recent_answers(
 
     return {
         "status": "available" if items else "empty",
-        "scope": scope,
+        "scope": result_scope,
         "query": {
             "node_id": node_id,
             "resolved_knowledge_point": resolved_knowledge_point,

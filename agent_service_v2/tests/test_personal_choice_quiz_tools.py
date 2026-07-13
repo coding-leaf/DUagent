@@ -17,6 +17,13 @@ class FakeClient:
             "title": payload["title"],
             "question_ids": ["question-1", "question-2"],
             "question_count": 2,
+            "artifact": {
+                "id": "quiz-generation-1",
+                "type": "QuizCard",
+                "title": payload["title"],
+                "course_id": payload["course_id"],
+                "question_ids": ["question-1", "question-2"],
+            },
         }
 
 
@@ -64,17 +71,8 @@ def test_personal_choice_quiz_tool_publishes_and_creates_matching_card(tmp_path)
     data = json.loads(_text(response))
 
     assert data["status"] == "published"
-    assert data["artifact_status"] == "created"
-    assert data["artifact_filename"] == "choice-quiz-question-1.json"
+    assert data["outcome"] == "success"
+    assert data["artifact"]["type"] == "QuizCard"
     assert client.calls[0][0] == "/internal/ai-chat/choice-quizzes"
     assert client.calls[0][1]["questions"] == questions
-    artifact_path = tmp_path / "runs" / "run-1" / "artifacts" / data["artifact_filename"]
-    artifact = json.loads(artifact_path.read_text(encoding="utf-8").split("---\n", 2)[-1])
-    assert artifact == {
-        "type": "QuizCard",
-        "title": "指针练习",
-        "props": {
-            "course_id": "course-1",
-            "question_ids": ["question-1", "question-2"],
-        },
-    }
+    assert not list(tmp_path.rglob("*.json"))

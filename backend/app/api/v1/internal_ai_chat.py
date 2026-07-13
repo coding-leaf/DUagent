@@ -64,6 +64,7 @@ async def read_recent_answers(
         db,
         user_id=req.user_id,
         course_id=req.course_id,
+        scope=req.scope,
         node_id=req.node_id,
         knowledge_point=req.knowledge_point,
         limit=req.limit,

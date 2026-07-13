@@ -5,6 +5,7 @@ from agentscope.workspace import LocalWorkspace
 
 from agent_service_v2.tools.artifact_files import build_write_artifact_file
 from agent_service_v2.tools.planning import build_planning_group
+from agent_service_v2.tools.input_models import ArtifactFileInput
 
 
 def build_workbench_tool_groups(
@@ -72,6 +73,8 @@ def build_workbench_tool_groups(
                 tools=personal_choice_quiz_tools,
             )
         )
+    artifact_tool = FunctionTool(build_write_artifact_file(workspace=workspace, run_id=run_id))
+    artifact_tool.input_schema = ArtifactFileInput.tool_schema()
     groups.extend(
         [
             ToolGroup(
@@ -81,9 +84,7 @@ def build_workbench_tool_groups(
                     "Use write_artifact_file only for Markdown or Mermaid. "
                     "Interactive practice cards are created atomically by their publishing tools."
                 ),
-                tools=[
-                    FunctionTool(build_write_artifact_file(workspace=workspace, run_id=run_id)),
-                ],
+                tools=[artifact_tool],
             ),
         ]
     )

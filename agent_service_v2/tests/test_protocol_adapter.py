@@ -79,12 +79,70 @@ def test_protocol_adapter_maps_core_agentscope_events():
     ]
     assert [event.seq for event in events] == [1, 2, 3, 4, 5, 6]
     assert events[1].payload == {"delta": "你好"}
-    assert events[2].payload == {"tool_call_id": "tool-1", "tool_name": "TaskCreate"}
+    assert events[2].payload == {
+        "tool_call_id": "tool-1",
+        "tool_name": "TaskCreate",
+        "tool_title": "创建计划任务",
+        "tool_category": "planning",
+        "read_only": False,
+    }
     assert events[3].payload == {
         "tool_call_id": "tool-1",
         "tool_name": "TaskCreate",
         "state": "success",
+        "outcome": "success",
     }
+
+
+@pytest.mark.parametrize(
+    ("status", "outcome", "event_type"),
+    [
+        ("published", "success", EduEventType.TOOL_COMPLETED),
+        ("empty", "neutral", EduEventType.TOOL_COMPLETED),
+        ("degraded", "warning", EduEventType.TOOL_COMPLETED),
+        ("delivery_incomplete", "failure", EduEventType.TOOL_FAILED),
+        ("error", "failure", EduEventType.TOOL_FAILED),
+    ],
+)
+def test_protocol_adapter_maps_business_outcomes(status, outcome, event_type):
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    adapter.adapt(ToolCallStartEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        tool_call_name="publish_personal_choice_quiz",
+    ))
+    adapter.adapt(ToolResultTextDeltaEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        delta=json.dumps({"status": status, "reason": "reason"}),
+    ))
+
+    event = adapter.adapt(ToolResultEndEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        state=ToolResultState.SUCCESS,
+    ))
+
+    assert event.type == event_type
+    assert event.payload["outcome"] == outcome
+
+
+def test_protocol_adapter_maps_agentscope_error_to_tool_failed():
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    adapter.adapt(ToolCallStartEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        tool_call_name="read_learning_progress",
+    ))
+
+    event = adapter.adapt(ToolResultEndEvent(
+        reply_id="reply-1",
+        tool_call_id="tool-1",
+        state=ToolResultState.ERROR,
+    ))
+
+    assert event.type == EduEventType.TOOL_FAILED
+    assert event.payload["outcome"] == "failure"
 
 
 def test_protocol_adapter_emits_plan_updated_for_planning_tools():
@@ -207,6 +265,46 @@ def test_protocol_adapter_distinguishes_missing_node_from_empty_answers(status, 
     assert event.payload["status"] == status
     assert event.payload["returned_count"] == 0
     assert event.payload["output_summary"] == expected_summary
+    assert event.payload["outcome"] == "neutral"
+
+
+def test_protocol_adapter_emits_stable_rag_sources():
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    raw_events = [
+        ToolCallStartEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            tool_call_name="retrieve_course_context_tool",
+        ),
+        ToolResultTextDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            delta=json.dumps({
+                "status": "available",
+                "outcome": "success",
+                "sources": [{
+                    "source_file": "教材.pdf",
+                    "snippet": "数组是一段连续内存。",
+                    "score": 0.91,
+                }],
+            }),
+        ),
+        ToolResultEndEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            state=ToolResultState.SUCCESS,
+        ),
+    ]
+
+    events = [event for raw in raw_events for event in adapter.adapt_many(raw)]
+    source_event = next(event for event in events if event.type == EduEventType.SOURCE_REFS)
+    assert source_event.payload == {
+        "sources": [{
+            "source_file": "教材.pdf",
+            "snippet": "数组是一段连续内存。",
+            "score": 0.91,
+        }]
+    }
 
 
 @pytest.mark.parametrize(
@@ -214,7 +312,7 @@ def test_protocol_adapter_distinguishes_missing_node_from_empty_answers(status, 
     [
         "write_artifact_file",
         "create_code_sandbox_card",
-        "validate_personal_code_problem_draft",
+        "publish_personal_code_problem",
         "publish_personal_choice_quiz",
     ],
 )

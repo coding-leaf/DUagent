@@ -66,7 +66,7 @@ def test_workbench_tool_groups_include_learning_progress_group_when_tools_exist(
 
 def test_workbench_tool_groups_include_personal_code_problem_group_when_tools_exist():
     class FakeTool:
-        name = "validate_personal_code_problem_draft"
+        name = "publish_personal_code_problem"
 
     groups = build_workbench_tool_groups(
         memory_tools=[],

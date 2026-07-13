@@ -5,12 +5,12 @@ from typing import Any
 from agentscope.tool import FunctionTool
 from agentscope.workspace import LocalWorkspace
 
-from agent_service_v2.artifacts.schemas import ArtifactValidationError
-from agent_service_v2.tools.artifact_files import build_create_quiz_practice_card
 from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClient,
     BackendLearningClientError,
 )
+from agent_service_v2.tools.contracts import edu_tool_result, normalize_tool_result
+from agent_service_v2.tools.input_models import PersonalChoiceQuizInput
 
 
 def _failure_status(reason: str) -> str:
@@ -50,50 +50,33 @@ def build_personal_choice_quiz_tools(
         Returns:
             A published result with question_ids and an atomically created QuizCard artifact.
         """
+        request = PersonalChoiceQuizInput(
+            title=title,
+            chapter=chapter,
+            knowledge_point=knowledge_point,
+            questions=questions,
+        )
         if client is None or not course_id or not conversation_id:
-            return {"status": "unavailable", "reason": "ai_chat_context_not_configured"}
-        if workspace is None:
-            return {"status": "unavailable", "reason": "ai_chat_workspace_not_configured"}
+            return edu_tool_result(status="unavailable", reason="ai_chat_context_not_configured")
         payload = {
             "user_id": user_id,
             "course_id": course_id,
             "conversation_id": conversation_id,
             "run_id": run_id,
-            "title": title,
-            "chapter": chapter,
-            "knowledge_point": knowledge_point,
-            "questions": questions,
+            **request.model_dump(),
         }
         try:
             data = await client.post_json("/internal/ai-chat/choice-quizzes", payload)
         except BackendLearningClientError as exc:
-            return {
-                "status": _failure_status(exc.reason),
-                "reason": exc.detail_reason or exc.reason,
-            }
-        question_ids = data.get("question_ids")
-        if data.get("status") != "published" or not isinstance(question_ids, list):
-            return data
-        create_card = build_create_quiz_practice_card(workspace=workspace, run_id=run_id)
-        try:
-            artifact = create_card(
-                course_id=course_id,
-                question_ids=question_ids,
-                title=title,
+            status = _failure_status(exc.reason)
+            return edu_tool_result(
+                status=status,
+                reason=exc.detail_reason or exc.reason,
+                retryable=status == "unavailable",
             )
-        except (ArtifactValidationError, OSError):
-            return {
-                "status": "delivery_incomplete",
-                "reason": "quiz_card_creation_failed",
-                "question_ids": question_ids,
-            }
-        return {
-            **data,
-            "artifact_status": "created",
-            "artifact_filename": artifact["filename"],
-        }
+        return normalize_tool_result(data, default_status="published")
 
-    return [
+    tools = [
         FunctionTool(
             publish_personal_choice_quiz,
             name="publish_personal_choice_quiz",
@@ -105,3 +88,5 @@ def build_personal_choice_quiz_tools(
             is_read_only=False,
         )
     ]
+    tools[0].input_schema = PersonalChoiceQuizInput.tool_schema()
+    return tools

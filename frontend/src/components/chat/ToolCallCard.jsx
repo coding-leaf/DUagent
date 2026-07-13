@@ -17,6 +17,16 @@ const STATUS_META = {
     icon: 'check_circle',
     shell: 'border-emerald-200 bg-emerald-50/50 text-emerald-800',
   },
+  neutral: {
+    label: '无结果',
+    icon: 'info',
+    shell: 'border-slate-200 bg-slate-50/70 text-slate-700',
+  },
+  warning: {
+    label: '降级',
+    icon: 'warning_amber',
+    shell: 'border-amber-200 bg-amber-50/70 text-amber-800',
+  },
   error: {
     label: '失败',
     icon: 'error_outline',

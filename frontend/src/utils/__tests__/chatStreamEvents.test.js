@@ -95,6 +95,52 @@ describe('chatStreamEvents', () => {
     });
   });
 
+  it.each([
+    ['delivery_incomplete', 'failure'],
+    ['error', 'failure']
+  ])('marks %s outcomes as red failures', (status, outcome) => {
+    let message = createEmptyAiMessage();
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'tool_completed',
+      payload: { tool_call_id: 'tool-1', status, outcome, reason: status }
+    });
+    expect(message.toolCalls[0].status).toBe('error');
+  });
+
+  it('keeps degraded outcomes as warnings and server tool metadata', () => {
+    let message = createEmptyAiMessage();
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'tool_started',
+      payload: {
+        tool_call_id: 'tool-1',
+        tool_name: 'future_tool',
+        tool_title: '服务端标题',
+        tool_category: 'retrieval',
+        read_only: true
+      }
+    });
+    message = reduceAssistantMessageForEvent(message, {
+      type: 'tool_completed',
+      payload: { tool_call_id: 'tool-1', status: 'degraded', outcome: 'warning' }
+    });
+    expect(message.toolCalls[0]).toMatchObject({
+      title: '服务端标题',
+      category: 'retrieval',
+      readOnly: true,
+      status: 'warning'
+    });
+  });
+
+  it('preserves stable RAG sources', () => {
+    const message = reduceAssistantMessageForEvent(createEmptyAiMessage(), {
+      type: 'source_refs',
+      payload: { sources: [{ source_file: '教材.pdf', snippet: '数组', score: 0.8 }] }
+    });
+    expect(message.sourceRefs).toEqual([
+      { source_file: '教材.pdf', snippet: '数组', score: 0.8 }
+    ]);
+  });
+
   it('adds content safety review as an ordered message part and blocks critical content', () => {
     let message = createEmptyAiMessage();
 

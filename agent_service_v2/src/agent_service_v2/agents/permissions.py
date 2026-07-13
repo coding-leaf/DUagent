@@ -12,7 +12,7 @@ SAFE_WORKBENCH_TOOLS = [
     "read_recent_answers",
     "write_artifact_file",
     "run_code_in_oj",
-    "validate_personal_code_problem_draft",
+    "publish_personal_code_problem",
     "publish_personal_choice_quiz",
     "search_memory",
     "add_memory",

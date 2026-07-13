@@ -4031,3 +4031,21 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - HTTP/SSE 路径、请求字段和事件类型无变化。
 - `source_refs.payload.sources[]` 在教材 RAG 既有结构之外，联网检索结果使用 `title/url/snippet/source/engine`；工具展示名稳定为 `web_search`。
+
+---
+
+### 2026-07-14 — Mem0 记忆提取保持用户语言
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+
+**核心改动：**
+1. 通过 Mem0 `MemoryConfig.custom_instructions` 强制记忆文本保持用户消息的主要语言。
+2. 中文对话提取为简体中文，专有名词、代码标识符和技术术语允许保留原文。
+
+**验证结果：**
+- Agent Service Python 语法检查通过。
+- `git diff --check` 通过。
+- 按用户要求未新增或运行测试。
+
+**接口漂移：** 无

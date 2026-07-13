@@ -32,6 +32,11 @@ from agent_service_v2.tools.workbench_toolkit import (
 
 logger = logging.getLogger(__name__)
 MEMORY_COLLECTION_NAME = "student_memories"
+MEMORY_EXTRACTION_INSTRUCTIONS = """
+提取出的记忆必须使用用户消息的主要语言。
+当用户使用中文时，所有 memory 文本必须使用简体中文，不得翻译或改写为英文。
+专有名词、代码标识符和技术术语可以保留原文，其余内容应与用户使用的语言和文字保持一致。
+""".strip()
 
 
 class MissingModelConfigError(RuntimeError):
@@ -46,6 +51,7 @@ def _build_mem0_config(*, qdrant_url: str, collection_name: str, embedding_dimen
     from mem0.configs.base import MemoryConfig
 
     return MemoryConfig(
+        custom_instructions=MEMORY_EXTRACTION_INSTRUCTIONS,
         vector_store={
             "provider": "qdrant",
             "config": {

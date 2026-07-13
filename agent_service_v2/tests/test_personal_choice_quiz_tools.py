@@ -1,8 +1,6 @@
 import asyncio
 import json
 
-from agentscope.workspace import LocalWorkspace
-
 from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
 
 
@@ -12,16 +10,19 @@ class FakeClient:
 
     async def post_json(self, path, payload):
         self.calls.append((path, payload))
+        if path.endswith("/prepare"):
+            return {"generation_id": "generation-1", "status": "delivery_pending"}
         return {
+            "generation_id": "generation-1",
             "status": "published",
-            "title": payload["title"],
+            "title": "指针练习",
             "question_ids": ["question-1", "question-2"],
             "question_count": 2,
             "artifact": {
                 "id": "quiz-generation-1",
                 "type": "QuizCard",
-                "title": payload["title"],
-                "course_id": payload["course_id"],
+                "title": "指针练习",
+                "course_id": "course-1",
                 "question_ids": ["question-1", "question-2"],
             },
         }
@@ -39,7 +40,6 @@ def test_personal_choice_quiz_tool_publishes_and_creates_matching_card(tmp_path)
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
-        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
     )[0]
     questions = [
         {
@@ -73,6 +73,7 @@ def test_personal_choice_quiz_tool_publishes_and_creates_matching_card(tmp_path)
     assert data["status"] == "published"
     assert data["outcome"] == "success"
     assert data["artifact"]["type"] == "QuizCard"
-    assert client.calls[0][0] == "/internal/ai-chat/choice-quizzes"
-    assert client.calls[0][1]["questions"] == questions
+    assert client.calls[0][0] == "/internal/ai-chat/personal-practices/prepare"
+    assert client.calls[0][1]["choice_quiz"]["questions"] == questions
+    assert client.calls[1][0] == "/internal/ai-chat/personal-practices/finalize"
     assert not list(tmp_path.rglob("*.json"))

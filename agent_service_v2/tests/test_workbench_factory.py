@@ -192,6 +192,9 @@ def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_pa
     assert "publish_personal_choice_quiz" in prompt
     assert "single_choice" in prompt
     assert "不要再次创建卡片" in prompt
+    assert 'outcome="success"' in prompt
+    assert "artifact_status" not in prompt
+    assert "delivery_incomplete" in prompt
     assert "validated" not in prompt
     assert "不要使用 write_artifact_file 创建 JSON" in prompt
 

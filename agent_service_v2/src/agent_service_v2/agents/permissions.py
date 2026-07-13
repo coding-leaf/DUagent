@@ -14,6 +14,7 @@ SAFE_WORKBENCH_TOOLS = [
     "run_code_in_oj",
     "publish_personal_code_problem",
     "publish_personal_choice_quiz",
+    "resume_personal_practice_delivery",
     "search_memory",
     "add_memory",
     "retrieve_course_context_tool",

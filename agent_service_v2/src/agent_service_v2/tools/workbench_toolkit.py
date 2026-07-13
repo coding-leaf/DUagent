@@ -16,6 +16,7 @@ def build_workbench_tool_groups(
     oj_execution_tools: list[ToolBase] | None = None,
     personal_code_problem_tools: list[ToolBase] | None = None,
     personal_choice_quiz_tools: list[ToolBase] | None = None,
+    personal_practice_delivery_tools: list[ToolBase] | None = None,
     workspace: LocalWorkspace,
     run_id: str,
 ) -> list[ToolGroup]:
@@ -71,6 +72,14 @@ def build_workbench_tool_groups(
                 name="personal_choice_quiz",
                 description="Create validated private single-choice and multi-choice practice sets.",
                 tools=personal_choice_quiz_tools,
+            )
+        )
+    if personal_practice_delivery_tools:
+        groups.append(
+            ToolGroup(
+                name="personal_practice_delivery",
+                description="Resume interrupted Backend publication of interactive practice.",
+                tools=personal_practice_delivery_tools,
             )
         )
     artifact_tool = FunctionTool(build_write_artifact_file(workspace=workspace, run_id=run_id))

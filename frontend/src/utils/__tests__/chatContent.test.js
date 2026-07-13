@@ -74,4 +74,15 @@ describe('chatContent utils', () => {
       }
     ])
   })
+
+  it('restores persisted RAG sources from message metadata', () => {
+    const message = normalizeMessage({
+      role: 'assistant',
+      content: '数组说明',
+      meta: { sources: [{ source_file: '教材.pdf', snippet: '数组', score: 0.9 }] }
+    })
+    expect(message.sourceRefs).toEqual([
+      { source_file: '教材.pdf', snippet: '数组', score: 0.9 }
+    ])
+  })
 })

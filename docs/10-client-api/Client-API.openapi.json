@@ -2052,7 +2052,7 @@
               "text/event-stream": {
                 "schema": {
                   "type": "string",
-                  "description": "事件类型: chunk / diagram / knowledge_points / suggestion / done / review。review 事件在 done 之后异步发出，结构: {\"type\":\"review\",\"status\":\"flagged\",\"reason\":\"<规则原因>\"}，status=flagged 表示该回答可能不准确，前端应标灰提示，原文保留。"
+                  "description": "EDU SSE v2 事件：workflow_started / text_delta / tool_started / tool_completed / tool_failed / plan_updated / source_refs / artifact_created / critic_completed / content_safety_reviewed / debug_log / workflow_completed / workflow_failed。tool_started 携带 tool_title/tool_category/read_only；工具结果 outcome 为 success/neutral/warning/failure；source_refs 统一使用 payload.sources[]。"
                 }
               }
             }

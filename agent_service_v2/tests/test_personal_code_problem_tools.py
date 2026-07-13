@@ -1,8 +1,6 @@
 import asyncio
 import json
 
-from agentscope.workspace import LocalWorkspace
-
 from agent_service_v2.tools.backend_learning_client import BackendLearningClientError
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 
@@ -13,6 +11,8 @@ class FakeClient:
 
     async def post_json(self, path, payload):
         self.calls.append((path, payload))
+        if path.endswith("/prepare"):
+            return {"generation_id": "generation-1", "status": "delivery_pending"}
         return {
             "generation_id": "generation-1",
             "status": "published",
@@ -23,7 +23,7 @@ class FakeClient:
             "artifact": {
                 "id": "generation-1",
                 "type": "CodeSandboxCard",
-                "title": payload["draft"]["title"],
+                "title": "回显",
                 "problem_id": "problem-1",
                 "language": "python",
             },
@@ -45,14 +45,12 @@ def _text(chunk) -> str:
 
 def test_personal_code_problem_tool_returns_published_private_problem(tmp_path):
     client = FakeClient()
-    workspace = LocalWorkspace(workdir=str(tmp_path), workspace_id="ws")
     tool = build_personal_code_problem_tools(
         client=client,
         user_id="student-1",
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
-        workspace=workspace,
     )[0]
 
     response = asyncio.run(
@@ -72,15 +70,15 @@ def test_personal_code_problem_tool_returns_published_private_problem(tmp_path):
     assert data["status"] == "published"
     assert data["problem_id"] == "problem-1"
     assert data["artifact"]["type"] == "CodeSandboxCard"
-    assert client.calls == [
-        (
-            "/internal/ai-chat/code-problem-validations",
+    assert client.calls[0] == (
+            "/internal/ai-chat/personal-practices/prepare",
             {
                 "user_id": "student-1",
                 "course_id": "course-1",
                 "conversation_id": "conversation-1",
                 "run_id": "run-1",
-                "draft": {
+                "practice_type": "code_problem",
+                "code_problem": {
                     "title": "回显",
                     "statement": "读取并输出输入。",
                     "language": "python",
@@ -93,18 +91,16 @@ def test_personal_code_problem_tool_returns_published_private_problem(tmp_path):
                 },
             },
         )
-    ]
+    assert client.calls[1][0] == "/internal/ai-chat/personal-practices/finalize"
 
 
 def test_personal_code_problem_publication_creates_matching_card_without_leaking_draft(tmp_path):
-    workspace = LocalWorkspace(workdir=str(tmp_path), workspace_id="ws")
     tool = build_personal_code_problem_tools(
         client=FakeClient(),
         user_id="student-1",
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
-        workspace=workspace,
     )[0]
 
     response = asyncio.run(
@@ -161,7 +157,6 @@ def test_personal_code_problem_tool_reports_backend_validation_as_rejected(tmp_p
         course_id="course-1",
         conversation_id="conversation-1",
         run_id="run-1",
-        workspace=LocalWorkspace(workdir=str(tmp_path), workspace_id="ws"),
     )[0]
 
     response = asyncio.run(

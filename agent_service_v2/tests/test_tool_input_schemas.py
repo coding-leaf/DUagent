@@ -1,6 +1,7 @@
 from agent_service_v2.tools.learning_progress import build_learning_progress_tools
 from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
+from agent_service_v2.tools.input_models import ArtifactFileInput, RAGRetrieveInput
 
 
 def _tool(tools, name):
@@ -14,7 +15,6 @@ def test_choice_quiz_schema_is_nested_and_constrained():
         course_id="course-1",
         conversation_id="conv-1",
         run_id="run-1",
-        workspace=None,
     )[0]
     schema = tool.input_schema
     question = schema["$defs"]["ChoiceQuestionInput"]
@@ -62,3 +62,12 @@ def test_recent_answers_schema_exposes_scope_and_cross_field_contract():
     assert schema["properties"]["limit"]["minimum"] == 1
     assert schema["properties"]["limit"]["maximum"] == 10
     assert "user_id" not in schema["properties"]
+
+
+def test_rag_and_artifact_models_expose_ranges_and_enums():
+    rag = RAGRetrieveInput.tool_schema()
+    artifact = ArtifactFileInput.tool_schema()
+
+    assert rag["properties"]["limit"]["minimum"] == 1
+    assert rag["properties"]["limit"]["maximum"] == 10
+    assert artifact["properties"]["artifact_type"]["enum"] == ["Markdown", "Mermaid"]

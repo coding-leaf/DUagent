@@ -1505,17 +1505,21 @@ POST /api/v1/tutoring/chat
 |------|------|
 | workflow_started | 本轮 Agent 工作流开始 |
 | text_delta | 文本片段；`payload.delta` 为增量文本 |
-| tool_started | 工具调用开始；`payload.tool_call_id/tool_name` 标识工具 |
-| tool_completed | 工具调用完成；`payload.tool_call_id/state` 标识结果 |
-| tool_failed | 工具调用失败；携带失败原因 |
+| tool_started | 工具调用开始；除 `tool_call_id/tool_name` 外，携带服务端 `tool_title/tool_category/read_only` |
+| tool_completed | 工具调用完成；`outcome=success/neutral/warning`，分别显示绿/灰/黄状态 |
+| tool_failed | 工具调用失败；`outcome=failure`，携带 `status/reason/retryable` 并显示红色状态 |
 | plan_updated | AI 计划任务列表更新；`payload.tasks[]` 含 `id/title/description/status` |
-| source_refs | 引用来源列表 |
-| artifact_created | Agent 工作区产物创建 |
+| source_refs | 引用来源列表；统一从 `payload.sources[]` 读取 `source_file/snippet/score` |
+| artifact_created | 文件型 Workspace 产物，或 Backend 已原子发布的 QuizCard/CodeSandboxCard |
 | critic_completed | 回答审查完成，可能标记不准确 |
 | content_safety_reviewed | 完整回复后的内容安全外审结果；仅审核违禁/违法/安全风险，不审核知识点正确性 |
 | debug_log | 开发观测日志，前端仅用于开发者浮窗 |
 | workflow_completed | 本轮回答完成，携带 conversation_id/message_id |
 | workflow_failed | 本轮回答失败 |
+
+**工具结果四态约定：** `available/published/ok/success` 映射为 `success`；`empty/not_found` 映射为 `neutral`；`degraded` 映射为 `warning`；`rejected/unavailable/delivery_incomplete/error` 映射为 `failure`。AgentScope 工具执行状态为 `ERROR` 时必须发送 `tool_failed`。
+
+Backend 在助手消息 `meta` 中保存 `agent_run_id`、`sources`、`tool_events` 和 `artifacts`。如互动卡片的 SSE 事件丢失，对话落库时会按 `agent_run_id` 从已发布 generation 恢复卡片描述符。
 
 **`content_safety_reviewed.payload` 字段：**
 

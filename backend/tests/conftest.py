@@ -25,6 +25,7 @@ def configure_and_cleanup_db(request):
         "tests.test_course_catalog_knowledge_repair": "sqlite+aiosqlite:////tmp/course_catalog_knowledge_repair.db",
         "tests.test_course_catalog_ready_gate": "sqlite+aiosqlite:////tmp/course_catalog_ready_gate.db",
         "tests.test_resource_detail": "sqlite+aiosqlite:///./test_resource.db",
+        "tests.test_personal_practice_delivery_service": "sqlite+aiosqlite:////tmp/test_personal_practice_delivery_v2.db",
     }
     
     # Resolve the database URL for this test module
@@ -77,5 +78,3 @@ def configure_and_cleanup_db(request):
             setattr(m, "async_engine", db_session.engine)
             
     yield
-
-

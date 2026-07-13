@@ -15,10 +15,12 @@ from agent_service_v2.observability.agent_middleware import AgentRunLoggingMiddl
 from agent_service_v2.observability.logging import LogSink
 from agent_service_v2.tools.backend_learning_client import build_backend_learning_client_from_settings
 from agent_service_v2.tools.learning_progress import build_learning_progress_tools
+from agent_service_v2.tools.input_models import RAGRetrieveInput
 from agent_service_v2.tools.memory_guard import guard_memory_tools
 from agent_service_v2.tools.oj_execution import build_oj_execution_tools
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
+from agent_service_v2.tools.personal_practice_delivery import build_resume_personal_practice_tools
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
 
@@ -121,7 +123,6 @@ class WorkbenchAgentFactory:
             course_id=course_id,
             conversation_id=conversation_id,
             run_id=run_id,
-            workspace=workspace,
         )
         personal_choice_quiz_tools = build_personal_choice_quiz_tools(
             client=learning_client,
@@ -129,7 +130,11 @@ class WorkbenchAgentFactory:
             course_id=course_id,
             conversation_id=conversation_id,
             run_id=run_id,
-            workspace=workspace,
+        )
+        personal_practice_delivery_tools = build_resume_personal_practice_tools(
+            client=learning_client,
+            user_id=user_id,
+            course_id=course_id,
         )
 
         from agentscope.tool import FunctionTool
@@ -143,9 +148,16 @@ class WorkbenchAgentFactory:
                     query (str): The search query keywords or question text.
                     limit (int, optional): Maximum number of segments to return. Defaults to 3.
                 """
-                return await retrieve_course_context(query=query, course_id=catalog_id, limit=limit)
+                request = RAGRetrieveInput(query=query, limit=limit)
+                return await retrieve_course_context(
+                    query=request.query,
+                    course_id=catalog_id,
+                    limit=request.limit,
+                )
 
-            rag_tools = [FunctionTool(retrieve_course_context_tool)]
+            rag_tool = FunctionTool(retrieve_course_context_tool)
+            rag_tool.input_schema = RAGRetrieveInput.tool_schema()
+            rag_tools = [rag_tool]
         else:
             rag_tools = []
 
@@ -193,6 +205,7 @@ class WorkbenchAgentFactory:
             oj_execution_tools=oj_execution_tools,
             personal_code_problem_tools=personal_code_problem_tools,
             personal_choice_quiz_tools=personal_choice_quiz_tools,
+            personal_practice_delivery_tools=personal_practice_delivery_tools,
             workspace=workspace,
             run_id=run_id,
         )
@@ -203,6 +216,7 @@ class WorkbenchAgentFactory:
             "learning_progress",
             "oj_execution",
             "artifact",
+            "personal_practice_delivery",
         }
         activated_groups = [
             group.name for group in tool_groups if group.name in default_active_groups

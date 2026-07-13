@@ -24,6 +24,27 @@ def _init_db():
     asyncio.run(init_db())
 
 
+def _code_prepare_payload(language="python"):
+    return {
+        "user_id": "student-1",
+        "course_id": "course-1",
+        "conversation_id": "conversation-1",
+        "run_id": "run-1",
+        "practice_type": "code_problem",
+        "code_problem": {
+            "title": "回显",
+            "statement": "读取并输出输入。",
+            "language": language,
+            "starter_code": "print(input())",
+            "reference_solution": "print(input())  # private",
+            "test_inputs": [
+                {"stdin": "shown\n", "is_public": True},
+                {"stdin": "hidden\n", "is_public": False},
+            ],
+        },
+    }
+
+
 @pytest.mark.asyncio
 async def test_internal_oj_evaluate_requires_token():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -38,24 +59,8 @@ async def test_internal_oj_evaluate_requires_token():
 async def test_internal_code_problem_creation_requires_token():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
-            "/internal/ai-chat/code-problem-validations",
-            json={
-                "user_id": "student-1",
-                "course_id": "course-1",
-                "conversation_id": "conversation-1",
-                "run_id": "run-1",
-                "draft": {
-                    "title": "回显",
-                    "statement": "读取并输出输入。",
-                    "language": "python",
-                    "starter_code": "print(input())",
-                    "reference_solution": "print(input())",
-                    "test_inputs": [
-                        {"stdin": "1\n", "is_public": True},
-                        {"stdin": "2\n", "is_public": False},
-                    ],
-                },
-            },
+            "/internal/ai-chat/personal-practices/prepare",
+            json=_code_prepare_payload(),
         )
     assert response.status_code == 403
 
@@ -64,49 +69,24 @@ async def test_internal_code_problem_creation_requires_token():
 async def test_internal_code_problem_creation_returns_safe_metadata_only():
     from types import SimpleNamespace
 
-    created = SimpleNamespace(
-        generation=SimpleNamespace(id="generation-1", status="published"),
-        problem=SimpleNamespace(id="problem-1"),
-        public_case_count=1,
-        hidden_case_count=1,
-    )
+    created = SimpleNamespace(id="generation-1", status="delivery_pending")
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            "app.api.v1.internal_ai_chat.prepare_personal_practice_delivery",
             new_callable=AsyncMock,
         ) as create_problem:
             create_problem.return_value = created
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/code-problem-validations",
+                    "/internal/ai-chat/personal-practices/prepare",
                     headers={"X-Internal-Agent-Token": "secret"},
-                    json={
-                        "user_id": "student-1",
-                        "course_id": "course-1",
-                        "conversation_id": "conversation-1",
-                        "run_id": "run-1",
-                        "draft": {
-                            "title": "回显",
-                            "statement": "读取并输出输入。",
-                            "language": "python",
-                            "starter_code": "print(input())",
-                            "reference_solution": "print(input())  # private",
-                            "test_inputs": [
-                                {"stdin": "shown\n", "is_public": True},
-                                {"stdin": "hidden\n", "is_public": False},
-                            ],
-                        },
-                    },
+                    json=_code_prepare_payload(),
                 )
 
     assert response.status_code == 200
     assert response.json()["data"] == {
         "generation_id": "generation-1",
-        "status": "published",
-        "problem_id": "problem-1",
-        "language": "python",
-        "public_case_count": 1,
-        "hidden_case_count": 1,
+        "status": "delivery_pending",
     }
     assert "private" not in str(response.json())
     assert "hidden\\n" not in str(response.json())
@@ -116,43 +96,22 @@ async def test_internal_code_problem_creation_returns_safe_metadata_only():
 async def test_internal_code_problem_creation_normalizes_language_alias_before_service_call():
     from types import SimpleNamespace
 
-    created = SimpleNamespace(
-        generation=SimpleNamespace(id="generation-1", status="published"),
-        problem=SimpleNamespace(id="problem-1"),
-        public_case_count=1,
-        hidden_case_count=1,
-    )
+    created = SimpleNamespace(id="generation-1", status="delivery_pending")
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            "app.api.v1.internal_ai_chat.prepare_personal_practice_delivery",
             new_callable=AsyncMock,
         ) as create_problem:
             create_problem.return_value = created
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/code-problem-validations",
+                    "/internal/ai-chat/personal-practices/prepare",
                     headers={"X-Internal-Agent-Token": "secret"},
-                    json={
-                        "user_id": "student-1",
-                        "course_id": "course-1",
-                        "conversation_id": "conversation-1",
-                        "run_id": "run-1",
-                        "draft": {
-                            "title": "Echo",
-                            "statement": "Read and write input.",
-                            "language": "C++",
-                            "starter_code": "int main() { return 0; }",
-                            "reference_solution": "int main() { return 0; }",
-                            "test_inputs": [
-                                {"stdin": "shown\\n", "is_public": True},
-                                {"stdin": "hidden\\n", "is_public": False},
-                            ],
-                        },
-                    },
+                    json=_code_prepare_payload("C++"),
                 )
 
     assert response.status_code == 200
-    assert create_problem.await_args.kwargs["draft"].language == "cpp"
+    assert create_problem.await_args.kwargs["request"].code_problem.language == "cpp"
 
 
 @pytest.mark.asyncio
@@ -160,9 +119,7 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
     from sqlalchemy.exc import OperationalError
 
     from app.api.deps import get_db
-    from app.models.code_problem import CodeProblem
     from app.models.personalized_resource_generation import PersonalizedResourceGeneration
-    from app.services.code_problem_service import CreatedCodeProblem
 
     class CommitFailingDB:
         async def commit(self):
@@ -171,30 +128,15 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
         async def rollback(self):
             return None
 
-    created = CreatedCodeProblem(
-        problem=CodeProblem(
-            id="problem-1",
-            course_id="course-1",
-            owner_user_id="student-1",
-            title="回显",
-            statement="读取并输出输入。",
-            language="python",
-            starter_code="print(input())",
-            reference_solution="print(input())",
-            validation_report={},
-        ),
-        generation=PersonalizedResourceGeneration(
+    created = PersonalizedResourceGeneration(
             id="generation-1",
             user_id="student-1",
             course_id="course-1",
             source_type="ai_chat",
             goal="读取并输出输入。",
             resource_type="validated_code_problem",
-            status="published",
+            status="delivery_pending",
             draft={},
-        ),
-        public_case_count=1,
-        hidden_case_count=1,
     )
 
     async def override_db():
@@ -204,37 +146,21 @@ async def test_internal_code_problem_creation_does_not_report_success_when_commi
     try:
         with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
             with patch(
-                "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+                "app.api.v1.internal_ai_chat.prepare_personal_practice_delivery",
                 new_callable=AsyncMock,
             ) as create_problem:
                 create_problem.return_value = created
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     response = await client.post(
-                        "/internal/ai-chat/code-problem-validations",
+                        "/internal/ai-chat/personal-practices/prepare",
                         headers={"X-Internal-Agent-Token": "secret"},
-                        json={
-                            "user_id": "student-1",
-                            "course_id": "course-1",
-                            "conversation_id": "conversation-1",
-                            "run_id": "run-1",
-                            "draft": {
-                                "title": "回显",
-                                "statement": "读取并输出输入。",
-                                "language": "python",
-                                "starter_code": "print(input())",
-                                "reference_solution": "print(input())",
-                                "test_inputs": [
-                                    {"stdin": "1\n", "is_public": True},
-                                    {"stdin": "2\n", "is_public": False},
-                                ],
-                            },
-                        },
+                        json=_code_prepare_payload(),
                     )
     finally:
         app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 500
-    assert response.json()["detail"]["message"] == "代码题保存失败"
+    assert response.json()["detail"]["message"] == "互动练习草案保存失败"
 
 
 @pytest.mark.asyncio

@@ -30,6 +30,36 @@
 - `POST /agent/v2/workbench/chat`：AgentScope 工作台对话与工具事件流。
 - `GET /agent/v2/workbench/artifacts`：在可信 user/course/conversation 边界内读取产物。
 
+Workbench 保持 AgentScope 2.x `Agent.reply_stream + Toolkit + ToolGroup` 的自主工具调用。EDU 协议适配器将工具结果统一为：
+
+```json
+{
+  "outcome": "success | neutral | warning | failure",
+  "status": "published",
+  "reason": null,
+  "summary": {},
+  "retryable": false,
+  "data": {},
+  "artifact": {},
+  "sources": []
+}
+```
+
+- `available/published/ok/success` → `success`，`empty/not_found` → `neutral`，`degraded` → `warning`，`rejected/unavailable/delivery_incomplete/error` → `failure`。
+- AgentScope `ToolResultState.ERROR` 直接映射为 `tool_failed`。`tool_started` 携带 `tool_title/tool_category/read_only`。
+- RAG 引用只使用 `payload.sources[]`，每项为 `source_file/snippet/score`；不再交叉使用 `citations`。
+- 长期记忆只保存用户明确表达的长期偏好、目标和稳定事实；禁止保存推断掌握度、诊断、答案、敏感内容或工具原文。写入前去重，工具卡可见，审计日志不记忆正文。
+
+### AI Chat 互动练习内部发布
+
+Agent Service 通过 Backend 内部 HTTP 链路发布 QuizCard 和 CodeSandboxCard：
+
+1. `POST /internal/ai-chat/personal-practices/prepare`：验证可信上下文与 draft，以稳定幂等键保存 `delivery_pending` generation，不创建用户可见题目。
+2. `POST /internal/ai-chat/personal-practices/finalize`：锁定 generation，在同一 MySQL 事务中创建业务记录、关联和 artifact descriptor，然后标记 `published`。
+3. `POST /internal/ai-chat/personal-practices/resume`：按 `generation_id` 幂等恢复 `delivery_failed` 或响应丢失的发布。
+
+`idempotency_key` 由规范化 draft、user、conversation、run 和工具类型稳定派生。互动卡片由 Backend 作为唯一权威；Agent Workspace 只保留 Markdown/Mermaid 等文件型产物。旧 `/internal/ai-chat/code-problem-validations` 和 `/internal/ai-chat/choice-quizzes` 已删除。
+
 ### Knowledge
 
 - `POST /agent/v2/knowledge/ingestions`：课程资料切片并写入 Qdrant。

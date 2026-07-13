@@ -3613,3 +3613,32 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Client API 路径无变化。
 - Agent SSE v2 新增 ToolOutcome、工具元信息并修正失败语义；`source_refs` 统一为 `sources`。
 - Backend internal recent-answers 新增必填 `scope=course|node|knowledge_point`，并严格限制 `limit<=10`。
+
+---
+
+### 2026-07-13 — AI Chat 互动练习 Backend 分阶段发布（第二批）
+
+**涉及范围：**
+- `backend`：generation 交付字段与迁移、prepare/finalize/resume 服务和内部路由、对话卡片恢复
+- `agent_service_v2`：互动练习分阶段 HTTP 工具、一次自动重试、恢复工具和 Backend artifact 事件适配
+- `frontend`：历史消息 sources 恢复与新/旧工具名兼容
+- `docs/10-client-api`、`docs/20-agent-api`：SSE 四态、sources 和分阶段发布契约
+
+**根因与改动：**
+1. 旧链路分别写入业务题目和 Agent Workspace 卡片，响应超时或 SSE 中断会导致重复题目或卡片漂移。现复用 `PersonalizedResourceGeneration`，新增 `agent_run_id/idempotency_key/artifact_payload/delivery_error/delivery_attempts`及 `delivery_pending/delivery_failed/published` 交付状态。
+2. `prepare` 只验证会话、选课与规范化 draft；`finalize` 锁定 generation，在同一事务中创建选择题/编程题、用例、个性化关联和 Backend artifact descriptor；`resume` 幂等恢复失败交付。
+3. 幂等键由用户、会话、Agent run、工具类型和规范化 draft 稳定派生。Agent 在超时/连接失败时只自动重试 finalize 一次，之后由 `resume_personal_practice_delivery` 继续。
+4. QuizCard/CodeSandboxCard 不再写 Agent Workspace JSON；Backend 成为互动卡片和业务实体唯一权威。Markdown/Mermaid 仍使用 Workspace。对话落库时如 SSE artifact 丢失，会按 `agent_run_id` 恢复已发布卡片。
+5. 删除 AI Chat 旧 `/code-problem-validations` 和 `/choice-quizzes` 路由；个性化资源 Team 的 `/internal/personalized-resources/code-problem-validations` 不属于该旧链路，保持不变。
+
+**验证结果：**
+- Agent Service v2 全量：164 passed，1 条第三方 TestClient 弃用告警。
+- Backend 受影响链路与覆盖率：48 passed；新发布服务 91%，SSE 持久化适配器 80%，三个受影响模块合计 80%。
+- Backend 全量在收集阶段被现有环境要求阻断：4 组教师侧测试未配置隔离 MySQL，另有 `test_kg_resource_alignment_probe.py` 引用当前仓库不存在的模块；均在导入/收集本次文件前失败。
+- Frontend 全量 Vitest：39 files、145 passed；lint 和生产构建通过，保留既有大 chunk 提示。
+- Backend `py_compile`、两份 OpenAPI JSON 解析、Agent 运行时 OpenAPI 与存档完全一致、`git diff --check` 均通过。
+
+**接口漂移：**
+- Client API 路径与请求保持不变；SSE v2 文档同步四态、工具元信息、`sources` 和 Backend 卡片恢复语义。
+- Agent 公开 `/agent/v2/*` 路径、请求和 OpenAPI 不变；Workbench SSE 事件字段和失败语义按第一批方案执行。
+- Backend internal AI Chat 删除两条旧路由，新增 `/personal-practices/prepare|finalize|resume`；Agent 调用点已同步切换，不保留双轨。

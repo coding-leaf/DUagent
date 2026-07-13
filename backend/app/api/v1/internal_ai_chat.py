@@ -7,8 +7,8 @@ from app.core.config import settings
 from app.schemas.internal_ai_chat import (
     LearningProgressRequest,
     OJEvaluationRequest,
-    PersonalChoiceQuizCreateRequest,
-    PersonalCodeProblemCreateRequest,
+    PersonalPracticeDeliveryRequest,
+    PersonalPracticePrepareRequest,
     RecentAnswersRequest,
 )
 from app.services.ai_chat_learning_context import (
@@ -16,16 +16,38 @@ from app.services.ai_chat_learning_context import (
     query_recent_answers,
 )
 from app.services.oj_execution_service import execute_code_in_oj, OJExecutionError
-from app.services.code_problem_service import (
-    CodeProblemValidationError,
-    create_validated_personal_problem_from_ai_chat,
-)
-from app.services.ai_chat_choice_quiz_service import (
-    ChoiceQuizValidationError,
-    create_personal_choice_quiz_from_ai_chat,
+from app.services.personal_practice_delivery_service import (
+    PersonalPracticeDeliveryError,
+    finalize_personal_practice_delivery,
+    prepare_personal_practice_delivery,
+    record_personal_practice_delivery_failure,
+    resume_personal_practice_delivery,
 )
 
 router = APIRouter(prefix="/internal/ai-chat", tags=["internal-ai-chat"])
+
+
+def _practice_http_error(message: str, reason: str, status_code: int = 400) -> HTTPException:
+    code = 40001 if status_code == status.HTTP_400_BAD_REQUEST else 50000
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message, "data": {"reason": reason}},
+    )
+
+
+async def _mark_delivery_failed(
+    db: AsyncSession,
+    generation_id: str,
+    reason: str,
+) -> None:
+    await db.rollback()
+    try:
+        await record_personal_practice_delivery_failure(
+            db, generation_id=generation_id, reason=reason,
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
 
 
 def verify_internal_agent_token(
@@ -109,93 +131,78 @@ async def evaluate_oj_code(
         }
 
 
-@router.post("/code-problem-validations")
-async def validate_personal_code_problem(
-    req: PersonalCodeProblemCreateRequest,
+@router.post("/personal-practices/prepare")
+async def prepare_personal_practice(
+    req: PersonalPracticePrepareRequest,
     _auth: None = Depends(verify_internal_agent_token),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        created = await create_validated_personal_problem_from_ai_chat(
+        generation = await prepare_personal_practice_delivery(
             db,
-            owner_user_id=req.user_id,
-            course_id=req.course_id,
-            conversation_id=req.conversation_id,
-            run_id=req.run_id,
-            draft=req.draft,
+            request=req,
             execute_case=execute_code_in_oj,
         )
-    except CodeProblemValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": 40001,
-                "message": "代码题草案验证失败",
-                "data": {"reason": exc.reason},
-            },
-        )
-    try:
         await db.commit()
+    except (PersonalPracticeDeliveryError, ValueError) as exc:
+        await db.rollback()
+        reason = getattr(exc, "reason", str(exc))
+        raise _practice_http_error("互动练习草案验证失败", reason)
     except SQLAlchemyError:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": 50000, "message": "代码题保存失败", "data": None},
+        raise _practice_http_error(
+            "互动练习草案保存失败", "database_error", status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     return {
         "code": 200,
         "message": "success",
         "data": {
-            "generation_id": created.generation.id,
-            "status": created.generation.status,
-            "problem_id": created.problem.id,
-            "language": req.draft.language,
-            "public_case_count": created.public_case_count,
-            "hidden_case_count": created.hidden_case_count,
+            "generation_id": generation.id,
+            "status": generation.status,
         },
     }
 
 
-@router.post("/choice-quizzes")
-async def create_personal_choice_quiz(
-    req: PersonalChoiceQuizCreateRequest,
+@router.post("/personal-practices/finalize")
+async def finalize_personal_practice(
+    req: PersonalPracticeDeliveryRequest,
     _auth: None = Depends(verify_internal_agent_token),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        question_ids = await create_personal_choice_quiz_from_ai_chat(
+        data = await finalize_personal_practice_delivery(
             db,
-            owner_user_id=req.user_id,
+            generation_id=req.generation_id,
+            user_id=req.user_id,
             course_id=req.course_id,
-            conversation_id=req.conversation_id,
-            chapter=req.chapter,
-            knowledge_point=req.knowledge_point,
-            questions=req.questions,
         )
         await db.commit()
-    except ChoiceQuizValidationError as exc:
+    except PersonalPracticeDeliveryError as exc:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": 40001,
-                "message": "选择题发布验证失败",
-                "data": {"reason": exc.reason},
-            },
+        raise _practice_http_error("互动练习发布验证失败", exc.reason)
+    except Exception as exc:
+        await _mark_delivery_failed(db, req.generation_id, exc.__class__.__name__)
+        raise _practice_http_error(
+            "互动练习发布失败", "delivery_failed", status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-    except SQLAlchemyError:
+    return {"code": 200, "message": "success", "data": data}
+
+
+@router.post("/personal-practices/resume")
+async def resume_personal_practice(
+    req: PersonalPracticeDeliveryRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        data = await resume_personal_practice_delivery(
+            db,
+            generation_id=req.generation_id,
+            user_id=req.user_id,
+            course_id=req.course_id,
+        )
+        await db.commit()
+    except PersonalPracticeDeliveryError as exc:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": 50000, "message": "选择题保存失败", "data": None},
-        )
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {
-            "status": "published",
-            "title": req.title,
-            "question_ids": question_ids,
-            "question_count": len(question_ids),
-        },
-    }
+        raise _practice_http_error("互动练习恢复失败", exc.reason)
+    return {"code": 200, "message": "success", "data": data}

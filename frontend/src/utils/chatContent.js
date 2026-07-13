@@ -139,6 +139,9 @@ export const normalizeMessage = (message, index = 0) => {
     knowledge_points: normalizeTextList(knowledge_points),
     suggestions: normalizeTextList(suggestions),
     toolCalls: restoreToolCalls(message),
+    sourceRefs: Array.isArray(message?.sourceRefs)
+      ? message.sourceRefs
+      : (Array.isArray(message?.meta?.sources) ? message.meta.sources : []),
   };
 };
 

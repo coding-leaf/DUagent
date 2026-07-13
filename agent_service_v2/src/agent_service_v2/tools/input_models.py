@@ -91,3 +91,12 @@ class ArtifactFileInput(ToolInputModel):
     content: str = Field(min_length=1, max_length=200000, description="Complete artifact content.")
     artifact_type: Literal["Markdown", "Mermaid"] = Field(description="Artifact type matching the extension.")
     title: str = Field(default="", max_length=200, description="Student-facing title.")
+
+
+class ResumePracticeDeliveryInput(ToolInputModel):
+    generation_id: str = Field(min_length=1, max_length=32, description="Prepared generation identifier.")
+
+
+class RAGRetrieveInput(ToolInputModel):
+    query: str = Field(min_length=1, max_length=2000, description="Course-material search query.")
+    limit: int = Field(default=3, ge=1, le=10, description="Maximum source segments.")

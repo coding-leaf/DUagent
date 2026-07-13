@@ -47,6 +47,7 @@ _TOOL_METADATA = {
     "write_artifact_file": ("编写工作区课件", "artifact", False),
     "publish_personal_code_problem": ("发布私有编程练习", "practice", False),
     "publish_personal_choice_quiz": ("发布私有选择题练习", "practice", False),
+    "resume_personal_practice_delivery": ("恢复互动练习发布", "practice", False),
     "search_memory": ("检索长期记忆", "memory", True),
     "add_memory": ("保存长期记忆", "memory", False),
 }
@@ -94,6 +95,9 @@ class EDUProtocolAdapter:
                 events.append(self._build_event(EduEventType.PLAN_UPDATED, plan_payload))
             if self._is_successful_artifact_tool_result(event):
                 events.extend(self._build_artifact_events())
+            result_artifact = self._build_result_artifact_payload(event)
+            if result_artifact is not None:
+                events.append(self._build_event(EduEventType.ARTIFACT_CREATED, result_artifact))
 
             # RAG source refs conversion
             source_refs_payload = self._build_source_refs_payload(event)
@@ -293,8 +297,36 @@ class EDUProtocolAdapter:
         return outcome == "success" and tool_name in {
             "write_artifact_file",
             "create_code_sandbox_card",
-            "publish_personal_code_problem",
-            "publish_personal_choice_quiz",
+        }
+
+    def _build_result_artifact_payload(
+        self,
+        event: ToolResultEndEvent,
+    ) -> dict[str, Any] | None:
+        parsed = _parse_json_object(self._tool_result_text.get(event.tool_call_id, ""))
+        artifact = parsed.get("artifact")
+        if parsed.get("outcome") != "success" or not isinstance(artifact, dict):
+            return None
+        artifact_type = artifact.get("type")
+        if artifact_type == "QuizCard":
+            props = {
+                "course_id": artifact.get("course_id"),
+                "question_ids": artifact.get("question_ids") or [],
+            }
+        elif artifact_type == "CodeSandboxCard":
+            props = {
+                "problem_id": artifact.get("problem_id"),
+                "language": artifact.get("language"),
+            }
+        else:
+            return None
+        return {
+            "artifact": {
+                "id": artifact.get("id"),
+                "type": artifact_type,
+                "title": artifact.get("title"),
+                "props": props,
+            }
         }
 
     def _build_artifact_events(self) -> list[EduEvent]:

@@ -312,8 +312,6 @@ def test_protocol_adapter_emits_stable_rag_sources():
     [
         "write_artifact_file",
         "create_code_sandbox_card",
-        "publish_personal_code_problem",
-        "publish_personal_choice_quiz",
     ],
 )
 def test_protocol_adapter_emits_artifact_after_artifact_tool_success(tool_name):
@@ -344,6 +342,50 @@ def test_protocol_adapter_emits_artifact_after_artifact_tool_success(tool_name):
             "title": "函数资料",
             "props": {"title": "函数资料", "content": "# 函数资料\n"},
         }
+    }
+
+
+def test_protocol_adapter_emits_backend_interactive_artifact():
+    adapter = EDUProtocolAdapter(run_id="run-1", conversation_id="conv-1")
+    raw_events = [
+        ToolCallStartEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            tool_call_name="publish_personal_choice_quiz",
+        ),
+        ToolResultTextDeltaEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            delta=json.dumps({
+                "outcome": "success",
+                "status": "published",
+                "artifact": {
+                    "id": "generation-1",
+                    "type": "QuizCard",
+                    "title": "指针练习",
+                    "course_id": "course-1",
+                    "question_ids": ["question-1"],
+                },
+            }),
+        ),
+        ToolResultEndEvent(
+            reply_id="reply-1",
+            tool_call_id="tool-1",
+            state=ToolResultState.SUCCESS,
+        ),
+    ]
+
+    events = [event for raw in raw_events for event in adapter.adapt_many(raw)]
+    assert [event.type for event in events] == [
+        EduEventType.TOOL_STARTED,
+        EduEventType.TOOL_COMPLETED,
+        EduEventType.ARTIFACT_CREATED,
+    ]
+    assert events[-1].payload["artifact"] == {
+        "id": "generation-1",
+        "type": "QuizCard",
+        "title": "指针练习",
+        "props": {"course_id": "course-1", "question_ids": ["question-1"]},
     }
 
 

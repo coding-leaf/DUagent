@@ -7,10 +7,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import AsyncIterator, Awaitable, Callable
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.db.session import async_session_factory
 from app.models.conversation import Conversation, Message
+from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 from app.services.agent_client import AgentServiceError, agent_client
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,11 @@ TOOL_EVENT_PAYLOAD_FIELDS = {
     "message",
     "output_summary",
     "summary",
+    "outcome",
+    "retryable",
+    "tool_title",
+    "tool_category",
+    "read_only",
 }
 
 StreamSSE = Callable[[str, dict], AsyncIterator[bytes]]
@@ -70,6 +76,15 @@ async def persist_tutoring_result(
     async with async_session_factory() as db:
         existing = await db.get(Message, assistant_message_id)
         existing_meta = existing.meta_json if existing and isinstance(existing.meta_json, dict) else {}
+        merged_meta = {**existing_meta, **(meta or {})}
+        run_id = merged_meta.get("agent_run_id")
+        if isinstance(run_id, str) and run_id:
+            recovered = await _published_artifacts_for_run(db, run_id)
+            if recovered:
+                merged_meta["artifacts"] = _merge_artifacts(
+                    merged_meta.get("artifacts") or [],
+                    recovered,
+                )
         await db.execute(
             update(Message)
             .where(Message.id == assistant_message_id)
@@ -77,7 +92,7 @@ async def persist_tutoring_result(
                 content=content,
                 diagrams=diagrams or None,
                 knowledge_points=knowledge_points or None,
-                meta_json={**existing_meta, **(meta or {})},
+                meta_json=merged_meta,
             )
         )
         await db.execute(
@@ -126,6 +141,9 @@ class TutoringStreamAdapter:
             return data_str
 
         event_type = parsed.get("type", "")
+        run_id = parsed.get("run_id")
+        if isinstance(run_id, str) and run_id:
+            state.meta["agent_run_id"] = run_id
         payload = (
             parsed.get("payload")
             if isinstance(parsed.get("payload"), dict)
@@ -141,6 +159,8 @@ class TutoringStreamAdapter:
             state.done_sent = True
         elif event_type == "content_safety_reviewed":
             state.meta["content_safety_review"] = payload
+        elif event_type == "source_refs":
+            state.meta["sources"] = payload.get("sources") or []
         elif event_type in TOOL_EVENT_TYPES:
             tool_payload = {
                 key: value
@@ -320,3 +340,50 @@ class TutoringStreamAdapter:
                 )
             except Exception:
                 logger.exception("Failed to save real AgentLog in DB")
+
+
+async def _published_artifacts_for_run(db, run_id: str) -> list[dict]:
+    result = await db.execute(
+        select(PersonalizedResourceGeneration.artifact_payload).where(
+            PersonalizedResourceGeneration.agent_run_id == run_id,
+            PersonalizedResourceGeneration.status == "published",
+            PersonalizedResourceGeneration.artifact_payload.is_not(None),
+            PersonalizedResourceGeneration.is_deleted.is_(False),
+        )
+    )
+    return [
+        normalized
+        for payload in result.scalars().all()
+        if (normalized := _client_artifact(payload)) is not None
+    ]
+
+
+def _client_artifact(payload: dict | None) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    artifact_type = payload.get("type")
+    if artifact_type == "QuizCard":
+        props = {
+            "course_id": payload.get("course_id"),
+            "question_ids": payload.get("question_ids") or [],
+        }
+    elif artifact_type == "CodeSandboxCard":
+        props = {
+            "problem_id": payload.get("problem_id"),
+            "language": payload.get("language"),
+        }
+    else:
+        return None
+    return {
+        "id": payload.get("id"),
+        "type": artifact_type,
+        "title": payload.get("title"),
+        "props": props,
+    }
+
+
+def _merge_artifacts(current: list[dict], recovered: list[dict]) -> list[dict]:
+    merged = {item.get("id"): item for item in current if isinstance(item, dict) and item.get("id")}
+    for artifact in recovered:
+        merged[artifact["id"]] = artifact
+    return list(merged.values())

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -16,6 +16,7 @@ class PersonalizedResourceGeneration(Base):
     __table_args__ = (
         Index("idx_prg_user_course", "user_id", "course_id", "is_deleted"),
         Index("idx_prg_status", "status", "is_deleted"),
+        Index("uk_prg_idempotency_key", "idempotency_key", unique=True),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_generation_id)
@@ -23,6 +24,8 @@ class PersonalizedResourceGeneration(Base):
     course_id: Mapped[str] = mapped_column(String(32), ForeignKey("courses.id"), nullable=False)
     conversation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_run_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_type: Mapped[str] = mapped_column(String(30), nullable=False)
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     resource_type: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -31,6 +34,9 @@ class PersonalizedResourceGeneration(Base):
     validation_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     review_decision: Mapped[str | None] = mapped_column(String(30), nullable=True)
     review_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    artifact_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    delivery_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delivery_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     published_resource_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("resources.id"), nullable=True
     )

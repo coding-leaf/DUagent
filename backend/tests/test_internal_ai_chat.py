@@ -14,6 +14,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 
 from app.db.session import init_db
 from app.main import app
+from app.schemas.internal_ai_chat import PersonalPracticePrepareRequest
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -96,178 +97,146 @@ async def test_internal_recent_answers_validates_explicit_scope_and_limit():
     assert kwargs["scope"] == "knowledge_point"
 
 
-@pytest.mark.asyncio
-async def test_internal_code_problem_returns_stable_validation_reason():
-    from app.services.code_problem_service import CodeProblemValidationError
+def _choice_prepare_payload():
+    return {
+        "user_id": "u1",
+        "course_id": "offering-1",
+        "conversation_id": "conv-1",
+        "run_id": "run-1",
+        "practice_type": "choice_quiz",
+        "choice_quiz": {
+            "title": "指针练习",
+            "chapter": "指针",
+            "knowledge_point": "指针基础",
+            "questions": [{
+                "type": "single_choice",
+                "content": "哪个运算符用于取地址？",
+                "options": [{"key": "A", "text": "&"}, {"key": "B", "text": "*"}],
+                "answer": "A",
+                "explanation": "& 是取地址运算符。",
+                "difficulty": "easy",
+            }],
+        },
+    }
 
+
+@pytest.mark.asyncio
+async def test_internal_prepare_rejects_unsupported_question_type():
+    payload = _choice_prepare_payload()
+    payload["choice_quiz"]["questions"][0]["type"] = "code"
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
-        with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
-            new_callable=AsyncMock,
-        ) as mock_service:
-            mock_service.side_effect = CodeProblemValidationError(
-                "conversation_ownership_check_failed"
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/internal/ai-chat/personal-practices/prepare",
+                headers={"X-Internal-Agent-Token": "secret"},
+                json=payload,
             )
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                response = await client.post(
-                    "/internal/ai-chat/code-problem-validations",
-                    headers={"X-Internal-Agent-Token": "secret"},
-                    json={
-                        "user_id": "u1",
-                        "course_id": "offering-1",
-                        "conversation_id": "conv-1",
-                        "run_id": "run-1",
-                        "draft": {
-                            "title": "回显",
-                            "statement": "读取并输出输入。",
-                            "language": "python",
-                            "starter_code": "print(input())",
-                            "reference_solution": "print(input())",
-                            "test_inputs": [
-                                {"stdin": "1\n", "is_public": True},
-                                {"stdin": "2\n", "is_public": False},
-                            ],
-                        },
-                    },
-                )
-
-    assert response.status_code == 400
-    assert response.json()["detail"]["data"]["reason"] == "conversation_ownership_check_failed"
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_internal_code_problem_returns_published_problem_id():
+async def test_internal_prepare_returns_pending_generation():
     from types import SimpleNamespace
 
-    created = SimpleNamespace(
-        generation=SimpleNamespace(id="generation-1", status="published"),
-        problem=SimpleNamespace(id="problem-1", language="python"),
-        public_case_count=1,
-        hidden_case_count=1,
-    )
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_validated_personal_problem_from_ai_chat",
+            "app.api.v1.internal_ai_chat.prepare_personal_practice_delivery",
             new_callable=AsyncMock,
-            return_value=created,
+            return_value=SimpleNamespace(id="generation-1", status="delivery_pending"),
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/code-problem-validations",
+                    "/internal/ai-chat/personal-practices/prepare",
                     headers={"X-Internal-Agent-Token": "secret"},
-                    json={
-                        "user_id": "u1",
-                        "course_id": "offering-1",
-                        "conversation_id": "conv-1",
-                        "run_id": "run-1",
-                        "draft": {
-                            "title": "回显",
-                            "statement": "读取并输出输入。",
-                            "language": "python",
-                            "starter_code": "print(input())",
-                            "reference_solution": "print(input())",
-                            "test_inputs": [
-                                {"stdin": "1\n", "is_public": True},
-                                {"stdin": "2\n", "is_public": False},
-                            ],
-                        },
-                    },
+                    json=_choice_prepare_payload(),
                 )
 
     assert response.status_code == 200
     assert response.json()["data"] == {
         "generation_id": "generation-1",
-        "status": "published",
-        "problem_id": "problem-1",
-        "language": "python",
-        "public_case_count": 1,
-        "hidden_case_count": 1,
+        "status": "delivery_pending",
     }
 
 
 @pytest.mark.asyncio
-async def test_internal_choice_quiz_rejects_unsupported_question_type():
-    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post(
-                "/internal/ai-chat/choice-quizzes",
-                headers={"X-Internal-Agent-Token": "secret"},
-                json={
-                    "user_id": "u1",
-                    "course_id": "offering-1",
-                    "conversation_id": "conv-1",
-                    "run_id": "run-1",
-                    "title": "指针练习",
-                    "chapter": "指针",
-                    "knowledge_point": "指针基础",
-                    "questions": [
-                        {
-                            "type": "code",
-                            "content": "编写程序",
-                            "options": [],
-                            "answer": "",
-                            "explanation": "",
-                            "difficulty": "medium",
-                        }
-                    ],
-                },
-            )
-
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_internal_choice_quiz_returns_published_question_ids():
+async def test_internal_finalize_returns_backend_artifact_descriptor():
+    result = {
+        "generation_id": "generation-1",
+        "status": "published",
+        "artifact": {
+            "id": "generation-1",
+            "type": "QuizCard",
+            "title": "指针练习",
+            "course_id": "offering-1",
+            "question_ids": ["question-1"],
+        },
+        "delivery_attempts": 1,
+    }
     with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
         with patch(
-            "app.api.v1.internal_ai_chat.create_personal_choice_quiz_from_ai_chat",
+            "app.api.v1.internal_ai_chat.finalize_personal_practice_delivery",
             new_callable=AsyncMock,
-            return_value=["question-1", "question-2"],
+            return_value=result,
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
-                    "/internal/ai-chat/choice-quizzes",
+                    "/internal/ai-chat/personal-practices/finalize",
                     headers={"X-Internal-Agent-Token": "secret"},
                     json={
+                        "generation_id": "generation-1",
                         "user_id": "u1",
                         "course_id": "offering-1",
-                        "conversation_id": "conv-1",
-                        "run_id": "run-1",
-                        "title": "指针练习",
-                        "chapter": "指针",
-                        "knowledge_point": "指针基础",
-                        "questions": [
-                            {
-                                "type": "single_choice",
-                                "content": "哪个运算符用于取地址？",
-                                "options": [
-                                    {"key": "A", "text": "&"},
-                                    {"key": "B", "text": "*"},
-                                ],
-                                "answer": "A",
-                                "explanation": "& 是取地址运算符。",
-                                "difficulty": "easy",
-                            },
-                            {
-                                "type": "multi_choice",
-                                "content": "以下哪些是合法指针操作？",
-                                "options": [
-                                    {"key": "A", "text": "取地址"},
-                                    {"key": "B", "text": "解引用"},
-                                    {"key": "C", "text": "随意访问越界地址"},
-                                ],
-                                "answer": ["A", "B"],
-                                "explanation": "取地址和解引用是基本操作。",
-                                "difficulty": "medium",
-                            },
-                        ],
                     },
                 )
-
     assert response.status_code == 200
-    assert response.json()["data"] == {
-        "status": "published",
-        "title": "指针练习",
-        "question_ids": ["question-1", "question-2"],
-        "question_count": 2,
+    assert response.json()["data"] == result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/internal/ai-chat/code-problem-validations",
+        "/internal/ai-chat/choice-quizzes",
+    ],
+)
+async def test_retired_ai_chat_practice_routes_are_not_available(path):
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                path,
+                headers={"X-Internal-Agent-Token": "secret"},
+                json={},
+            )
+
+    assert response.status_code == 404
+
+
+def test_personal_practice_prepare_schema_requires_exactly_one_draft():
+    schema = PersonalPracticePrepareRequest.model_json_schema()
+    properties = schema["properties"]
+
+    assert set(schema["required"]) == {
+        "user_id",
+        "course_id",
+        "conversation_id",
+        "run_id",
+        "practice_type",
     }
+    assert properties["practice_type"]["enum"] == ["choice_quiz", "code_problem"]
+    assert properties["run_id"]["maxLength"] == 80
+
+    payload = _choice_prepare_payload()
+    payload["code_problem"] = {
+        "title": "unexpected",
+        "statement": "unexpected",
+        "language": "python",
+        "starter_code": "",
+        "reference_solution": "print(input())",
+        "test_inputs": [
+            {"stdin": "public", "is_public": True},
+            {"stdin": "hidden", "is_public": False},
+        ],
+    }
+    with pytest.raises(ValueError, match="requires only choice_quiz draft"):
+        PersonalPracticePrepareRequest.model_validate(payload)

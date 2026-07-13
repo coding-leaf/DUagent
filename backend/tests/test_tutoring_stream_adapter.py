@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.services.agent_client import AgentServiceError
-from app.services.tutoring_stream_adapter import TutoringStreamAdapter
+from app.services.tutoring_stream_adapter import TutoringStreamAdapter, _client_artifact
 
 
 def test_workbench_payload_keeps_offering_and_catalog_ids_separate():
@@ -69,7 +69,9 @@ async def test_stream_adapter_forwards_v2_events_with_backend_envelope():
     assert decoded[1]["conversation_id"] == "conv-1"
     assert decoded[1]["message_id"] == "msg-1"
     assert decoded[1]["run_id"] == "run-1"
-    persisted.assert_awaited_once_with("msg-1", "conv-1", "hello", [], [], {})
+    persisted.assert_awaited_once_with(
+        "msg-1", "conv-1", "hello", [], [], {"agent_run_id": "run-1"}
+    )
     recorded_log.assert_awaited_once()
     record = recorded_log.await_args.args[0]
     assert record.endpoint == "/agent/v2/workbench/chat"
@@ -114,8 +116,9 @@ async def test_stream_adapter_does_not_filter_tool_source_or_artifact_events():
         "",
         [],
         [],
-        {
-            "tool_events": [
+            {
+                "agent_run_id": "run-1",
+                "tool_events": [
                 {
                     "type": "tool_started",
                     "payload": {
@@ -130,8 +133,9 @@ async def test_stream_adapter_does_not_filter_tool_source_or_artifact_events():
                         "state": "success",
                     },
                 },
-            ],
-            "artifacts": [
+                ],
+                "sources": [{"title": "Array"}],
+                "artifacts": [
                 {
                     "id": "a1",
                     "type": "Markdown",
@@ -251,8 +255,9 @@ async def test_stream_adapter_persists_content_safety_review_meta():
         "hello",
         [],
         [],
-        {
-            "content_safety_review": {
+            {
+                "agent_run_id": "run-1",
+                "content_safety_review": {
                 "passed": False,
                 "risk_level": "high",
                 "categories": ["illegal_instruction"],
@@ -265,3 +270,18 @@ async def test_stream_adapter_persists_content_safety_review_meta():
             }
         },
     )
+
+
+def test_backend_artifact_descriptor_is_recovered_for_conversation_history():
+    assert _client_artifact({
+        "id": "generation-1",
+        "type": "CodeSandboxCard",
+        "title": "回显",
+        "problem_id": "problem-1",
+        "language": "python",
+    }) == {
+        "id": "generation-1",
+        "type": "CodeSandboxCard",
+        "title": "回显",
+        "props": {"problem_id": "problem-1", "language": "python"},
+    }

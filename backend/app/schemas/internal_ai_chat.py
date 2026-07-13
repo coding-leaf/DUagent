@@ -73,12 +73,36 @@ class ChoiceQuestionDraft(BaseModel):
         return self
 
 
-class PersonalChoiceQuizCreateRequest(BaseModel):
+class PersonalChoiceQuizDraft(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    chapter: str = Field(max_length=100)
+    knowledge_point: str = Field(max_length=100)
+    questions: list[ChoiceQuestionDraft] = Field(min_length=1, max_length=8)
+
+
+class PersonalPracticePrepareRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=32)
     course_id: str = Field(min_length=1, max_length=32)
     conversation_id: str = Field(min_length=1, max_length=32)
     run_id: str = Field(min_length=1, max_length=80)
-    title: str = Field(min_length=1, max_length=200)
-    chapter: str = Field(default="", max_length=100)
-    knowledge_point: str = Field(default="", max_length=100)
-    questions: list[ChoiceQuestionDraft] = Field(min_length=1, max_length=8)
+    practice_type: Literal["choice_quiz", "code_problem"]
+    choice_quiz: PersonalChoiceQuizDraft | None = None
+    code_problem: CodeProblemDraft | None = None
+
+    @model_validator(mode="after")
+    def validate_practice_draft(self):
+        if self.practice_type == "choice_quiz" and (
+            self.choice_quiz is None or self.code_problem is not None
+        ):
+            raise ValueError("choice_quiz requires only choice_quiz draft")
+        if self.practice_type == "code_problem" and (
+            self.code_problem is None or self.choice_quiz is not None
+        ):
+            raise ValueError("code_problem requires only code_problem draft")
+        return self
+
+
+class PersonalPracticeDeliveryRequest(BaseModel):
+    generation_id: str = Field(min_length=1, max_length=32)
+    user_id: str = Field(min_length=1, max_length=32)
+    course_id: str = Field(min_length=1, max_length=32)

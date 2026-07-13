@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractModelText, normalizeTextList } from '../chatContent'
+import { extractModelText, normalizeMessage, normalizeTextList } from '../chatContent'
 
 describe('chatContent utils', () => {
   describe('extractModelText', () => {
@@ -42,5 +42,36 @@ describe('chatContent utils', () => {
       expect(normalizeTextList(['test', null, '', '  '])).toEqual(['test'])
     })
   })
-})
 
+  it('restores persisted tool cards from message metadata', () => {
+    const message = normalizeMessage({
+      role: 'assistant',
+      content: '已读取学习状态。',
+      meta: {
+        tool_events: [
+          {
+            type: 'tool_started',
+            payload: { tool_call_id: 'tool-1', tool_name: 'read_learning_state' }
+          },
+          {
+            type: 'tool_completed',
+            payload: {
+              tool_call_id: 'tool-1',
+              state: 'success',
+              output_summary: '薄弱点已读取'
+            }
+          }
+        ]
+      }
+    })
+
+    expect(message.toolCalls).toEqual([
+      {
+        id: 'tool-1',
+        name: 'read_learning_state',
+        status: 'completed',
+        outputSummary: '薄弱点已读取'
+      }
+    ])
+  })
+})

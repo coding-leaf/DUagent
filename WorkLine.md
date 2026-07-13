@@ -3220,3 +3220,29 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **说明：**
 - 未修改历史任务数据；已经停在 96% 的任务仍需单独结算或重新触发。
+
+---
+
+### 2026-07-13 — 持久化 AI Chat 工具卡片并修复完成竞态
+
+**涉及文件：**
+- `backend/app/services/tutoring_stream_adapter.py`
+- `backend/tests/test_tutoring_stream_adapter.py`
+- `frontend/src/utils/chatContent.js`
+- `frontend/src/utils/__tests__/chatContent.test.js`
+- `WorkLine.md`
+
+**核心改动：**
+1. Backend 将精简后的 EDU `tool_started/tool_completed/tool_failed` 事件保存到消息既有开放元信息 `meta.tool_events`，不保存 AgentScope 内部对象。
+2. 前端加载会话历史时复用现有 EDU 事件 reducer 恢复 tool 卡片，刷新或重新进入会话后仍可展示。
+3. Backend 在向前端转发 `workflow_completed/workflow_failed` 前先尝试持久化消息，避免新会话完成后立即拉取历史时读取到空 assistant 消息。
+
+**验证结果：**
+- Backend tutoring stream/route 回归：7 passed、1 skipped；`py_compile` 通过。
+- Frontend ChatContext、历史归一化和流事件测试：21 passed。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 路径、顶层响应字段与 SSE 事件类型无变化；仅在文档已声明为开放对象的消息 `meta` 中新增 `tool_events` 内部回放数据。
+- Agent API 无变化。

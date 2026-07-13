@@ -1,3 +1,5 @@
+import { reduceAssistantMessageForEvent } from './chatStreamEvents';
+
 // 聊天正文展示工具：把模型可能产出的结构化输出（纯 JSON / 散文 + ```json 围栏 / 对象）
 // 归一化为面向学生的纯文本，避免 JSON 块泄露到正文。
 // 提取用括号配平而非非贪婪正则，因此 model_text 内嵌的 ```c 代码块/花括号不会截断解析。
@@ -94,6 +96,19 @@ export const normalizeTextList = (value) => {
   return list.map(extractModelText).map(item => item?.trim()).filter(Boolean);
 };
 
+const restoreToolCalls = (message) => {
+  if (Array.isArray(message?.toolCalls) && message.toolCalls.length > 0) {
+    return message.toolCalls;
+  }
+  const events = message?.meta?.tool_events;
+  if (!Array.isArray(events)) return [];
+  const restored = events.reduce(
+    reduceAssistantMessageForEvent,
+    { content: '', toolCalls: [], parts: [] }
+  );
+  return restored.toolCalls;
+};
+
 export const normalizeMessage = (message, index = 0) => {
   const normalizedId = message?.id || message?.message_id || `${message?.role || 'message'}-${message?.timestamp || index}`;
   let contentObj = message?.content;
@@ -123,6 +138,7 @@ export const normalizeMessage = (message, index = 0) => {
     diagrams: Array.isArray(diagrams) ? diagrams : (diagrams ? [diagrams] : []),
     knowledge_points: normalizeTextList(knowledge_points),
     suggestions: normalizeTextList(suggestions),
+    toolCalls: restoreToolCalls(message),
   };
 };
 

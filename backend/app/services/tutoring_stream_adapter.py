@@ -14,6 +14,17 @@ from app.models.conversation import Conversation, Message
 from app.services.agent_client import AgentServiceError, agent_client
 
 logger = logging.getLogger(__name__)
+TOOL_EVENT_TYPES = {"tool_started", "tool_completed", "tool_failed"}
+TOOL_EVENT_PAYLOAD_FIELDS = {
+    "tool_call_id",
+    "tool_name",
+    "state",
+    "status",
+    "reason",
+    "message",
+    "output_summary",
+    "summary",
+}
 
 StreamSSE = Callable[[str, dict], AsyncIterator[bytes]]
 PersistResult = Callable[
@@ -44,6 +55,7 @@ class StreamState:
     artifacts: list[dict] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
     done_sent: bool = False
+    persisted: bool = False
 
 
 async def persist_tutoring_result(
@@ -129,6 +141,15 @@ class TutoringStreamAdapter:
             state.done_sent = True
         elif event_type == "content_safety_reviewed":
             state.meta["content_safety_review"] = payload
+        elif event_type in TOOL_EVENT_TYPES:
+            tool_payload = {
+                key: value
+                for key, value in payload.items()
+                if key in TOOL_EVENT_PAYLOAD_FIELDS
+            }
+            state.meta.setdefault("tool_events", []).append(
+                {"type": event_type, "payload": tool_payload}
+            )
         elif event_type == "artifact_created":
             artifact = payload.get("artifact")
             if isinstance(artifact, dict):
@@ -162,6 +183,38 @@ class TutoringStreamAdapter:
             "event": "message",
             "data": adapted,
         }
+
+    @staticmethod
+    def _is_terminal_event(event: dict) -> bool:
+        try:
+            event_type = json.loads(event.get("data", "")).get("type")
+        except (json.JSONDecodeError, AttributeError):
+            return False
+        return event_type in {"workflow_completed", "workflow_failed"}
+
+    async def _persist_state(
+        self,
+        state: StreamState,
+    ) -> bool:
+        try:
+            await self._persist_result(
+                state.assistant_message_id,
+                state.conversation_id,
+                "".join(state.chunks),
+                state.diagrams,
+                state.knowledge_points,
+                state.meta,
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to persist tutoring stream result",
+                extra={
+                    "conversation_id": state.conversation_id,
+                    "message_id": state.assistant_message_id,
+                },
+            )
+            return False
 
     @staticmethod
     def _build_workbench_payload(payload: dict) -> dict:
@@ -205,18 +258,22 @@ class TutoringStreamAdapter:
                     line, text_buffer = text_buffer.split("\n", 1)
                     event = self._adapt_line(line.rstrip("\r"), state)
                     if event is not None:
+                        if self._is_terminal_event(event):
+                            state.persisted = await self._persist_state(state)
                         yield event
 
             text_buffer += decoder.decode(b"", final=True)
             if text_buffer:
                 event = self._adapt_line(text_buffer.rstrip("\r"), state)
                 if event is not None:
+                    if self._is_terminal_event(event):
+                        state.persisted = await self._persist_state(state)
                     yield event
         except AgentServiceError as e:
             status_val = "error"
             error_message = "AgentServiceError: Agent 服务不可用"
             if not state.done_sent:
-                yield {
+                failed_event = {
                     "event": "message",
                     "data": json.dumps(
                         {
@@ -235,6 +292,8 @@ class TutoringStreamAdapter:
                         ensure_ascii=False,
                     ),
                 }
+                state.persisted = await self._persist_state(state)
+                yield failed_event
         except Exception as e:
             status_val = "error"
             error_message = f"UnexpectedError: {str(e)}"
@@ -246,23 +305,8 @@ class TutoringStreamAdapter:
                 status_val = "error"
                 error_message = "No output generated"
 
-            try:
-                await self._persist_result(
-                    assistant_message_id,
-                    conversation_id,
-                    full_text,
-                    state.diagrams,
-                    state.knowledge_points,
-                    state.meta,
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to persist tutoring stream result",
-                    extra={
-                        "conversation_id": conversation_id,
-                        "message_id": assistant_message_id,
-                    },
-                )
+            if not state.persisted:
+                state.persisted = await self._persist_state(state)
 
             try:
                 await self._record_agent_log(

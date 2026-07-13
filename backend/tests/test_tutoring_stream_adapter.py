@@ -41,20 +41,21 @@ async def test_stream_adapter_forwards_v2_events_with_backend_envelope():
         persist_result=persisted,
         record_agent_log=recorded_log,
     )
-    events = [
-        event
-        async for event in adapter.stream(
-            payload={
-                "user_id": "u1",
-                "scope": "course",
-                "course_id": "course-1",
-                "conversation_id": "conv-1",
-                "message": "x",
-            },
-            conversation_id="conv-1",
-            assistant_message_id="msg-1",
-        )
-    ]
+    events = []
+    async for event in adapter.stream(
+        payload={
+            "user_id": "u1",
+            "scope": "course",
+            "course_id": "course-1",
+            "conversation_id": "conv-1",
+            "message": "x",
+        },
+        conversation_id="conv-1",
+        assistant_message_id="msg-1",
+    ):
+        if json.loads(event["data"])["type"] == "workflow_completed":
+            assert persisted.await_count == 1
+        events.append(event)
 
     decoded = [json.loads(event["data"]) for event in events]
     assert calls[0][0] == "/agent/v2/workbench/chat"
@@ -114,6 +115,22 @@ async def test_stream_adapter_does_not_filter_tool_source_or_artifact_events():
         [],
         [],
         {
+            "tool_events": [
+                {
+                    "type": "tool_started",
+                    "payload": {
+                        "tool_call_id": "tool-1",
+                        "tool_name": "TaskCreate",
+                    },
+                },
+                {
+                    "type": "tool_completed",
+                    "payload": {
+                        "tool_call_id": "tool-1",
+                        "state": "success",
+                    },
+                },
+            ],
             "artifacts": [
                 {
                     "id": "a1",

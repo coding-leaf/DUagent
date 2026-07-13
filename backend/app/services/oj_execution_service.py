@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 from collections.abc import Awaitable, Callable
 import httpx
@@ -32,6 +33,22 @@ class OJExecutionError(Exception):
         super().__init__(message)
         self.reason = reason
         self.message = message
+
+
+def _encode_judge0_text(value: str) -> str:
+    return base64.b64encode(value.encode("utf-8")).decode("ascii")
+
+
+def _decode_judge0_text(value: object) -> str:
+    if not value:
+        return ""
+    if not isinstance(value, str):
+        raise OJExecutionError("oj_invalid_response", "Judge0 returned a non-text output field.")
+    try:
+        # Judge0 CE 1.13 may wrap long Base64 fields with line breaks.
+        return base64.b64decode(value).decode("utf-8", errors="replace")
+    except ValueError as exc:
+        raise OJExecutionError("oj_invalid_response", "Judge0 returned invalid base64 output.") from exc
 
 
 def _resolve_judge0_language_id(language: str) -> int:
@@ -152,7 +169,11 @@ async def execute_code_batch_in_oj(
     headers = _judge0_headers()
     payload = {
         "submissions": [
-            {"source_code": code, "language_id": lang_id, "stdin": stdin}
+            {
+                "source_code": _encode_judge0_text(code),
+                "language_id": lang_id,
+                "stdin": _encode_judge0_text(stdin),
+            }
             for stdin in stdins
         ]
     }
@@ -162,7 +183,7 @@ async def execute_code_batch_in_oj(
             response = await client.post(
                 url,
                 json=payload,
-                params={"base64_encoded": "false"},
+                params={"base64_encoded": "true"},
                 headers=headers,
             )
     except httpx.TimeoutException as exc:
@@ -170,6 +191,11 @@ async def execute_code_batch_in_oj(
     except httpx.RequestError as exc:
         raise OJExecutionError("oj_unavailable", "Cannot connect to Judge0 service.") from exc
     if response.status_code >= 400:
+        logger.error(
+            "Judge0 batch submission failed HTTP status=%d response=%s",
+            response.status_code,
+            response.text[:500],
+        )
         raise OJExecutionError("oj_http_error", f"OJ Service returned HTTP {response.status_code}")
     data = response.json()
     if not isinstance(data, list) or any(not isinstance(item, dict) or not item.get("token") for item in data):
@@ -190,7 +216,7 @@ async def read_code_batch_results_in_oj(
         async with client_factory(timeout=8.0) as client:
             response = await client.get(
                 url,
-                params={"tokens": ",".join(tokens), "base64_encoded": "false"},
+                params={"tokens": ",".join(tokens), "base64_encoded": "true"},
                 headers=headers,
             )
     except httpx.TimeoutException as exc:
@@ -198,6 +224,11 @@ async def read_code_batch_results_in_oj(
     except httpx.RequestError as exc:
         raise OJExecutionError("oj_unavailable", "Cannot connect to Judge0 service.") from exc
     if response.status_code >= 400:
+        logger.error(
+            "Judge0 batch result read failed HTTP status=%d response=%s",
+            response.status_code,
+            response.text[:500],
+        )
         raise OJExecutionError("oj_http_error", f"OJ Service returned HTTP {response.status_code}")
     submissions = response.json().get("submissions", [])
     if len(submissions) != len(tokens):
@@ -211,11 +242,11 @@ def _map_judge0_submission(data: dict) -> dict:
     return {
         "status": JUDGE0_STATUS_MAP.get(status_id, "unknown"),
         "compile_status": "Compilation Error" if status_id == 6 else "OK",
-        "compile_output": data.get("compile_output") or "",
+        "compile_output": _decode_judge0_text(data.get("compile_output")),
         "execution": {
             "status_id": status_id,
-            "stdout": data.get("stdout") or "",
-            "stderr": data.get("stderr") or "",
+            "stdout": _decode_judge0_text(data.get("stdout")),
+            "stderr": _decode_judge0_text(data.get("stderr")),
             "status_description": status_obj.get("description", "Unknown"),
         },
     }

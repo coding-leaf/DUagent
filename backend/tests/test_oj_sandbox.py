@@ -1,3 +1,4 @@
+import base64
 import os
 import sys
 from unittest.mock import AsyncMock, patch
@@ -562,8 +563,60 @@ async def test_execute_code_batch_in_oj_submits_all_fixed_inputs_without_waiting
 
     assert result == ["token-1", "token-2"]
     assert calls[0][0].endswith("/submissions/batch")
-    assert calls[0][1]["json"]["submissions"][0]["stdin"] == "first\n"
+    assert calls[0][1]["params"]["base64_encoded"] == "true"
+    first_submission = calls[0][1]["json"]["submissions"][0]
+    assert base64.b64decode(first_submission["source_code"]).decode() == "print(input())"
+    assert base64.b64decode(first_submission["stdin"]).decode() == "first\n"
     assert "wait" not in calls[0][1].get("params", {})
+
+
+@pytest.mark.asyncio
+async def test_execute_code_batch_in_oj_rejects_empty_inputs():
+    from app.services.oj_execution_service import execute_code_batch_in_oj
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        await execute_code_batch_in_oj(code="print('ok')", language="python", stdins=[])
+
+    assert exc_info.value.reason == "empty_batch"
+
+
+@pytest.mark.asyncio
+async def test_execute_code_batch_in_oj_rejects_unsupported_language():
+    from app.services.oj_execution_service import execute_code_batch_in_oj
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        await execute_code_batch_in_oj(code="fn main() {}", language="rust", stdins=[""])
+
+    assert exc_info.value.reason == "unsupported_language"
+
+
+@pytest.mark.asyncio
+async def test_execute_code_batch_in_oj_preserves_http_failure_reason():
+    from app.services.oj_execution_service import execute_code_batch_in_oj
+
+    class BatchResponse:
+        status_code = 503
+        text = "temporarily unavailable"
+
+    class BatchClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *_args, **_kwargs):
+            return BatchResponse()
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        await execute_code_batch_in_oj(
+            code="print('ok')",
+            language="python",
+            stdins=[""],
+            client_factory=lambda **_kwargs: BatchClient(),
+        )
+
+    assert exc_info.value.reason == "oj_http_error"
 
 
 @pytest.mark.asyncio
@@ -575,12 +628,57 @@ async def test_read_code_batch_results_maps_each_judge0_submission():
         text = "[]"
 
         def json(self):
+            compile_output = base64.b64encode(
+                "main.c: error: ‘MAX_STUDENTS’ undeclared".encode()
+            ).decode()
             return {
                 "submissions": [
-                    {"status": {"id": 3, "description": "Accepted"}, "stdout": "3\n", "stderr": ""},
-                    {"status": {"id": 7, "description": "Runtime Error"}, "stdout": "", "stderr": "boom"},
+                    {
+                        "status": {"id": 3, "description": "Accepted"},
+                        "stdout": base64.b64encode("中文结果\n".encode()).decode(),
+                        "stderr": None,
+                    },
+                    {
+                        "status": {"id": 6, "description": "Compilation Error"},
+                        "stdout": None,
+                        "stderr": None,
+                        "compile_output": f"{compile_output[:24]}\n{compile_output[24:]}",
+                    },
                 ]
             }
+
+    class BatchClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *_args, **kwargs):
+            assert kwargs["params"]["base64_encoded"] == "true"
+            return BatchResponse()
+
+    results = await read_code_batch_results_in_oj(
+        tokens=["token-1", "token-2"],
+        client_factory=lambda **_kwargs: BatchClient(),
+    )
+
+    assert results[0]["status"] == "success"
+    assert results[0]["execution"]["stdout"] == "中文结果\n"
+    assert results[1]["status"] == "compilation_error"
+    assert results[1]["compile_output"] == "main.c: error: ‘MAX_STUDENTS’ undeclared"
+
+
+@pytest.mark.asyncio
+async def test_read_code_batch_results_rejects_incomplete_batch():
+    from app.services.oj_execution_service import read_code_batch_results_in_oj
+
+    class BatchResponse:
+        status_code = 200
+        text = "[]"
+
+        def json(self):
+            return {"submissions": []}
 
     class BatchClient:
         async def __aenter__(self):
@@ -592,14 +690,58 @@ async def test_read_code_batch_results_maps_each_judge0_submission():
         async def get(self, *_args, **_kwargs):
             return BatchResponse()
 
-    results = await read_code_batch_results_in_oj(
-        tokens=["token-1", "token-2"],
-        client_factory=lambda **_kwargs: BatchClient(),
-    )
+    with pytest.raises(OJExecutionError) as exc_info:
+        await read_code_batch_results_in_oj(
+            tokens=["missing-token"],
+            client_factory=lambda **_kwargs: BatchClient(),
+        )
 
-    assert results[0]["status"] == "success"
-    assert results[0]["execution"]["stdout"] == "3\n"
-    assert results[1]["status"] == "runtime_error"
+    assert exc_info.value.reason == "oj_batch_incomplete"
+
+
+@pytest.mark.asyncio
+async def test_read_code_batch_results_preserves_http_failure_reason():
+    from app.services.oj_execution_service import read_code_batch_results_in_oj
+
+    class BatchResponse:
+        status_code = 502
+        text = "upstream unavailable"
+
+    class BatchClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return BatchResponse()
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        await read_code_batch_results_in_oj(
+            tokens=["token-1"],
+            client_factory=lambda **_kwargs: BatchClient(),
+        )
+
+    assert exc_info.value.reason == "oj_http_error"
+
+
+def test_decode_judge0_text_rejects_non_text_output():
+    from app.services.oj_execution_service import _decode_judge0_text
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        _decode_judge0_text(123)
+
+    assert exc_info.value.reason == "oj_invalid_response"
+
+
+def test_decode_judge0_text_rejects_malformed_base64():
+    from app.services.oj_execution_service import _decode_judge0_text
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        _decode_judge0_text("a")
+
+    assert exc_info.value.reason == "oj_invalid_response"
 
 
 @pytest.mark.asyncio
@@ -629,3 +771,31 @@ async def test_poll_code_batch_results_waits_until_every_submission_is_terminal(
 
     assert [item["status"] for item in results] == ["success", "wrong_answer"]
     assert sleep_calls == [0.1]
+
+
+@pytest.mark.asyncio
+async def test_poll_code_batch_results_fails_after_attempt_limit():
+    from app.services.oj_execution_service import poll_code_batch_results_in_oj
+
+    async def read_results(**_kwargs):
+        return [{"status": "processing"}]
+
+    async def sleep(_delay):
+        return None
+
+    with pytest.raises(OJExecutionError) as exc_info:
+        await poll_code_batch_results_in_oj(
+            tokens=["token-1"],
+            max_attempts=2,
+            read_results=read_results,
+            sleep=sleep,
+        )
+
+    assert exc_info.value.reason == "oj_batch_timeout"
+
+
+@pytest.mark.asyncio
+async def test_poll_code_batch_results_accepts_empty_token_list():
+    from app.services.oj_execution_service import poll_code_batch_results_in_oj
+
+    assert await poll_code_batch_results_in_oj(tokens=[]) == []

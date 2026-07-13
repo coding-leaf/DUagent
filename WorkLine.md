@@ -3269,3 +3269,26 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - Client API 与 Agent API 均无变化。
+
+---
+
+### 2026-07-13 — 修复私人编程题编译错误误报 OJ 不可用
+
+**涉及文件：**
+- `backend/app/services/oj_execution_service.py`
+- `backend/tests/test_oj_sandbox.py`
+- `WorkLine.md`
+
+**根因与改动：**
+1. 私人题批量判题使用 `base64_encoded=false` 读取结果；含中文注释或 GCC 特殊字符的编译结果会被 Judge0 CE 1.13.0 以 HTTP 400 拒绝，Backend 因此把正常编译错误误报为“判题服务暂时不可用”。
+2. 批量提交与批量读取统一改用 Base64，Backend 负责编解码源码、标准输入、标准输出、标准错误和编译输出，并兼容 Judge0 返回的换行 Base64 文本。
+3. 批量提交和读取的 HTTP 错误增加状态码与截断响应日志，保留现有对外错误协议。
+
+**验证结果：**
+- Backend OJ 回归：27 passed；修改 service 定向覆盖率 82%。
+- Python `py_compile` 与 `git diff --check` 通过。
+- 本地 Judge0 1.13.0 真实烟雾测试：含中文注释且缺少 `MAX_STUDENTS` 定义的 C 代码正确返回 `compilation_error`，编译信息包含 `MAX_STUDENTS`，不再误报服务不可用。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent API 无变化。

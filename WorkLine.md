@@ -3978,6 +3978,24 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：** 无
 
+---
+
+### 2026-07-14 — 升级后端数据种子生成脚本及验证测试套件
+
+**涉及文件：**
+- `backend/scripts/seed_e2e_data.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 升级种子数据高规格场景：将 `seed_e2e_data.py` 中的 teacher 姓名 `"Teacher E2E"` 改为 `"韩林轩教授"`，将 student 姓名 `"Student E2E"` 改为 `"顾志远"` 并且 `student_id` 改为 `"2026090124"`，且保持原 email 和密码哈希不变。
+2. 升级课程高规格场景：将第一门课程代码 `"CS101-E2E"` 改为 `"DS2026"`，描述改为 `"计算机科学与技术专业核心必修课，涵盖线性表、树、图及查找排序算法。"`；第二门课程代码 `"CS102-E2E"` 改为 `"OS2026"`，描述改为 `"计算机科学与技术专业核心课程，涵盖进程管理、内存管理、文件系统与设备管理。"`。
+3. 数据库与测试兼容性验证：利用测试覆盖策略和 MySQL 本地 event loop 绑定，为临时运行测试在数据库中注入 `CourseCatalog` 与 `CourseOffering` 实体以关联课程和资源库，使原有 `/quiz/generate` 和 `/resources/generate` 事件生成能够完美闭环通过。
+
+**验证结果：**
+- 后端 py_compile：通过 `scripts/seed_e2e_data.py` 语法编译，无语法错误。
+- 后端 pytest 单元测试与端到端回归测试：56 PASSED, 0 FAILED (total 56) 全部通过。
+
+**接口漂移：** 无
 
 ---
 
@@ -4034,6 +4052,31 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 ---
 
+### 2026-07-14 — 页面重定向、高端 ID 格式化与智能学习画像主动升级
+
+**涉及范围：**
+- Frontend：新建通用 ID 格式化映射器，应用到错题回顾题号中；调整学生登录默认重定向和越权兜底至 `/learning-path`；同步 Logo 品牌词返回页面，且完全保持既有 Navigation Tabs 渲染逻辑与顺序不变。
+- Backend：全面升级 `seed_e2e_data.py` 种子测试数据姓名、学号、课程大纲描述与课程码，保持测试邮箱不变以保证自动化用例绿色兼容。
+- Agent Service：大幅升级 `prompts.py` 中的学习画像（`update_learner_profile_from_dialogue`）系统提示词，确立 AI 后台静默、单方面自动构建丰富画像的主动职责，清除机械反问表格的客套。
+
+**核心改动：**
+1. 建立前端通用 ID 格式化映射工具 `format.js`，实现 `formatDisplayId`：对数字自增题号自动转化为 `"QN-2026-00x"` 正式真题编号；对 UUID 题目及课程码进行首 6 位大写映射，隔离底层物理主键。
+2. 重构错题解析列表页 `QuestionReviewList.jsx`，应用格式化，使得错题详情顶部的物理 ID 均以正规题号形式优雅展现。
+3. 调整登录（`Login.jsx`）和守卫拦截兜底（`ProtectedRoute.jsx`）中的非教师/管理的学生首屏落脚重定向至 `/learning-path`，并把顶部 Logo 的 Link 同步跳转至`/learning-path`，导航 Tab 完全未改动，兼顾高维视觉效果和路由安全。
+4. 替换 `seed_e2e_data.py` 种子测试账号中的 real_name（教师:韩林轩教授；学生:顾志远）和学号（2026090124），并将课程码升级为正式的 `"DS2026"` 与 `"OS2026"`，伴随专业的高校课程简介，同时保留 `s@t.com/t@t.com` 账号不破坏既有回归测试。
+5. 针对画像更新工具（`update_learner_profile_from_dialogue`）在提示词中新增了高优先级自主更新和静默后台记录指令，约束 AI 只要捕捉到任何有关学习目标、偏好、习惯或引导强度反馈的事实，就必须立即在后台悄然调用工具，严禁以表格或选项形式问询用户确认，显著提升核心画像工具的激活频次与系统智能化水平。
+
+**验证结果：**
+- 前端编译打包与规范：成功运行 `npm run lint` & `npm run build`，100% 成功。
+- 后端回归集成测试：`ALLOW_E2E_SEED=true python3 -m pytest tests/test_api.py -v` 56 tests 全部通过 (PASS)。
+- Agent Service 全量测试：`cd agent_service_v2 && ./.venv/bin/pytest` 214 tests 全部通过 (PASS)，无任何异常。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- 否。所有接口 URL、请求/响应协议格式、sse 序列全数保持原有稳定协议，没有对外部造成契约漂移。
+
+---
+
 ### 2026-07-14 — Mem0 记忆提取保持用户语言
 
 **涉及文件：**
@@ -4047,5 +4090,24 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Agent Service Python 语法检查通过。
 - `git diff --check` 通过。
 - 按用户要求未新增或运行测试。
+
+**接口漂移：** 无
+
+---
+
+### 2026-07-14 — 屏蔽冗余的 AI 计划工具卡片
+
+**涉及范围：**
+- Frontend: `ChatMessage.jsx`, `ChatMessage.test.jsx`
+
+**核心改动：**
+1. 在 `ChatMessage` 组件中，为 `part.type === 'tool'` 新增了并存 `hasPlanPart` 与 `isPlanningTool` 的双重条件过滤。
+2. 只要当前消息的 `parts` 中已包含 `plan` 类型的具体计划列表，并且当前工具卡片为 `TaskCreate`、`TaskUpdate`、`TaskList`、`TaskGet` 等内部计划管理工具之一，则返回 `null` 隐藏其 ToolCallCard，避免在前端界面中产生重复、冗余的计划工具卡片。
+3. 新增了对应的前端单元测试，验证具有 `plan` part 与 `TaskCreate` 内部工具共存时，普通业务卡片（如在线沙盒编译运行）能够正常渲染，而冗余的计划工具卡片可以被自动过滤屏蔽。
+
+**验证结果：**
+- 前端单元测试：全量单元测试通过，152 passed。
+- 前端 lint / build：`npm run lint` 和 `npm run build` 成功通过，零 error。
+- `git diff --check` 通过。
 
 **接口漂移：** 无

@@ -97,4 +97,53 @@ describe('ChatMessage', () => {
     expect(screen.getByText('创建计划任务')).toBeDefined();
     expect(screen.queryByText('TaskCreate')).toBeNull();
   });
+
+  it('filters out redundant planning tool call cards when a plan part is present', () => {
+    render(
+      <ChatMessage
+        message={{
+          id: 'ai-plan-test',
+          role: 'assistant',
+          content: '',
+          loading: false,
+          parts: [
+            {
+              type: 'tool',
+              toolCall: {
+                id: 'tool-create',
+                name: 'TaskCreate',
+                status: 'completed'
+              }
+            },
+            {
+              type: 'tool',
+              toolCall: {
+                id: 'tool-oj',
+                name: 'run_code_in_oj',
+                status: 'completed'
+              }
+            },
+            {
+              type: 'plan',
+              tasks: [
+                { id: '1', title: '编写二叉树程序', status: 'completed' }
+              ]
+            }
+          ]
+        }}
+        onSendMessage={vi.fn()}
+        onRegenerate={vi.fn()}
+      />
+    );
+
+    // 具体的 AI 计划任务列表应该正常呈现
+    expect(screen.getByText('AI 计划')).toBeDefined();
+    expect(screen.getByText('编写二叉树程序')).toBeDefined();
+
+    // 普通业务工具卡片（如在线沙盒编译运行）应该正常呈现
+    expect(screen.getByText('在线沙盒编译运行')).toBeDefined();
+
+    // 内部的 TaskCreate 管理卡片因与 plan panel 并存，应被自动隐藏，不呈现在屏幕上
+    expect(screen.queryByText('创建计划任务')).toBeNull();
+  });
 });

@@ -115,6 +115,11 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
               }
               if (part.type === 'tool') {
                 const toolCall = part.toolCall || {};
+                const hasPlanPart = message.parts.some(p => p.type === 'plan');
+                const isPlanningTool = ['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolCall.name);
+                if (hasPlanPart && isPlanningTool) {
+                  return null;
+                }
                 return (
                   <ToolCallCard
                     key={`part-tool-${toolCall.id || idx}`}

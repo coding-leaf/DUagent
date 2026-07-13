@@ -48,9 +48,11 @@ export function useLearningEffects(activeCourseId) {
 
   const overview = useMemo(() => ({
     total: nodeRows.length,
-    practiced: nodeRows.filter(row => row.hasPracticeEvidence).length,
+    mastered: nodeRows.filter(row => row.assessment_state === 'mastered').length,
+    learning: nodeRows.filter(row => row.assessment_state === 'learning').length,
     pending: nodeRows.filter(row => row.assessment_state === 'pending_practice').length,
-    defaultPass: nodeRows.filter(row => (
+    weak: nodeRows.filter(row => row.assessment_state === 'weak').length,
+    unstarted: nodeRows.filter(row => (
       row.assessment_state === 'unassessed_default_pass'
       || row.assessment_state === 'unstarted'
     )).length,

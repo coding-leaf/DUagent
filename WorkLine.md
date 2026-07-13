@@ -3090,4 +3090,24 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - Backend→Agent 内部调用由 v1 路径迁移到已有 v2 路径。
 - Agent 内部接口新增 `GET /agent/v2/workbench/artifacts`；Frontend→Backend 客户端契约不变。
 
+---
 
+### 2026-07-13 — 补齐课程语境参数与 AI Chat UI 闭环
+
+**核心改动：**
+1. 公共资源、KG 节点资源、基线题库、个性化题目和个性化资源请求统一携带资源库 `course_title`，避免 Agent 在非 C 语言课程中使用默认课程提示词。
+2. 工作区 Markdown 支持标题锚点、页内目录和当前会话产物下载链接。
+3. AI Chat 按课程保存并恢复最后活动会话；工作流失败原因同时写入兼容旧渲染的 `content` 和新版结构化 `parts`。
+4. 修复学习效果概览字段与 UI 不一致，展示已掌握、薄弱、学习中、待练习和未开始节点。
+5. Agent v2 OpenAPI 与内部接口规范补充题目生成路径及 `course_title` 字段。
+
+**验证结果：**
+- Backend 相关回归：35 passed；TDD 定向测试均完成 RED→GREEN。
+- Frontend 定向测试：10 passed；全量单元测试：133 passed。
+- Frontend lint：通过；生产构建通过，保留既有大 chunk 提示。
+- Agent v2 全量测试：139 passed。
+- Backend `py_compile`、OpenAPI JSON 解析和 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent v2 请求模型中的既有可选字段 `course_title` 现已由 Backend 真实传入，并同步写入 OpenAPI/内部接口规范；新增文档化 `POST /agent/v2/knowledge/quiz/generations`，运行路径未新增。

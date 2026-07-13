@@ -87,6 +87,9 @@ export const ChatProvider = ({ children }) => {
   const setActiveSession = (sessionId) => {
     setIsDraftConversation(false);
     setActiveSessionState(sessionId);
+    if (activeCourseId && sessionId) {
+      localStorage.setItem(`active_session_id_${activeCourseId}`, sessionId);
+    }
   };
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -104,9 +107,13 @@ export const ChatProvider = ({ children }) => {
     }
 
     if (activeCourseId && sessions.length > 0) {
+      const savedSessionId = localStorage.getItem(`active_session_id_${activeCourseId}`);
+      const savedSessionExists = savedSessionId && sessions.some(s => s.id === savedSessionId);
       const activeSessionExists = sessions.some(s => s.id === activeSession);
       if (!isDraftConversation && (!activeSession || !activeSessionExists)) {
-        setActiveSessionState(sessions[0].id);
+        const nextSessionId = savedSessionExists ? savedSessionId : sessions[0].id;
+        setActiveSessionState(nextSessionId);
+        localStorage.setItem(`active_session_id_${activeCourseId}`, nextSessionId);
       }
     } else if (activeCourseId && sessionsRes) {
       setActiveSessionState(null);
@@ -116,6 +123,7 @@ export const ChatProvider = ({ children }) => {
       setActiveArtifactId(null);
       setHiddenArtifactIds([]);
       clearRunLogs();
+      localStorage.removeItem(`active_session_id_${activeCourseId}`);
     }
   }, [sessions, activeCourseId, activeSession, sessionsRes, isDraftConversation, clearRunLogs]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -138,7 +146,6 @@ export const ChatProvider = ({ children }) => {
       setWorkspaceArtifacts([]);
       setActiveArtifactId(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -160,6 +167,9 @@ export const ChatProvider = ({ children }) => {
     cancelStream();
     setActiveSessionState(null);
     setIsDraftConversation(true);
+    if (activeCourseId) {
+      localStorage.removeItem(`active_session_id_${activeCourseId}`);
+    }
     lastMessageIdRef.current = null;
     setMessages([]);
     setWorkspaceArtifacts([]);
@@ -188,6 +198,11 @@ export const ChatProvider = ({ children }) => {
         if (updatedSessions.length > 0) {
           setActiveSessionState(updatedSessions[0].id);
           setIsDraftConversation(false);
+          if (activeCourseId) {
+            localStorage.setItem(`active_session_id_${activeCourseId}`, updatedSessions[0].id);
+          }
+        } else if (activeCourseId) {
+          localStorage.removeItem(`active_session_id_${activeCourseId}`);
         }
       }
     } catch (err) {
@@ -199,17 +214,23 @@ export const ChatProvider = ({ children }) => {
   const createStreamHandlers = (targetId) => {
     const completeMessage = (event, failed = false) => {
       const finalMessageId = completionMessageId(event);
+      const failureMessage = `[生成失败: ${event.payload?.message || event.payload?.reason || 'agent_failed'}]`;
       lastMessageIdRef.current = finalMessageId;
       setMessages(prev => updateTargetMessage(prev, targetId, m => ({
         ...m,
         id: targetId === 'ai-placeholder' ? finalMessageId : m.id,
         content: failed
-          ? `${m.content || ''}\n\n[生成失败: ${event.payload?.message || event.payload?.reason || 'agent_failed'}]`
+          ? `${m.content || ''}\n\n${failureMessage}`
           : m.content,
         loading: false,
         isError: failed || m.isError,
         toolCalls: completeRunningToolCalls(m.toolCalls),
-        parts: completeRunningParts(m.parts)
+        parts: failed
+          ? [
+              ...completeRunningParts(m.parts),
+              { type: 'text', content: `\n\n${failureMessage}` }
+            ]
+          : completeRunningParts(m.parts)
       })));
       setIsSending(false);
       abortControllerRef.current = null;
@@ -217,6 +238,9 @@ export const ChatProvider = ({ children }) => {
       if (!activeSession && event.conversation_id) {
         setIsDraftConversation(false);
         setActiveSessionState(event.conversation_id);
+        if (activeCourseId) {
+          localStorage.setItem(`active_session_id_${activeCourseId}`, event.conversation_id);
+        }
         mutateSessions();
       }
     };

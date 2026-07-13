@@ -34,7 +34,12 @@ vi.mock('../api/services/chat', () => ({
   chatService: {
     getSessions: vi.fn().mockResolvedValue({
       code: 200,
-      data: { conversations: [{ id: 'conv-existing', title: 'Existing chat' }] }
+      data: {
+        conversations: [
+          { id: 'conv-existing', title: 'Existing chat' },
+          { id: 'conv-saved', title: 'Saved chat' }
+        ]
+      }
     }),
     getHistory: (...args) => getHistoryMock(...args),
     streamChat: (...args) => streamChatMock(...args)
@@ -75,6 +80,9 @@ const StreamConsumer = () => {
       <div data-testid="message-count">{messages.length}</div>
       <div data-testid="user-content">{user?.content || ''}</div>
       <div data-testid="assistant-content">{assistant?.content || ''}</div>
+      <div data-testid="assistant-parts">
+        {(assistant?.parts || []).map(part => part.content || '').join('')}
+      </div>
       <div data-testid="assistant-loading">{String(assistant?.loading ?? false)}</div>
       <div data-testid="assistant-error">{String(assistant?.isError ?? false)}</div>
       <div data-testid="tool-status">{assistant?.toolCalls?.[0]?.status || ''}</div>
@@ -119,6 +127,16 @@ test('keeps a user-created draft conversation active when history exists', async
 
   expect(screen.getByTestId('active-session').textContent).toBe('');
   expect(screen.getByTestId('message-count').textContent).toBe('0');
+});
+
+test('restores the last active conversation for the current course', async () => {
+  localStorage.setItem('active_session_id_test-course-id', 'conv-saved');
+
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-saved');
+  });
 });
 
 test('ChatProvider keeps original user text while sending plan hint to agent', async () => {
@@ -272,6 +290,7 @@ test('ChatProvider handles workflow_failed as native EDU v2 error event', async 
   });
   expect(screen.getByTestId('assistant-error').textContent).toBe('true');
   expect(screen.getByTestId('assistant-content').textContent).toContain('模型未配置');
+  expect(screen.getByTestId('assistant-parts').textContent).toContain('模型未配置');
 });
 
 test('ChatProvider records native stream and debug events for developer console', async () => {

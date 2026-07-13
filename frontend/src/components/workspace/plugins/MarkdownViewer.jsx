@@ -1,19 +1,23 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useMemo } from 'react';
+import Icon from '../../Icon';
+import { useChat } from '../../../context/ChatContext';
+import { markdownHeadingId } from '../../../utils/markdownAnchors';
 
 const COMPONENTS = {
   h1: ({ children, ...props }) => (
-    <h1 className="text-2xl font-bold text-slate-800 mt-6 mb-4 pb-2 border-b border-slate-100" {...props}>
+    <h1 id={markdownHeadingId(children)} className="text-2xl font-bold text-slate-800 mt-6 mb-4 pb-2 border-b border-slate-100" {...props}>
       {children}
     </h1>
   ),
   h2: ({ children, ...props }) => (
-    <h2 className="text-xl font-semibold text-slate-800 mt-5 mb-3" {...props}>
+    <h2 id={markdownHeadingId(children)} className="text-xl font-semibold text-slate-800 mt-5 mb-3" {...props}>
       {children}
     </h2>
   ),
   h3: ({ children, ...props }) => (
-    <h3 className="text-lg font-medium text-slate-800 mt-4 mb-2" {...props}>
+    <h3 id={markdownHeadingId(children)} className="text-lg font-medium text-slate-800 mt-4 mb-2" {...props}>
       {children}
     </h3>
   ),
@@ -82,6 +86,54 @@ const COMPONENTS = {
 };
 
 export default function MarkdownViewer({ title, content }) {
+  const chat = useChat();
+  const activeSession = chat?.activeSession;
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+  const components = useMemo(() => ({
+    ...COMPONENTS,
+    a({ href, children, ...props }) {
+      if (href?.startsWith('./') && activeSession) {
+        let filename;
+        try {
+          filename = decodeURIComponent(href.slice(2));
+        } catch {
+          filename = href.slice(2);
+        }
+        const token = localStorage.getItem('access_token');
+        const downloadUrl = `${apiBaseUrl}/tutoring/conversations/${activeSession}/files/${encodeURIComponent(filename)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        return (
+          <a
+            href={downloadUrl}
+            download={filename}
+            className="text-cyan-600 hover:text-cyan-700 font-semibold underline inline-flex items-center gap-1 transition-colors"
+            {...props}
+          >
+            <Icon name="download" className="text-sm shrink-0" />
+            {children}
+          </a>
+        );
+      }
+      if (href?.startsWith('#')) {
+        return (
+          <a href={href} className="text-cyan-600 hover:text-cyan-700 underline transition-colors" {...props}>
+            {children}
+          </a>
+        );
+      }
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-cyan-600 hover:text-cyan-700 underline transition-colors"
+          {...props}
+        >
+          {children}
+        </a>
+      );
+    }
+  }), [activeSession, apiBaseUrl]);
+
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm w-full">
       {title ? (
@@ -89,7 +141,7 @@ export default function MarkdownViewer({ title, content }) {
           <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
         </div>
       ) : null}
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
     </div>

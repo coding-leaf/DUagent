@@ -3918,3 +3918,64 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **遗留边界：**
 - 门禁使用确定性探查与 Schema 特征，覆盖已知直接和常见变体；未知的隐晦语义提取仍需通过对抗样例持续扩充，不构成对所有提示注入的绝对保证。
+
+---
+
+### 2026-07-14 — 创建前端通用 ID 格式化工具
+
+**涉及文件：**
+- `frontend/src/utils/format.js`
+- `WorkLine.md`
+
+**核心改动：**
+1. 创建并导出了 `formatDisplayId` 工具函数，用于将底层的物理 ID 或 UUID 格式化为带有正式且具有专业辨识度的编码，例如 `CLASS-XXXXXX` 和 `QN-XXXXXX`。
+2. 处理逻辑包括：针对已格式化的 ID 不重复处理，兼容历史特定的 CS101/CS102-E2E 数据，对 UUID 提取前 6 位大写字母并拼接前缀，对数字自增 ID 进行补零大写并拼接前缀。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证，代码风格完全合规。
+- 前端构建：通过 `npm run build` 验证，打包编译没有任何错误或警告。
+
+**接口漂移：**
+- 无。
+
+---
+
+### 2026-07-14 — 在解析回顾列表中格式化显示题目 ID
+
+**涉及文件：**
+- `frontend/src/components/quiz/QuestionReviewList.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. 在 `QuestionReviewList.jsx` 中引入 `formatDisplayId` 格式化工具。
+2. 将错题/测评解析回顾列表页面的题号展示从原始 `q.question_id` 修改为通过 `formatDisplayId(q.question_id, 'question')` 过滤后的格式化 ID 展示，使界面显示更为正式、统一。
+
+**验证结果：**
+- 前端 lint / build：通过 `npm run lint` 与 `npm run build` 验证，代码完全合规且正常打包。
+- 后端 py_compile / pytest：未运行（前端组件专属修改）
+- Agent pytest：未运行（前端组件专属修改）
+
+**接口漂移：** 无
+
+---
+
+### 2026-07-14 — 将学生端登录后的默认首屏变更为路径规划页
+
+**涉及文件：**
+- `frontend/src/pages/Login.jsx`
+- `frontend/src/components/ProtectedRoute.jsx`
+- `frontend/src/components/Navbar.jsx`
+- `WorkLine.md`
+
+**核心改动：**
+1. 登录跳转：修改 `Login.jsx`，使非管理员（admin）和教师（teacher）的学生账号登录成功后直接 `navigate('/learning-path')`（重定向到路径规划页），而非原先的 `/dashboard`。
+2. 权限重定向兜底：修改 `ProtectedRoute.jsx`，将没有对应页面访问权限的未授权兜底重定向 `<Navigate to="/dashboard" replace />` 修改为 `<Navigate to="/learning-path" replace />`。
+3. 导航栏 Logo 跳转：修改 `Navbar.jsx` 中的 Logo 链接 `<Link to="/dashboard"` 为 `<Link to="/learning-path"`，确保学生点击顶部 Logo“智能学习助手”时能返回路径规划首页。其他 Tab 导航逻辑和排序根据硬约束保持不动。
+
+**验证结果：**
+- 前端 lint：通过 `npm run lint` 验证，代码无任何静态语法或风格错误。
+- 前端构建：通过 `npm run build` 验证，打包顺利通过，生成产物合规。
+
+**接口漂移：** 无
+
+

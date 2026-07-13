@@ -26,7 +26,7 @@ export default function Navbar({ searchTerm, onSearch }) {
         
         {/* Brand & Course Selector */}
         <div className="flex-1 flex items-center space-x-md">
-          <Link to="/dashboard" className="text-xl font-bold tracking-tight text-cyan-600 hover:opacity-90 transition-opacity">
+          <Link to="/learning-path" className="text-xl font-bold tracking-tight text-cyan-600 hover:opacity-90 transition-opacity">
             智能学习助手
           </Link>
           

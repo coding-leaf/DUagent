@@ -64,7 +64,7 @@ export default function Login() {
         } else if (userRole === 'teacher') {
           navigate('/teacher');
         } else {
-          navigate('/dashboard');
+          navigate('/learning-path');
         }
       } else {
         setError(response.message || '登录失败，请检查账号密码');

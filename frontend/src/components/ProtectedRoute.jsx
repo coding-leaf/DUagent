@@ -27,7 +27,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     if (user.role === 'teacher') {
       return <Navigate to="/teacher" replace />;
     }
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/learning-path" replace />;
   }
 
   return children;

@@ -3783,3 +3783,21 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - Client API 与 Agent API 均无变化；仅执行开发环境数据清理。
+
+---
+
+### 2026-07-13 — 修复长期记忆白名单与编程题草案契约
+
+**涉及范围：**
+- 长期记忆写入改用 `identity`、`learning_goal`、`resource_preference`、`learning_habit`、`teaching_preference` 类型白名单，不再要求正文带“用户明确”等固定前缀；敏感信息、诊断数据、答案和工具原文继续拒绝。
+- Agent 编程题长度和测试用例数量与 Backend 对齐；C/C++、Java、Go 的参考解在调用 Backend 前必须包含对应的完整程序入口。
+- 提示词同步要求参考解可直接提交 OJ，避免仅生成待实现函数后反复发布失败。
+
+**验证结果：**
+- RED：记忆策略与编程题契约新增测试初始 6 failed，确认旧前缀规则、上下限漂移和入口缺失未被拦截。
+- Agent 聚焦测试：记忆、工具输入 Schema、编程题工具 13 passed；Workbench 工厂、工具组、Backend 客户端和协议适配 43 passed。
+- 修改文件 `py_compile` 与 `git diff --check` 通过；按用户提速要求未运行 Agent 全量回归。
+
+**接口漂移：**
+- Client API、Agent HTTP API 和 SSE 字段均无变化。
+- Agent 内部 `add_memory` 工具新增必填 `memory_type` 白名单枚举；编程题工具仅收紧到既有 Backend 契约。

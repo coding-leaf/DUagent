@@ -50,12 +50,33 @@ class PersonalChoiceQuizInput(ToolInputModel):
 
 class PersonalCodeProblemInput(ToolInputModel):
     title: str = Field(min_length=1, max_length=200, description="Problem title.")
-    statement: str = Field(min_length=1, max_length=20000, description="Markdown problem statement.")
+    statement: str = Field(min_length=1, max_length=10000, description="Markdown problem statement.")
     language: Literal["c", "cpp", "python", "java", "go", "javascript"] = Field(description="Runtime language.")
-    starter_code: str = Field(default="", max_length=50000, description="Student starter code.")
-    reference_solution: str = Field(min_length=1, max_length=50000, description="Private reference solution.")
-    public_inputs: list[str] = Field(min_length=1, max_length=10, description="Visible stdin cases.")
-    hidden_inputs: list[str] = Field(min_length=1, max_length=20, description="Private stdin cases.")
+    starter_code: str = Field(default="", max_length=20000, description="Student starter code.")
+    reference_solution: str = Field(min_length=1, max_length=30000, description="Private reference solution.")
+    public_inputs: list[str] = Field(min_length=1, max_length=7, description="Visible stdin cases.")
+    hidden_inputs: list[str] = Field(min_length=1, max_length=7, description="Private stdin cases.")
+
+    @model_validator(mode="after")
+    def validate_backend_contract(self):
+        if len(self.public_inputs) + len(self.hidden_inputs) > 8:
+            raise ValueError("public and hidden inputs may contain at most 8 cases in total")
+        if not _has_complete_program_entrypoint(self.language, self.reference_solution):
+            raise ValueError(
+                f"{self.language} reference_solution must be a complete executable program"
+            )
+        return self
+
+
+def _has_complete_program_entrypoint(language: str, source: str) -> bool:
+    compact = " ".join(source.split())
+    if language in {"c", "cpp"}:
+        return "main(" in compact.replace("main (", "main(")
+    if language == "java":
+        return "class Main" in compact and "static void main(" in compact.replace("main (", "main(")
+    if language == "go":
+        return "package main" in compact and "func main(" in compact.replace("main (", "main(")
+    return True
 
 
 class LearningProgressInput(ToolInputModel):

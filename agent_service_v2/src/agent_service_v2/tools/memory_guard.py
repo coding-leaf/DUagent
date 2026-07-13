@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import re
 from typing import Any
@@ -18,16 +19,24 @@ _FORBIDDEN_MEMORY_PATTERNS = (
     r"(?i)tool[_ -]?result|工具返回|reference_solution|hidden_inputs",
 )
 
+_ALLOWED_MEMORY_TYPES = (
+    "identity",
+    "learning_goal",
+    "resource_preference",
+    "learning_habit",
+    "teaching_preference",
+)
 
-def validate_memory_content(content: list[str]) -> str | None:
+
+def validate_memory_content(memory_type: str | None, content: list[str]) -> str | None:
+    if memory_type not in _ALLOWED_MEMORY_TYPES:
+        return "memory_type_not_allowed"
     if not content:
         return "memory_content_empty"
     for item in content:
         normalized = item.strip()
         if not normalized:
             return "memory_content_empty"
-        if not (normalized.startswith("用户明确") or normalized.lower().startswith("user explicitly")):
-            return "memory_must_be_explicit_user_statement"
         if any(re.search(pattern, normalized) for pattern in _FORBIDDEN_MEMORY_PATTERNS):
             return "memory_content_forbidden"
     if len(set(item.strip() for item in content)) != len(content):
@@ -41,7 +50,7 @@ class GuardedMemoryTool(ToolBase):
         self._delegate = delegate
         self.name = delegate.name
         self.description = delegate.description
-        self.input_schema = delegate.input_schema
+        self.input_schema = _memory_input_schema(delegate.input_schema) if self.name == "add_memory" else delegate.input_schema
         self.is_concurrency_safe = delegate.is_concurrency_safe
         self.is_read_only = delegate.is_read_only
 
@@ -54,7 +63,8 @@ class GuardedMemoryTool(ToolBase):
 
     async def call(self, **kwargs: Any) -> ToolChunk:
         if self.name == "add_memory":
-            reason = validate_memory_content(kwargs.get("content") or [])
+            memory_type = kwargs.pop("memory_type", None)
+            reason = validate_memory_content(memory_type, kwargs.get("content") or [])
             if reason:
                 return _chunk(edu_tool_result(status="rejected", reason=reason), error=True)
         result = await self._delegate(**kwargs)
@@ -69,6 +79,20 @@ class GuardedMemoryTool(ToolBase):
 
 def guard_memory_tools(tools: list[ToolBase]) -> list[ToolBase]:
     return [GuardedMemoryTool(tool) if tool.name in {"search_memory", "add_memory"} else tool for tool in tools]
+
+
+def _memory_input_schema(delegate_schema: dict[str, Any]) -> dict[str, Any]:
+    schema = deepcopy(delegate_schema)
+    properties = schema.setdefault("properties", {})
+    properties["memory_type"] = {
+        "type": "string",
+        "enum": list(_ALLOWED_MEMORY_TYPES),
+        "description": "Whitelisted durable fact category.",
+    }
+    required = schema.setdefault("required", [])
+    if "memory_type" not in required:
+        required.append("memory_type")
+    return schema
 
 
 def _result_text(result: ToolChunk) -> str:

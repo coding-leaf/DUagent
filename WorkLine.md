@@ -3745,3 +3745,11 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 路径、字段和响应结构无变化；不完整或重复提交由原先错误计分改为 4xx 拒绝。
 - Agent API 无变化。
+
+**开发数据清理：**
+- 经用户授权，条件更新测试用户 `0ec43e6e57eb4357` 在课程 `391cdec456914f20` 的单条画像记录：仅将误写的对话目标恢复为 `casual` 并移除 `profile_dialogue` 来源；其余画像维度未改动，更新 1 行。
+
+**最终验证：**
+- Frontend 4 个相关测试文件：28 passed；lint、生产构建通过，保留既有大 chunk 提示。
+- Backend 相关测试：10 passed；两个修改服务 `py_compile` 通过。
+- `git diff --check` 通过。

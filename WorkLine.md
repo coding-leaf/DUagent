@@ -3979,3 +3979,28 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：** 无
 
 
+---
+
+### 2026-07-14 — AI Chat 屏蔽词语义复核与自动终止
+
+**涉及范围：**
+- Agent Service：输入候选语义复核、输出流本地终止、统一拒答事件和安全提示词。
+- Backend：阻断事件到达后丢弃已累计正文，只保存统一拒答与审核元数据。
+- Frontend：当前消息和历史消息展示安全终止状态，不显示内部原因码或原始正文。
+
+**核心改动：**
+1. 普通输入不调用审核模型；本地高风险短语命中后复用现有非流式聊天模型，通过 AgentScope 2.0.3 `generate_structured_output()` 返回固定安全判定结构。
+2. 语义审核设置 3 秒超时；模型未配置、超时或输出无效时回退到本地高危硬词阻断。为保证流式速度，输出命中跨分片高危词后直接关闭 AgentScope stream，不再追加模型调用。
+3. 阻断事件固定为 `workflow_started -> content_safety_reviewed(action=block) -> text_delta(统一拒答) -> workflow_completed`；正常回复改为先发送最终审核事件再发送完成事件。
+4. Backend 清除阻断前的正文与事件时间线；Frontend 刷新历史后仍恢复 `safetyBlocked`，显示“抱歉，我无法回答你的问题”和“回答已自动终止”。
+
+**验证结果：**
+- TDD RED：Agent 缺少语义审核 client；Backend 会保存阻断前片段；Frontend 不会恢复历史安全状态。
+- Agent Service v2 全量：200 passed，1 条第三方 TestClient 弃用告警；OpenAPI 仍为 10 条 `/agent/v2/*` 路径。
+- Backend：相关 Python 文件 `py_compile` 通过，`tests/test_tutoring_stream_adapter.py` 10 passed。
+- Frontend：Vitest 39 files / 151 passed；`npm run lint` 与 `npm run build` 通过，保留既有大 chunk 提示。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent HTTP 路径、字段及 SSE 事件类型无变化。
+- `content_safety_reviewed` 的本地命中语义由替换后 `flag` 调整为语义复核后的 `allow|block`；阻断时事件顺序变为审核先于完成。

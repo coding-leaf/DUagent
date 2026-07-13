@@ -8,6 +8,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from agent_service_v2.agents.model_provider import build_chat_model_from_settings
 from agent_service_v2.agents.workbench_factory import WorkbenchAgentFactory
 from agent_service_v2.runtime.sse import format_sse
+from agent_service_v2.safety.content_review_client import AgentScopeContentReviewClient
+from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
 from agent_service_v2.schemas.workbench import WorkbenchChatRequest
 from agent_service_v2.session.run_bus import WorkbenchRunBus
 from agent_service_v2.session.workbench_session import WorkbenchSession
@@ -26,6 +28,7 @@ async def workbench_chat(req: WorkbenchChatRequest) -> StreamingResponse:
         run_bus=run_bus,
         workspace_manager=WorkbenchWorkspaceManager(root_dir=_workspace_root()),
         agent_factory=create_agent_factory(),
+        content_reviewer=create_content_reviewer(),
     )
     run = await session.start_async(
         user_id=req.user_id,
@@ -74,3 +77,11 @@ def _workspace_root() -> Path:
 
 def create_agent_factory() -> WorkbenchAgentFactory:
     return WorkbenchAgentFactory(model_provider=build_chat_model_from_settings)
+
+
+def create_content_reviewer() -> ContentSafetyReviewer:
+    return ContentSafetyReviewer(
+        client=AgentScopeContentReviewClient(
+            model_provider=lambda: build_chat_model_from_settings(stream=False),
+        ),
+    )

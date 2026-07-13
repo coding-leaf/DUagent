@@ -82,7 +82,7 @@ def test_workbench_chat_streams_agent_events(monkeypatch):
     assert [payload["type"] for payload in payloads] == [
         "workflow_started",
         "text_delta",
-        "workflow_completed",
         "content_safety_reviewed",
+        "workflow_completed",
     ]
     assert payloads[1]["payload"] == {"delta": "先复习链表。"}

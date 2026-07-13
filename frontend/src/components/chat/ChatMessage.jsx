@@ -12,7 +12,7 @@ const PLAN_STATUS_META = {
 
 const SAFETY_STATUS_META = {
   flag: { label: '内容安全提示', className: 'border-amber-200 bg-amber-50 text-amber-700', icon: 'shield_alert' },
-  block: { label: '内容已隐藏', className: 'border-red-200 bg-red-50 text-red-700', icon: 'gpp_bad' }
+  block: { label: '回答已终止', className: 'border-red-200 bg-red-50 text-red-700', icon: 'gpp_bad' }
 };
 
 function PlanTaskList({ tasks = [] }) {
@@ -47,13 +47,16 @@ function PlanTaskList({ tasks = [] }) {
 function ContentSafetyNotice({ review }) {
   if (!review || review.action === 'allow') return null;
   const meta = SAFETY_STATUS_META[review.action] || SAFETY_STATUS_META.flag;
+  const reason = review.action === 'block'
+    ? '检测到内容安全风险，回答已自动终止。'
+    : review.reason;
   return (
     <div className={`rounded-lg border px-3 py-2 text-[12px] leading-relaxed ${meta.className}`}>
       <div className="flex items-center gap-1.5 font-semibold">
         <Icon name={meta.icon} className="text-[15px]" />
         <span>{meta.label}</span>
       </div>
-      {review.reason && <div className="mt-1">{review.reason}</div>}
+      {reason && <div className="mt-1">{reason}</div>}
     </div>
   );
 }
@@ -62,7 +65,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
   const isSafetyBlocked = !isUser && message.safetyBlocked;
-  const canUseAssistantActions = !isUser && !message.loading;
+  const canUseAssistantActions = !isUser && !message.loading && !isSafetyBlocked;
   const hasOrderedParts = !isUser && Array.isArray(message.parts) && message.parts.length > 0;
 
   const handleCopy = () => {
@@ -97,7 +100,7 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
         {isSafetyBlocked ? (
           <div className="space-y-3">
             <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700">
-              该回复未通过内容安全审核，已隐藏。
+              抱歉，我无法回答你的问题。
             </div>
             <ContentSafetyNotice review={message.safetyReview} />
           </div>

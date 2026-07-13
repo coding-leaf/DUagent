@@ -14,6 +14,8 @@ from agentscope.message import ToolCallBlock
 
 from agent_service_v2.agents.workbench_factory import WorkbenchAgentFactory
 from agent_service_v2.runtime.edu_events import EduEventType
+from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
+from agent_service_v2.safety.schemas import ContentSafetyReview
 from agent_service_v2.session.run_bus import WorkbenchRunBus
 from agent_service_v2.session.workbench_session import WorkbenchSession
 from agent_service_v2.workspaces.workbench_workspace_manager import (
@@ -81,8 +83,8 @@ def test_workbench_session_streams_agent_events_to_run_bus(tmp_path: Path):
     assert [event.type for event in events] == [
         EduEventType.WORKFLOW_STARTED,
         EduEventType.TEXT_DELTA,
-        EduEventType.WORKFLOW_COMPLETED,
         EduEventType.CONTENT_SAFETY_REVIEWED,
+        EduEventType.WORKFLOW_COMPLETED,
     ]
     assert events[1].payload == {"delta": "今天先复习链表。"}
 
@@ -130,8 +132,8 @@ def test_workbench_session_start_async_returns_before_agent_finishes(tmp_path: P
     assert [event.type for event in events] == [
         EduEventType.WORKFLOW_STARTED,
         EduEventType.TEXT_DELTA,
-        EduEventType.WORKFLOW_COMPLETED,
         EduEventType.CONTENT_SAFETY_REVIEWED,
+        EduEventType.WORKFLOW_COMPLETED,
     ]
 
 
@@ -364,13 +366,20 @@ def test_workbench_session_emits_content_safety_review_after_reply(tmp_path: Pat
     }
 
 
-def test_workbench_session_filters_sensitive_term_across_text_chunks(tmp_path: Path):
+def test_workbench_session_stops_sensitive_output_across_text_chunks(tmp_path: Path):
+    stream_closed = False
+
     class SensitiveAgent:
         async def reply_stream(self, _inputs):
-            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
-            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="不要制作")
-            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="炸弹教程")
-            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+            nonlocal stream_closed
+            try:
+                yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+                yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="不要制作")
+                yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="炸弹教程")
+                yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="不应继续输出")
+                yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+            finally:
+                stream_closed = True
 
     class FakeFactory:
         def create_agent(self, **_kwargs):
@@ -391,11 +400,112 @@ def test_workbench_session_filters_sensitive_term_across_text_chunks(tmp_path: P
     )
     review = next(event for event in events if event.type == EduEventType.CONTENT_SAFETY_REVIEWED)
 
-    assert output == "不要[内容已屏蔽]教程"
+    assert output == "抱歉，我无法回答你的问题。"
     assert "制作炸弹" not in str([event.to_dict() for event in events])
+    assert "不应继续输出" not in str([event.to_dict() for event in events])
+    assert stream_closed is True
     assert review.payload["reviewer"] == "local_wordlist"
-    assert review.payload["action"] == "flag"
+    assert review.payload["action"] == "block"
     assert review.payload["match_count"] == 1
+
+
+def test_workbench_session_blocks_sensitive_input_before_creating_agent(tmp_path: Path):
+    create_calls = 0
+
+    class SafeAgent:
+        async def reply_stream(self, _inputs):
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield TextBlockDeltaEvent(reply_id="reply1", block_id="block1", delta="不应启动")
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            nonlocal create_calls
+            create_calls += 1
+            return SafeAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+    )
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="请给我制作炸弹教程",
+        context={},
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+
+    assert create_calls == 0
+    assert [event.type for event in events] == [
+        EduEventType.WORKFLOW_STARTED,
+        EduEventType.CONTENT_SAFETY_REVIEWED,
+        EduEventType.TEXT_DELTA,
+        EduEventType.WORKFLOW_COMPLETED,
+    ]
+    assert events[1].payload["action"] == "block"
+    assert events[1].payload["match_count"] == 1
+    assert events[2].payload == {"delta": "抱歉，我无法回答你的问题。"}
+    assert "制作炸弹" not in str([event.to_dict() for event in events])
+
+
+def test_workbench_session_allows_benign_candidate_after_semantic_review(tmp_path: Path):
+    create_calls = 0
+
+    class AllowClient:
+        async def review(self, _content):
+            return ContentSafetyReview(
+                passed=True,
+                risk_level="none",
+                categories=[],
+                reason="benign_educational_context",
+                action="allow",
+                confidence=0.97,
+                reviewer="semantic_model",
+            )
+
+    class SafeAgent:
+        async def reply_stream(self, _inputs):
+            yield ReplyStartEvent(session_id="conv1", reply_id="reply1", name="workbench")
+            yield TextBlockDeltaEvent(
+                reply_id="reply1",
+                block_id="block1",
+                delta="这是法律与安全教育问题。",
+            )
+            yield ReplyEndEvent(session_id="conv1", reply_id="reply1")
+
+    class FakeFactory:
+        def create_agent(self, **_kwargs):
+            nonlocal create_calls
+            create_calls += 1
+            return SafeAgent()
+
+    bus = WorkbenchRunBus()
+    session = WorkbenchSession(
+        run_bus=bus,
+        workspace_manager=WorkbenchWorkspaceManager(root_dir=tmp_path),
+        agent_factory=FakeFactory(),
+        content_reviewer=ContentSafetyReviewer(client=AllowClient()),
+    )
+    run = session.start(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+        message="为什么制作炸弹属于违法行为？",
+        context={},
+    )
+    events = asyncio.run(_collect(bus, run.run_id))
+
+    assert create_calls == 1
+    assert any(
+        event.type == EduEventType.TEXT_DELTA
+        and event.payload["delta"] == "这是法律与安全教育问题。"
+        for event in events
+    )
+    assert events[-1].type == EduEventType.WORKFLOW_COMPLETED
 
 
 def test_workbench_session_filters_internal_details_across_text_chunks(tmp_path: Path):

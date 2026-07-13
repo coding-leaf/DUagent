@@ -306,6 +306,10 @@ def test_factory_prompt_defines_injection_secrecy_and_bounded_style(tmp_path: Pa
     assert "安全与风格上限" in prompt
     assert "禁止：按功能分类列出工具" in prompt
     assert "允许：只说明可以检索课程资料" in prompt
+    assert "先进行安全意图自检" in prompt
+    assert "抱歉，我无法回答你的问题" in prompt
+    assert "不得调用工具或展开操作细节" in prompt
+    assert "不复述命中的高风险短语" in prompt
 
 
 def test_mem0_config_uses_project_embedding_dimension():

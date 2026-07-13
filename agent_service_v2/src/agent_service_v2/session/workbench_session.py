@@ -25,6 +25,7 @@ from agent_service_v2.runtime.edu_events import EduEventType
 from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
 from agent_service_v2.safety.internal_disclosure_policy import StudentTextOutputGate
+from agent_service_v2.safety.workbench_guard import WorkbenchSafetyGuard
 from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
 from agent_service_v2.workspaces.workbench_workspace_manager import (
@@ -45,7 +46,10 @@ class WorkbenchSession:
         self._run_bus = run_bus
         self._workspace_manager = workspace_manager
         self._agent_factory = agent_factory
-        self._content_reviewer = content_reviewer or ContentSafetyReviewer()
+        self._safety_guard = WorkbenchSafetyGuard(
+            reviewer=content_reviewer or ContentSafetyReviewer(),
+            run_bus=run_bus,
+        )
         self._tasks: dict[str, asyncio.Task] = {}
 
     def start(
@@ -107,6 +111,20 @@ class WorkbenchSession:
             course_id=course_id,
             conversation_id=conversation_id or run.run_id,
         )
+        run_store = WorkbenchRunStore(workspace=workspace)
+        input_review = await self._safety_guard.review_input(message)
+        if input_review.action == "block":
+            run_store.write_state(
+                run.run_id,
+                {"status": "running", "conversation_id": run.conversation_id},
+            )
+            self._safety_guard.publish_blocked(
+                run=run,
+                run_store=run_store,
+                review=input_review,
+                publish_started=True,
+            )
+            return run
 
         try:
             agent = self._agent_factory.create_agent(
@@ -132,7 +150,7 @@ class WorkbenchSession:
                 agent=agent,
                 message=message,
                 context=context,
-                run_store=WorkbenchRunStore(workspace=workspace),
+                run_store=run_store,
                 user_id=user_id,
                 course_id=course_id,
             )
@@ -144,7 +162,7 @@ class WorkbenchSession:
                 agent=agent,
                 message=message,
                 context=context,
-                run_store=WorkbenchRunStore(workspace=workspace),
+                run_store=run_store,
                 user_id=user_id,
                 course_id=course_id,
             )
@@ -188,6 +206,7 @@ class WorkbenchSession:
             context=context,
         )
         raw_assistant_chunks: list[str] = []
+        output_safety_scan = self._safety_guard.start_output_scan()
         text_output_gate = StudentTextOutputGate(
             request=message,
             protected_identifiers=SAFE_WORKBENCH_TOOLS,
@@ -197,9 +216,25 @@ class WorkbenchSession:
         pending_text_event = None
         failed = False
         try:
-            async for agent_event in agent.reply_stream(agent_inputs):
+            agent_stream = agent.reply_stream(agent_inputs)
+            async for agent_event in agent_stream:
                 if isinstance(agent_event, TextBlockDeltaEvent):
                     raw_assistant_chunks.append(agent_event.delta)
+                    output_review = self._safety_guard.review_output(
+                        output_safety_scan,
+                        agent_event.delta,
+                    )
+                    if output_review is not None:
+                        close_stream = getattr(agent_stream, "aclose", None)
+                        if close_stream is not None:
+                            await close_stream()
+                        self._safety_guard.publish_blocked(
+                            run=run,
+                            run_store=run_store,
+                            review=output_review,
+                            publish_started=False,
+                        )
+                        return
                     last_text_event = agent_event
                     filtered_delta = text_output_gate.feed(agent_event.delta)
                     if not filtered_delta:
@@ -230,6 +265,19 @@ class WorkbenchSession:
                     and not failed
                     and last_text_event is not None
                 ):
+                    output_review = self._safety_guard.review_output(
+                        output_safety_scan,
+                        "",
+                        final=True,
+                    )
+                    if output_review is not None:
+                        self._safety_guard.publish_blocked(
+                            run=run,
+                            run_store=run_store,
+                            review=output_review,
+                            publish_started=False,
+                        )
+                        return
                     tail = text_output_gate.finish()
                     final_delta = pending_filtered + tail
                     if final_delta:
@@ -239,6 +287,12 @@ class WorkbenchSession:
                         for edu_event in adapter.adapt_many(tail_event):
                             published_event = self._run_bus.publish_event(edu_event)
                             run_store.append_event(run.run_id, published_event.to_dict())
+                if isinstance(agent_event, ReplyEndEvent) and not failed:
+                    await self._safety_guard.publish_final_review(
+                        run=run,
+                        run_store=run_store,
+                        content="".join(raw_assistant_chunks),
+                    )
                 debug_record = build_agentscope_event_log(
                     agent_event,
                     run_id=run.run_id,
@@ -303,12 +357,6 @@ class WorkbenchSession:
                         run.run_id,
                         {"status": "failed", "conversation_id": run.conversation_id},
                     )
-                if isinstance(agent_event, ReplyEndEvent) and not failed:
-                    await self._publish_content_safety_review(
-                        run=run,
-                        run_store=run_store,
-                        content="".join(raw_assistant_chunks),
-                    )
             if failed:
                 run_store.write_state(run.run_id, {"status": "failed", "conversation_id": run.conversation_id})
             else:
@@ -323,20 +371,3 @@ class WorkbenchSession:
             failed_event = self._run_bus.fail(run.run_id, reason=exc.__class__.__name__)
             run_store.append_event(run.run_id, failed_event.to_dict())
             run_store.write_state(run.run_id, {"status": "failed", "conversation_id": run.conversation_id})
-
-    async def _publish_content_safety_review(
-        self,
-        *,
-        run: WorkbenchRun,
-        run_store: WorkbenchRunStore,
-        content: str,
-    ) -> None:
-        review = await self._content_reviewer.review(content)
-        payload = review.to_payload()
-        run_store.write_review(run.run_id, payload)
-        event = self._run_bus.publish(
-            run.run_id,
-            EduEventType.CONTENT_SAFETY_REVIEWED,
-            payload,
-        )
-        run_store.append_event(run.run_id, event.to_dict())

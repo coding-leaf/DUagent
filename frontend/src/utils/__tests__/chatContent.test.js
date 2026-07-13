@@ -105,4 +105,51 @@ describe('chatContent utils', () => {
       { source_file: '教材.pdf', snippet: '数组', score: 0.9 }
     ])
   })
+
+  it('restores a blocked safety review from persisted message metadata', () => {
+    const message = normalizeMessage({
+      role: 'assistant',
+      content: '抱歉，我无法回答你的问题。',
+      meta: {
+        content_safety_review: {
+          passed: false,
+          risk_level: 'critical',
+          categories: ['dangerous_instructions'],
+          reason: 'operational_harm_request',
+          action: 'block',
+          confidence: 0.96,
+          scope: 'content_safety_only',
+          knowledge_reviewed: false,
+          reviewer: 'semantic_model'
+        }
+      }
+    })
+
+    expect(message.safetyBlocked).toBe(true)
+    expect(message.safetyReview.action).toBe('block')
+    expect(message.parts.at(-1).type).toBe('content_safety_review')
+  })
+
+  it('does not duplicate a safety review already present in the event timeline', () => {
+    const review = {
+      passed: false,
+      risk_level: 'high',
+      categories: ['sensitive_content'],
+      reason: 'risk',
+      action: 'flag'
+    }
+    const message = normalizeMessage({
+      role: 'assistant',
+      content: '安全正文',
+      meta: {
+        event_timeline: [
+          { type: 'text_delta', payload: { delta: '安全正文' } },
+          { type: 'content_safety_reviewed', payload: review }
+        ],
+        content_safety_review: review
+      }
+    })
+
+    expect(message.parts.filter(part => part.type === 'content_safety_review')).toHaveLength(1)
+  })
 })

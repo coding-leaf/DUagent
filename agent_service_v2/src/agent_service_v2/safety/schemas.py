@@ -61,7 +61,7 @@ class ContentSafetyReview:
             "knowledge_reviewed": self.knowledge_reviewed,
             "reviewer": self.reviewer,
         }
-        if self.reviewer == "local_wordlist":
+        if self.reviewer == "local_wordlist" or self.match_count:
             payload["match_count"] = self.match_count
         return payload
 

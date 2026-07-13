@@ -149,6 +149,17 @@ export const normalizeMessage = (message, index = 0) => {
     displayContent = extractModelText(message?.content);
   }
   const restoredEvents = restoreMessageEvents(message, displayContent);
+  const persistedSafetyReview = message?.meta?.content_safety_review;
+  const restoredState = persistedSafetyReview
+    ? reduceAssistantMessageForEvent(
+        {
+          content: displayContent,
+          toolCalls: restoredEvents.toolCalls || [],
+          parts: restoredEvents.parts || []
+        },
+        { type: 'content_safety_reviewed', payload: persistedSafetyReview }
+      )
+    : restoredEvents;
 
   return {
     ...message,
@@ -157,8 +168,13 @@ export const normalizeMessage = (message, index = 0) => {
     diagrams: Array.isArray(diagrams) ? diagrams : (diagrams ? [diagrams] : []),
     knowledge_points: normalizeTextList(knowledge_points),
     suggestions: normalizeTextList(suggestions),
-    toolCalls: restoredEvents.toolCalls,
-    parts: restoredEvents.parts,
+    toolCalls: restoredState.toolCalls,
+    parts: restoredState.parts,
+    ...(restoredState.safetyReview ? {
+      safetyReview: restoredState.safetyReview,
+      safetyBlocked: restoredState.safetyBlocked,
+      safetyFlagged: restoredState.safetyFlagged
+    } : {}),
     sourceRefs: Array.isArray(message?.sourceRefs)
       ? message.sourceRefs
       : (Array.isArray(message?.meta?.sources) ? message.meta.sources : []),

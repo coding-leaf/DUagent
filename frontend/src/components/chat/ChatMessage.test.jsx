@@ -64,9 +64,10 @@ describe('ChatMessage', () => {
       />
     );
 
-    expect(screen.getByText('该回复未通过内容安全审核，已隐藏。')).toBeDefined();
+    expect(screen.getByText('抱歉，我无法回答你的问题。')).toBeDefined();
+    expect(screen.getByText('检测到内容安全风险，回答已自动终止。')).toBeDefined();
     expect(screen.queryByText('不应展示的原文')).toBeNull();
-    expect(screen.getByText('明确违法指导')).toBeDefined();
+    expect(screen.queryByText('明确违法指导')).toBeNull();
   });
 
   it('renders a tool call without duplicating the raw tool name', () => {
@@ -97,4 +98,3 @@ describe('ChatMessage', () => {
     expect(screen.queryByText('TaskCreate')).toBeNull();
   });
 });
-

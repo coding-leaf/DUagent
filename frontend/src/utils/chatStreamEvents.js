@@ -72,7 +72,12 @@ const upsertPlanPart = (parts = [], tasks = []) => {
 
 const appendSafetyReviewPart = (parts = [], review) => {
   if (!review || review.action === 'allow') return parts;
-  return [...parts, { type: 'content_safety_review', review }];
+  const next = [...parts];
+  const index = next.findIndex(part => part.type === 'content_safety_review');
+  const safetyPart = { type: 'content_safety_review', review };
+  if (index < 0) return [...next, safetyPart];
+  next[index] = safetyPart;
+  return next;
 };
 
 const normalizeSafetyReview = (payload = {}) => ({

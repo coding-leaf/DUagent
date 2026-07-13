@@ -296,6 +296,38 @@ async def test_stream_adapter_persists_content_safety_review_meta():
     )
 
 
+@pytest.mark.asyncio
+async def test_stream_adapter_discards_partial_content_when_safety_blocks():
+    async def source(path, payload):
+        yield b'data: {"type":"text_delta","run_id":"run-1","seq":1,"timestamp":"t1","agent":"workbench","payload":{"delta":"partial safe prefix"}}\n\n'
+        yield b'data: {"type":"content_safety_reviewed","run_id":"run-1","seq":2,"timestamp":"t2","agent":"workbench","payload":{"passed":false,"risk_level":"critical","categories":["dangerous_instructions"],"reason":"operational_harm_request","action":"block","confidence":0.96,"scope":"content_safety_only","knowledge_reviewed":false,"reviewer":"semantic_model","match_count":1}}\n\n'
+        yield 'data: {"type":"text_delta","run_id":"run-1","seq":3,"timestamp":"t3","agent":"workbench","payload":{"delta":"抱歉，我无法回答你的问题。"}}\n\n'.encode()
+        yield b'data: {"type":"workflow_completed","run_id":"run-1","seq":4,"timestamp":"t4","agent":"workbench","payload":{}}\n\n'
+
+    persisted = AsyncMock()
+    adapter = TutoringStreamAdapter(
+        stream_sse=source,
+        persist_result=persisted,
+        record_agent_log=AsyncMock(),
+    )
+
+    events = [
+        event
+        async for event in adapter.stream(
+            payload={"message": "x"},
+            conversation_id="conv-1",
+            assistant_message_id="msg-1",
+        )
+    ]
+
+    assert len(events) == 4
+    persisted.assert_awaited_once()
+    assert persisted.await_args.args[2] == "抱歉，我无法回答你的问题。"
+    meta = persisted.await_args.args[5]
+    assert meta["content_safety_review"]["action"] == "block"
+    assert "partial safe prefix" not in str(meta)
+
+
 def test_backend_artifact_descriptor_is_recovered_for_conversation_history():
     assert _client_artifact({
         "id": "generation-1",

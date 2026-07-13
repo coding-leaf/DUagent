@@ -50,7 +50,8 @@ Workbench 保持 AgentScope 2.x `Agent.reply_stream + Toolkit + ToolGroup` 的�
 - RAG 引用只使用 `payload.sources[]`，每项为 `source_file/snippet/score`；不再交叉使用 `citations`。
 - 长期记忆只保存用户明确表达的长期偏好、目标和稳定事实；禁止保存推断掌握度、诊断、答案、敏感内容或工具原文。写入前去重，工具卡可见，审计日志不记忆正文。
 - `artifact_created` 支持 `PersonalizedResourceCard`：已有推荐使用 `props.resources[]`，异步生成使用 `props.task_id/course_id/resource_type/goal`。任务卡只表示已启动，不表示已审核或发布。
-- AI 输出使用本地 UTF-8 词表进行流式敏感内容过滤，跨分片命中统一替换为 `[内容已屏蔽]`。`content_safety_reviewed` 返回 `reviewer=local_wordlist`、`action=flag` 与 `match_count`，不泄露原词。该能力不是事实防幻觉审查。
+- AI Chat 输入先使用本地 UTF-8 高风险短语词表召回候选；只有候选输入复用非流式聊天模型做结构化语义复核，普通输入不增加模型调用。语义审核超时、不可用或输出无效时回退到本地硬词阻断。
+- AI 输出使用滚动窗口进行跨分片检测，命中后立即关闭 AgentScope 回复流，不再等待语义模型。阻断时依次发送 `content_safety_reviewed(action=block)`、统一拒答 `text_delta` 和 `workflow_completed`；`match_count` 可见但不泄露命中原词。该能力不是事实防幻觉审查。
 
 ### AI Chat 画像与精准资源内部工具
 

@@ -189,6 +189,13 @@ class TutoringStreamAdapter:
         elif event_type == "workflow_failed":
             state.done_sent = True
         elif event_type == "content_safety_reviewed":
+            if payload.get("action") == "block":
+                state.chunks.clear()
+                state.event_timeline.clear()
+                state.timeline_has_text = False
+                state.timeline_has_tool = False
+                state.meta.pop("event_timeline", None)
+                state.meta.pop("tool_events", None)
             state.meta["content_safety_review"] = payload
             TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
         elif event_type == "source_refs":

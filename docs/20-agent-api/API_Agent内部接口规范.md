@@ -107,6 +107,17 @@ GET /agent/v2/workbench/artifacts
 
 Query 参数：`user_id`、`conversation_id`、`filename` 必填，`course_id` 可选。成功返回二进制文件；不存在或文件名不安全时返回 404。
 
+### 1.4 题目与公共资源生成（v2）
+
+```
+POST /agent/v2/knowledge/quiz/generations
+POST /agent/v2/knowledge/resources/generations
+```
+
+两条接口都使用 `course_id` 作为课程知识库检索键，并接受可选的 `course_title`。Backend 已解析到资源库标题时必须传入 `course_title`，Agent 用它约束生成内容的学科、技术栈和编程语言，不能仅依赖默认提示词。
+
+题目生成可附带 `class_course_id` / `class_course_ids`、章节、知识点、题型、难度和个性化上下文；公共资源生成由 Backend 传入 `task_id`、`resource_types` 和 `webhook_url`，异步完成后回调 Backend 落库。
+
 **SSE 事件类型：**
 
 | type | 说明 |
@@ -457,6 +468,7 @@ POST /agent/v1/resources/generate
 | task_id | string | 是 | Backend 预先创建的任务 ID，Agent 返回和回调时原样带回 |
 | user_id | string | 是 | 触发教师用户 ID |
 | course_id | string | 是 | 课程 ID |
+| course_title | string | 否 | 课程名称；用于约束生成内容的学科与编程语言 |
 | webhook_url | string | 是 | 完成回调 URL（Backend 的 `/api/v1/webhooks/agent`） |
 | chapter | string | 否 | 章节 |
 | knowledge_point | string | 否 | 知识点 |

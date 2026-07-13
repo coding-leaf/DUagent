@@ -256,11 +256,20 @@ async def generate_quiz_for_child(
     course_ids = child_data.get("course_ids") or fanout_course_ids
     fanout_catalog_id = child_data.get("fanout_catalog_id")
     agent_course_id = child_data.get("agent_course_id") or child_data.get("catalog_id") or child.course_id or ""
+    catalog_result = await db.execute(
+        select(CourseCatalog).where(
+            CourseCatalog.id == agent_course_id,
+            CourseCatalog.is_deleted == False,
+        )
+    )
+    catalog = catalog_result.scalar_one_or_none()
+    course_title = catalog.title if catalog else None
 
     try:
         questions = await generate_baseline_quiz_questions(
             child=child,
             agent_course_id=agent_course_id,
+            course_title=course_title,
             course_ids=course_ids,
             chapter=chapter,
             node_name=node_name,
@@ -336,6 +345,7 @@ def build_baseline_quiz_payload(
     *,
     child: AsyncTask,
     agent_course_id: str,
+    course_title: str | None,
     course_ids: list[str],
     chapter: str,
     node_name: str,
@@ -346,6 +356,7 @@ def build_baseline_quiz_payload(
         "task_id": child.id,
         "user_id": child.user_id or "",
         "course_id": agent_course_id,
+        "course_title": course_title,
         "class_course_ids": course_ids,
         "chapter": chapter,
         "knowledge_point": node_name,
@@ -371,6 +382,7 @@ async def generate_baseline_quiz_questions(
     *,
     child: AsyncTask,
     agent_course_id: str,
+    course_title: str | None,
     course_ids: list[str],
     chapter: str,
     node_name: str,
@@ -378,6 +390,7 @@ async def generate_baseline_quiz_questions(
     bulk_payload = build_baseline_quiz_payload(
         child=child,
         agent_course_id=agent_course_id,
+        course_title=course_title,
         course_ids=course_ids,
         chapter=chapter,
         node_name=node_name,
@@ -397,6 +410,7 @@ async def generate_baseline_quiz_questions(
         payload = build_baseline_quiz_payload(
             child=child,
             agent_course_id=agent_course_id,
+            course_title=course_title,
             course_ids=course_ids,
             chapter=chapter,
             node_name=node_name,

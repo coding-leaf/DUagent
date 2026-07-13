@@ -207,6 +207,7 @@ class CatalogResourceGenerationService:
             "task_id": task.id,
             "user_id": actor_user_id,
             "course_id": catalog.id,
+            "course_title": catalog.title,
             "resource_types": resource_types,
             "webhook_url": webhook_url,
         }
@@ -350,6 +351,7 @@ class CatalogResourceGenerationService:
                 "task_id": child.id,
                 "user_id": actor_user_id,
                 "course_id": catalog.id,
+                "course_title": catalog.title,
                 "chapter": target_node["chapter"],
                 "knowledge_point": target_node["node_name"],
                 "resource_types": resource_types,

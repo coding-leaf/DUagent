@@ -172,6 +172,7 @@ async def generate_questions(
             current_user.id,
             req.course_id,
             catalog_context.catalog_id,
+            catalog_context.catalog_title,
             req,
             db,
         )

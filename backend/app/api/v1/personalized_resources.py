@@ -226,6 +226,7 @@ async def generate_personalized_resource(
             current_user.id,
             req.course_id,
             catalog_context.catalog_id,
+            catalog_context.catalog_title,
             quiz_req,
             db,
         )
@@ -318,6 +319,7 @@ async def generate_personalized_resource(
             "task_id": task.id,
             "user_id": current_user.id,
             "course_id": req.course_id if is_goal_generation else catalog_context.catalog_id,
+            "course_title": catalog_context.catalog_title,
             "webhook_url": _webhook_url(request),
         }
         if req.goal:

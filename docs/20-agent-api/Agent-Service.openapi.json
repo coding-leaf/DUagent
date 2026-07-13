@@ -214,6 +214,37 @@
         }
       }
     },
+    "/agent/v2/knowledge/quiz/generations": {
+      "post": {
+        "tags": ["Assessment"],
+        "summary": "生成公共或个性化题目（v2）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/QuizGenerationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "success" },
+                    "data": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/agent/v2/knowledge/resources/generations": {
       "post": {
         "tags": ["Resources"],
@@ -790,6 +821,7 @@
           "task_id": { "type": "string", "description": "Backend 预先创建的任务 ID，Agent 返回和回调时原样带回" },
           "user_id": { "type": "string", "description": "触发教师用户 ID" },
           "course_id": { "type": "string", "description": "课程 ID" },
+          "course_title": { "type": "string", "nullable": true, "description": "课程名称；用于约束生成内容的学科与编程语言" },
           "webhook_url": { "type": "string", "description": "完成回调 URL" },
           "chapter": { "type": "string", "description": "章节" },
           "knowledge_point": { "type": "string", "description": "知识点" },
@@ -802,6 +834,26 @@
             },
             "description": "公共资源类型列表，至少一项"
           }
+        }
+      },
+      "QuizGenerationRequest": {
+        "type": "object",
+        "required": ["course_id"],
+        "properties": {
+          "task_id": { "type": "string", "nullable": true, "description": "Backend 异步任务 ID" },
+          "user_id": { "type": "string", "nullable": true, "description": "用户 ID" },
+          "course_id": { "type": "string", "description": "用于 RAG 的课程资源库 ID" },
+          "course_title": { "type": "string", "nullable": true, "description": "课程名称；用于约束题目学科与编程语言" },
+          "class_course_id": { "type": "string", "nullable": true, "description": "单个教学班 ID" },
+          "class_course_ids": { "type": "array", "nullable": true, "items": { "type": "string" } },
+          "chapter": { "type": "string", "nullable": true },
+          "knowledge_point": { "type": "string", "nullable": true },
+          "question_types": { "type": "array", "items": { "type": "string" } },
+          "count": { "type": "integer", "default": 3 },
+          "difficulty": { "type": "string", "nullable": true },
+          "personalized": { "type": "boolean", "default": false },
+          "personalization_context": { "type": "object", "nullable": true },
+          "source": { "type": "string", "nullable": true }
         }
       },
       "ResourceTaskResponse": {

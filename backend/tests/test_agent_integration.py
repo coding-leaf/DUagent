@@ -846,6 +846,7 @@ class TestQuizGenerateIntegration:
             )
             payload = mock_agent.await_args.args[1]
             assert payload["course_id"] == catalog_id
+            assert payload["course_title"] == "Quiz Gate Catalog"
             assert payload["class_course_id"] == course_id
             assert payload["personalization_context"]["evaluation"]["summary"] == (
                 "class scoped evaluation summary"
@@ -865,6 +866,36 @@ class TestQuizGenerateIntegration:
             question = await self._latest_generated_question(course_id)
             assert question is not None
             assert question.course_id == course_id
+
+    @pytest.mark.asyncio
+    async def test_personalized_resource_generation_sends_catalog_title(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            student_headers, course_id = await self._setup_student_with_course(client)
+            catalog_id = await self._bind_catalog(course_id)
+
+            with patch(
+                "app.api.v1.personalized_resources.agent_client.post_json",
+                new_callable=AsyncMock,
+            ) as mock_agent:
+                mock_agent.return_value = {"task_id": "accepted"}
+                response = await client.post(
+                    "/api/v1/personalized-resources/generate",
+                    headers=student_headers,
+                    json={
+                        "course_id": course_id,
+                        "generate_type": "resource",
+                        "resource_types": ["lesson"],
+                    },
+                )
+
+            assert response.status_code == 202
+            assert mock_agent.await_args.args[0] == (
+                "/agent/v2/knowledge/resources/generations"
+            )
+            payload = mock_agent.await_args.args[1]
+            assert payload["course_id"] == catalog_id
+            assert payload["course_title"] == "Quiz Gate Catalog"
 
     @pytest.mark.asyncio
     async def test_quiz_generate_202(self):

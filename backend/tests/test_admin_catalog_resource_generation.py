@@ -367,6 +367,7 @@ async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_
     assert mock_agent.await_args.args[0] == "/agent/v2/knowledge/quiz/generations"
     payload = mock_agent.await_args.args[1]
     assert payload["course_id"] == catalog_id
+    assert payload["course_title"] == "Admin Generation Catalog"
     async with async_session_factory() as db:
         questions = (
             await db.execute(select(QuizQuestion).where(QuizQuestion.course_id == class_id))
@@ -468,6 +469,11 @@ async def test_admin_catalog_quiz_child_splits_large_mixed_request_when_batch_re
     first_payload = mock_agent.await_args_list[0].args[1]
     second_payload = mock_agent.await_args_list[1].args[1]
     third_payload = mock_agent.await_args_list[2].args[1]
+    assert [
+        first_payload["course_title"],
+        second_payload["course_title"],
+        third_payload["course_title"],
+    ] == ["Admin Generation Catalog"] * 3
     assert first_payload["count"] == 7
     assert second_payload["question_types"] == ["single_choice"]
     assert second_payload["count"] == 3
@@ -639,6 +645,7 @@ async def test_admin_catalog_generation_creates_task_and_sends_catalog_id_to_age
 
     payload = mock_agent.await_args.args[1]
     assert payload["course_id"] == catalog_id
+    assert payload["course_title"] == "Admin Generation Catalog"
     assert payload["chapter"] == "树"
     assert payload["knowledge_point"] == "二叉树"
     assert payload["resource_types"] == ["lesson", "diagram"]
@@ -697,6 +704,10 @@ async def test_admin_catalog_generation_without_metadata_creates_parent_and_chil
     assert mock_agent.await_count == 2
     payloads = [call.args[1] for call in mock_agent.await_args_list]
     assert [payload["course_id"] for payload in payloads] == [catalog_id, catalog_id]
+    assert [payload["course_title"] for payload in payloads] == [
+        "Admin Generation Catalog",
+        "Admin Generation Catalog",
+    ]
     assert [(payload["chapter"], payload["knowledge_point"]) for payload in payloads] == [
         ("第一章", "变量"),
         ("第二章", "指针"),

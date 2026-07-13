@@ -19,6 +19,7 @@ async def assemble_generate_payload(
     user_id: str,
     class_course_id: str,
     agent_course_id: str,
+    course_title: str,
     req: QuizGenerateRequest,
     db: AsyncSession,
 ) -> dict:
@@ -26,6 +27,7 @@ async def assemble_generate_payload(
     payload: dict = {
         "user_id": user_id,
         "course_id": agent_course_id,
+        "course_title": course_title,
         "class_course_id": class_course_id,
     }
     if req.chapter:

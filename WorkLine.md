@@ -3768,3 +3768,18 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - Client API、Agent API 与 SSE 字段均无变化；仅扩大本地精确短语匹配覆盖面。
+
+---
+
+### 2026-07-13 — 清空开发业务库并保留管理员账号
+
+**操作范围：**
+- 经用户二次确认，事务性清空 MySQL `duagent` 的业务数据；保留 `users` 表中唯一有效管理员 `admin`。
+- 其余 24 张表全部清空，删除 3 个非管理员账号；未修改表结构，未删除 Backend 文件、Qdrant 或 Agent Workspace。
+
+**验证结果：**
+- 共删除 3,391 行；清理后仅 `users` 表保留 1 行，其余表均为 0。
+- 保留账号校验为 `username=admin`、`role=admin`、`is_deleted=0`；外键检查已恢复。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化；仅执行开发环境数据清理。

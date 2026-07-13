@@ -3111,3 +3111,33 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 无变化。
 - Agent v2 请求模型中的既有可选字段 `course_title` 现已由 Backend 真实传入，并同步写入 OpenAPI/内部接口规范；新增文档化 `POST /agent/v2/knowledge/quiz/generations`，运行路径未新增。
+
+---
+
+### 2026-07-13 — 修复 AgentScope v2 课程切片无法生成知识图谱
+
+**涉及文件：**
+- `backend/app/services/kg_generation.py`
+- `backend/tests/test_admin_catalog_kg_generation.py`
+- `docs/20-agent-api/Agent-Service.openapi.json`
+- `docs/20-agent-api/API_Agent内部接口规范.md`
+- `WorkLine.md`
+
+**核心改动：**
+1. 移除 Backend KG 生成对 Qdrant 旧版顶层 `course_id/content` payload 的直接读取，`catalog_chunks` 改为通过统一 `AgentClient` 调用现有 `/agent/v2/knowledge/knowledge-graphs/generations`。
+2. Agent Service v2 继续负责解析 AgentScope 原生 `chunk.metadata.course_id` 与 `chunk.content.text`、执行 RAG 和模型生成；Backend 仅校验 `nodes/edges`、创建 MySQL 图谱版本并更新异步任务。
+3. 保留 `40918` 到 `kg_context_empty` 的错误语义，Agent 连接或其他业务错误映射为 `kg_agent_failed`；保留既有 `catalog_chunks_llm` 生成策略名。
+4. 正式 OpenAPI 和内部规范补录已运行的 Agent v2 KG 同步接口。由于 RAG 上下文归 Agent Service 所有，新图谱 metrics 不再记录 Backend 侧 `context_char_count`。
+
+**验证结果：**
+- TDD RED：新增 3 个 Backend 用例后，旧实现 2 failed、1 false-positive；收紧 Agent 调用断言后确认旧实现不满足调用边界。
+- Backend GREEN：`tests/test_admin_catalog_kg_generation.py` 24 passed；与 `tests/test_generate_kg.py` 合并回归 36 passed，`app.services.kg_generation` 覆盖率 83%。
+- Agent v2：KG API 与 AgentScope Qdrant payload 定向测试 2 passed。
+- 语法与契约：Backend `py_compile` 通过；Agent OpenAPI JSON 解析通过。
+
+**接口漂移：**
+- Client API 无变化。
+- Agent API 将既有运行接口 `POST /agent/v2/knowledge/knowledge-graphs/generations` 补录进正式契约，未改变运行路径、请求字段或响应行为。
+
+**遗留问题：**
+- `outline_text` 旧路径仍由 Backend 直接调用 LLM，本次仅修复触发故障的 `catalog_chunks` 主链路，后续可单独迁移以完全收口 Agent 边界。

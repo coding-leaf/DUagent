@@ -214,6 +214,41 @@
         }
       }
     },
+    "/agent/v2/knowledge/knowledge-graphs/generations": {
+      "post": {
+        "tags": ["Knowledge Graph"],
+        "summary": "从课程资源库生成知识图谱（v2）",
+        "description": "同步生成结构化知识图谱。Agent Service 根据 catalog_id 从 Qdrant 检索 AgentScope v2 课程切片并调用模型生成 nodes/edges；Backend 负责校验结果、写入 MySQL、创建版本并激活。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/KnowledgeGraphGenerationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "生成成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "success" },
+                    "data": { "$ref": "#/components/schemas/KnowledgeGraphGenerationResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "请求缺少 catalog_id 或 outline_text" },
+          "409": { "description": "catalog_id 对应的课程知识切片为空（code=40918）" },
+          "502": { "description": "Agent 模型生成失败" }
+        }
+      }
+    },
     "/agent/v2/knowledge/quiz/generations": {
       "post": {
         "tags": ["Assessment"],
@@ -810,6 +845,56 @@
             "properties": {
               "node_id": { "type": "string", "description": "当前节点 ID" },
               "node_name": { "type": "string", "description": "当前节点名称" }
+            }
+          }
+        }
+      },
+      "KnowledgeGraphGenerationRequest": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": ["catalog_chunks", "outline_text"],
+            "default": "outline_text",
+            "description": "输入来源；catalog_chunks 使用 catalog_id，outline_text 使用 context"
+          },
+          "catalog_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "课程资源库 ID；source_type=catalog_chunks 时必填，也是 Qdrant 隔离键"
+          },
+          "context": {
+            "type": "string",
+            "nullable": true,
+            "description": "课程大纲文本；source_type=outline_text 时必填"
+          }
+        }
+      },
+      "KnowledgeGraphGenerationResult": {
+        "type": "object",
+        "required": ["nodes", "edges"],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "chapter"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "chapter": { "type": "string" }
+              }
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["from", "to"],
+              "properties": {
+                "from": { "type": "string", "description": "前置节点 ID" },
+                "to": { "type": "string", "description": "后置节点 ID" }
+              }
             }
           }
         }

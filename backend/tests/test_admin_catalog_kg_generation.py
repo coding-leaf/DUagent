@@ -38,6 +38,7 @@ from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course
 from app.models.others import AsyncTask, CourseKnowledgeGraph
 from app.models.user import User
+from app.services.agent_client import AgentServiceError
 from app.services.kg_generation import (
     KGGenerationInputError,
     generate_knowledge_graph_version,
@@ -339,6 +340,83 @@ async def test_generate_outline_text_uses_llm_and_creates_version():
     assert result["source_type"] == "outline_llm"
     assert result["generation_strategy"] == "legacy_outline"
     assert result["node_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_catalog_chunks_uses_agent_v2_and_creates_version():
+    await _reset_db()
+    catalog_id, course_id = await _seed_catalog_and_course(
+        status="ready",
+        knowledge_status="ready",
+        chunk_count=482,
+    )
+
+    with patch(
+        "app.services.agent_client.agent_client.post_json",
+        new_callable=AsyncMock,
+    ) as mock_post:
+        mock_post.return_value = {
+            "nodes": [{"id": "pointer", "name": "指针", "chapter": "第 5 章"}],
+            "edges": [],
+        }
+        result = await generate_knowledge_graph_version(
+            course_id=course_id,
+            source_type="catalog_chunks",
+            catalog_id=catalog_id,
+            activate=True,
+        )
+
+    mock_post.assert_awaited_once_with(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        {"source_type": "catalog_chunks", "catalog_id": catalog_id},
+    )
+    assert result["source_type"] == "catalog_chunks"
+    assert result["generation_strategy"] == "catalog_chunks_llm"
+    assert result["node_count"] == 1
+    assert result["metrics"] == {"node_count": 1, "edge_count": 0}
+
+
+@pytest.mark.asyncio
+async def test_generate_catalog_chunks_preserves_empty_context_error():
+    with patch(
+        "app.services.agent_client.agent_client.post_json",
+        new_callable=AsyncMock,
+        side_effect=AgentServiceError(
+            "No catalog knowledge chunks found for KG generation",
+            agent_code=40918,
+        ),
+    ) as mock_post:
+        with pytest.raises(KGGenerationInputError) as exc_info:
+            await generate_knowledge_graph_version(
+                course_id="course-1",
+                source_type="catalog_chunks",
+                catalog_id="catalog-1",
+            )
+
+    mock_post.assert_awaited_once_with(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        {"source_type": "catalog_chunks", "catalog_id": "catalog-1"},
+    )
+    assert exc_info.value.error_code == "kg_context_empty"
+    assert str(exc_info.value) == "No catalog knowledge chunks found for KG generation"
+
+
+@pytest.mark.asyncio
+async def test_generate_catalog_chunks_maps_agent_unavailable_error():
+    with patch(
+        "app.services.agent_client.agent_client.post_json",
+        new_callable=AsyncMock,
+        side_effect=AgentServiceError("无法连接 Agent Service", status_code=503),
+    ):
+        with pytest.raises(KGGenerationInputError) as exc_info:
+            await generate_knowledge_graph_version(
+                course_id="course-1",
+                source_type="catalog_chunks",
+                catalog_id="catalog-1",
+            )
+
+    assert exc_info.value.error_code == "kg_agent_failed"
+    assert str(exc_info.value) == "无法连接 Agent Service"
 
 
 @pytest.mark.asyncio

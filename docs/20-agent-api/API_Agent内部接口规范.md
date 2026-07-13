@@ -107,6 +107,31 @@ GET /agent/v2/workbench/artifacts
 
 Query 参数：`user_id`、`conversation_id`、`filename` 必填，`course_id` 可选。成功返回二进制文件；不存在或文件名不安全时返回 404。
 
+### 1.3 课程知识图谱生成（v2）
+
+```
+POST /agent/v2/knowledge/knowledge-graphs/generations
+```
+
+该接口同步返回结构化 `nodes/edges`。`source_type=catalog_chunks` 时，Backend 只传入 `catalog_id`；Agent Service 使用该 ID 检索 Qdrant 中的 AgentScope v2 课程切片，并负责模型调用。Backend 不直接访问 Qdrant，也不解析 AgentScope 内部 payload，只校验返回图谱并负责 MySQL 版本化、激活和任务状态落库。
+
+**请求体：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| source_type | string | 否 | `catalog_chunks` / `outline_text`，默认 `outline_text` |
+| catalog_id | string | 条件必填 | `source_type=catalog_chunks` 时必填；课程资源库及 Qdrant 隔离键 |
+| context | string | 条件必填 | `source_type=outline_text` 时必填；课程大纲文本 |
+
+**成功响应 `data`：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| nodes | array | 知识点节点，每项包含 `id`、`name`、`chapter` |
+| edges | array | 前置依赖边，每项包含 `from`、`to` |
+
+资源库无匹配知识切片时返回 HTTP 409、业务码 `40918`，`data.error_code=kg_context_empty`。模型调用或结构化生成失败时返回 HTTP 502。Agent Service 不创建 Backend `task_id`，该同步内部调用由 Backend 已有 `kg_generation` 后台任务承载。
+
 ### 1.4 题目与公共资源生成（v2）
 
 ```

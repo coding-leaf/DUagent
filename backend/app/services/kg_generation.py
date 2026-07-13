@@ -9,6 +9,7 @@ import httpx
 
 from app.core.config import settings
 from app.db.session import async_session_factory
+from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import (
     create_knowledge_graph_version,
     get_active_knowledge_graph,
@@ -28,85 +29,16 @@ class KGGenerationInputError(ValueError):
         super().__init__(message)
 
 
-def _chunk_text_from_payload(payload: dict[str, Any]) -> str:
-    for key in ("content", "chunk_text", "text"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
-
-
-def _truncate_chunk(text: str, max_chars: int = 1200) -> str:
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars].rstrip() + "..."
-
-
-async def build_catalog_kg_context(
-    catalog_id: str,
-    *,
-    limit: int = 24,
-    max_chars: int = 18000,
-) -> str:
-    """Build KG generation context from catalog knowledge chunks stored in Qdrant."""
-    qdrant_url = settings.QDRANT_URL.rstrip("/")
-    collection = settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION
-    payload = {
-        "filter": {
-            "must": [
-                {"key": "course_id", "match": {"value": catalog_id}},
-            ],
-        },
-        "limit": limit,
-        "with_payload": True,
-        "with_vector": False,
-    }
-
+async def generate_catalog_kg_from_agent(catalog_id: str) -> dict[str, Any]:
+    """Keep Qdrant payload ownership in Agent Service; return its graph payload."""
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{qdrant_url}/collections/{collection}/points/scroll",
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-    except Exception as exc:
-        raise KGGenerationInputError(
-            "Failed to read catalog knowledge chunks",
-            error_code="kg_context_empty",
-        ) from exc
-
-    points = data.get("result", {}).get("points", [])
-    if not isinstance(points, list):
-        points = []
-
-    chunks: list[str] = []
-    used_chars = 0
-    for point in points:
-        if not isinstance(point, dict):
-            continue
-        point_payload = point.get("payload")
-        if not isinstance(point_payload, dict):
-            continue
-        text = _truncate_chunk(_chunk_text_from_payload(point_payload))
-        if not text:
-            continue
-        if used_chars + len(text) > max_chars:
-            remaining = max_chars - used_chars
-            if remaining <= 200:
-                break
-            text = _truncate_chunk(text, remaining)
-        chunks.append(text)
-        used_chars += len(text)
-        if used_chars >= max_chars:
-            break
-
-    if not chunks:
-        raise KGGenerationInputError(
-            "No catalog knowledge chunks found for KG generation",
-            error_code="kg_context_empty",
+        return await agent_client.post_json(
+            "/agent/v2/knowledge/knowledge-graphs/generations",
+            {"source_type": "catalog_chunks", "catalog_id": catalog_id},
         )
-    return "\n---\n".join(chunks)
+    except AgentServiceError as exc:
+        error_code = "kg_context_empty" if exc.agent_code == 40918 else "kg_agent_failed"
+        raise KGGenerationInputError(exc.message, error_code=error_code) from exc
 
 
 async def generate_kg_from_llm(outline: str) -> dict[str, Any]:
@@ -368,14 +300,14 @@ async def generate_knowledge_graph_version(
         source_catalog_id = (catalog_id or "").strip()
         if not source_catalog_id:
             raise KGGenerationInputError("catalog_id is required for catalog_chunks")
-        context = await build_catalog_kg_context(source_catalog_id)
-        nodes, edges = validate_kg_json_payload(await generate_kg_from_llm(context))
+        nodes, edges = validate_kg_json_payload(
+            await generate_catalog_kg_from_agent(source_catalog_id)
+        )
         graph_source_type = "catalog_chunks"
         generation_strategy = "catalog_chunks_llm"
         metrics: dict[str, Any] = {
             "node_count": len(nodes),
             "edge_count": len(edges),
-            "context_char_count": len(context),
         }
     elif source_type == "outline_text":
         outline = (outline_text or "").strip()

@@ -174,11 +174,19 @@ async def link_published_generation(
     resource_id: str | None = None,
     code_problem_id: str | None = None,
 ) -> UserPersonalizedResource:
-    link = None
+    task = None
     if generation.run_id:
+        task_result = await db.execute(
+            select(AsyncTask).where(AsyncTask.id == generation.run_id).with_for_update()
+        )
+        task = task_result.scalar_one_or_none()
+    task_id = task.id if task is not None else None
+
+    link = None
+    if task_id:
         result = await db.execute(
             select(UserPersonalizedResource).where(
-                UserPersonalizedResource.task_id == generation.run_id,
+                UserPersonalizedResource.task_id == task_id,
                 UserPersonalizedResource.user_id == generation.user_id,
                 UserPersonalizedResource.course_id == generation.course_id,
                 UserPersonalizedResource.is_deleted == False,
@@ -190,19 +198,14 @@ async def link_published_generation(
             user_id=generation.user_id,
             course_id=generation.course_id,
             source_type=generation.source_type,
-            task_id=generation.run_id,
+            task_id=task_id,
         )
         db.add(link)
     link.resource_id = resource_id
     link.code_problem_id = code_problem_id
 
-    if generation.run_id:
-        task_result = await db.execute(
-            select(AsyncTask).where(AsyncTask.id == generation.run_id).with_for_update()
-        )
-        task = task_result.scalar_one_or_none()
-        if task:
-            task.status = "completed"
-            task.progress = 100
-            task.completed_at = datetime.now(timezone.utc)
+    if task:
+        task.status = "completed"
+        task.progress = 100
+        task.completed_at = datetime.now(timezone.utc)
     return link

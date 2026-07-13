@@ -3246,3 +3246,26 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 路径、顶层响应字段与 SSE 事件类型无变化；仅在文档已声明为开放对象的消息 `meta` 中新增 `tool_events` 内部回放数据。
 - Agent API 无变化。
+
+---
+
+### 2026-07-13 — 修复 AI Chat 私人编程题发布回滚
+
+**涉及文件：**
+- `backend/app/services/personalized_resource_generation_service.py`
+- `backend/tests/test_personalized_resource_generation_service.py`
+- `WorkLine.md`
+
+**根因与改动：**
+1. AgentScope run ID 为 `run_` 加 32 位 UUID，共 36 字符；旧逻辑误将它写入 `user_personalized_resources.task_id`。该字段是 `async_tasks.id` 的 32 字符外键，MySQL 因数据过长回滚了已经通过 OJ 校验的私人题事务。
+2. 发布关联现在先确认 `generation.run_id` 是否对应真实 `AsyncTask`；只有真实异步任务才填写 `task_id` 并更新任务完成状态。AI Chat run ID继续保存在专用的 generation/code problem `run_id` 字段中，个性化资源关联的 `task_id` 留空。
+3. 保留既有 AsyncTask 生成链路的关联与完成更新行为。
+
+**验证结果：**
+- Backend OJ、私人题、内部接口与生成状态回归：38 passed。
+- 修改 service 定向覆盖率：90%（20 passed）。
+- Agent v2 私人题工具与 Backend client 回归：10 passed。
+- Python `py_compile` 与 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化。

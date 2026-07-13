@@ -23,7 +23,10 @@ from agent_service_v2.tools.personal_code_problem import build_personal_code_pro
 from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
 from agent_service_v2.tools.personal_practice_delivery import build_resume_personal_practice_tools
 from agent_service_v2.tools.personalized_resources import build_personalized_resource_tools
-from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
+from agent_service_v2.tools.workbench_toolkit import (
+    build_workbench_tool_groups,
+    split_workbench_tool_groups,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -227,21 +230,8 @@ class WorkbenchAgentFactory:
             workspace=workspace,
             run_id=run_id,
         )
-        toolkit = Toolkit(tool_groups=tool_groups)
-        default_active_groups = {
-            "planning",
-            "memory",
-            "rag",
-            "learning_progress",
-            "learner_profile",
-            "personalized_resources",
-            "oj_execution",
-            "artifact",
-            "personal_practice_delivery",
-        }
-        activated_groups = [
-            group.name for group in tool_groups if group.name in default_active_groups
-        ]
+        basic_tools, dynamic_groups = split_workbench_tool_groups(tool_groups)
+        toolkit = Toolkit(tools=basic_tools, tool_groups=dynamic_groups)
 
         if run_id and log_sink:
             middlewares.append(
@@ -262,7 +252,7 @@ class WorkbenchAgentFactory:
             middlewares=middlewares,
             state=AgentState(
                 permission_context=build_workbench_permission_context(),
-                tool_context={"activated_groups": activated_groups},
+                tool_context={"activated_groups": []},
             ),
             offloader=workspace,
             context_config=ContextConfig(tool_result_limit=20000),

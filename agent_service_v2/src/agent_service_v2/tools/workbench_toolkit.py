@@ -8,6 +8,26 @@ from agent_service_v2.tools.planning import build_planning_group
 from agent_service_v2.tools.input_models import ArtifactFileInput
 
 
+OPTIONAL_PRACTICE_GROUPS = frozenset(
+    {"personal_code_problem", "personal_choice_quiz"}
+)
+
+
+def split_workbench_tool_groups(
+    groups: list[ToolGroup],
+) -> tuple[list[ToolBase], list[ToolGroup]]:
+    dynamic_groups = [
+        group for group in groups if group.name in OPTIONAL_PRACTICE_GROUPS
+    ]
+    basic_tools = [
+        tool
+        for group in groups
+        if group.name not in OPTIONAL_PRACTICE_GROUPS
+        for tool in group.tools
+    ]
+    return basic_tools, dynamic_groups
+
+
 def build_workbench_tool_groups(
     *,
     memory_tools: list[ToolBase] | None,
@@ -93,6 +113,17 @@ def build_workbench_tool_groups(
                     "Activate when the user explicitly requests a private programming exercise; "
                     "then call publish_personal_code_problem."
                 ),
+                instructions=(
+                    "只处理用户明确要求的私有编程题练习。激活前应已取得用户明确要求的教材或学情依据；"
+                    "依据不足时停止发布。statement 不得包含参考答案或隐藏用例。reference_solution "
+                    "必须是可直接提交 OJ 的完整程序；public_inputs 与 hidden_inputs 总数不超过 8，"
+                    "且不得在聊天或 Artifact 中泄露 reference_solution 和 hidden_inputs。只有 "
+                    'outcome="success"、status="published"、problem_id 非空且返回 '
+                    "CodeSandboxCard artifact 时才能声称练习可用。generation_id 不是 problem_id。"
+                    "rejected、unavailable、degraded、delivery_failed、delivery_incomplete 或 error "
+                    "均不得声称发布成功；delivery_incomplete 且包含 generation_id 时，调用恢复工具，"
+                    "不要重新生成草案。"
+                ),
                 tools=personal_code_problem_tools,
             )
         )
@@ -103,6 +134,13 @@ def build_workbench_tool_groups(
                 description=(
                     "Activate when the user explicitly requests answerable single-choice or "
                     "multi-choice practice; then call publish_personal_choice_quiz."
+                ),
+                instructions=(
+                    "只处理用户明确要求的私有选择题练习。激活前应已取得用户明确要求的教材或学情依据；"
+                    "依据不足时停止发布。题型只允许 single_choice 与 multi_choice。调用 "
+                    "publish_personal_choice_quiz 后，只有 outcome=\"success\"、status=\"published\" "
+                    "且返回 QuizCard artifact 时才能声称练习可用。rejected、unavailable、degraded、"
+                    "delivery_incomplete 或 error 均不得声称发布成功。"
                 ),
                 tools=personal_choice_quiz_tools,
             )

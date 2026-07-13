@@ -1,7 +1,10 @@
+import asyncio
+import json
 from pathlib import Path
 
 import pytest
 from agentscope.agent import Agent
+from agentscope.message import ToolCallBlock
 
 from agent_service_v2.agents import workbench_factory as factory_module
 from agent_service_v2.agents.workbench_factory import (
@@ -145,11 +148,11 @@ def test_factory_prompt_mentions_learning_progress_tools(tmp_path: Path):
     prompt = agent._system_prompt
     assert "read_learning_progress" in prompt
     assert "read_recent_answers" in prompt
-    assert "do not fabricate" in prompt.lower()
+    assert "不得编造具体错误原因" in prompt
     assert "not_found 或 empty" in prompt
 
 
-def test_factory_activates_safe_tool_groups_by_default(tmp_path: Path):
+def test_factory_exposes_only_optional_practice_groups_to_reset_tools(tmp_path: Path):
     class FakeModel:
         pass
 
@@ -164,11 +167,62 @@ def test_factory_activates_safe_tool_groups_by_default(tmp_path: Path):
         conversation_id="conv1",
     )
 
-    assert "artifact" in agent.state.tool_context.activated_groups
-    assert "learning_progress" in agent.state.tool_context.activated_groups
-    assert "planning" in agent.state.tool_context.activated_groups
-    assert "personal_code_problem" not in agent.state.tool_context.activated_groups
-    assert "personal_choice_quiz" not in agent.state.tool_context.activated_groups
+    schemas = asyncio.run(
+        agent.toolkit.get_tool_schemas(agent.state.tool_context.activated_groups)
+    )
+    reset_schema = next(
+        item["function"] for item in schemas if item["function"]["name"] == "reset_tools"
+    )
+
+    assert set(reset_schema["parameters"]["properties"]) == {
+        "personal_code_problem",
+        "personal_choice_quiz",
+    }
+
+
+def test_foundation_tools_survive_practice_group_reset(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1", course_id="c1", conversation_id="conv1"
+    )
+    agent = WorkbenchAgentFactory(model_provider=lambda: FakeModel()).create_agent(
+        user_id="u1",
+        course_id="c1",
+        catalog_id="catalog-1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )
+
+    async def reset_and_list_tools():
+        async for _chunk in agent.toolkit.call_tool(
+            ToolCallBlock(
+                id="reset-1",
+                name="reset_tools",
+                input=json.dumps({"personal_choice_quiz": True}),
+            ),
+            agent.state,
+        ):
+            pass
+        schemas = await agent.toolkit.get_tool_schemas(
+            agent.state.tool_context.activated_groups
+        )
+        return {item["function"]["name"] for item in schemas}
+
+    tool_names = asyncio.run(reset_and_list_tools())
+
+    assert agent.state.tool_context.activated_groups == ["personal_choice_quiz"]
+    assert {
+        "TaskCreate",
+        "retrieve_course_context_tool",
+        "read_learning_progress",
+        "read_learner_profile",
+        "recommend_personalized_resources",
+        "publish_personal_choice_quiz",
+    } <= tool_names
+    assert "publish_personal_code_problem" not in tool_names
 
 
 def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_path: Path):
@@ -187,17 +241,15 @@ def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_pa
     )._system_prompt
 
     assert "智慧学习辅助教学 AI" in prompt
-    assert "三个或更多" in prompt
-    assert "published" in prompt
-    assert "problem_id" in prompt
+    assert "多个可独立完成的子目标" in prompt
+    assert "不要仅因为调用多个工具" in prompt
+    assert "规则优先级" in prompt
+    assert "选择最直接的工具" in prompt
     assert "publish_personal_choice_quiz" in prompt
-    assert "single_choice" in prompt
-    assert "不要再次创建卡片" in prompt
-    assert 'outcome="success"' in prompt
-    assert "artifact_status" not in prompt
-    assert "delivery_incomplete" in prompt
-    assert "validated" not in prompt
+    assert "先完成用户明确要求的教材、学情或画像读取" in prompt
+    assert "不会自行在未来返回并通知" in prompt
     assert "不要使用 write_artifact_file 创建 JSON" in prompt
+    assert "public_inputs 与 hidden_inputs" not in prompt
 
 
 def test_factory_prompt_requires_fact_tools_and_maps_dynamic_practice_groups(tmp_path: Path):
@@ -216,15 +268,16 @@ def test_factory_prompt_requires_fact_tools_and_maps_dynamic_practice_groups(tmp
     )._system_prompt
 
     assert "只用于判断该调用哪个工具" in prompt
-    assert "必须调用 retrieve_course_context_tool" in prompt
-    assert "必须调用 read_learner_profile" in prompt
+    assert "普通稳定概念" in prompt
+    assert "用户明确要求按教材" in prompt
+    assert "仅基于当前对话" in prompt
+    assert "持久化学习画像" in prompt
     assert "必须调用 search_memory" in prompt
     assert "本轮没有对应工具的成功结果" in prompt
     assert "personal_choice_quiz=true" in prompt
     assert "personal_code_problem=true" in prompt
-    assert "personal_practice_delivery=true" in prompt
     assert "未显式设为 true 的工具组会被关闭" in prompt
-    assert "默认已激活的工具组直接调用目标工具" in prompt
+    assert "基础工具始终可用" in prompt
 
 
 def test_factory_prompt_defines_injection_secrecy_and_bounded_style(tmp_path: Path):

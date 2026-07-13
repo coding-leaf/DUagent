@@ -3858,3 +3858,30 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **遗留边界：**
 - 提示词约束不能提供对所有未知语义注入的绝对保证；确定性输出过滤负责兜底已知内部标识，后续应以对抗样例集持续回归扩充覆盖面。
+
+---
+
+### 2026-07-14 — 消除 AI Chat 工具重置死锁并重构提示词
+
+**涉及文件：**
+- `agent_service_v2/src/agent_service_v2/agents/prompts.py`
+- `agent_service_v2/src/agent_service_v2/agents/workbench_factory.py`
+- `agent_service_v2/src/agent_service_v2/tools/workbench_toolkit.py`
+- `agent_service_v2/tests/test_workbench_factory.py`
+- `agent_service_v2/tests/test_workbench_toolkit.py`
+- `WorkLine.md`
+
+**核心改动：**
+1. 将教材、学情、画像、资源、代码执行、记忆、Planning、Artifact 和练习恢复工具放入 AgentScope 原生 `basic` 组，仅让选择题与编程题发布组参与动态重置；启用发布组后不再关闭前置工具。
+2. 主提示词增加规则优先级和最小工具选择原则，复杂任务改按持续跟踪、独立子目标或用户明确要求判断，不再按工具数量和单工具计算量机械创建 Task。
+3. 收窄教材检索与画像读取条件，区分普通稳定概念、当前对话信息和持久化画像；资源异步任务明确回复状态、查看位置及不会自动返回通知。
+4. 选择题与编程题的详细发布状态机移入动态 `ToolGroup.instructions`，只在组激活后注入；术语统一为“私有练习”。主提示词由 91 行、9086 字节缩减为 84 行、8088 字节。
+
+**验证结果：**
+- TDD RED：重置 Schema、重置后基础工具存活、提示词冲突和动态状态机共 7 个场景初始全部失败；实现后 Factory 与 Toolkit 定向测试 22 passed。
+- Agent Service v2 全量：184 passed，保留 1 条第三方 TestClient 弃用告警。
+- 修改 Python 文件 `py_compile`、OpenAPI 路径导入和 `git diff --check` 通过；仍为 10 条 `/agent/v2/*` 路径。
+
+**接口漂移：**
+- Client API、Agent HTTP 路径、请求响应字段和 SSE 事件类型均无变化。
+- `reset_tools` 仍使用 AgentScope 2.0.3 原生最终状态语义，但其可管理范围收窄为两个可选发布组；未修改框架包，未新增依赖。

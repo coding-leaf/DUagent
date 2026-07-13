@@ -1,192 +1,42 @@
 {
-  "openapi": "3.0.3",
+  "openapi": "3.1.0",
   "info": {
-    "title": "EDUagent Agent-Service API",
-    "version": "5.0.0",
-    "description": "Backend (FastAPI, Port 8001) ↔ Agent Service (FastAPI + AgentScope, Port 8002) 内部接口规范。\n流式接口请求体使用 application/json，响应使用 SSE (text/event-stream)。\n资源生成使用 HTTP 202 + 异步 Webhook 回调。Backend 调用 Agent 前先生成 task_id 并传入请求体；Agent 返回和回调时必须原样使用该 task_id。内部链路无需额外鉴权；Agent Service 不直接写 Backend 数据库，只返回结构化结果，由 Backend 校验、落库并更新任务状态。"
+    "title": "EDUagent Agent Service v2",
+    "version": "0.1.0"
   },
-  "servers": [
-    { "url": "http://localhost:8002/agent/v1", "description": "Agent Service 本地开发环境" }
-  ],
   "paths": {
-    "/tutoring/chat": {
+    "/agent/v2/workbench/chat": {
       "post": {
-        "tags": ["Tutoring"],
-        "summary": "智能辅导对话",
-        "description": "SSE 流式接口。Agent 每次回复前检索用户长期记忆和相关历史事实；scope=course 时使用课程知识库 RAG，scope=global 时不读取课程知识库，作为简单 AI Bot。回复可嵌入 Mermaid 图解。",
+        "tags": [
+          "workbench"
+        ],
+        "summary": "Workbench Chat",
+        "operationId": "workbench_chat_agent_v2_workbench_chat_post",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/TutoringChatRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "SSE 事件流",
-            "content": {
-              "text/event-stream": {
-                "schema": { "type": "string", "description": "事件类型: chunk / diagram / knowledge_points / suggestion / done" }
+              "schema": {
+                "$ref": "#/components/schemas/WorkbenchChatRequest"
               }
             }
-          }
-        }
-      }
-    },
-    "/profile/generate": {
-      "post": {
-        "tags": ["Profile"],
-        "summary": "生成/刷新用户画像",
-        "description": "v1 冷启动由 Frontend 固定问卷 + Backend 保存初始画像完成，Agent Service 不提供多轮冷启动引导。该接口仅用于基于学习数据（评估、练习、资源使用、近期活跃度）生成或刷新用户画像。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ProfileGenerateRequest" }
-            }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "成功",
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/ProfileData" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/evaluation/generate": {
-      "post": {
-        "tags": ["Evaluation"],
-        "summary": "生成学习效果评估",
-        "description": "基于学习进度、练习结果、资源使用统计生成 3 张评估表 + LLM 文字总结",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/EvaluationGenerateRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/EvaluationData" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/assessment/evaluate": {
-      "post": {
-        "tags": ["Assessment"],
-        "summary": "测验评估",
-        "description": "对用户提交的练习答案进行 LLM 评分和诊断，识别薄弱知识点并给出复习建议",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AssessmentEvaluateRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/AssessmentResult" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/assessment/generate-questions": {
-      "post": {
-        "tags": ["Assessment"],
-        "summary": "生成题目",
-        "description": "Agent Service 只生成结构化题目 JSON，不直接写 SQL。Backend 负责校验题目结构、补充 course_id / owner_user_id / source 等数据库字段，并写入 quiz_questions。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuestionGenerateRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/QuestionGenerateResult" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/learning-path/generate": {
-      "post": {
-        "tags": ["LearningPath"],
-        "summary": "生成学习路径",
-        "description": "结合学习效果评估、用户画像和静态课程知识图谱，生成个性化学习路径（节点排序+推荐）",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/LearningPathGenerateRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/LearningPathData" }
-                  }
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -196,83 +46,153 @@
     },
     "/agent/v2/workbench/artifacts": {
       "get": {
-        "tags": ["Workbench"],
-        "summary": "读取 Workbench 会话产物",
-        "description": "仅供 Backend 在完成用户与会话归属校验后读取 Agent workspace 产物。",
+        "tags": [
+          "workbench"
+        ],
+        "summary": "Download Workbench Artifact",
+        "operationId": "download_workbench_artifact_agent_v2_workbench_artifacts_get",
         "parameters": [
-          { "name": "user_id", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "conversation_id", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "filename", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "course_id", "in": "query", "required": false, "schema": { "type": "string", "nullable": true } }
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Id"
+            }
+          }
         ],
         "responses": {
           "200": {
-            "description": "Workbench 产物文件",
-            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
-          "404": { "description": "产物不存在或文件名不安全" }
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/v2/knowledge/ingestions": {
+      "post": {
+        "tags": [
+          "Knowledge"
+        ],
+        "summary": "触发课程目录课本资料入库 (v2)",
+        "description": "接收后端上传指令，对教材物理文件进行高精度 Parser、切片并写入 Qdrant。",
+        "operationId": "create_knowledge_ingestion_agent_v2_knowledge_ingestions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeIngestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeIngestionAcceptedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/agent/v2/knowledge/knowledge-graphs/generations": {
       "post": {
-        "tags": ["Knowledge Graph"],
-        "summary": "从课程资源库生成知识图谱（v2）",
-        "description": "同步生成结构化知识图谱。Agent Service 根据 catalog_id 从 Qdrant 检索 AgentScope v2 课程切片并调用模型生成 nodes/edges；Backend 负责校验结果、写入 MySQL、创建版本并激活。",
+        "tags": [
+          "Knowledge Graph"
+        ],
+        "summary": "一键由 Leader 规划提取课程知识图谱（V2）",
+        "description": "一键通过 CoursePlannerAgent (Leader) 高度自检产生课程知识图谱大纲。",
+        "operationId": "generate_v2_knowledge_graph_agent_v2_knowledge_knowledge_graphs_generations_post",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/KnowledgeGraphGenerationRequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "生成成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/KnowledgeGraphGenerationResult" }
-                  }
-                }
+              "schema": {
+                "$ref": "#/components/schemas/KGGenerationRequest"
               }
             }
           },
-          "400": { "description": "请求缺少 catalog_id 或 outline_text" },
-          "409": { "description": "catalog_id 对应的课程知识切片为空（code=40918）" },
-          "502": { "description": "Agent 模型生成失败" }
-        }
-      }
-    },
-    "/agent/v2/knowledge/quiz/generations": {
-      "post": {
-        "tags": ["Assessment"],
-        "summary": "生成公共或个性化题目（v2）",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/QuizGenerationRequest" }
-            }
-          }
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "成功",
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "type": "object" }
-                  }
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -282,29 +202,37 @@
     },
     "/agent/v2/knowledge/resources/generations": {
       "post": {
-        "tags": ["Resources"],
-        "summary": "生成资源库",
-        "description": "异步公共资源任务。Backend 创建本地任务并传入 task_id；Agent 根据 course_id 检索课程知识库，生成 lesson / diagram / example，完成后通过 Webhook 回调 Backend。Agent 不直接写 SQL。",
+        "tags": [
+          "Resources"
+        ],
+        "summary": "异步生成公共课程资源（V2）",
+        "description": "Generate typed public resources grounded in the course knowledge base.",
+        "operationId": "generate_v2_course_resources_agent_v2_knowledge_resources_generations_post",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ResourceGenerateRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/ResourceGenerationRequest"
+              }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "202": {
-            "description": "已接受，异步处理",
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 202 },
-                    "message": { "type": "string", "example": "accepted" },
-                    "data": { "$ref": "#/components/schemas/ResourceTaskResponse" }
-                  }
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -312,31 +240,39 @@
         }
       }
     },
-    "/memory/compress": {
+    "/agent/v2/knowledge/quiz/generations": {
       "post": {
-        "tags": ["Memory"],
-        "summary": "记忆压缩与事实提取",
-        "description": "滑动窗口机制触发：融合旧摘要+新对话生成新摘要，同时提取语义事实（盲点/掌握点/偏好）。Agent Service 负责将去重后的 facts 写入 Qdrant user_memory；Backend 负责全量保存原始对话消息、消息 meta、摘要和调用结果。记忆压缩不删除、不替代原始对话。",
+        "tags": [
+          "Assessment"
+        ],
+        "summary": "快捷通过 Worker 智能体产生公共/个性化习题库（V2）",
+        "description": "Allows instant direct call to Quiz Worker Agent to output custom choice and code challenges.",
+        "operationId": "generate_v2_quiz_questions_agent_v2_knowledge_quiz_generations_post",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/MemoryCompressRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/QuizGenerationRequest"
+              }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "成功",
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/MemoryCompressResult" }
-                  }
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -344,22 +280,158 @@
         }
       }
     },
-    "/health": {
-      "get": {
-        "tags": ["Health"],
-        "summary": "健康检查",
+    "/agent/v2/evaluation/generations": {
+      "post": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "一键通过 Agent 异步评估生成学情报告 (V2)",
+        "description": "根据学习行为和练习成绩统计生成多维学情诊断与行动建议报告。",
+        "operationId": "generate_v2_evaluation_agent_v2_evaluation_generations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
-            "description": "成功",
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": { "type": "integer", "example": 200 },
-                    "message": { "type": "string", "example": "success" },
-                    "data": { "$ref": "#/components/schemas/HealthData" }
-                  }
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/v2/evaluation/quiz/diagnose": {
+      "post": {
+        "tags": [
+          "Evaluation"
+        ],
+        "summary": "对学生练习作答结果进行综合诊断与个性化建议 (V2)",
+        "description": "根据学生提交的试卷问题与作答详情，诊断薄弱盲点并产生针对性补救建议。",
+        "operationId": "generate_v2_quiz_diagnose_agent_v2_evaluation_quiz_diagnose_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizDiagnoseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/v2/personalized-resources/generations": {
+      "post": {
+        "tags": [
+          "personalized-resources"
+        ],
+        "summary": "Start Personalized Resource Generation",
+        "operationId": "start_personalized_resource_generation_agent_v2_personalized_resources_generations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceTeamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent/v2/personalized-resources/generations/{session_id}/events": {
+      "get": {
+        "tags": [
+          "personalized-resources"
+        ],
+        "summary": "Stream Personalized Resource Events",
+        "operationId": "stream_personalized_resource_events_agent_v2_personalized_resources_generations__session_id__events_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -370,638 +442,904 @@
   },
   "components": {
     "schemas": {
-      "TutoringChatRequest": {
-        "type": "object",
-        "required": ["user_id", "message", "user_profile"],
+      "ChapterProgressItem": {
         "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "scope": { "type": "string", "description": "course / global，默认 course" },
-          "course_id": { "type": "string", "description": "课程 ID；scope=course 时必填，scope=global 时为空" },
-          "catalog_id": { "type": "string", "description": "资源库 ID；课程知识检索按此键过滤，缺省回落 course_id" },
-          "conversation_id": { "type": "string", "description": "对话 ID（继续已有对话时传入）" },
-          "message": { "type": "string", "description": "用户当前消息" },
-          "user_profile": {
-            "type": "object",
-            "description": "用户画像（由 Backend 从 SQL 组装）。注意：Qdrant 检索由 Agent Service 自行完成",
-            "required": ["guidance_level"],
-            "properties": {
-              "guidance_level": { "type": "string", "description": "引导粒度：L1 / L2 / L3" },
-              "modal_preference": { "type": "object", "description": "模态偏好" },
-              "knowledge_mastered": { "type": "array", "items": { "type": "string" }, "description": "已掌握知识点名称列表" },
-              "knowledge_weak": { "type": "array", "items": { "type": "string" }, "description": "薄弱知识点名称列表" },
-              "custom_instruction": { "type": "string", "description": "用户个性化偏好，注入 AI 对话 system prompt" }
-            }
+          "chapter": {
+            "type": "string",
+            "title": "Chapter",
+            "description": "章节名称"
           },
-          "active_kg_nodes": {
-            "type": "array",
-            "items": { "type": "object" },
-            "description": "当前课程绑定资源库的 Active KG 节点精简列表"
+          "completion_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Completion Rate",
+            "description": "完成率 0-100"
           },
-          "conversation_summary": { "type": "string", "description": "全局对话摘要（记忆压缩后生成）" },
-          "recent_messages": {
-            "type": "array",
-            "description": "最近 N 轮缓冲消息",
-            "items": {
-              "type": "object",
-              "properties": {
-                "role": { "type": "string", "description": "user / assistant" },
-                "content": { "type": "string", "description": "消息内容" },
-                "meta": { "type": "object", "description": "Backend 保存的消息元信息" }
-              }
-            }
+          "time_spent": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Time Spent",
+            "description": "学习时长（分钟）"
           }
-        }
-      },
-      "ProfileGenerateRequest": {
+        },
         "type": "object",
-        "required": ["user_id", "course_id"],
-        "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "evaluation_data": {
-            "type": "object",
-            "description": "最新学习效果评估",
-            "properties": {
-              "progress": { "type": "object", "description": "学习进度" },
-              "mastery": { "type": "object", "description": "掌握程度" },
-              "resource_usage": { "type": "object", "description": "资源使用统计" }
-            }
-          },
-          "quiz_history": {
-            "type": "array",
-            "description": "练习历史记录",
-            "items": {
-              "type": "object",
-              "properties": {
-                "score": { "type": "number", "description": "正确率" },
-                "chapter": { "type": "string", "description": "章节" },
-                "created_at": { "type": "string", "format": "date-time", "description": "完成时间" }
-              }
-            }
-          },
-          "resource_usage_stats": {
-            "type": "object",
-            "description": "资源类型使用比例",
-            "properties": {
-              "video_count": { "type": "integer", "description": "视频使用次数" },
-              "document_count": { "type": "integer", "description": "文档使用次数" },
-              "code_count": { "type": "integer", "description": "代码资源使用次数" },
-              "quiz_count": { "type": "integer", "description": "做题次数" }
-            }
-          },
-          "drive_intent_data": {
-            "type": "object",
-            "description": "近期学习频率（Backend SQL 统计）",
-            "properties": {
-              "recent_7d_sessions": { "type": "integer", "description": "近 7 天学习次数" },
-              "recent_7d_duration": { "type": "integer", "description": "近 7 天学习时长（分钟）" }
-            }
-          }
-        }
-      },
-      "ProfileData": {
-        "type": "object",
-        "description": "6 维用户画像",
-        "properties": {
-          "modal_preference": {
-            "type": "object",
-            "description": "模态偏好（五维雷达图）",
-            "properties": {
-              "video_animation": { "type": "number", "description": "视频动画偏好 0-100" },
-              "chart_logic": { "type": "number", "description": "图表逻辑偏好 0-100" },
-              "text_analysis": { "type": "number", "description": "文字解析偏好 0-100" },
-              "code_practice": { "type": "number", "description": "代码实践偏好 0-100" },
-              "formula_derivation": { "type": "number", "description": "公式推导偏好 0-100" }
-            }
-          },
-          "guidance_level_suggestion": {
-            "type": "object",
-            "description": "引导粒度建议",
-            "properties": {
-              "recommended": { "type": "string", "description": "L1 / L2 / L3" },
-              "reason": { "type": "string", "description": "建议依据" }
-            }
-          },
-          "knowledge_coordinates": {
-            "type": "array",
-            "description": "知识坐标标签",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": { "type": "string", "description": "知识点名称" },
-                "status": { "type": "string", "description": "mastered / learning" }
-              }
-            }
-          },
-          "cognitive_blindspots": {
-            "type": "array",
-            "description": "认知盲区标签",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": { "type": "string", "description": "知识点名称" },
-                "error_count": { "type": "integer", "description": "错误次数" },
-                "severity": { "type": "string", "description": "high / medium / low" }
-              }
-            }
-          },
-          "drive_intent": {
-            "type": "object",
-            "description": "驱动意图（状态光环）",
-            "properties": {
-              "type": { "type": "string", "description": "exam_sprint / daily_homework / casual" },
-              "intensity": { "type": "number", "description": "近 7 天学习强度 0-100" }
-            }
-          },
-          "discipline_badge": {
-            "type": "object",
-            "description": "学科底座徽章",
-            "properties": {
-              "subject": { "type": "string", "description": "学科名称" },
-              "level": { "type": "string", "description": "徽章等级" },
-              "streak_days": { "type": "integer", "description": "连续学习天数" }
-            }
-          }
-        }
+        "required": [
+          "chapter",
+          "completion_rate",
+          "time_spent"
+        ],
+        "title": "ChapterProgressItem"
       },
       "EvaluationGenerateRequest": {
-        "type": "object",
-        "required": ["user_id", "course_id", "learning_progress", "quiz_results", "resource_usage"],
         "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "用户 ID"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id",
+            "description": "课程 ID"
+          },
           "learning_progress": {
-            "type": "object",
-            "description": "学习进度数据（Backend SQL 统计）",
-            "properties": {
-              "chapter_progress": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "chapter": { "type": "string", "description": "章节名称" },
-                    "completion_rate": { "type": "number", "description": "完成率 0-100" },
-                    "time_spent": { "type": "integer", "description": "学习时长（分钟）" }
-                  }
-                }
-              }
-            }
+            "$ref": "#/components/schemas/LearningProgress",
+            "description": "学习进度数据（Backend SQL 统计）"
           },
           "quiz_results": {
-            "type": "array",
-            "description": "各次练习结果汇总",
             "items": {
-              "type": "object",
-              "properties": {
-                "chapter": { "type": "string", "description": "章节" },
-                "score": { "type": "number", "description": "正确率" },
-                "created_at": { "type": "string", "format": "date-time", "description": "完成时间" }
-              }
-            }
-          },
-	          "resource_usage": {
-	            "type": "object",
-	            "description": "资源使用统计",
-	            "properties": {
-	              "by_type": { "type": "object", "description": "{document: N, mindmap: N, reading: N, code: N, video: N}" },
-	              "by_chapter": { "type": "object", "description": "各章节资源使用分布" }
-	            }
-	          },
-	          "student_profile": {
-	            "type": "object",
-	            "description": "用户基础画像，如专业、年级、引导级别"
-	          },
-	          "profile_context": {
-	            "type": "object",
-	            "description": "Backend 规则生成的课程画像上下文"
-	          },
-	          "kg_context": {
-	            "type": "object",
-	            "description": "课程 KG 节点与节点进度上下文"
-	          },
-	          "learning_activity": {
-	            "type": "object",
-	            "description": "学习行为统计上下文"
-	          }
-	        }
-	      },
-      "EvaluationData": {
-        "type": "object",
-        "properties": {
-          "progress_table": {
-            "type": "object",
-            "description": "学习进度表",
-            "properties": {
-              "columns": { "type": "array", "items": { "type": "object" }, "description": "表头" },
-              "rows": { "type": "array", "items": { "type": "object" }, "description": "数据行" }
-            }
-          },
-          "mastery_table": {
-            "type": "object",
-            "description": "知识点掌握程度表",
-            "properties": {
-              "columns": { "type": "array", "items": { "type": "object" } },
-              "rows": { "type": "array", "items": { "type": "object" } }
-            }
-          },
-          "resource_usage_table": {
-            "type": "object",
-            "description": "资源使用习惯记录表",
-            "properties": {
-              "columns": { "type": "array", "items": { "type": "object" } },
-              "rows": { "type": "array", "items": { "type": "object" } }
-            }
-          },
-          "summary_text": { "type": "string", "description": "LLM 综合文字总结" }
-        }
-      },
-      "AssessmentEvaluateRequest": {
-        "type": "object",
-        "required": ["user_id", "course_id", "quiz_id", "questions", "answers"],
-        "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "quiz_id": { "type": "string", "description": "练习 ID" },
-          "questions": {
+              "$ref": "#/components/schemas/QuizResultItem"
+            },
             "type": "array",
-            "description": "题目列表",
-            "items": {
-              "type": "object",
-              "required": ["id", "type", "content", "correct_answer", "knowledge_point"],
-              "properties": {
-                "id": { "type": "string", "description": "题目 ID" },
-                "type": { "type": "string", "description": "题型" },
-                "content": { "type": "string", "description": "题目内容" },
-                "options": { "type": "array", "items": { "type": "object" }, "description": "选项列表" },
-                "correct_answer": {
-                  "description": "正确答案，单选/简答为 string，多选为 array",
-                  "oneOf": [
-                    { "type": "string" },
-                    { "type": "array", "items": { "type": "string" } }
-                  ]
-                },
-                "knowledge_point": { "type": "string", "description": "关联知识点" }
-              }
-            }
+            "title": "Quiz Results",
+            "description": "各次练习结果汇总"
           },
-          "answers": {
-            "type": "array",
-            "description": "用户答案",
-            "items": {
-              "type": "object",
-              "properties": {
-                "question_id": { "type": "string", "description": "题目 ID" },
-                "answer": {
-                  "description": "用户提交的答案，单选/简答为 string，多选为 array",
-                  "oneOf": [
-                    { "type": "string" },
-                    { "type": "array", "items": { "type": "string" } }
-                  ]
-                }
-              }
-            }
+          "resource_usage": {
+            "$ref": "#/components/schemas/ResourceUsage",
+            "description": "资源使用统计"
           },
-          "user_mastery": {
-            "type": "object",
-            "description": "用户当前知识点掌握度"
-          }
-        }
-      },
-      "QuestionGenerateRequest": {
-        "type": "object",
-        "required": ["user_id", "course_id"],
-        "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "knowledge_base_id": { "type": "string", "description": "课程知识库 ID；Backend 可由 course_id 解析后传入" },
-          "chapter": { "type": "string", "description": "章节" },
-          "knowledge_point": { "type": "string", "description": "知识点" },
-          "question_types": {
-            "type": "array",
-            "items": { "type": "string", "enum": ["single_choice", "multi_choice"] },
-            "description": "single_choice / multi_choice"
-          },
-          "count": { "type": "integer", "default": 5, "description": "生成题数" },
-          "difficulty": { "type": "string", "description": "easy / medium / hard" },
-          "personalized": { "type": "boolean", "default": true, "description": "是否生成个性化题" },
-          "personalization_context": {
-            "type": "object",
-            "description": "个性化上下文",
-            "properties": {
-              "evaluation": { "type": "object", "description": "最近学习效果评估" },
-              "profile": { "type": "object", "description": "最近用户画像" },
-              "wrong_points": { "type": "array", "items": { "type": "object" }, "description": "最近错题/薄弱知识点" },
-              "current_path_node": { "type": "object", "description": "当前学习路径节点" }
-            }
-          }
-        }
-      },
-      "QuestionGenerateResult": {
-        "type": "object",
-        "properties": {
-          "questions": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/GeneratedQuestion" }
-          }
-        }
-      },
-      "GeneratedQuestion": {
-        "type": "object",
-        "required": ["type", "content", "answer", "explanation", "knowledge_point"],
-        "properties": {
-          "type": { "type": "string", "enum": ["single_choice", "multi_choice"], "description": "single_choice / multi_choice" },
-          "content": { "type": "string", "description": "题目内容" },
-          "options": {
-            "type": "array",
-            "description": "选项列表，非选择题为空数组",
-            "items": {
-              "type": "object",
-              "properties": {
-                "key": { "type": "string", "description": "A/B/C/D" },
-                "text": { "type": "string", "description": "选项文本" }
-              }
-            }
-          },
-          "answer": { "description": "标准答案，单选/简答为 string，多选可为 array" },
-          "explanation": { "type": "string", "description": "解析" },
-          "chapter": { "type": "string", "description": "章节" },
-          "knowledge_point": { "type": "string", "description": "关联知识点" },
-          "difficulty": { "type": "string", "description": "easy / medium / hard" }
-        }
-      },
-      "AssessmentResult": {
-        "type": "object",
-        "properties": {
-          "per_question_results": {
-            "type": "array",
-            "description": "每题评估结果",
-            "items": {
-              "type": "object",
-              "properties": {
-                "question_id": { "type": "string", "description": "题目 ID" },
-                "is_correct": { "type": "boolean", "description": "是否正确" },
-                "explanation": { "type": "string", "description": "LLM 解析" },
-                "related_knowledge_points": {
-                  "type": "array",
-                  "items": { "type": "string" },
-                  "description": "关联知识点"
-                }
-              }
-            }
-          },
-          "diagnosis": {
-            "type": "object",
-            "description": "综合诊断",
-            "properties": {
-              "summary": { "type": "string", "description": "诊断总结" },
-              "weak_points": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string", "description": "知识点名称" },
-                    "error_pattern": { "type": "string", "description": "错误模式描述" }
-                  }
-                }
+          "student_profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "suggestions": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "复习建议"
+              {
+                "type": "null"
               }
-            }
-          }
-        }
-      },
-      "LearningPathGenerateRequest": {
-        "type": "object",
-        "required": ["user_id", "course_id", "evaluation", "profile", "knowledge_graph"],
-        "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "evaluation": { "type": "object", "description": "学习效果评估数据" },
-          "profile": { "type": "object", "description": "用户画像数据" },
-          "knowledge_graph": {
-            "type": "object",
-            "description": "静态课程知识点图谱（JSON 前置依赖关系）",
-            "properties": {
-              "nodes": {
-                "type": "array",
-                "description": "图谱节点",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "string" },
-                    "name": { "type": "string" },
-                    "chapter": { "type": "string" }
-                  }
-                }
+            ],
+            "title": "Student Profile",
+            "description": "用户基础画像"
+          },
+          "profile_context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
               },
-              "edges": {
-                "type": "array",
-                "description": "前置依赖边",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "from": { "type": "string", "description": "前置节点 ID" },
-                    "to": { "type": "string", "description": "后置节点 ID" }
-                  }
-                }
+              {
+                "type": "null"
               }
-            }
-          }
-        }
-      },
-      "LearningPathData": {
-        "type": "object",
-        "properties": {
-          "nodes": {
-            "type": "array",
-            "description": "路径节点",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": { "type": "string", "description": "节点 ID" },
-                "name": { "type": "string", "description": "知识点名称" },
-                "status": { "type": "string", "description": "completed / in_progress / pending / recommended" },
-                "mastery": { "type": "number", "description": "掌握度 0-100" },
-                "order": { "type": "integer", "description": "排序序号" },
-                "reason": { "type": "string", "description": "排在该位置的原因说明" }
-              }
-            }
+            ],
+            "title": "Profile Context",
+            "description": "Backend 规则生成的课程画像上下文"
           },
-          "edges": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "from": { "type": "string", "description": "前置节点 ID" },
-                "to": { "type": "string", "description": "后置节点 ID" }
+          "kg_context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
               }
-            }
+            ],
+            "title": "Kg Context",
+            "description": "课程 KG 节点与节点进度上下文"
           },
-          "current_position": {
-            "type": "object",
-            "properties": {
-              "node_id": { "type": "string", "description": "当前节点 ID" },
-              "node_name": { "type": "string", "description": "当前节点名称" }
-            }
-          }
-        }
-      },
-      "KnowledgeGraphGenerationRequest": {
-        "type": "object",
-        "properties": {
-          "source_type": {
+          "learning_activity": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Activity",
+            "description": "学习行为统计上下文"
+          },
+          "facts_version": {
             "type": "string",
-            "enum": ["catalog_chunks", "outline_text"],
-            "default": "outline_text",
-            "description": "输入来源；catalog_chunks 使用 catalog_id，outline_text 使用 context"
+            "title": "Facts Version",
+            "description": "Backend 学习事实快照版本",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "course_id",
+          "learning_progress",
+          "quiz_results",
+          "resource_usage"
+        ],
+        "title": "EvaluationGenerateRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "KGGenerationRequest": {
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context",
+            "description": "The course syllabus outline context"
           },
           "catalog_id": {
-            "type": "string",
-            "nullable": true,
-            "description": "课程资源库 ID；source_type=catalog_chunks 时必填，也是 Qdrant 隔离键"
-          },
-          "context": {
-            "type": "string",
-            "nullable": true,
-            "description": "课程大纲文本；source_type=outline_text 时必填"
-          }
-        }
-      },
-      "KnowledgeGraphGenerationResult": {
-        "type": "object",
-        "required": ["nodes", "edges"],
-        "properties": {
-          "nodes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["id", "name", "chapter"],
-              "properties": {
-                "id": { "type": "string" },
-                "name": { "type": "string" },
-                "chapter": { "type": "string" }
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
-            }
+            ],
+            "title": "Catalog Id",
+            "description": "Course catalog ID for catalog chunk input"
           },
-          "edges": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["from", "to"],
-              "properties": {
-                "from": { "type": "string", "description": "前置节点 ID" },
-                "to": { "type": "string", "description": "后置节点 ID" }
-              }
-            }
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "description": "Resource input origin",
+            "default": "outline_text"
           }
-        }
-      },
-      "ResourceGenerateRequest": {
+        },
         "type": "object",
-        "required": ["task_id", "user_id", "course_id", "webhook_url"],
+        "title": "KGGenerationRequest"
+      },
+      "KnowledgeIngestionAcceptedResponse": {
         "properties": {
-          "task_id": { "type": "string", "description": "Backend 预先创建的任务 ID，Agent 返回和回调时原样带回" },
-          "user_id": { "type": "string", "description": "触发教师用户 ID" },
-          "course_id": { "type": "string", "description": "课程 ID" },
-          "course_title": { "type": "string", "nullable": true, "description": "课程名称；用于约束生成内容的学科与编程语言" },
-          "webhook_url": { "type": "string", "description": "完成回调 URL" },
-          "chapter": { "type": "string", "description": "章节" },
-          "knowledge_point": { "type": "string", "description": "知识点" },
-          "resource_types": {
-            "type": "array",
-            "minItems": 1,
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 202
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "accepted"
+          },
+          "data": {
+            "$ref": "#/components/schemas/KnowledgeIngestionResultData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "KnowledgeIngestionAcceptedResponse"
+      },
+      "KnowledgeIngestionMaterialResult": {
+        "properties": {
+          "storage_uri": {
+            "type": "string",
+            "title": "Storage Uri"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "chunk_count": {
+            "type": "integer",
+            "title": "Chunk Count",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storage_uri",
+          "status"
+        ],
+        "title": "KnowledgeIngestionMaterialResult"
+      },
+      "KnowledgeIngestionRequest": {
+        "properties": {
+          "catalog_id": {
+            "type": "string",
+            "title": "Catalog Id",
+            "description": "课程资源目录（即 course_id）"
+          },
+          "materials": {
             "items": {
-              "type": "string",
-              "enum": ["lesson", "diagram", "example"]
+              "$ref": "#/components/schemas/MaterialIngestionItem"
             },
-            "description": "公共资源类型列表，至少一项"
+            "type": "array",
+            "title": "Materials",
+            "description": "待入库课本资源列表"
           }
-        }
+        },
+        "type": "object",
+        "required": [
+          "catalog_id",
+          "materials"
+        ],
+        "title": "KnowledgeIngestionRequest"
+      },
+      "KnowledgeIngestionResultData": {
+        "properties": {
+          "catalog_id": {
+            "type": "string",
+            "title": "Catalog Id"
+          },
+          "chunk_count": {
+            "type": "integer",
+            "title": "Chunk Count"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeIngestionMaterialResult"
+            },
+            "type": "array",
+            "title": "Materials"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog_id",
+          "chunk_count",
+          "materials"
+        ],
+        "title": "KnowledgeIngestionResultData"
+      },
+      "LearningProgress": {
+        "properties": {
+          "chapter_progress": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterProgressItem"
+            },
+            "type": "array",
+            "title": "Chapter Progress",
+            "description": "各章节完成度"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chapter_progress"
+        ],
+        "title": "LearningProgress"
+      },
+      "MaterialIngestionItem": {
+        "properties": {
+          "storage_uri": {
+            "type": "string",
+            "title": "Storage Uri",
+            "description": "课本资源的相对路径或 URI"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storage_uri"
+        ],
+        "title": "MaterialIngestionItem"
+      },
+      "QuizDiagnoseRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "User ID"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id",
+            "description": "Course ID"
+          },
+          "quiz_id": {
+            "type": "string",
+            "title": "Quiz Id",
+            "description": "Quiz ID"
+          },
+          "questions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Questions",
+            "description": "List of questions in the quiz"
+          },
+          "answers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Answers",
+            "description": "List of user answers submitted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "course_id",
+          "quiz_id",
+          "questions",
+          "answers"
+        ],
+        "title": "QuizDiagnoseRequest"
       },
       "QuizGenerationRequest": {
-        "type": "object",
-        "required": ["course_id"],
         "properties": {
-          "task_id": { "type": "string", "nullable": true, "description": "Backend 异步任务 ID" },
-          "user_id": { "type": "string", "nullable": true, "description": "用户 ID" },
-          "course_id": { "type": "string", "description": "用于 RAG 的课程资源库 ID" },
-          "course_title": { "type": "string", "nullable": true, "description": "课程名称；用于约束题目学科与编程语言" },
-          "class_course_id": { "type": "string", "nullable": true, "description": "单个教学班 ID" },
-          "class_course_ids": { "type": "array", "nullable": true, "items": { "type": "string" } },
-          "chapter": { "type": "string", "nullable": true },
-          "knowledge_point": { "type": "string", "nullable": true },
-          "question_types": { "type": "array", "items": { "type": "string", "enum": ["single_choice", "multi_choice"] }, "default": ["single_choice", "multi_choice"] },
-          "count": { "type": "integer", "default": 3 },
-          "difficulty": { "type": "string", "nullable": true },
-          "personalized": { "type": "boolean", "default": false },
-          "personalization_context": { "type": "object", "nullable": true },
-          "source": { "type": "string", "nullable": true }
-        }
-      },
-      "ResourceTaskResponse": {
-        "type": "object",
-        "properties": {
-          "task_id": { "type": "string", "description": "Backend 传入的异步任务 ID" },
-          "estimated_duration": { "type": "integer", "description": "预计完成时间（秒）" }
-        }
-      },
-      "MemoryCompressRequest": {
-        "type": "object",
-        "required": ["user_id", "conversation_id", "messages_to_compress"],
-        "properties": {
-          "user_id": { "type": "string", "description": "用户 ID" },
-          "conversation_id": { "type": "string", "description": "对话 ID" },
-          "old_summary": { "type": "string", "description": "旧的全局摘要（首次压缩时为空）" },
-          "messages_to_compress": {
-            "type": "array",
-            "description": "本轮需要压缩的对话消息（最早的 N 轮）",
-            "items": {
-              "type": "object",
-              "properties": {
-                "role": { "type": "string", "description": "user / assistant" },
-                "content": { "type": "string", "description": "消息内容" },
-                "timestamp": { "type": "string", "format": "date-time", "description": "消息时间" }
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
-            }
+            ],
+            "title": "Task Id",
+            "description": "Task UUID"
           },
-          "existing_facts": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "已存储的长期记忆事实 ID 列表（用于去重）"
-          }
-        }
-      },
-      "MemoryCompressResult": {
-        "type": "object",
-        "properties": {
-          "new_summary": { "type": "string", "description": "融合后的新全局摘要" },
-          "extracted_facts": {
-            "type": "array",
-            "description": "提取的语义事实",
-            "items": {
-              "type": "object",
-              "properties": {
-                "content": { "type": "string", "description": "事实内容（如：用户在递归概念上卡壳）" },
-                "fact_type": { "type": "string", "description": "blind_spot / mastered_point / cognitive_preference" },
-                "knowledge_point": { "type": "string", "description": "关联知识点名称（如有）" },
-                "confidence": { "type": "number", "description": "置信度 0-1" }
+          "course_id": {
+            "type": "string",
+            "title": "Course Id",
+            "description": "Host entity"
+          },
+          "course_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
-            }
+            ],
+            "title": "Course Title",
+            "description": "Course title name to auto-inject into prompts"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter",
+            "description": "Chapter"
+          },
+          "knowledge_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Point",
+            "description": "Pedagogical topic"
+          },
+          "question_types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "single_choice",
+                "multi_choice"
+              ]
+            },
+            "type": "array",
+            "title": "Question Types"
+          },
+          "count": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "default": 3
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "User ID for personalization"
+          },
+          "class_course_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Course Id",
+            "description": "Class Course ID"
+          },
+          "class_course_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Course Ids",
+            "description": "Class Course IDs"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty",
+            "description": "Difficulty level"
+          },
+          "personalized": {
+            "type": "boolean",
+            "title": "Personalized",
+            "description": "Whether this is a personalized request",
+            "default": false
+          },
+          "personalization_context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personalization Context",
+            "description": "Personalization context"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "baseline or personalized"
           }
-        }
-      },
-      "HealthData": {
+        },
         "type": "object",
+        "required": [
+          "course_id"
+        ],
+        "title": "QuizGenerationRequest"
+      },
+      "QuizResultItem": {
         "properties": {
-          "status": { "type": "string", "description": "healthy / degraded / unhealthy" },
-          "qdrant_connected": { "type": "boolean", "description": "Qdrant 向量库连接状态" },
-          "model_loaded": { "type": "boolean", "description": "大模型加载状态" },
-          "model_name": { "type": "string", "description": "当前加载的模型名称" },
-          "uptime_seconds": { "type": "integer", "description": "服务运行时长（秒）" }
-        }
+          "chapter": {
+            "type": "string",
+            "title": "Chapter",
+            "description": "章节"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "正确率"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "完成时间"
+          },
+          "knowledge_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Point",
+            "description": "知识点名称"
+          },
+          "total_answers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Answers",
+            "description": "答题总数"
+          },
+          "personalized_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personalized Count",
+            "description": "个性化强化练习次数"
+          },
+          "recent_trend": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Trend",
+            "description": "最近10次答题正确率趋势"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chapter",
+          "score"
+        ],
+        "title": "QuizResultItem"
+      },
+      "ResourceGenerationRequest": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "Asynchronous task ID tracking this generation"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id",
+            "description": "Associated host course entity"
+          },
+          "course_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Title",
+            "description": "Course title name to auto-inject into prompts"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter",
+            "description": "Target syllabus chapter folder"
+          },
+          "knowledge_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Point",
+            "description": "Core pedagogical topic"
+          },
+          "resource_types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "lesson",
+                "diagram",
+                "example"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Resource Types",
+            "description": "Public resource types requested"
+          },
+          "webhook_url": {
+            "type": "string",
+            "title": "Webhook Url",
+            "description": "Callback target to inject generated results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "course_id",
+          "resource_types",
+          "webhook_url"
+        ],
+        "title": "ResourceGenerationRequest"
+      },
+      "ResourceTeamRequest": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "course_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Title"
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Goal"
+          },
+          "knowledge_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Point"
+          },
+          "resource_preferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resource Preferences"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": "manual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "user_id",
+          "course_id",
+          "goal"
+        ],
+        "title": "ResourceTeamRequest"
+      },
+      "ResourceUsage": {
+        "properties": {
+          "by_type": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "By Type",
+            "description": "{document: N, mindmap: N, reading: N, code: N, video: N}"
+          },
+          "by_chapter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Chapter",
+            "description": "各章节资源使用分布"
+          }
+        },
+        "type": "object",
+        "required": [
+          "by_type"
+        ],
+        "title": "ResourceUsage"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkbenchChatRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": "course"
+          },
+          "course_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
+          },
+          "context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "message"
+        ],
+        "title": "WorkbenchChatRequest"
       }
     }
   }

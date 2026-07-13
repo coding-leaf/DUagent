@@ -47,7 +47,7 @@
 当前系统打通了核心功能主链，但在新课程冷启动和非核心展示辅助能力上，依然依赖外部工具与运维级别脚本：
 
 ### 1. 📖 RAG 课程知识库的离线向量灌入 (`ingest_knowledge.py`)
-- **实现行为**：Tutoring 智能辅导所需的教材切片及向量检索，目前完全依赖 Agent 侧的离线脚本 `agent_service/tools/ingest_knowledge.py` 写入 Qdrant 数据库。
+- **实现行为**：课程资料由 Backend 上传后调用 `POST /agent/v2/knowledge/ingestions`，Agent Service v2 负责切片和写入 Qdrant；Workbench 通过注册的 RAG 工具检索这些切片。
 - **限制**：后端无供教师上传教材并触发自动切片与 Embedding 向量化的 HTTP API / Web 界面。
 
 ### 2. 🔀 知识图谱智能提取与 upsert 命令行 (`generate_knowledge_graph.py`)

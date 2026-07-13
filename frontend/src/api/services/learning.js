@@ -4,9 +4,6 @@ export const learningService = {
   getLearningPath(courseId) {
     return apiClient.get('/learning-path', { params: { course_id: courseId } });
   },
-  refreshLearningPath(courseId) {
-    return apiClient.post('/learning-path/refresh', { course_id: courseId });
-  },
   getResources(params) {
     return apiClient.get('/resources', { params });
   },

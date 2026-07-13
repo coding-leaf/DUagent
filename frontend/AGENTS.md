@@ -20,7 +20,7 @@ This file applies only to frontend-specific work scoped from `frontend/` and sup
 
 - 前端页面：Login / Register / Dashboard / LearningPath / Quiz / StudentProfile / AIChat / ResourceDetail / TeacherConsole / AdminConsole
 - 后端 API 模块：auth / courses / learning-path / quiz / profile / evaluation / learning-activities / resources / profile / teaching / tutoring / catalogs（admin）
-- Agent Service：tutoring / evaluation / learning_path / profile / assessment / resources
+- Agent Service v2：Workbench / knowledge ingestion / KG / evaluation / resources / assessment
 - 数据库活跃表：learning_activities（259）/ quiz_questions（117）/ resources（88）/ quiz_sessions（31）/ evaluations（23）
 
 **项目开发阶段：**
@@ -34,7 +34,7 @@ This file applies only to frontend-specific work scoped from `frontend/` and sup
 
 判断"该怎么做"时，按以下顺序查证：
 
-1. **当前运行代码**：前端 `src/`、后端 `backend/app/`、Agent `agent_service/`。代码是最终事实。
+1. **当前运行代码**：前端 `src/`、后端 `backend/app/`、Agent `agent_service_v2/src/`。代码是最终事实。
 2. **`docs/superpowers/specs/`**：本 session 产出的设计文档，近期决策在这里。
 3. **`WorkLine.md`**：根目录 `WorkLine.md` 是当前唯一工作存档。旧版 `WORKFLOW.md` 仅用于只读追溯历史上下文，不再追加新记录，也不作为当前状态源。
 4. **`docs/feature-ledger.md`**：功能级看板，但已与实际实现存在较大偏差，**只作参考，不作约束**。用它了解历史意图，不用它判断现状。

@@ -36,7 +36,7 @@
 
 - `frontend/`：React + Vite 浏览器应用，只调用 Backend Client API。
 - `backend/`：FastAPI Client API、数据库模型、业务编排、异步任务和 Agent Service 调用。
-- `agent_service/`：Agent 内部 API、知识库入库、资源生成、题目生成、诊断和学习路径相关能力。
+- `agent_service_v2/`：Agent 内部 API、知识库入库、资源生成、题目生成和诊断；学习路径由 Backend 根据 KG 与实时进度计算。
 
 核心数据方向：
 

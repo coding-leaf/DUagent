@@ -29,11 +29,9 @@ asyncio.run(init_db())
 asyncio.run(engine.dispose())
 
 from app.main import app
-from app.services.learning_path_refresh_service import LearningPathRefreshService
-from app.models.user import RegistrationCode, User
-from sqlalchemy import delete, update
+from app.models.user import RegistrationCode
 
-from app.models.course import Course, CourseEnrollment
+from app.models.course import CourseEnrollment
 from app.models.others import LearningPath, Resource, CourseKnowledgeGraph
 from app.models.quiz import QuizQuestion
 
@@ -67,87 +65,6 @@ async def _register_and_login(client, code, email, username):
     })
     assert "token" in r.json().get("data", {}), f"Login failed: {r.json()}"
     return {"Authorization": f"Bearer {r.json()['data']['token']}"}, r.json()["data"]["user"]["id"]
-
-
-@pytest.mark.asyncio(loop_scope="module")
-async def test_learning_path_payload_uses_active_knowledge_graph():
-    suffix = uuid.uuid4().hex[:8]
-    teacher_id = f"payload_teacher_{suffix}"
-    user_id = f"payload_user_{suffix}"
-    course_id = f"payload_course_{suffix}"
-
-    active_node = {"id": "active_node", "name": "Active KG Node", "chapter": "active_chapter"}
-    inactive_node = {"id": "inactive_only", "name": "Inactive KG Node", "chapter": "inactive_chapter"}
-    active_edge = {"source": "active_node", "target": "active_next"}
-    inactive_edge = {"source": "inactive_only", "target": "inactive_next"}
-
-    payload = None
-    try:
-        async with async_session_factory() as db:
-            db.add_all(
-                [
-                    User(
-                        id=teacher_id,
-                        username=f"payload_teacher_{suffix}",
-                        email=f"payload_teacher_{suffix}@test.com",
-                        password_hash="hash",
-                        role="teacher",
-                    ),
-                    User(
-                        id=user_id,
-                        username=f"payload_user_{suffix}",
-                        email=f"payload_user_{suffix}@test.com",
-                        password_hash="hash",
-                        role="student",
-                    ),
-                    Course(
-                        id=course_id,
-                        name="Payload KG Course",
-                        course_code=f"PL{suffix[:8]}",
-                        teacher_id=teacher_id,
-                    ),
-                ]
-            )
-            await db.flush()
-            db.add_all(
-                [
-                    CourseKnowledgeGraph(
-                        course_id=course_id,
-                        version=2,
-                        is_active=False,
-                        nodes=[inactive_node],
-                        edges=[inactive_edge],
-                    ),
-                    CourseKnowledgeGraph(
-                        course_id=course_id,
-                        version=1,
-                        is_active=True,
-                        nodes=[active_node],
-                        edges=[active_edge],
-                    ),
-                ]
-            )
-            await db.commit()
-
-            payload = await LearningPathRefreshService(db).assemble_payload(user_id, course_id)
-    finally:
-        async with async_session_factory() as db:
-            await db.execute(
-                update(CourseKnowledgeGraph)
-                .where(CourseKnowledgeGraph.course_id == course_id)
-                .values(parent_graph_id=None)
-            )
-            await db.execute(delete(CourseKnowledgeGraph).where(CourseKnowledgeGraph.course_id == course_id))
-            await db.execute(delete(Course).where(Course.id == course_id))
-            await db.execute(delete(User).where(User.id.in_([teacher_id, user_id])))
-            await db.commit()
-        await engine.dispose()
-
-    assert payload is not None
-    assert payload["knowledge_graph"]["nodes"] == [active_node]
-    assert inactive_node not in payload["knowledge_graph"]["nodes"]
-    assert payload["knowledge_graph"]["edges"] == [active_edge]
-    assert inactive_edge not in payload["knowledge_graph"]["edges"]
 
 
 @pytest.mark.asyncio(loop_scope="module")

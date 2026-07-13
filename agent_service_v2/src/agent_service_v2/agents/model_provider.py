@@ -5,11 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class AgentModelSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(
-            ".env",
-            "agent_service/.env",
-            "../agent_service/.env",
-        ),
+        env_file=(".env",),
         extra="ignore",
     )
 

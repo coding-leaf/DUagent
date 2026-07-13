@@ -211,9 +211,6 @@ async def test():
         chk("Learning path", r.json()["code"] == 200)
         chk("LP current_position null ok", r.json()["data"]["current_position"] is None or isinstance(r.json()["data"]["current_position"], dict))
 
-        r = await client.post("/api/v1/learning-path/refresh", headers=s_h, json={"course_id": course_id})
-        chk("LP refresh 202", r.status_code == 202)
-
         # === Node resources ===
         r = await client.get(f"/api/v1/learning-path/nodes/n1/resources?course_id={course_id}", headers=s_h)
         chk("Node resources", r.json()["code"] == 200)

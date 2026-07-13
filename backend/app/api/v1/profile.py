@@ -9,14 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
 from app.models.course import CourseEnrollment
-from app.services.agent_client import AgentServiceError, agent_client
 from app.services.profile_presenters import profile_data
 from app.services.profile_service import ProfileService
-from app.services.profile_dialogue_service import ProfileDialogueService
 from app.services.profile_refresh_service import ProfileRefreshService, run_profile_refresh_background
 from app.schemas.profile import (
     ProfileInitializeRequest,
-    ProfileDialogueUpdateRequest,
     ProfileGoalUpdateRequest,
     ProfileInstructionUpdateRequest,
     ProfileRefreshRequest,
@@ -66,43 +63,6 @@ async def get_profile(
     service = ProfileService(db)
     pf = await service.get_or_create_profile(current_user.id, course_id)
     return {"code": 200, "message": "success", "data": profile_data(pf, course_id, current_user)}
-
-@router.post("/dialogue-update")
-async def dialogue_update_profile(
-    req: ProfileDialogueUpdateRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await _verify_course_enrollment(current_user, req.course_id, db)
-
-    payload = {
-        "user_id": current_user.id,
-        "course_id": req.course_id,
-        "message": req.message,
-    }
-    try:
-        data = await agent_client.post_json("/agent/v1/profile/dialogue-update", payload)
-    except AgentServiceError as e:
-        raise HTTPException(
-            status_code=e.status_code,
-            detail={"code": e.agent_code or e.status_code, "message": e.message, "data": None},
-        ) from e
-
-    extracted = data.get("profile") if isinstance(data, dict) and isinstance(data.get("profile"), dict) else data
-    if not isinstance(extracted, dict):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": 50200, "message": "画像解析结果格式错误", "data": None},
-        )
-
-    try:
-        dialogue_service = ProfileDialogueService(db)
-        pf = await dialogue_service.update_from_dialogue(current_user.id, req.course_id, extracted)
-        await db.commit()
-        return {"code": 200, "message": "success", "data": profile_data(pf, req.course_id, current_user)}
-    except Exception as e:
-        await db.rollback()
-        raise e
 
 @router.post("/learning-goal")
 async def update_learning_goal(

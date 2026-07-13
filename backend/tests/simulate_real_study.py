@@ -190,15 +190,8 @@ async def main():
         await wait_for_task(client, s_headers, task_id)
         print("Evaluation refresh completed!")
         
-        # 9. Student refreshes learning path
-        print("\n9. Refreshing learning path (Async)...")
-        r = await client.post("/api/v1/learning-path/refresh", headers=s_headers, json={"course_id": course_id})
-        r.raise_for_status()
-        task_id = r.json()["data"]["task_id"]
-        await wait_for_task(client, s_headers, task_id)
-        
-        # Query learning path
-        print("\nQuerying learning path...")
+        # 9. Student queries the real-time learning path
+        print("\n9. Querying learning path...")
         r = await client.get(f"/api/v1/learning-path?course_id={course_id}", headers=s_headers)
         r.raise_for_status()
         path_data = r.json()["data"]

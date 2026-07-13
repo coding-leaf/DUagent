@@ -13,7 +13,7 @@
 
 - 负责 `backend/` 内的主业务后端服务。
 - 负责用户、鉴权、课程、SQL 持久化、任务状态、前端 API、Agent Service HTTP 调用适配和 Webhook 落库。
-- 不负责 `agent_service/` 内部的 LLM、AgentScope、Qdrant RAG、提示词、智能体编排实现。
+- 不负责 `agent_service_v2/` 内部的 LLM、AgentScope、Qdrant RAG、提示词、智能体编排实现。
 - Backend 只通过 HTTP 调用 Agent Service，使用统一的 `app/services/agent_client.py`，不导入 `agent_service` Python 模块。
 - Backend 不直接访问 Qdrant；RAG 检索由 Agent Service 负责。
 - Agent Service 不直接写 Backend SQL；Backend 负责校验 Agent 返回结果并写入 SQL。
@@ -22,10 +22,10 @@
 
 开发时优先级如下：
 
-1. `../docs/20-agent-api/Agent-Service.openapi.json` — Agent Service 接口契约
-2. `../docs/20-agent-api/API_Agent内部接口规范.md` — 字段语义和错误码规范
-3. `../docs/backend-agent-integration-reference.md` — 联调接入参考
-4. 当前 `app/` 代码
+1. 当前 `app/` 代码
+2. `../agent_service_v2/src/` 当前运行代码
+3. `../docs/20-agent-api/Agent-Service.openapi.json` — Agent Service 接口契约
+4. `../docs/20-agent-api/API_Agent内部接口规范.md` — 字段语义和错误码规范
 5. `backend/schema.sql` — 数据库 schema 参考
 
 - 如果文档与历史实现冲突，优先以当前非归档文档为准。
@@ -98,7 +98,7 @@
 
 ### 禁止
 - Backend 直接访问 Qdrant
-- Backend 导入 `agent_service` Python 模块
+- Backend 导入 `agent_service_v2` Python 模块
 - Agent Service 直接写 Backend SQL
 - Agent Service 自行生成 `task_id`（必须由 Backend 传入）
 - 修改 `../docs/` 下已有文档，除非用户明确要求
@@ -154,7 +154,7 @@ Backend 开发完成后，在根目录 `WorkLine.md` 记录接口状态、测试
 ```bash
 pwd
 git status --short
-curl -s http://127.0.0.1:8002/agent/v1/health
+curl -fsS http://127.0.0.1:8002/openapi.json >/dev/null
 ```
 
 跨窗口继续时，优先读取 `AGENTS.md`、根目录 `WorkLine.md`、`git status --short`、最近测试结果；旧版 `WORKFLOW.md` 仅作为历史联调记录只读查询。

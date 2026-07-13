@@ -1,5 +1,7 @@
 # EDUagent Project Coverage Audit
 
+> 历史审计快照：本文记录 v1 迁移前状态，不作为当前实现或接口来源。当前 Agent Service 以 `agent_service_v2/` 和 `docs/20-agent-api/` 为准。
+
 本文档用于证明 `docs/project-direction.md` 是否覆盖当前项目结构。它不是需求清单，也不是完成承诺；它记录当前代码和文档中能找到的证据、覆盖状态和缺口。
 
 审计日期：2026-06-09

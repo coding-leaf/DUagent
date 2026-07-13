@@ -1044,36 +1044,13 @@ GET /api/v1/profile?course_id={course_id}
 | profile_dimensions[].source | string | 维度来源：profile_dialogue / system_profile / resource_usage / evaluation / activity / system_pending / kg_quiz_activity |
 | generated_at | string | 画像生成时间 |
 
-### 7.3 对话补充用户画像
-
-```
-POST /api/v1/profile/dialogue-update
-```
-
-**说明：** 将学生自然语言补充的学习方向、薄弱点、资源偏好等信息提交给 Agent 解析，并合并到当前课程画像。学习方向仅保留 `exam_sprint` / `daily_homework` / `casual` 三类枚举；“我喜欢视频/图解/代码”等资源偏好类输入归入标准模态偏好，不写入学习方向。Agent 解析失败时不覆盖已有画像。
-
-**请求体 `application/json`：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| course_id | string | 是 | 课程 ID |
-| message | string | 是 | 学生补充文本，1-1000 字符 |
-
-**响应 `data`：**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| profile | object | 本次从文本中解析出的画像增量 |
-| sources | object | 本次增量字段来源，值为 profile_dialogue |
-| profile_data | object | 合并后的完整画像，结构同 `GET /profile` |
-
-### 7.4 刷新用户画像
+### 7.3 刷新用户画像
 
 ```
 POST /api/v1/profile/refresh
 ```
 
-**说明：** 根据最近的学习效果评估、练习、辅导对话、资源使用等数据异步调用 Agent 生成新画像，完成后覆盖该用户在该课程下的最近画像。
+**说明：** 根据最近的学习效果评估、练习和资源使用等事实异步运行 Backend 画像规则，完成后更新该用户在该课程下的画像。
 
 **请求体 `application/json`：**
 
@@ -1097,7 +1074,7 @@ POST /api/v1/profile/refresh
 GET /api/v1/learning-path?course_id={course_id}
 ```
 
-**说明：** 本接口只读取当前用户在该课程下最近一次学习路径，不实时调用 Agent。若尚未生成路径，返回 `nodes: []`、`edges: []`、`current_position: null`、`generated_at: null`，前端展示空状态或引导刷新。
+**说明：** 本接口根据 active KG 和当前用户实时学习进度返回学习路径，不调用 Agent。若课程没有可用 KG，返回 `nodes: []`、`edges: []`、`current_position: null`。
 
 **响应 `data`：**
 
@@ -1119,27 +1096,7 @@ GET /api/v1/learning-path?course_id={course_id}
 | current_position.node_name | string | 当前节点名称 |
 | generated_at | string | 路径生成时间 |
 
-### 8.2 刷新学习路径
-
-```
-POST /api/v1/learning-path/refresh
-```
-
-**请求体 `application/json`：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| course_id | string | 是 | 课程 ID |
-
-**响应 `data`：**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| task_id | string | 异步任务 ID |
-
-**说明：** Backend 读取该课程的静态知识图谱、最近学习效果评估和用户画像后异步调用 Agent。知识图谱决定可学习节点和前置依赖顺序，Agent 只负责个性化排序、推荐理由和当前节点建议，不允许脱离课程知识图谱自由编排路径。
-
-### 8.3 节点资源推送
+### 8.2 节点资源推送
 
 ```
 GET /api/v1/learning-path/nodes/:node_id/resources

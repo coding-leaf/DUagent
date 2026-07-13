@@ -10,9 +10,9 @@
 
 ## 明确不做
 
-- 不实现 `agent_service/` 内部 LLM、AgentScope、Qdrant RAG、提示词和智能体编排。
+- 不实现 `agent_service_v2/` 内部 LLM、AgentScope、Qdrant RAG、提示词和智能体编排。
 - 不直接访问 Qdrant。
-- 不通过 Python 模块导入方式调用 `agent_service`。
+- 不通过 Python 模块导入方式调用 `agent_service_v2`。
 - 不把未在正式契约中声明的字段、状态、枚举暴露给前端。
 
 ## 对外边界

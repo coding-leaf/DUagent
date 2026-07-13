@@ -997,17 +997,6 @@ class TestEvaluationLearningPathIntegration:
             assert "task_id" in r.json()["data"]
 
     @pytest.mark.asyncio
-    async def test_learning_path_refresh_202(self):
-        """验证学习路径刷新返回 202 + task_id。"""
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            s_h, course_id = await self._setup_student(client)
-
-            r = await client.post("/api/v1/learning-path/refresh", headers=s_h, json={"course_id": course_id})
-            assert r.status_code == 202
-            assert "task_id" in r.json()["data"]
-
-    @pytest.mark.asyncio
     async def test_evaluation_get_empty(self):
         """验证 GET /evaluation 无评估时返回空数据。"""
         transport = ASGITransport(app=app)

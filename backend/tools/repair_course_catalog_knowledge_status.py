@@ -35,9 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("QDRANT_COURSE_KNOWLEDGE_COLLECTION", DEFAULT_COLLECTION),
         help="Qdrant course knowledge collection",
     )
-    parser.add_argument("--qdrant-url", default=os.environ.get("QDRANT_URL"))
+    parser.add_argument(
+        "--qdrant-url",
+        default=os.environ.get("QDRANT_URL", "http://127.0.0.1:6333"),
+    )
     parser.add_argument("--qdrant-api-key", default=os.environ.get("QDRANT_API_KEY"))
-    parser.add_argument("--qdrant-path", default=os.environ.get("QDRANT_PATH", "../agent_service/qdrant_data"))
+    parser.add_argument("--qdrant-path", default=os.environ.get("QDRANT_PATH"))
     parser.add_argument("--format", choices=["json"], default="json")
 
     subparsers = parser.add_subparsers(dest="command", required=True)

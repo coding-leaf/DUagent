@@ -5,7 +5,7 @@
 - 背景
   - 需要维持服务边界，避免把 Agent 内部实现耦合进 Backend。
 - 决策
-  - 统一通过 `app/services/agent_client.py` 访问 `/agent/v1/*`。
+  - 统一通过 `app/services/agent_client.py` 访问 `/agent/v2/*`。
 - 原因
   - 保持部署边界、错误边界和契约边界清晰。
 - 代价

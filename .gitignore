@@ -64,6 +64,9 @@ qdrant_storage/
 # Agent runtime workspace artifacts
 agent_service_v2/workspaces/
 
+# Retired v1 local data retained for manual archival
+agent_service/knowledge_base/
+
 # Coverage & Build
 coverage/
 .coverage
@@ -76,4 +79,3 @@ out/
 #规范
 !AGENTS.md
 .worktrees/
-

@@ -5,10 +5,6 @@ class ProfileInitializeRequest(BaseModel):
     course_id: str
     answers: Optional[Dict[str, Any]] = None
 
-class ProfileDialogueUpdateRequest(BaseModel):
-    course_id: str
-    message: str = Field(..., min_length=1, max_length=1000)
-
 class ProfileGoalUpdateRequest(BaseModel):
     course_id: str
     goal_type: str = Field(..., min_length=1, max_length=200)

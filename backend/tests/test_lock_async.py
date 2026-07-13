@@ -175,36 +175,9 @@ async def test():
             await eval_lock_session.close()
 
         # =============================================
-        # 3. learning-path/refresh lock_timeout
+        # 3. Lock competition: concurrent refresh → single active row
         # =============================================
-        lp_lock_name = f"learningpath_{user_id}_{course_id}"
-        lp_lock_session = async_session_factory()
-        try:
-            lr = await lp_lock_session.execute(
-                text("SELECT GET_LOCK(:name, 0)"), {"name": lp_lock_name}
-            )
-            chk("lp lock acquired", lr.scalar() == 1)
-
-            print("  (waiting ~5s for lp lock timeout...)")
-            with patch("app.services.learning_path_refresh_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-                mock_agent.return_value = {"nodes": [], "edges": [], "current_position": None}
-                r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
-                chk("lp lock held → 202", r.status_code == 202)
-                task_id = r.json()["data"]["task_id"]
-                result = await _poll_task(client, task_id, headers, timeout=15)
-                chk("lp lock held → task failed", result and result["status"] == "failed")
-                chk("lp lock held → error_code=lock_timeout",
-                    result and result.get("error_code") == "lock_timeout")
-        finally:
-            await lp_lock_session.execute(
-                text("SELECT RELEASE_LOCK(:name)"), {"name": lp_lock_name}
-            )
-            await lp_lock_session.close()
-
-        # =============================================
-        # 4. Lock competition: concurrent refresh → single active row
-        # =============================================
-        print("\n-- 4. lock competition --")
+        print("\n-- 3. lock competition --")
         with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {
                 "modal_preference": {},

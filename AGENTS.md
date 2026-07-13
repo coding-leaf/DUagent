@@ -1,6 +1,6 @@
 # AGENTS.md — 全局协作约束（v3）
 
-> 本文档为项目根目录全局约束，对 `frontend/`、`backend/`、`agent_service/` 全部生效。
+> 本文档为项目根目录全局约束，对 `frontend/`、`backend/`、`agent_service_v2/` 全部生效。
 > 各子目录有同名文件时，**子目录 AGENTS.md 补充局部细节，但不得与本文件冲突**。
 
 ---
@@ -21,7 +21,7 @@
 |---------|--------|
 | 前端页面 / 组件 / hook | `frontend/AGENTS.md` |
 | 后端 API / 数据库 / 鉴权 | `backend/AGENTS.md` |
-| Agent 编排 / LLM / RAG | `agent_service/AGENTS.md` |
+| Agent 编排 / LLM / RAG | `agent_service_v2/AGENTS.md` |
 | **跨模块交互 / 根目录决策** | 本文件 |
 
 ---
@@ -33,7 +33,7 @@
 | `AGENTS.md` | 根目录全局协作约束。文件名必须保持全大写，子模块也统一使用 `AGENTS.md`。 |
 | `frontend/AGENTS.md` | 前端局部规则，只补充 UI、SWR/MVVM、前端验证等细节。 |
 | `backend/AGENTS.md` | 后端局部规则，只补充 FastAPI 分层、数据库、契约和测试细节。 |
-| `agent_service/AGENTS.md` | Agent Service 局部规则，只补充 AgentScope、RAG、多智能体和模型调用边界。 |
+| `agent_service_v2/AGENTS.md` | Agent Service 局部规则，只补充 AgentScope、RAG、多智能体和模型调用边界。 |
 | `TODO.md` | USER 灵感碎片和待办池，允许保留不完整想法，不作为事实结论。 |
 | `赛题疑点` | A3 赛题原文摘录、疑问和需求理解草稿。用于对齐比赛要求，不作为实现状态源。 |
 | `docs/90-review/` | 放正式审计、验收、差距分析文档。例如 A3 赛题需求差距审计。 |
@@ -48,7 +48,7 @@
 
 查证"该怎么做"时，按以下顺序：
 
-1. **当前运行代码**（`frontend/src/`、`backend/app/`、`agent_service/`）— 代码是最终事实
+1. **当前运行代码**（`frontend/src/`、`backend/app/`、`agent_service_v2/src/`）— 代码是最终事实
 2. **`docs/` 下的 API 契约**（`docs/10-client-api/`、`docs/20-agent-api/`）— 接口边界基准
 3. **`WorkLine.md`**（本项目工作存档，近期决策和验证结论在这里）
 4. **`PROJECT.md`**（架构说明与里程碑）
@@ -67,7 +67,7 @@
 
 - **前端不直连 Agent Service**，所有 AI 能力通过 Backend 代理
 - **Agent Service 不写 MySQL**，持久化数据必须通过 Backend Webhook 落库
-- **Backend 不导入 `agent_service` Python 模块**，只通过 HTTP 调用
+- **Backend 不导入 `agent_service_v2` Python 模块**，只通过 HTTP 调用
 - **Backend 不直接访问 Qdrant**，向量检索由 Agent Service 负责
 - Agent Service 使用 Backend 传入的 `task_id`，不自行生成
 
@@ -130,7 +130,7 @@ python3 -m py_compile backend/app/<修改的文件.py>
 cd backend && python3 -m pytest tests/<相关测试> -v
 
 # Agent Service 测试
-cd agent_service && ./.venv/bin/pytest
+cd agent_service_v2 && ./.venv/bin/pytest
 ```
 
 构建或测试失败必须修复后再 commit。

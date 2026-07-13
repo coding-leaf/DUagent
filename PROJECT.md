@@ -1,9 +1,9 @@
-# Project: EDUagent Refactoring Phase 2
+# Project: EDUagent v3
 
 ## Architecture
 - **Frontend**: React SPA. MVVM architecture where custom SWR hooks act as ViewModels, Page files act as View Containers, and sub-components in `src/components/` act as Views.
 - **Backend**: FastAPI. Layered architecture: Router (`backend/app/api/v1/`) -> Service (`backend/app/services/`) -> DB/Repository.
-- **Agent Service**: Python FastAPI microservice. Zero direct DB access (stateless AI reasoning). Communicates with Backend via HTTP callbacks and Webhooks.
+- **Agent Service v2**: AgentScope 2.x + FastAPI microservice. It owns LLM, tools, RAG, workspaces and agent-team execution, does not access MySQL, and communicates with Backend through HTTP and webhooks.
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
@@ -14,11 +14,12 @@
 
 ## Interface Contracts
 ### Backend ↔ Agent Service
-- **Tutoring**: `POST /agent/v1/tutoring/chat` for stream generation.
-- **Evaluation**: `POST /agent/v1/evaluation/generate` for offline background report generation.
-- **Resource**: `POST /agent/v1/resources/generate` for custom resource material.
-- **Learning Path**: `POST /agent/v1/learning-path/refresh` for map nodes optimization.
-All callback flows write back to MySQL via Backend webhooks (`POST /api/v1/webhooks/`).
+- **Workbench tutoring**: `POST /agent/v2/workbench/chat`.
+- **Knowledge ingestion / KG / quiz / resources**: `/agent/v2/knowledge/*`.
+- **Evaluation and answer diagnosis**: `/agent/v2/evaluation/*`.
+- **Personalized resources**: `/agent/v2/personalized-resources/*`.
+- **Learning path**: Backend derives the current path from the active KG and real-time learning progress; there is no Agent learning-path generation endpoint.
+Agent callbacks write authoritative business results to MySQL through Backend webhooks or internal Backend APIs.
 
 ## Code Layout
 - Frontend: `frontend/src/`
@@ -27,4 +28,4 @@ All callback flows write back to MySQL via Backend webhooks (`POST /api/v1/webho
   - Custom SWR Hooks: `frontend/src/hooks/`
 - Backend API: `backend/app/api/v1/`
 - Backend Services: `backend/app/services/`
-- Agent Service: `agent_service/`
+- Agent Service: `agent_service_v2/src/agent_service_v2/`

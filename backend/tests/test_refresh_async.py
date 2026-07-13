@@ -1,6 +1,6 @@
-"""MySQL integration test for refresh endpoint async behavior.
+"""MySQL integration test for active refresh endpoint async behavior.
 
-Covers 3 refresh endpoints (profile / evaluation / learning-path):
+Covers profile and evaluation refresh endpoints:
   - 202 + task_id returned immediately
   - Background task completes (success) or fails (Agent error)
   - DB records written on success
@@ -32,7 +32,7 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.services.agent_client import AgentServiceError
 from app.models.user import RegistrationCode, User
-from app.models.others import AsyncTask, UserProfile, Evaluation, LearningPath, CourseKnowledgeGraph
+from app.models.others import AsyncTask, UserProfile, Evaluation, CourseKnowledgeGraph
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from sqlalchemy import func, select, text
 
@@ -211,93 +211,7 @@ async def test():
             await db.commit()
 
         # =============================================
-        # 3. profile/dialogue-update success
-        # =============================================
-        print("\n-- 3. profile/dialogue-update success --")
-        with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-            mock_agent.return_value = {
-                "learning_goal": "准备期末考试，重点学习 C 语言指针",
-                "learning_preferences": ["代码例子", "图解"],
-                "weak_points": ["动态内存分配"],
-                "drive_intent": "exam_cram",
-            }
-            r = await client.post(
-                "/api/v1/profile/dialogue-update",
-                headers=headers,
-                json={
-                    "course_id": course_id,
-                    "message": "我正在学 C 语言指针，准备期末考试，喜欢代码例子和图解，不太理解动态内存分配。",
-                },
-            )
-            chk("dialogue-update → 200", r.status_code == 200)
-            body = r.json().get("data", {})
-            dimensions = body.get("profile_dimensions", [])
-            learning_goal_dim = next((d for d in dimensions if d.get("key") == "learning_goal"), {})
-            chk("dialogue-update → profile source",
-                learning_goal_dim.get("source") == "profile_dialogue")
-            agent_path = mock_agent.await_args.args[0] if mock_agent.await_args else ""
-            payload = mock_agent.await_args.args[1] if mock_agent.await_args else {}
-            chk("dialogue-update → agent path",
-                agent_path == "/agent/v1/profile/dialogue-update")
-            chk("dialogue-update → agent course_id", payload.get("course_id") == course_id)
-            chk("dialogue-update → agent message passthrough",
-                "动态内存分配" in payload.get("message", ""))
-
-            async with async_session_factory() as db:
-                pf_r = await db.execute(
-                    select(UserProfile).where(
-                        UserProfile.course_id == course_id,
-                        UserProfile.is_deleted == False,
-                    )
-                )
-                pf = pf_r.scalars().first()
-                chk("dialogue-update → persisted goal",
-                    pf and pf.drive_intent.get("learning_goal") == "exam_sprint")
-                chk("dialogue-update → persisted weak point",
-                    pf and any(item.get("name") == "动态内存分配" for item in pf.cognitive_blindspots))
-                used_lock_r = await db.execute(
-                    text("SELECT IS_USED_LOCK(:name)"),
-                    {"name": f"profile_{current_user.id}_{course_id}"},
-                )
-                chk("dialogue-update → lock released", used_lock_r.scalar() is None)
-
-        # =============================================
-        # 4. profile/dialogue-update Agent failure
-        # =============================================
-        print("\n-- 4. profile/dialogue-update Agent failure --")
-        async with async_session_factory() as db:
-            before_r = await db.execute(
-                select(UserProfile).where(
-                    UserProfile.course_id == course_id,
-                    UserProfile.is_deleted == False,
-                )
-            )
-            before_profile = before_r.scalars().first()
-            before_goal = (before_profile.drive_intent or {}).get("learning_goal") if before_profile else None
-
-        with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-            mock_agent.side_effect = AgentServiceError(
-                message="dialogue parse failed", status_code=502, agent_code=50210)
-            r = await client.post(
-                "/api/v1/profile/dialogue-update",
-                headers=headers,
-                json={"course_id": course_id, "message": "解析失败案例"},
-            )
-            chk("dialogue-update Agent error → 502", r.status_code == 502)
-
-        async with async_session_factory() as db:
-            after_r = await db.execute(
-                select(UserProfile).where(
-                    UserProfile.course_id == course_id,
-                    UserProfile.is_deleted == False,
-                )
-            )
-            after_profile = after_r.scalars().first()
-            after_goal = (after_profile.drive_intent or {}).get("learning_goal") if after_profile else None
-            chk("dialogue-update Agent error → no overwrite", after_goal == before_goal)
-
-        # =============================================
-        # 5. evaluation/refresh success
+        # 3. evaluation/refresh success
         # =============================================
         print("\n-- 5. evaluation/refresh success --")
         async with async_session_factory() as db:
@@ -472,57 +386,6 @@ async def test():
             existing.error_code = "test_cleanup"
             existing.error_message = "test cleanup"
             await db.commit()
-
-        # =============================================
-        # 7. learning-path/refresh success
-        # =============================================
-        print("\n-- 7. learning-path/refresh success --")
-        with patch("app.services.learning_path_refresh_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-            mock_agent.return_value = {
-                "nodes": [{"id": "n1", "name": "Intro", "status": "pending", "mastery": 0, "order": 0}],
-                "edges": [],
-                "current_position": {"node_id": "n1", "node_name": "Intro"},
-            }
-            r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
-            chk("lp/refresh → 202", r.status_code == 202)
-            task_id = r.json()["data"]["task_id"]
-            chk("lp/refresh → task_id present", bool(task_id))
-
-            r_imm = await client.get(f"/api/v1/tasks/{task_id}", headers=headers)
-            imm_data = r_imm.json().get("data", {})
-            chk("lp/refresh → still processing on immediate poll",
-                imm_data.get("status") == "processing")
-
-            result = await _poll_task(client, task_id, headers)
-            chk("lp/refresh → completed", result and result["status"] == "completed")
-            await asyncio.sleep(0.5)
-
-
-            async with async_session_factory() as db:
-                lp_r = await db.execute(
-                    select(LearningPath).where(
-                        LearningPath.course_id == course_id,
-                        LearningPath.is_deleted == False,
-                    )
-                )
-                chk("lp/refresh → DB record written", lp_r.scalars().first() is not None)
-
-        # =============================================
-        # 8. learning-path/refresh Agent failure
-        # =============================================
-        print("\n-- 8. learning-path/refresh Agent failure --")
-        with patch("app.services.learning_path_refresh_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-            mock_agent.side_effect = AgentServiceError(
-                message="lp failed", status_code=500, agent_code=50002)
-            r = await client.post("/api/v1/learning-path/refresh", headers=headers, json={"course_id": course_id})
-            chk("lp Agent error → 202", r.status_code == 202)
-            task_id = r.json()["data"]["task_id"]
-            result = await _poll_task(client, task_id, headers)
-            chk("lp Agent error → failed", result and result["status"] == "failed")
-            await asyncio.sleep(0.5)
-
-            chk("lp Agent error → error_code",
-                result and "50002" in str(result.get("error_code", "")))
 
     print(f"\n{'='*50}")
     print(f"  Total: {ok} OK, {fail} FAIL")

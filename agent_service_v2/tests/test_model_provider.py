@@ -6,6 +6,10 @@ from agent_service_v2.agents.model_provider import (
 )
 
 
+def test_model_settings_do_not_depend_on_retired_v1_env():
+    assert AgentModelSettings.model_config["env_file"] == (".env",)
+
+
 def test_build_chat_model_returns_none_without_complete_settings():
     settings = AgentModelSettings(_env_file=None, LLM_PROVIDER="agentscope_openai")
 

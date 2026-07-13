@@ -1,16 +1,36 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
+from app.api.deps import get_current_user, get_db
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def override_current_user():
+    db = AsyncMock()
+
+    async def override_db():
+        yield db
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id="u123",
+        role="student",
+        guidance_level="L2",
+    )
+    app.dependency_overrides[get_db] = override_db
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_db, None)
 
 @patch("app.api.v1.profile.ProfileService")
 @patch("app.api.v1.profile._verify_course_enrollment")
 def test_get_profile_route(mock_verify, mock_service_cls):
     mock_service = AsyncMock()
-    mock_service.get_or_create_profile.return_value = AsyncMock()
+    mock_service.get_or_create_profile.return_value = None
     mock_service_cls.return_value = mock_service
     
     with patch("app.api.v1.profile.get_current_user") as mock_user:
@@ -22,7 +42,7 @@ def test_get_profile_route(mock_verify, mock_service_cls):
 @patch("app.api.v1.profile._verify_course_enrollment")
 def test_initialize_profile_route(mock_verify, mock_service_cls):
     mock_service = AsyncMock()
-    mock_service.initialize_profile.return_value = AsyncMock()
+    mock_service.initialize_profile.return_value = None
     mock_service_cls.return_value = mock_service
     
     with patch("app.api.v1.profile.get_current_user") as mock_user:
@@ -33,29 +53,11 @@ def test_initialize_profile_route(mock_verify, mock_service_cls):
         )
         assert response.status_code == 200
 
-@patch("app.api.v1.profile.ProfileDialogueService")
-@patch("app.api.v1.profile.agent_client")
-@patch("app.api.v1.profile._verify_course_enrollment")
-def test_dialogue_update_profile_route(mock_verify, mock_agent_client, mock_dialogue_service_cls):
-    mock_dialogue_service = AsyncMock()
-    mock_dialogue_service.update_from_dialogue.return_value = AsyncMock()
-    mock_dialogue_service_cls.return_value = mock_dialogue_service
-    
-    mock_agent_client.post_json = AsyncMock(return_value={"profile": {"learning_goal": "exam_sprint"}})
-    
-    with patch("app.api.v1.profile.get_current_user") as mock_user:
-        mock_user.return_value = AsyncMock(id="u123", role="student")
-        response = client.post(
-            "/api/v1/profile/dialogue-update",
-            json={"course_id": "c456", "message": "I need to prepare for my exam."}
-        )
-        assert response.status_code == 200
-
 @patch("app.api.v1.profile.ProfileService")
 @patch("app.api.v1.profile._verify_course_enrollment")
 def test_update_learning_goal_route(mock_verify, mock_service_cls):
     mock_service = AsyncMock()
-    mock_service.update_learning_goal.return_value = AsyncMock()
+    mock_service.update_learning_goal.return_value = None
     mock_service_cls.return_value = mock_service
     
     with patch("app.api.v1.profile.get_current_user") as mock_user:
@@ -70,7 +72,7 @@ def test_update_learning_goal_route(mock_verify, mock_service_cls):
 @patch("app.api.v1.profile._verify_course_enrollment")
 def test_update_custom_instruction_route(mock_verify, mock_service_cls):
     mock_service = AsyncMock()
-    mock_service.update_custom_instruction.return_value = AsyncMock()
+    mock_service.update_custom_instruction.return_value = None
     mock_service_cls.return_value = mock_service
     
     with patch("app.api.v1.profile.get_current_user") as mock_user:

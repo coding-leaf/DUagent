@@ -20,7 +20,7 @@ async def _recover_orphaned_background_tasks() -> None:
     """启动时将残留的进程内后台 processing 任务标记为 failed。
 
     只覆盖使用 asyncio.create_task 且没有外部恢复机制的任务：
-    profile_refresh / evaluation_refresh / learning_path_refresh / kg_generation。
+    profile_refresh / evaluation_refresh / kg_generation。
     进程重启后这些协程会丢失。
     resource_generation / quiz_generation 不在此范围。
     """
@@ -35,7 +35,6 @@ async def _recover_orphaned_background_tasks() -> None:
     _recoverable_task_types = [
         "profile_refresh",
         "evaluation_refresh",
-        "learning_path_refresh",
         "kg_generation",
         "code_problem_judging",
         "resource_generation",

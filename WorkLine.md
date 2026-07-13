@@ -3558,3 +3558,32 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - Client API 与 Agent API 均无变化。
+
+---
+
+### 2026-07-13 — 退役 Agent Service v1 并统一 v2 运行时
+
+**涉及范围：**
+- 删除 Git 跟踪的 `agent_service/` v1 源码、测试和模块文档
+- `backend`：删除画像对话补充和学习路径刷新死链路、旧探针及关联测试
+- `frontend`：删除未使用的学习路径刷新 API 方法
+- `agent_service_v2`：移除旧 v1 `.env` 读取依赖，补齐模块协作说明
+- 根协作规则、项目总览、Client/Agent OpenAPI、开发与联调文档
+
+**核心改动：**
+1. 实际 UI、运行日志和数据库审计确认 v1 已不承接产品流量；默认启动入口继续只启动 Agent Service v2。
+2. 删除无 UI 调用且无任务记录的 `POST /api/v1/profile/dialogue-update` 和 `POST /api/v1/learning-path/refresh`。画像刷新保留 Backend 规则链路，学习路径继续由 active KG 与实时学习进度计算。
+3. Agent OpenAPI 由 v2 实际 FastAPI 入口重新生成，共 10 条 `/agent/v2/*` 路径；Client OpenAPI 同步删除两条死接口。
+4. v2 不再读取 `agent_service/.env`；Backend 修复工具不再默认指向旧 `agent_service/qdrant_data`。
+5. 数据不迁移：MySQL 继续由 Backend 独占，PDF 权威存储继续位于 `backend/storage/course_catalogs/`，v2 复用独立 Qdrant。旧目录中唯一约 19MB PDF、旧本地向量数据和环境文件均保留，未移动或删除。
+
+**验证结果：**
+- TDD：退役路由测试先 RED，删除路由后 GREEN。
+- Backend 语法检查通过；画像、实时学习路径、节点资源和退役路由相关测试：60 passed。
+- Agent Service v2 全量测试：149 passed、1 条第三方 TestClient 弃用告警。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- Agent v2 运行时 OpenAPI 与 `docs/20-agent-api/Agent-Service.openapi.json` 的 10 条路径完全一致。
+
+**接口漂移：**
+- Client API 删除 `POST /api/v1/profile/dialogue-update` 和 `POST /api/v1/learning-path/refresh`。
+- Agent API 删除全部 `/agent/v1/*`，当前只保留 `/agent/v2/*`。

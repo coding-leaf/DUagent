@@ -3508,3 +3508,32 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 
 **接口漂移：**
 - Client API 与 Agent API 均无变化。
+
+---
+
+### 2026-07-13 — AI Chat 私有选择题与真实编程题工具分流
+
+**涉及范围：**
+- `agent_service_v2`：普通题型约束、私有选择题工具、Artifact 发布触发、工作台权限与提示词
+- `backend`：AI Chat 私有选择题内部接口、权限校验、私有落库与普通题型过滤
+- `frontend`：持久化 QuizCard、个性化生成入口、错题强化请求与历史题型隔离
+- `docs/10-client-api`、`docs/20-agent-api` 与对应设计文档
+
+**根因与改动：**
+1. 普通 Quiz 前端与 SQL 判题只支持单选、多选，但生成契约仍允许 `code/short_answer`，导致伪代码题丢失测试用例后进入不支持页面。普通题请求、Agent 提示词、模型输出校验、Backend 落库与查询现统一限制为 `single_choice/multi_choice`。
+2. AI Chat 新增 `publish_personal_choice_quiz`：Backend 校验会话归属、选课关系、选项和答案后写入当前学生私有题库及 `user_personalized_resources(source_type=ai_chat)`；工具成功后原子创建持久化 `QuizCard`，点击进入正式答题页。
+3. 真正编程题继续走 `validate_personal_code_problem_draft` 的 OJ 公开/隐藏用例验证与私有 `CodeProblem` 链路。工作台不再向模型暴露重复创建代码卡片的步骤。
+4. SSE 协议适配器在两种原子发布工具成功后扫描并发布 Artifact，避免题目已落库但卡片未在画布长期显示。
+5. 历史 `code/short_answer` 普通题不删除，只从普通取题和个性化题目分组中隔离。
+
+**验证结果：**
+- Agent Service v2 全量：148 passed；新增工具与 Artifact 触发定向回归通过。
+- Backend 私有选择题真实落库：1 passed；新接口、答题查询和异步 Quiz 定向：17 passed；Quiz 生成集成：6 passed。
+- Frontend 全量单元测试：40 files、141 passed；lint 与生产构建通过，保留既有大 chunk 提示。
+- Backend 扩大历史集成集另有 2 个既有失败：旧 SSE 消息测试未保存文本、旧资源 Webhook 使用当前已拒绝的 `document` 类型；均不在本次练习链路修改范围。
+- Python `py_compile`、OpenAPI JSON 解析与 `git diff --check` 通过。
+
+**接口漂移：**
+- Client API：普通 Quiz 题型由历史文档的四种收紧为 `single_choice/multi_choice`；编程题明确使用独立 CodeProblem/OJ 链路。
+- Agent API：知识题生成 `question_types` 收紧为 `single_choice/multi_choice`。
+- 新增 Backend internal `POST /internal/ai-chat/choice-quizzes`，不直接暴露给前端。

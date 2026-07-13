@@ -42,7 +42,6 @@ def test_workbench_tool_groups_include_expected_boundaries():
     artifact_group = next(group for group in groups if group.name == "artifact")
     assert [getattr(tool, "name", type(tool).__name__) for tool in artifact_group.tools] == [
         "write_artifact_file",
-        "create_code_sandbox_card",
     ]
 
 
@@ -79,3 +78,19 @@ def test_workbench_tool_groups_include_personal_code_problem_group_when_tools_ex
     )
 
     assert "personal_code_problem" in [group.name for group in groups]
+
+
+def test_workbench_tool_groups_include_personal_choice_quiz_group_when_tools_exist():
+    class FakeTool:
+        name = "publish_personal_choice_quiz"
+
+    groups = build_workbench_tool_groups(
+        memory_tools=[],
+        rag_tools=[],
+        learning_progress_tools=[],
+        personal_choice_quiz_tools=[FakeTool()],
+        workspace=LocalWorkspace(workdir="/tmp/eduagent-test-workspace", workspace_id="ws"),
+        run_id="run-1",
+    )
+
+    assert "personal_choice_quiz" in [group.name for group in groups]

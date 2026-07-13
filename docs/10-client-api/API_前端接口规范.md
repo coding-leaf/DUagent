@@ -1196,7 +1196,7 @@ GET /api/v1/learning-path/nodes/:node_id/resources
 - 通用题面向课程/章节/知识点，所有加入该课程的学生可使用。
 - 个性化题按 `owner_user_id` 归属当前学生，只对该学生可见。
 - Agent 不直接写数据库；当前前端契约不提供触发 `/quiz/generate` 的页面入口，历史生题链路如需恢复必须重新进行产品契约审查。
-- 支持题型固定为：`single_choice` / `multi_choice` / `code` / `short_answer`。
+- 普通 Quiz 支持题型固定为：`single_choice` / `multi_choice`。需要执行代码的题目使用独立私有 `CodeProblem` 与 OJ 链路。
 
 ### 9.1 获取题目组
 
@@ -1213,7 +1213,7 @@ GET /api/v1/quiz/questions?course_id={course_id}&chapter={chapter}&knowledge_poi
 | course_id | string | 是 | 课程 ID |
 | chapter | string | 否 | 指定章节，为空则按当前进度出题 |
 | knowledge_point | string | 否 | 指定知识点 |
-| type | string | 否 | 题型：single_choice / multi_choice / code / short_answer |
+| type | string | 否 | 题型：single_choice / multi_choice |
 | source | string | 否 | 题目来源：common / personalized |
 | limit | integer | 否 | 返回题数，默认 10 |
 
@@ -1226,7 +1226,7 @@ GET /api/v1/quiz/questions?course_id={course_id}&chapter={chapter}&knowledge_poi
 | chapter | string | 章节 |
 | questions | array | 题目列表 |
 | questions[].id | string | 题目 ID |
-| questions[].type | string | 题型：single_choice / multi_choice / code / short_answer |
+| questions[].type | string | 题型：single_choice / multi_choice |
 | questions[].source | string | 来源：common / personalized |
 | questions[].personalized | boolean | 是否个性化题 |
 | questions[].content | string | 题目内容 |
@@ -1270,7 +1270,7 @@ Backend 会先根据教学班 `course_id` 解析绑定的 `CourseOffering.catalo
 | course_id | string | 是 | 课程 ID |
 | chapter | string | 否 | 章节 |
 | knowledge_point | string | 否 | 知识点 |
-| question_types | array | 否 | 题型列表：single_choice / multi_choice / code / short_answer |
+| question_types | array | 否 | 题型列表：single_choice / multi_choice |
 | count | integer | 否 | 生成题数，默认 5 |
 | difficulty | string | 否 | 难度：easy / medium / hard |
 | personalized | boolean | 否 | 是否按当前学生个性化生成，默认 true |
@@ -1289,10 +1289,9 @@ POST /api/v1/quiz/submit
 
 **两步流程：**
 
-1. **立即返回**：Backend 对选择题在 SQL 中对比正确答案，直接返回对错和耗时
-2. **主观评估**：`code` / `short_answer` 可由 Backend 调用 Agent 评估；v1 可先同步评估或返回待诊断状态
-3. **异步诊断**：Backend 后台调用 `POST /agent/v1/assessment/evaluate` 生成 LLM 诊断
-4. **前端轮询**：`GET /api/v1/quiz/result` 获取诊断建议（诊断未完成时 `diagnosis` 为 null）
+1. **立即返回**：Backend 对单选题、多选题在 SQL 中对比正确答案，直接返回对错和耗时
+2. **异步诊断**：Backend 后台调用评估接口生成 LLM 诊断
+3. **前端轮询**：`GET /api/v1/quiz/result` 获取诊断建议（诊断未完成时 `diagnosis` 为 null）
 
 **请求体 `application/json`：**
 

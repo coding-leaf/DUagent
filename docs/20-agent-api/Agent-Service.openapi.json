@@ -678,8 +678,8 @@
           "knowledge_point": { "type": "string", "description": "知识点" },
           "question_types": {
             "type": "array",
-            "items": { "type": "string" },
-            "description": "single_choice / multi_choice / code / short_answer"
+            "items": { "type": "string", "enum": ["single_choice", "multi_choice"] },
+            "description": "single_choice / multi_choice"
           },
           "count": { "type": "integer", "default": 5, "description": "生成题数" },
           "difficulty": { "type": "string", "description": "easy / medium / hard" },
@@ -709,7 +709,7 @@
         "type": "object",
         "required": ["type", "content", "answer", "explanation", "knowledge_point"],
         "properties": {
-          "type": { "type": "string", "description": "single_choice / multi_choice / code / short_answer" },
+          "type": { "type": "string", "enum": ["single_choice", "multi_choice"], "description": "single_choice / multi_choice" },
           "content": { "type": "string", "description": "题目内容" },
           "options": {
             "type": "array",
@@ -933,7 +933,7 @@
           "class_course_ids": { "type": "array", "nullable": true, "items": { "type": "string" } },
           "chapter": { "type": "string", "nullable": true },
           "knowledge_point": { "type": "string", "nullable": true },
-          "question_types": { "type": "array", "items": { "type": "string" } },
+          "question_types": { "type": "array", "items": { "type": "string", "enum": ["single_choice", "multi_choice"] }, "default": ["single_choice", "multi_choice"] },
           "count": { "type": "integer", "default": 3 },
           "difficulty": { "type": "string", "nullable": true },
           "personalized": { "type": "boolean", "default": false },

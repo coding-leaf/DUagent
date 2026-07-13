@@ -246,6 +246,8 @@ class EDUProtocolAdapter:
         return state != "error" and tool_name in {
             "write_artifact_file",
             "create_code_sandbox_card",
+            "validate_personal_code_problem_draft",
+            "publish_personal_choice_quiz",
         }
 
     def _build_artifact_events(self) -> list[EduEvent]:

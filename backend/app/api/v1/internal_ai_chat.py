@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.schemas.internal_ai_chat import (
     LearningProgressRequest,
     OJEvaluationRequest,
+    PersonalChoiceQuizCreateRequest,
     PersonalCodeProblemCreateRequest,
     RecentAnswersRequest,
 )
@@ -18,6 +19,10 @@ from app.services.oj_execution_service import execute_code_in_oj, OJExecutionErr
 from app.services.code_problem_service import (
     CodeProblemValidationError,
     create_validated_personal_problem_from_ai_chat,
+)
+from app.services.ai_chat_choice_quiz_service import (
+    ChoiceQuizValidationError,
+    create_personal_choice_quiz_from_ai_chat,
 )
 
 router = APIRouter(prefix="/internal/ai-chat", tags=["internal-ai-chat"])
@@ -146,5 +151,50 @@ async def validate_personal_code_problem(
             "language": req.draft.language,
             "public_case_count": created.public_case_count,
             "hidden_case_count": created.hidden_case_count,
+        },
+    }
+
+
+@router.post("/choice-quizzes")
+async def create_personal_choice_quiz(
+    req: PersonalChoiceQuizCreateRequest,
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        question_ids = await create_personal_choice_quiz_from_ai_chat(
+            db,
+            owner_user_id=req.user_id,
+            course_id=req.course_id,
+            conversation_id=req.conversation_id,
+            chapter=req.chapter,
+            knowledge_point=req.knowledge_point,
+            questions=req.questions,
+        )
+        await db.commit()
+    except ChoiceQuizValidationError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": 40001,
+                "message": "选择题发布验证失败",
+                "data": {"reason": exc.reason},
+            },
+        )
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": 50000, "message": "选择题保存失败", "data": None},
+        )
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "status": "published",
+            "title": req.title,
+            "question_ids": question_ids,
+            "question_count": len(question_ids),
         },
     }

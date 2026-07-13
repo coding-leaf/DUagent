@@ -181,3 +181,91 @@ async def test_internal_code_problem_returns_published_problem_id():
         "public_case_count": 1,
         "hidden_case_count": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_internal_choice_quiz_rejects_unsupported_question_type():
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/internal/ai-chat/choice-quizzes",
+                headers={"X-Internal-Agent-Token": "secret"},
+                json={
+                    "user_id": "u1",
+                    "course_id": "offering-1",
+                    "conversation_id": "conv-1",
+                    "run_id": "run-1",
+                    "title": "指针练习",
+                    "chapter": "指针",
+                    "knowledge_point": "指针基础",
+                    "questions": [
+                        {
+                            "type": "code",
+                            "content": "编写程序",
+                            "options": [],
+                            "answer": "",
+                            "explanation": "",
+                            "difficulty": "medium",
+                        }
+                    ],
+                },
+            )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_internal_choice_quiz_returns_published_question_ids():
+    with patch("app.api.v1.internal_ai_chat.settings.INTERNAL_AGENT_TOKEN", "secret"):
+        with patch(
+            "app.api.v1.internal_ai_chat.create_personal_choice_quiz_from_ai_chat",
+            new_callable=AsyncMock,
+            return_value=["question-1", "question-2"],
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/internal/ai-chat/choice-quizzes",
+                    headers={"X-Internal-Agent-Token": "secret"},
+                    json={
+                        "user_id": "u1",
+                        "course_id": "offering-1",
+                        "conversation_id": "conv-1",
+                        "run_id": "run-1",
+                        "title": "指针练习",
+                        "chapter": "指针",
+                        "knowledge_point": "指针基础",
+                        "questions": [
+                            {
+                                "type": "single_choice",
+                                "content": "哪个运算符用于取地址？",
+                                "options": [
+                                    {"key": "A", "text": "&"},
+                                    {"key": "B", "text": "*"},
+                                ],
+                                "answer": "A",
+                                "explanation": "& 是取地址运算符。",
+                                "difficulty": "easy",
+                            },
+                            {
+                                "type": "multi_choice",
+                                "content": "以下哪些是合法指针操作？",
+                                "options": [
+                                    {"key": "A", "text": "取地址"},
+                                    {"key": "B", "text": "解引用"},
+                                    {"key": "C", "text": "随意访问越界地址"},
+                                ],
+                                "answer": ["A", "B"],
+                                "explanation": "取地址和解引用是基本操作。",
+                                "difficulty": "medium",
+                            },
+                        ],
+                    },
+                )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "status": "published",
+        "title": "指针练习",
+        "question_ids": ["question-1", "question-2"],
+        "question_count": 2,
+    }

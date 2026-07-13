@@ -88,11 +88,12 @@ def test_factory_configures_safe_tool_permission_allow_rules(tmp_path: Path):
     assert "read_learning_progress" in allow_rules
     assert "read_recent_answers" in allow_rules
     assert "write_artifact_file" in allow_rules
-    assert "create_code_sandbox_card" in allow_rules
+    assert "create_code_sandbox_card" not in allow_rules
     assert "draft_study_artifact" not in allow_rules
     assert "TaskCreate" in allow_rules
     assert "run_code_in_oj" in allow_rules
     assert "validate_personal_code_problem_draft" in allow_rules
+    assert "publish_personal_choice_quiz" in allow_rules
 
     deny_rules = agent.state.permission_context.deny_rules
 
@@ -166,6 +167,7 @@ def test_factory_activates_safe_tool_groups_by_default(tmp_path: Path):
     assert "artifact" in agent.state.tool_context.activated_groups
     assert "learning_progress" in agent.state.tool_context.activated_groups
     assert "personal_code_problem" not in agent.state.tool_context.activated_groups
+    assert "personal_choice_quiz" not in agent.state.tool_context.activated_groups
 
 
 def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_path: Path):
@@ -187,6 +189,9 @@ def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_pa
     assert "三个或更多" in prompt
     assert "published" in prompt
     assert "problem_id" in prompt
+    assert "publish_personal_choice_quiz" in prompt
+    assert "single_choice" in prompt
+    assert "不要再次创建卡片" in prompt
     assert "validated" not in prompt
     assert "不要使用 write_artifact_file 创建 JSON" in prompt
 

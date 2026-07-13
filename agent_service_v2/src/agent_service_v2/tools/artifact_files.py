@@ -88,6 +88,40 @@ def build_create_code_sandbox_card(
     return create_code_sandbox_card
 
 
+def build_create_quiz_practice_card(
+    *, workspace: LocalWorkspace, run_id: str
+) -> Callable[..., dict]:
+    artifact_dir = WorkbenchRunStore(workspace=workspace).artifact_dir(run_id)
+
+    def create_quiz_practice_card(
+        course_id: str, question_ids: list[str], title: str
+    ) -> dict:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", course_id):
+            raise ArtifactValidationError("course_id contains unsupported characters")
+        if (
+            not 1 <= len(question_ids) <= 8
+            or any(not re.fullmatch(r"[A-Za-z0-9_-]+", item) for item in question_ids)
+        ):
+            raise ArtifactValidationError("question_ids must contain 1 to 8 safe IDs")
+        content = json.dumps(
+            {
+                "type": "QuizCard",
+                "title": title,
+                "props": {"course_id": course_id, "question_ids": question_ids},
+            },
+            ensure_ascii=False,
+        )
+        return _persist_artifact(
+            artifact_dir=artifact_dir,
+            filename=f"choice-quiz-{question_ids[0]}.json",
+            content=content,
+            artifact_type="QuizCard",
+            title=title,
+        )
+
+    return create_quiz_practice_card
+
+
 def _persist_artifact(
     *, artifact_dir: Path, filename: str, content: str, artifact_type: str, title: str
 ) -> dict:

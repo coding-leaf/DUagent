@@ -1,8 +1,38 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-export default function QuizCard({ question, choices, correctAnswer }) {
+export default function QuizCard({ question, choices, correctAnswer, course_id, question_ids }) {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+
+  if (course_id && Array.isArray(question_ids) && question_ids.length > 0) {
+    const startPractice = () => {
+      const params = new URLSearchParams({
+        course_id,
+        source: 'personalized',
+        question_ids: question_ids.join(','),
+      });
+      navigate(`/quiz?${params.toString()}`);
+    };
+    return (
+      <div className="bg-white border border-cyan-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-slate-800 font-semibold text-[15px]">私有选择题练习已生成</h3>
+            <p className="text-sm text-slate-500 mt-2">共 {question_ids.length} 题，作答结果会进入学习证据。</p>
+          </div>
+          <span className="px-2.5 py-1 rounded-full bg-cyan-50 text-cyan-700 text-xs font-medium">仅自己可见</span>
+        </div>
+        <button
+          onClick={startPractice}
+          className="mt-5 w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+        >
+          开始练习
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">

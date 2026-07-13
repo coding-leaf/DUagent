@@ -141,7 +141,10 @@ class ResourceWorkerAgent:
         course_info = f"Course Title: {course_title}" if course_title else "Course Title: C Programming Language"
 
         if resource_type == "quiz":
-            q_types_str = ", ".join(question_types) if question_types else "single_choice, multi_choice, code"
+            requested_types = question_types or ["single_choice", "multi_choice"]
+            if any(item not in {"single_choice", "multi_choice"} for item in requested_types):
+                raise ValueError("ordinary quiz only supports single_choice and multi_choice")
+            q_types_str = ", ".join(requested_types)
             diff_str = difficulty or "medium"
             
             personalization_prompt = ""
@@ -182,12 +185,12 @@ Allowed Question Types: {q_types_str}
 Ensure the questions are precise and cover critical syllabus concepts.
 
 {course_info}
-If the course title specifies a particular language (e.g. C/C++), you MUST generate all questions, coding challenges, solutions, options and explanations for that exact language. Absolutely never default to Python, Java, or other programming languages.
+If the course title specifies a particular language (e.g. C/C++), all terminology, options and explanations must match that exact course language.
 
 Your output MUST be a strict JSON object with this structure:
 {{
   "questions": [
-     // Each question must match one of the allowed types (single_choice, multi_choice, code)
+     // Each question must match one of the allowed types (single_choice, multi_choice)
      // Example single_choice:
      {{
        "title": "A single-choice question title or statement in Simplified Chinese (简体中文)",
@@ -221,27 +224,13 @@ Your output MUST be a strict JSON object with this structure:
        "chapter": "{chapter or ""}",
        "knowledge_point": "{knowledge_point or ""}",
        "difficulty": "{diff_str}"
-     }},
-     // Example code challenge:
-     {{
-       "title": "Code challenge title in Simplified Chinese",
-       "content": "Code challenge description in Simplified Chinese",
-       "type": "code",
-       "description": "Challenge description in Simplified Chinese",
-       "initial_code": "int main() {{\\n  // Write code here\\n}}",
-       "test_cases": [
-         {{"input": "5", "expected_output": "25"}}
-       ],
-       "chapter": "{chapter or ""}",
-       "knowledge_point": "{knowledge_point or ""}",
-       "difficulty": "{diff_str}"
      }}
   ]
 }}
 
 Language & Technology Requirements:
 1. ALL descriptive textual fields (including: "title", "content", options' "text", "explanation", "description") MUST be generated in Simplified Chinese (简体中文).
-2. Keep only the C programming source codes and their compilable format (or corresponding language specified in the course title). The comments inside code blocks should also be in Simplified Chinese. Absolutely never default to Python.
+2. Do not generate programming challenges, free-response questions, starter code or test cases in the ordinary quiz flow.
 """
         elif resource_type == "document":
             prompt = f"""You are a {course_title or 'C Programming'} Lecturer.
@@ -321,15 +310,10 @@ Language Requirements:
                 elif "content" in q and "title" not in q:
                     q["title"] = q["content"]
                 
-                # 2. For code challenges, handle description / content alignment
-                if q.get("type") == "code":
-                    if "description" in q and "content" not in q:
-                        q["content"] = q["description"]
-                        q["title"] = q["description"]
-                    elif "content" in q and "description" not in q:
-                        q["description"] = q["content"]
-                
-                # 3. Handle correct answer options format if LLM returns a simple string list
+                if q.get("type") not in {"single_choice", "multi_choice"}:
+                    raise ValueError("model returned unsupported ordinary quiz type")
+
+                # 2. Handle correct answer options format if LLM returns a simple string list
                 raw_options = q.get("options", [])
                 if isinstance(raw_options, list) and len(raw_options) > 0:
                     if isinstance(raw_options[0], str):

@@ -1562,7 +1562,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "题型：single_choice / multi_choice / code / short_answer"
+            "description": "题型：single_choice / multi_choice"
           },
           {
             "name": "source",
@@ -1714,7 +1714,7 @@
           "Quiz"
         ],
         "summary": "提交答案",
-        "description": "选择题由 Backend 直接判题；code / short_answer 可由 Agent 评估。Backend 后台调 Agent 生成 LLM 诊断，前端 GET /quiz/result 获取诊断。",
+        "description": "单选题和多选题由 Backend 直接判题。Backend 后台调 Agent 生成 LLM 诊断，前端 GET /quiz/result 获取诊断。编程题使用独立私有 CodeProblem 与 OJ 链路。",
         "requestBody": {
           "required": true,
           "content": {
@@ -4576,7 +4576,7 @@
             "items": {
               "type": "string"
             },
-            "description": "题型列表：single_choice / multi_choice / code / short_answer"
+            "description": "题型列表：single_choice / multi_choice"
           },
           "count": {
             "type": "integer",
@@ -4633,7 +4633,7 @@
           },
           "type": {
             "type": "string",
-            "description": "single_choice / multi_choice / code / short_answer"
+            "description": "single_choice / multi_choice"
           },
           "source": {
             "type": "string",

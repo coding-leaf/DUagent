@@ -209,7 +209,15 @@ def test_protocol_adapter_distinguishes_missing_node_from_empty_answers(status, 
     assert event.payload["output_summary"] == expected_summary
 
 
-@pytest.mark.parametrize("tool_name", ["write_artifact_file", "create_code_sandbox_card"])
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "write_artifact_file",
+        "create_code_sandbox_card",
+        "validate_personal_code_problem_draft",
+        "publish_personal_choice_quiz",
+    ],
+)
 def test_protocol_adapter_emits_artifact_after_artifact_tool_success(tool_name):
     publisher = FakeArtifactPublisher()
     adapter = EDUProtocolAdapter(

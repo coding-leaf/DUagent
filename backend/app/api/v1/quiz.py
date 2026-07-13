@@ -59,6 +59,7 @@ async def get_questions(
         QuizQuestion.is_deleted == False,
         (QuizQuestion.source.in_(["common", "baseline"]))
         | ((QuizQuestion.source == "personalized") & (QuizQuestion.owner_user_id == current_user.id)),
+        QuizQuestion.type.in_(["single_choice", "multi_choice"]),
     )
     ids_list = [qid.strip() for qid in (question_ids or "").split(",") if qid.strip()]
 

@@ -202,12 +202,16 @@ class QuizGenerationRequest(BaseModel):
     course_title: str | None = Field(None, description="Course title name to auto-inject into prompts")
     chapter: str | None = Field(None, description="Chapter")
     knowledge_point: str | None = Field(None, description="Pedagogical topic")
-    question_types: list[str] = Field(default=["single_choice", "multi_choice", "code"])
-    count: int = Field(default=3)
+    question_types: list[Literal["single_choice", "multi_choice"]] = Field(
+        default_factory=lambda: ["single_choice", "multi_choice"]
+    )
+    count: int = Field(default=3, ge=1, le=20)
     user_id: str | None = Field(None, description="User ID for personalization")
     class_course_id: str | None = Field(None, description="Class Course ID")
     class_course_ids: list[str] | None = Field(None, description="Class Course IDs")
-    difficulty: str | None = Field(None, description="Difficulty level")
+    difficulty: Literal["easy", "medium", "hard"] | None = Field(
+        None, description="Difficulty level"
+    )
     personalized: bool = Field(False, description="Whether this is a personalized request")
     personalization_context: dict[str, Any] | None = Field(None, description="Personalization context")
     source: str | None = Field(None, description="baseline or personalized")

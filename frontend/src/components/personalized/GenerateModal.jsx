@@ -7,7 +7,6 @@ import Icon from '../Icon';
 const QUESTION_TYPE_OPTIONS = [
   { value: 'single_choice', label: '单选题', icon: 'radio_button_checked' },
   { value: 'multi_choice', label: '多选题', icon: 'check_box' },
-  { value: 'short_answer', label: '问答题', icon: 'edit_note' },
 ];
 
 const RESOURCE_TYPE_OPTIONS = [

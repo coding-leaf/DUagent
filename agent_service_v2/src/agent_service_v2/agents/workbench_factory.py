@@ -17,6 +17,7 @@ from agent_service_v2.tools.backend_learning_client import build_backend_learnin
 from agent_service_v2.tools.learning_progress import build_learning_progress_tools
 from agent_service_v2.tools.oj_execution import build_oj_execution_tools
 from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
+from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
 from agent_service_v2.tools.workbench_toolkit import build_workbench_tool_groups
 
 
@@ -121,6 +122,14 @@ class WorkbenchAgentFactory:
             run_id=run_id,
             workspace=workspace,
         )
+        personal_choice_quiz_tools = build_personal_choice_quiz_tools(
+            client=learning_client,
+            user_id=user_id,
+            course_id=course_id,
+            conversation_id=conversation_id,
+            run_id=run_id,
+            workspace=workspace,
+        )
 
         from agentscope.tool import FunctionTool
         from agent_service_v2.tools.rag import retrieve_course_context
@@ -182,6 +191,7 @@ class WorkbenchAgentFactory:
             learning_progress_tools=learning_progress_tools,
             oj_execution_tools=oj_execution_tools,
             personal_code_problem_tools=personal_code_problem_tools,
+            personal_choice_quiz_tools=personal_choice_quiz_tools,
             workspace=workspace,
             run_id=run_id,
         )

@@ -15,9 +15,9 @@ class PersonalizedResourceGenerateRequest(BaseModel):
 
     # quiz 专用
     wrong_question_ids: Optional[list[str]] = None
-    question_types: Optional[list[str]] = None
-    count: int = 5
-    difficulty: Optional[str] = None
+    question_types: Optional[list[Literal["single_choice", "multi_choice"]]] = None
+    count: int = Field(default=5, ge=1, le=20)
+    difficulty: Optional[Literal["easy", "medium", "hard"]] = None
 
     # resource 专用
     resource_types: Optional[list[str]] = None

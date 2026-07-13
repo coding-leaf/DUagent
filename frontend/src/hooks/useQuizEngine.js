@@ -26,8 +26,6 @@ const answerUpdaters = {
     };
   },
   single_choice: (prev, qId, nextAnswer) => ({ ...prev, [qId]: nextAnswer }),
-  short_answer: (prev, qId, nextAnswer) => ({ ...prev, [qId]: nextAnswer }),
-  coding: (prev, qId, nextAnswer) => ({ ...prev, [qId]: nextAnswer }),
   default: (prev, qId, nextAnswer) => ({ ...prev, [qId]: nextAnswer }),
 };
 

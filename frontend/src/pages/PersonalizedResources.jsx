@@ -17,7 +17,7 @@ const SOURCE_LABEL = {
 function groupQuestionsByKp(items) {
   const map = new Map();
   for (const item of items) {
-    if (!item.question) continue;
+    if (!item.question || !['single_choice', 'multi_choice'].includes(item.question.type)) continue;
     const kp = item.question.knowledge_point || '未分类';
     if (!map.has(kp)) map.set(kp, []);
     map.get(kp).push(item);

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -13,9 +13,11 @@ class QuizGenerateRequest(BaseModel):
     course_id: str
     chapter: Optional[str] = None
     knowledge_point: Optional[str] = None
-    question_types: Optional[list[str]] = None
-    count: int = 5
-    difficulty: Optional[str] = None
+    question_types: list[Literal["single_choice", "multi_choice"]] = Field(
+        default_factory=lambda: ["single_choice", "multi_choice"]
+    )
+    count: int = Field(default=5, ge=1, le=20)
+    difficulty: Optional[Literal["easy", "medium", "hard"]] = None
     personalized: bool = True
 
 

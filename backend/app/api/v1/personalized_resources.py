@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,8 @@ from app.schemas.personalized import PersonalizedResourceGenerateRequest
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_catalog_gate import resolve_generation_catalog
 from app.services import quiz_service
+from app.schemas.internal_ai_chat import ChoiceQuestionDraft
+from app.services.ai_chat_choice_quiz_service import persist_personal_choice_questions
 
 router = APIRouter(prefix="/api/v1/personalized-resources", tags=["personalized-resources"])
 
@@ -258,36 +261,31 @@ async def generate_personalized_resource(
             )
 
         questions = data.get("questions", [])
-        question_ids: list[str] = []
-        for q in questions:
-            new_q = QuizQuestion(
-                course_id=req.course_id,
-                catalog_id=catalog_context.catalog_id,
-                chapter=req.chapter or q.get("chapter", ""),
-                knowledge_point=req.knowledge_point or q.get("knowledge_point", ""),
-                type=q.get("type", "single_choice"),
-                source="personalized",
-                personalized=True,
-                owner_user_id=current_user.id,
-                difficulty=q.get("difficulty", req.difficulty or "medium"),
-                content=q.get("content", ""),
-                options=q.get("options", []),
-                correct_answer=str(q.get("answer", "")),
-                explanation=q.get("explanation", ""),
+        try:
+            drafts = [ChoiceQuestionDraft.model_validate(question) for question in questions]
+        except ValidationError as exc:
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "code": 502,
+                    "message": "Agent 返回了不受支持或不完整的选择题",
+                    "data": {"reason": str(exc.errors()[0].get("type", "validation_error"))},
+                },
             )
-            db.add(new_q)
-            await db.flush()
-            question_ids.append(new_q.id)
-
-        # 写入 user_personalized_resources（每道题一行）
-        for qid in question_ids:
-            upr = UserPersonalizedResource(
-                user_id=current_user.id,
-                course_id=req.course_id,
-                question_id=qid,
-                source_type=req.source_type,
-            )
-            db.add(upr)
+        chapter = req.chapter or (questions[0].get("chapter", "") if questions else "")
+        knowledge_point = req.knowledge_point or (
+            questions[0].get("knowledge_point", "") if questions else ""
+        )
+        question_ids = await persist_personal_choice_questions(
+            db,
+            owner_user_id=current_user.id,
+            course_id=req.course_id,
+            catalog_id=catalog_context.catalog_id,
+            chapter=chapter,
+            knowledge_point=knowledge_point,
+            source_type=req.source_type,
+            questions=drafts,
+        )
 
         await db.flush()
         await db.commit()

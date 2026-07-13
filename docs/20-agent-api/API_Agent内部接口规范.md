@@ -410,7 +410,7 @@ POST /agent/v1/assessment/generate-questions
 | knowledge_base_id | string | 否 | 课程知识库 ID；Backend 可由 course_id 解析后传入 |
 | chapter | string | 否 | 章节 |
 | knowledge_point | string | 否 | 知识点 |
-| question_types | array | 否 | 题型列表：single_choice / multi_choice / code / short_answer |
+| question_types | array | 否 | 普通题型列表：single_choice / multi_choice |
 | count | integer | 否 | 生成题数，默认 5 |
 | difficulty | string | 否 | easy / medium / hard |
 | personalized | boolean | 否 | 是否生成个性化题，默认 true |
@@ -425,7 +425,7 @@ POST /agent/v1/assessment/generate-questions
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | questions | array | 生成题目列表 |
-| questions[].type | string | single_choice / multi_choice / code / short_answer |
+| questions[].type | string | single_choice / multi_choice |
 | questions[].content | string | 题目内容 |
 | questions[].options | array | 选项列表，非选择题为空数组 |
 | questions[].options[].key | string | A/B/C/D |
@@ -435,6 +435,22 @@ POST /agent/v1/assessment/generate-questions
 | questions[].chapter | string | 章节 |
 | questions[].knowledge_point | string | 关联知识点 |
 | questions[].difficulty | string | easy / medium / hard |
+
+---
+
+### 4.3 AI Chat 私有选择题发布（Agent Service v2 → Backend）
+
+```
+POST /internal/ai-chat/choice-quizzes
+Header: X-Internal-Agent-Token: <token>
+```
+
+该接口只接受 `single_choice` 与 `multi_choice`。Backend 校验当前会话归属与课程选课关系后，
+将题目写入当前学生私有题库，并关联 `user_personalized_resources(source_type=ai_chat)`。
+Agent Service 不直接写 SQL。编程题不得使用本接口，必须走私有 `CodeProblem` 与 OJ 验证链路。
+
+成功响应返回 `status=published`、`question_ids` 与 `question_count`；Agent 工作台随后原子创建
+持久化 `QuizCard`。
 
 ---
 

@@ -113,6 +113,7 @@ export function usePracticeResult({ courseId, initialResultData, quizContext, na
         course_id: courseId,
         generate_type: 'quiz',
         source_type: 'quiz_wrong_answer',
+        question_types: ['single_choice', 'multi_choice'],
         count: 5,
       };
       if (wrongQuestionIds.length > 0) payload.wrong_question_ids = wrongQuestionIds;

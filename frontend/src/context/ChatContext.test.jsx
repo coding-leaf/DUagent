@@ -28,19 +28,12 @@ vi.mock('../api/services/course', () => ({
 
 const streamChatMock = vi.hoisted(() => vi.fn());
 const getHistoryMock = vi.hoisted(() => vi.fn());
+const getSessionsMock = vi.hoisted(() => vi.fn());
 
 // Mock chatService
 vi.mock('../api/services/chat', () => ({
   chatService: {
-    getSessions: vi.fn().mockResolvedValue({
-      code: 200,
-      data: {
-        conversations: [
-          { id: 'conv-existing', title: 'Existing chat' },
-          { id: 'conv-saved', title: 'Saved chat' }
-        ]
-      }
-    }),
+    getSessions: (...args) => getSessionsMock(...args),
     getHistory: (...args) => getHistoryMock(...args),
     streamChat: (...args) => streamChatMock(...args)
   }
@@ -49,6 +42,16 @@ vi.mock('../api/services/chat', () => ({
 beforeEach(() => {
   streamChatMock.mockReset();
   getHistoryMock.mockReset();
+  getSessionsMock.mockReset();
+  getSessionsMock.mockResolvedValue({
+    code: 200,
+    data: {
+      conversations: [
+        { id: 'conv-existing', title: 'Existing chat' },
+        { id: 'conv-saved', title: 'Saved chat' }
+      ]
+    }
+  });
   getHistoryMock.mockResolvedValue({
     code: 200,
     data: { messages: [] }
@@ -127,6 +130,30 @@ test('keeps a user-created draft conversation active when history exists', async
 
   expect(screen.getByTestId('active-session').textContent).toBe('');
   expect(screen.getByTestId('message-count').textContent).toBe('0');
+});
+
+test('keeps a newly completed conversation active while the session list is stale', async () => {
+  streamChatMock.mockImplementation((_payload, onMessage) => {
+    onMessage({
+      type: 'workflow_completed',
+      conversation_id: 'conv-new',
+      message_id: 'msg-new',
+      payload: {}
+    });
+    return vi.fn();
+  });
+
+  renderWithProviders(<StreamConsumer />);
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+
+  await act(async () => screen.getByTestId('new-chat').click());
+  await act(async () => screen.getByTestId('send').click());
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-new');
+  });
 });
 
 test('restores the last active conversation for the current course', async () => {

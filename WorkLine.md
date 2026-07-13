@@ -3713,3 +3713,19 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 与 Agent HTTP 路径无变化。
 - Agent SSE `content_safety_reviewed` 在本地审查时新增 `match_count`，`artifact_created` 新增 `PersonalizedResourceCard` 类型。
+
+---
+
+### 2026-07-13 — 修复 AI Chat 新会话串台与历史工具卡错序
+
+**涉及范围：**
+- Frontend：保护刚完成但尚未进入会话列表的新会话，取消过期历史请求的状态写入；按持久化时间线恢复正文与工具卡顺序。
+- Backend：对同时包含正文和工具调用的回复保存精简事件时间线，保留既有 `tool_events` 兼容字段。
+
+**验证结果：**
+- Frontend ChatContext 与历史消息归一化定向测试：20 passed。
+- Backend SSE 适配器定向测试：9 passed。
+
+**接口漂移：**
+- Client API 路径及显式请求/响应字段无变化；消息 `meta` 增加内部 `event_timeline` 兼容字段。
+- Agent API 无变化。

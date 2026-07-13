@@ -73,6 +73,26 @@ describe('chatContent utils', () => {
         outputSummary: '薄弱点已读取'
       }
     ])
+    expect(message.parts.map(part => part.type)).toEqual(['text', 'tool'])
+  })
+
+  it('restores persisted text and tool cards in event order', () => {
+    const message = normalizeMessage({
+      role: 'assistant',
+      content: '前半段后半段',
+      meta: {
+        event_timeline: [
+          { type: 'text_delta', payload: { delta: '前半段' } },
+          { type: 'tool_started', payload: { tool_call_id: 'tool-1', tool_name: 'read_profile' } },
+          { type: 'tool_completed', payload: { tool_call_id: 'tool-1', state: 'success' } },
+          { type: 'text_delta', payload: { delta: '后半段' } }
+        ]
+      }
+    })
+
+    expect(message.parts.map(part => part.type)).toEqual(['text', 'tool', 'text'])
+    expect(message.parts[0].content).toBe('前半段')
+    expect(message.parts[2].content).toBe('后半段')
   })
 
   it('restores persisted RAG sources from message metadata', () => {

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.services.agent_client import AgentServiceError
-from app.services.tutoring_stream_adapter import TutoringStreamAdapter, _client_artifact
+from app.services.tutoring_stream_adapter import StreamState, TutoringStreamAdapter, _client_artifact
 
 
 def test_workbench_payload_keeps_offering_and_catalog_ids_separate():
@@ -22,6 +22,30 @@ def test_workbench_payload_keeps_offering_and_catalog_ids_separate():
 
     assert result["course_id"] == "offering-1"
     assert result["catalog_id"] == "catalog-1"
+
+
+def test_stream_adapter_persists_text_and_tool_event_order():
+    state = StreamState(conversation_id="conv-1", assistant_message_id="msg-1")
+
+    TutoringStreamAdapter._adapt_data(
+        '{"type":"text_delta","payload":{"delta":"before"}}', state
+    )
+    TutoringStreamAdapter._adapt_data(
+        '{"type":"tool_started","payload":{"tool_call_id":"t1","tool_name":"read_profile"}}', state
+    )
+    TutoringStreamAdapter._adapt_data(
+        '{"type":"tool_completed","payload":{"tool_call_id":"t1","state":"success"}}', state
+    )
+    TutoringStreamAdapter._adapt_data(
+        '{"type":"text_delta","payload":{"delta":"after"}}', state
+    )
+
+    assert [event["type"] for event in state.meta["event_timeline"]] == [
+        "text_delta",
+        "tool_started",
+        "tool_completed",
+        "text_delta",
+    ]
 
 
 @pytest.mark.asyncio

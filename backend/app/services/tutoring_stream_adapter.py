@@ -59,6 +59,9 @@ class StreamState:
     diagrams: list = field(default_factory=list)
     knowledge_points: list = field(default_factory=list)
     artifacts: list[dict] = field(default_factory=list)
+    event_timeline: list[dict] = field(default_factory=list)
+    timeline_has_text: bool = False
+    timeline_has_tool: bool = False
     meta: dict = field(default_factory=dict)
     done_sent: bool = False
     persisted: bool = False
@@ -134,6 +137,33 @@ class TutoringStreamAdapter:
         self._record_agent_log = record_agent_log or persist_agent_log
 
     @staticmethod
+    def _append_timeline_event(
+        state: StreamState,
+        event_type: str,
+        payload: dict,
+    ) -> None:
+        if event_type == "text_delta":
+            delta = payload.get("delta", "")
+            if not delta:
+                return
+            state.timeline_has_text = True
+            last = state.event_timeline[-1] if state.event_timeline else None
+            if last and last.get("type") == "text_delta":
+                last["payload"]["delta"] += delta
+            else:
+                state.event_timeline.append({
+                    "type": event_type,
+                    "payload": {"delta": delta},
+                })
+        else:
+            state.event_timeline.append({"type": event_type, "payload": payload})
+            if event_type in TOOL_EVENT_TYPES:
+                state.timeline_has_tool = True
+
+        if state.timeline_has_text and state.timeline_has_tool:
+            state.meta["event_timeline"] = state.event_timeline
+
+    @staticmethod
     def _adapt_data(data_str: str, state: StreamState) -> str | None:
         try:
             parsed = json.loads(data_str)
@@ -153,12 +183,14 @@ class TutoringStreamAdapter:
         if event_type == "text_delta":
             content = payload.get("delta", "")
             state.chunks.append(content)
+            TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
         elif event_type == "workflow_completed":
             state.done_sent = True
         elif event_type == "workflow_failed":
             state.done_sent = True
         elif event_type == "content_safety_reviewed":
             state.meta["content_safety_review"] = payload
+            TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
         elif event_type == "source_refs":
             state.meta["sources"] = payload.get("sources") or []
         elif event_type in TOOL_EVENT_TYPES:
@@ -170,6 +202,11 @@ class TutoringStreamAdapter:
             state.meta.setdefault("tool_events", []).append(
                 {"type": event_type, "payload": tool_payload}
             )
+            TutoringStreamAdapter._append_timeline_event(
+                state, event_type, tool_payload
+            )
+        elif event_type == "plan_updated":
+            TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
         elif event_type == "artifact_created":
             artifact = payload.get("artifact")
             if isinstance(artifact, dict):

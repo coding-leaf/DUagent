@@ -96,17 +96,35 @@ export const normalizeTextList = (value) => {
   return list.map(extractModelText).map(item => item?.trim()).filter(Boolean);
 };
 
-const restoreToolCalls = (message) => {
-  if (Array.isArray(message?.toolCalls) && message.toolCalls.length > 0) {
-    return message.toolCalls;
+const reducePersistedEvents = (events) => events.reduce(
+  reduceAssistantMessageForEvent,
+  { content: '', toolCalls: [], parts: [] }
+);
+
+const restoreMessageEvents = (message, displayContent) => {
+  const timeline = message?.meta?.event_timeline;
+  if (Array.isArray(timeline) && timeline.length > 0) {
+    return reducePersistedEvents(timeline);
   }
+
   const events = message?.meta?.tool_events;
-  if (!Array.isArray(events)) return [];
+  if (!Array.isArray(events) || events.length === 0) {
+    return {
+      toolCalls: Array.isArray(message?.toolCalls) ? message.toolCalls : [],
+      parts: Array.isArray(message?.parts) ? message.parts : []
+    };
+  }
   const restored = events.reduce(
     reduceAssistantMessageForEvent,
     { content: '', toolCalls: [], parts: [] }
   );
-  return restored.toolCalls;
+  return {
+    ...restored,
+    parts: [
+      ...(displayContent ? [{ type: 'text', content: displayContent }] : []),
+      ...restored.parts
+    ]
+  };
 };
 
 export const normalizeMessage = (message, index = 0) => {
@@ -130,6 +148,7 @@ export const normalizeMessage = (message, index = 0) => {
   } else {
     displayContent = extractModelText(message?.content);
   }
+  const restoredEvents = restoreMessageEvents(message, displayContent);
 
   return {
     ...message,
@@ -138,7 +157,8 @@ export const normalizeMessage = (message, index = 0) => {
     diagrams: Array.isArray(diagrams) ? diagrams : (diagrams ? [diagrams] : []),
     knowledge_points: normalizeTextList(knowledge_points),
     suggestions: normalizeTextList(suggestions),
-    toolCalls: restoreToolCalls(message),
+    toolCalls: restoredEvents.toolCalls,
+    parts: restoredEvents.parts,
     sourceRefs: Array.isArray(message?.sourceRefs)
       ? message.sourceRefs
       : (Array.isArray(message?.meta?.sources) ? message.meta.sources : []),

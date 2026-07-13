@@ -83,8 +83,10 @@ export const ChatProvider = ({ children }) => {
   const abortControllerRef = useRef(null);
   const lastMessageIdRef = useRef(null);
   const prevCourseIdRef = useRef(activeCourseId);
+  const pendingSessionIdRef = useRef(null);
 
   const setActiveSession = (sessionId) => {
+    pendingSessionIdRef.current = null;
     setIsDraftConversation(false);
     setActiveSessionState(sessionId);
     if (activeCourseId && sessionId) {
@@ -96,6 +98,7 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     if (prevCourseIdRef.current !== activeCourseId) {
       prevCourseIdRef.current = activeCourseId;
+      pendingSessionIdRef.current = null;
       setActiveSessionState(null);
       setIsDraftConversation(false);
       setMessages([]);
@@ -110,12 +113,21 @@ export const ChatProvider = ({ children }) => {
       const savedSessionId = localStorage.getItem(`active_session_id_${activeCourseId}`);
       const savedSessionExists = savedSessionId && sessions.some(s => s.id === savedSessionId);
       const activeSessionExists = sessions.some(s => s.id === activeSession);
+      const pendingSessionId = pendingSessionIdRef.current;
+      if (pendingSessionId && activeSession === pendingSessionId) {
+        if (activeSessionExists) pendingSessionIdRef.current = null;
+        else return;
+      }
       if (!isDraftConversation && (!activeSession || !activeSessionExists)) {
         const nextSessionId = savedSessionExists ? savedSessionId : sessions[0].id;
         setActiveSessionState(nextSessionId);
         localStorage.setItem(`active_session_id_${activeCourseId}`, nextSessionId);
       }
-    } else if (activeCourseId && sessionsRes) {
+    } else if (
+      activeCourseId
+      && sessionsRes
+      && pendingSessionIdRef.current !== activeSession
+    ) {
       setActiveSessionState(null);
       setIsDraftConversation(false);
       setMessages([]);
@@ -130,10 +142,11 @@ export const ChatProvider = ({ children }) => {
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    let cancelled = false;
     setHiddenArtifactIds([]);
     if (activeSession) {
       chatService.getHistory(activeSession).then(res => {
-        if (res.code === 200 && res.data) {
+        if (!cancelled && res.code === 200 && res.data) {
           const historyMessages = normalizeMessages(res.data.messages);
           setMessages(historyMessages);
           const artifacts = artifactsFromMessages(historyMessages);
@@ -146,6 +159,9 @@ export const ChatProvider = ({ children }) => {
       setWorkspaceArtifacts([]);
       setActiveArtifactId(null);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [activeSession]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -165,6 +181,7 @@ export const ChatProvider = ({ children }) => {
 
   const resetConversation = () => {
     cancelStream();
+    pendingSessionIdRef.current = null;
     setActiveSessionState(null);
     setIsDraftConversation(true);
     if (activeCourseId) {
@@ -236,6 +253,7 @@ export const ChatProvider = ({ children }) => {
       abortControllerRef.current = null;
 
       if (!activeSession && event.conversation_id) {
+        pendingSessionIdRef.current = event.conversation_id;
         setIsDraftConversation(false);
         setActiveSessionState(event.conversation_id);
         if (activeCourseId) {

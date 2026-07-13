@@ -15,6 +15,11 @@ export const normalizeMermaidSource = (content) => {
   return fenced ? fenced[1].trim() : trimmed;
 };
 
+export const mermaidCache = new Map();
+
+export const getCachedSvg = (source) => mermaidCache.get(source);
+export const setCachedSvg = (source, svg) => mermaidCache.set(source, svg);
+
 export const sanitizeMermaidSource = (content) => {
   let source = normalizeMermaidSource(content);
 

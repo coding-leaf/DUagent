@@ -3040,8 +3040,30 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - 无。
 
+---
 
+### 2026-07-13 — 修复 Markdown 标题锚点工具模块缺失
 
+**涉及文件：**
+- `frontend/src/utils/markdownAnchors.js`
+- `frontend/src/utils/__tests__/markdownAnchors.test.js`
+- `frontend/src/utils/mermaid.js`
+- `frontend/src/utils/__tests__/mermaid.test.js`
+- `WorkLine.md`
+
+**核心改动：**
+1. 补回 `MarkdownViewer` 已引用但当前分支缺失的标题锚点工具模块，恢复中文、数字标题的稳定页内锚点生成。
+2. 对流式渲染中可能出现的空标题输入安全降级为空字符串，避免递归取值异常。
+3. 补回 Mermaid SVG 内存缓存读写导出，使 `MarkdownViewer` 的缓存调用与工具模块一致。
+4. 新增工具函数单元测试，覆盖中英文混合标题、未完成流式标题与 Mermaid 缓存读写。
+
+**验证结果：**
+- RED：工具模块缺失时，定向单元测试因无法解析导入而失败。
+- RED：Mermaid 缓存导出缺失时，定向单元测试因 `setCachedSvg is not a function` 失败。
+- GREEN：两组定向单元测试共 3 passed；`npm run lint` 为 0 error（保留 `ChatContext.jsx` 既有 unused eslint-disable warning）；`npm run build` 通过（保留既有大 chunk 提示）。
+
+**接口漂移：**
+- 无。
 
 
 

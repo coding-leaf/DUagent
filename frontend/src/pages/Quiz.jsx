@@ -149,13 +149,6 @@ export default function Quiz() {
         </div>
       </main>
 
-      {/* Contextual FAB for Agent Help (Minimalist) */}
-      <button className="fixed bottom-24 right-8 w-14 h-14 bg-white border border-slate-200 rounded-full shadow-xl flex items-center justify-center text-primary hover:scale-110 transition-transform active:scale-95 group z-50 cursor-pointer">
-        <Icon name="support_agent" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}/>
-        <div className="absolute right-16 bg-on-surface text-white text-[10px] py-1 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-          获取AI解题思路
-        </div>
-      </button>
     </div>
   );
 }

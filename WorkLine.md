@@ -3402,3 +3402,27 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 **接口漂移：**
 - Client API 无变化。
 - Agent API 路径、请求和响应结构无变化，仅增强内部 LLM 输出清洗与保底文案准确性。
+
+---
+
+### 2026-07-13 — 清理答题页无功能占位 UI
+
+**涉及文件：**
+- `frontend/src/pages/Quiz.jsx`
+- `frontend/src/components/quiz/QuizHeader.jsx`
+- `frontend/src/components/quiz/__tests__/QuizPresentational.test.jsx`
+- `WorkLine.md`
+
+**根因与改动：**
+1. 答题页头部遗留无点击逻辑的分析、通知按钮及外部假头像，均来自早期 UI 模板，与当前用户和业务数据无关。
+2. 页面右下角还遗留无事件处理的“获取AI解题思路”悬浮按钮。
+3. 删除全部假功能元素，只保留返回、课程名称、当前知识点和真实答题交互。
+
+**验证结果：**
+- Quiz 展示组件定向测试：4 passed。
+- Frontend 全量单元测试：37 files、138 passed。
+- Frontend lint 与生产构建通过；保留既有大 chunk 提示。
+- `git diff --check` 通过。
+
+**接口漂移：**
+- Client API 与 Agent API 均无变化。

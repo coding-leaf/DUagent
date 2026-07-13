@@ -21,6 +21,9 @@ describe('QuizHeader', () => {
     );
     expect(screen.getByText('Test Course')).toBeInTheDocument();
     expect(screen.getByText('Test Knowledge')).toBeInTheDocument();
+    expect(screen.queryByTestId('icon-analytics')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('icon-notifications')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '用户头像' })).not.toBeInTheDocument();
     
     // Simulate exit click
     fireEvent.click(screen.getByTitle(/返回上一页/i));

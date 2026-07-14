@@ -59,7 +59,7 @@ preflight() {
   require_file "$ROOT_DIR/backend/requirements.txt"
   require_file "$ROOT_DIR/agent_service_v2/uv.lock"
   require_file "$ROOT_DIR/frontend/package-lock.json"
-  require_file "$JUDGE_DIR/render_judge0_config.sh"
+  require_file "$ROOT_DIR/deploy/render_judge0_config.sh"
   log "Preflight passed"
 }
 wait_http() {
@@ -157,7 +157,7 @@ ensure_judge0() {
 
   local names=(judge0-v1130-redis-1 judge0-v1130-db-1 judge0-v1130-server-1 judge0-v1130-workers-1)
   local all_exist=true
-  "$JUDGE_DIR/render_judge0_config.sh" "$INFRA_ENV" "$JUDGE_CONFIG"
+  "$ROOT_DIR/deploy/render_judge0_config.sh" "$INFRA_ENV" "$JUDGE_CONFIG"
   for name in "${names[@]}"; do
     container_exists "$name" || all_exist=false
   done

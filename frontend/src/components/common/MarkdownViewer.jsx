@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import mermaid, { sanitizeMermaidSource, getCachedSvg, setCachedSvg } from '../../utils/mermaid';
@@ -307,6 +308,27 @@ export default function MarkdownViewer({ content, className = '', compact = fals
           {children}
         </code>
       );
+    },
+    details({ children, ...rest }) {
+      return (
+        <details 
+          className="group my-4 border border-slate-200/60 rounded-xl bg-slate-50/30 hover:bg-slate-50/80 transition-all duration-200 overflow-hidden shadow-sm [&_summary]:open:border-b [&_summary]:open:border-slate-200/50 [&>*:not(summary)]:px-4 [&>*:not(summary)]:pb-3 [&>*:not(summary)]:pt-1"
+          {...rest}
+        >
+          {children}
+        </details>
+      );
+    },
+    summary({ children, ...rest }) {
+      return (
+        <summary 
+          className="flex items-center gap-2 px-4 py-3 font-semibold text-slate-700 cursor-pointer list-none select-none hover:text-cyan-700 transition-colors focus-visible:outline-none [&::-webkit-details-marker]:hidden"
+          {...rest}
+        >
+          <span className="text-[10px] text-slate-400 group-open:rotate-90 transition-transform duration-200 shrink-0 select-none">▶</span>
+          <div className="flex-1 flex items-center gap-1.5">{children}</div>
+        </summary>
+      );
     }
   }), [activeSession, apiBaseUrl, compact, loading]);
 
@@ -314,6 +336,7 @@ export default function MarkdownViewer({ content, className = '', compact = fals
     <div className={`markdown-body break-words leading-[1.7] ${compact ? 'chat-compact-markdown' : ''} ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={components}
       >
         {content}

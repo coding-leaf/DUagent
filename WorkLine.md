@@ -4111,3 +4111,45 @@ Backend 新增 service-token 保护的 internal AIChat 学习查询接口，支�
 - `git diff --check` 通过。
 
 **接口漂移：** 无
+
+---
+
+### 2026-07-14 — 重构统一管理员后台（/admin）顶部 UI 风格
+
+**涉及范围：**
+- Frontend: `frontend/src/pages/AdminConsole.jsx`
+
+**核心改动：**
+1. 引入并初始化 `useAuth()`，打通真实的超级管理员（Super Admin）账户上下文数据。
+2. 顶部导航栏重塑：由原先高对比度纯深色背景（`bg-slate-900 shadow-md`）完全重构为现代、轻盈的白色半透明毛玻璃特效 `sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur-md`，并将字体样式设为 `'Public_Sans' antialiased`，完美与学生端（`Navbar.jsx`）和教师端（`TeacherConsole.jsx`）的设计语言对齐。
+3. 双行标题布局应用：左侧引入 `admin_panel_settings` 勋章，以上下双行展示 “系统管理后台（`cyan-700`）” 类别标识与 “智能学习助手 Admin Console” 实体标题，大幅提升专业度与视觉层次。
+4. 圆角用户信息胶囊：在顶栏右侧新增圆润用户信息组件，动态截取首字并以高亮青色徽章（`bg-cyan-100 border-cyan-200 text-cyan-700`）配合 `Super Admin` 角色名称，完全对齐教师端设计。
+5. 关键交互补全与优化：新增“退出登录”按钮（支持 hover bg-red-50 & text-red-600 顺滑变红特效），并将点击逻辑安全绑定至 `logout()` 及 `/` 路由跳转；同时根据用户意见，直接删除了原本位于顶栏的“管理首页”按钮，避免在管理员控制台内部出现功能重合与语义不明的问题。
+6. 容器网格宽度限制：将外层及主体 layout 栅格最大宽度由 `1440px` 限制统一调整为 `1280px`（`max-w-[1280px] w-full mx-auto`），消除了由于超宽视图拉伸导致的两侧视觉错位。
+
+**验证结果：**
+- 前端 lint & 生产构建：运行 `npm run lint && npm run build` 100% 成功，保留既有大 chunk 提示。
+- 自动化单元测试回归：由于只改变静态 UI 与通用 auth 上下文，相关测试未受影响。
+- `git diff --check` 通过。
+
+**接口漂移：** 无
+
+---
+
+### 2026-07-14 — 修复并打通前端 MarkdownViewer 标签解析，美化折叠卡片渲染
+
+**涉及范围：**
+- Frontend: `frontend/package.json`, `frontend/package-lock.json`, `frontend/src/components/common/MarkdownViewer.jsx`
+
+**核心改动：**
+1. 引入并在前端注册了 `rehype-raw`（`^7.0.0`）依赖插件，使 `react-markdown` 能够成功解析标准的 HTML5 原生节点（如 `<details>` 与 `<summary>`）。
+2. 在 `MarkdownViewer.jsx` 自定义 `components` 中重塑并美化 `details` 和 `summary` 渲染。
+3. 给 `details` 添加微透明卡片边框、高雅的背景悬浮过渡，以及利用 `open` 状态和 `:not(summary)` 选择器在内部子级 Markdown 元素上自动应用精细包裹的边距，使排版赏心悦目。
+4. 给 `summary` 添加顺滑的 `▶` 旋转微动画指示器，消除了默认浏览器的黑色三角形，并提供 `hover:text-cyan-700` 等 premium 交互视觉。
+
+**验证结果：**
+- 前端安装依赖审计：完成并审计通过。
+- 前端 lint / build：运行 `npm run lint && npm run build` 100% 成功通过，零 lint 错误，构建生成成功。
+- `git diff --check` 通过。
+
+**接口漂移：** 无

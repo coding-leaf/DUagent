@@ -74,8 +74,10 @@ preflight() {
   require_file "$INFRA_COMPOSE"
   require_file "$INFRA_ENV"
   require_file "$ROOT_DIR/backend/requirements.txt"
+  require_file "$ROOT_DIR/backend/schema.sql"
   require_file "$ROOT_DIR/agent_service_v2/uv.lock"
   require_file "$ROOT_DIR/frontend/package-lock.json"
+  require_file "$ROOT_DIR/deploy/ensure_default_admin.sh"
   require_file "$ROOT_DIR/deploy/render_judge0_config.sh"
   log "Preflight passed"
 }
@@ -115,49 +117,20 @@ ensure_service() {
   log "Creating missing container $container"
   infra_compose up -d "$service"
 }
-initialize_fresh_mysql() {
-  local password database
-  require_file "$INFRA_ENV"
-  password="$(env_value "$INFRA_ENV" DB_PASSWORD)"
-  database="$(env_value "$INFRA_ENV" DB_NAME)"
-  [[ -n "$password" && "$password" != replace-* ]] || fail "Set DB_PASSWORD in .env"
-  database="${database:-duagent}"
-  for _ in $(seq 1 60); do
-    if docker exec -e MYSQL_PWD="$password" eduagent-mysql \
-      mysqladmin ping -u root --silent >/dev/null 2>&1; then
-      break
-    fi
-    sleep 2
-  done
-  docker exec -e MYSQL_PWD="$password" eduagent-mysql \
-    mysqladmin ping -u root --silent >/dev/null 2>&1 || fail "Fresh MySQL is not ready"
-  log "Initializing fresh MySQL schema"
-  docker exec -e MYSQL_PWD="$password" -i eduagent-mysql \
-    mysql -u root "$database" <"$ROOT_DIR/backend/schema.sql"
-  log "Default admin is admin@admin.com / Admin123456; change it immediately"
-}
 ensure_core_infrastructure() {
-  local mysql_container_missing=false mysql_volume_missing=false mysql_port qdrant_port
-  container_exists eduagent-mysql || mysql_container_missing=true
-  docker volume inspect eduagent_mysql_data >/dev/null 2>&1 || mysql_volume_missing=true
-  if [[ "$mysql_container_missing" == true ]]; then
-    require_file "$INFRA_ENV"
-    [[ -n "$(env_value "$INFRA_ENV" DB_PASSWORD)" ]] || fail "DB_PASSWORD is required in .env"
-  fi
+  local mysql_port qdrant_port
   ensure_service eduagent-mysql mysql
   ensure_service eduagent-qdrant qdrant
   ensure_service eduagent-agentscope-redis redis
   mysql_port="$(env_value "$INFRA_ENV" DB_PORT 2>/dev/null || true)"
   qdrant_port="$(env_value "$INFRA_ENV" QDRANT_HTTP_PORT 2>/dev/null || true)"
   wait_tcp "MySQL" "${mysql_port:-3306}"
+  "$ROOT_DIR/deploy/ensure_default_admin.sh" "$INFRA_ENV" "$ROOT_DIR/backend/schema.sql"
   wait_http "Qdrant" "http://127.0.0.1:${qdrant_port:-6333}/collections"
   docker exec eduagent-agentscope-redis redis-cli ping | grep -qx PONG || fail "Redis PING failed"
   if ! docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' eduagent-qdrant \
     | grep -qx '/qdrant/storage'; then
     log "WARNING: existing eduagent-qdrant has no persistent /qdrant/storage mount"
-  fi
-  if [[ "$mysql_container_missing" == true && "$mysql_volume_missing" == true ]]; then
-    initialize_fresh_mysql
   fi
 }
 ensure_judge0() {

@@ -93,13 +93,14 @@ git pull --ff-only origin release/prod
 
 ## 4. 配置唯一的 `.env`
 
-生产部署只维护根目录一份 `.env`：
+生产部署只维护根目录一份 `.env`。首次执行预检时，脚本会自动复制中文模板并将权限设置为 `600`：
 
 ```bash
-cp deploy/env.production.example .env
-chmod 600 .env
+./deploy_prod.sh check
 nano .env
 ```
+
+首次预检会因为 `.env` 仍有占位值而停止，这是预期行为。脚本不会覆盖已经存在的 `.env`；填写完成后，在下一节重新执行预检即可。
 
 模板已用中文标记填写要求。至少需要确认以下配置：
 
@@ -123,7 +124,7 @@ openssl rand -hex 32
 grep -En '^[A-Z][A-Z0-9_]*=(replace-with-|.*your-)' .env
 ```
 
-没有输出才继续。`.env` 已被 Git 忽略，不要提交、截图或发送其中的真实密码和 API Key。
+没有输出才继续。部署脚本也会执行同样的占位值检查，避免使用模板密码启动服务。`.env` 已被 Git 忽略，不要提交、截图或发送其中的真实密码和 API Key。
 
 ## 5. 检查并部署
 

@@ -5,6 +5,7 @@ RUN_DIR="$ROOT_DIR/.run/prod"
 LOG_DIR="$ROOT_DIR/.run_logs/prod"
 INFRA_COMPOSE="$ROOT_DIR/docker-compose.prod.yml"
 INFRA_ENV="$ROOT_DIR/.env"
+ENV_TEMPLATE="$ROOT_DIR/deploy/env.production.example"
 JUDGE_DIR="$ROOT_DIR/deploy/judge0"
 JUDGE_CONFIG="$RUN_DIR/judge0.conf"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
@@ -42,6 +43,20 @@ env_value() {
   local file="$1" key="$2"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$file"
 }
+prepare_env() {
+  [[ -f "$INFRA_ENV" ]] && return
+  require_file "$ENV_TEMPLATE"
+  install -m 600 "$ENV_TEMPLATE" "$INFRA_ENV"
+  log "已自动创建 .env（权限 600）"
+}
+validate_env_placeholders() {
+  local placeholders
+  placeholders="$(grep -En '^[A-Z][A-Z0-9_]*=(replace-with-|.*your-)' "$INFRA_ENV" || true)"
+  if [[ -n "$placeholders" ]]; then
+    printf '%s\n' "$placeholders" >&2
+    fail ".env 仍包含占位值；请编辑 .env 后重试"
+  fi
+}
 infra_compose() {
   local args=(docker compose)
   [[ -f "$INFRA_ENV" ]] && args+=(--env-file "$INFRA_ENV")
@@ -49,6 +64,8 @@ infra_compose() {
   "${args[@]}"
 }
 preflight() {
+  prepare_env
+  validate_env_placeholders
   for cmd in docker curl npm python3 uv; do
     require_cmd "$cmd"
   done
@@ -119,17 +136,14 @@ initialize_fresh_mysql() {
     mysql -u root "$database" <"$ROOT_DIR/backend/schema.sql"
   log "Default admin is admin@admin.com / Admin123456; change it immediately"
 }
-
 ensure_core_infrastructure() {
   local mysql_container_missing=false mysql_volume_missing=false mysql_port qdrant_port
   container_exists eduagent-mysql || mysql_container_missing=true
   docker volume inspect eduagent_mysql_data >/dev/null 2>&1 || mysql_volume_missing=true
-
   if [[ "$mysql_container_missing" == true ]]; then
     require_file "$INFRA_ENV"
     [[ -n "$(env_value "$INFRA_ENV" DB_PASSWORD)" ]] || fail "DB_PASSWORD is required in .env"
   fi
-
   ensure_service eduagent-mysql mysql
   ensure_service eduagent-qdrant qdrant
   ensure_service eduagent-agentscope-redis redis
@@ -138,30 +152,25 @@ ensure_core_infrastructure() {
   wait_tcp "MySQL" "${mysql_port:-3306}"
   wait_http "Qdrant" "http://127.0.0.1:${qdrant_port:-6333}/collections"
   docker exec eduagent-agentscope-redis redis-cli ping | grep -qx PONG || fail "Redis PING failed"
-
   if ! docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' eduagent-qdrant \
     | grep -qx '/qdrant/storage'; then
     log "WARNING: existing eduagent-qdrant has no persistent /qdrant/storage mount"
   fi
-
   if [[ "$mysql_container_missing" == true && "$mysql_volume_missing" == true ]]; then
     initialize_fresh_mysql
   fi
 }
-
 ensure_judge0() {
   if curl -fsS "http://127.0.0.1:2358/languages" >/dev/null 2>&1; then
     log "Reusing healthy Judge0"
     return 0
   fi
-
   local names=(judge0-v1130-redis-1 judge0-v1130-db-1 judge0-v1130-server-1 judge0-v1130-workers-1)
   local all_exist=true
   "$ROOT_DIR/deploy/render_judge0_config.sh" "$INFRA_ENV" "$JUDGE_CONFIG"
   for name in "${names[@]}"; do
     container_exists "$name" || all_exist=false
   done
-
   if [[ "$all_exist" == true ]]; then
     docker start "${names[@]}" >/dev/null
   else
@@ -169,7 +178,6 @@ ensure_judge0() {
   fi
   wait_http "Judge0" "http://127.0.0.1:2358/languages" 90
 }
-
 install_and_build() {
   if [[ ! -x "$ROOT_DIR/.venv/bin/python" ]]; then
     python3 -m venv "$ROOT_DIR/.venv"
@@ -183,7 +191,6 @@ install_and_build() {
   )
   [[ -f "$ROOT_DIR/frontend/dist/index.html" ]] || fail "Frontend build did not create dist/index.html"
 }
-
 process_running() {
   local pid_file="$1" marker="$2" pid
   [[ -f "$pid_file" ]] || return 1
@@ -191,7 +198,6 @@ process_running() {
   kill -0 "$pid" >/dev/null 2>&1 || return 1
   tr '\0' ' ' <"/proc/$pid/cmdline" | grep -Fq "$marker"
 }
-
 start_process() {
   local name="$1" pid_file="$2" log_file="$3" workdir="$4" marker="$5"
   shift 5
@@ -206,7 +212,6 @@ start_process() {
   process_running "$pid_file" "$marker" || fail "$name exited during startup; see $log_file"
   log "$name started with PID $(<"$pid_file")"
 }
-
 stop_process() {
   local name="$1" pid_file="$2" marker="$3" pid
   if ! process_running "$pid_file" "$marker"; then
@@ -224,7 +229,6 @@ stop_process() {
   rm -f "$pid_file"
   log "$name stopped"
 }
-
 start_apps() {
   local qdrant_port redis_port
   mkdir -p "$RUN_DIR" "$LOG_DIR"
@@ -233,7 +237,6 @@ start_apps() {
   [[ -f "$ROOT_DIR/frontend/dist/index.html" ]] || fail "Run deploy first to build Frontend"
   qdrant_port="$(env_value "$INFRA_ENV" QDRANT_HTTP_PORT 2>/dev/null || true)"
   redis_port="$(env_value "$INFRA_ENV" REDIS_PORT 2>/dev/null || true)"
-
   start_process "Agent Service" "$RUN_DIR/agent.pid" "$LOG_DIR/agent.log" \
     "$ROOT_DIR/agent_service_v2" "agent_service_v2.main:app" \
     env BACKEND_INTERNAL_AGENT_TOKEN="$(env_value "$INFRA_ENV" INTERNAL_AGENT_TOKEN)" \
@@ -243,7 +246,6 @@ start_apps() {
     "$ROOT_DIR/agent_service_v2/.venv/bin/uvicorn" agent_service_v2.main:app \
     --env-file "$INFRA_ENV" --host 127.0.0.1 --port "$AGENT_PORT"
   wait_http "Agent Service" "http://127.0.0.1:$AGENT_PORT/openapi.json" 90
-
   start_process "Backend" "$RUN_DIR/backend.pid" "$LOG_DIR/backend.log" \
     "$ROOT_DIR/backend" "app.main:app" \
     env QDRANT_URL="http://127.0.0.1:${qdrant_port:-6333}" \
@@ -253,12 +255,10 @@ start_apps() {
   wait_http "Backend" "http://127.0.0.1:$BACKEND_PORT/health" 60
   wait_http "Frontend" "http://127.0.0.1:$BACKEND_PORT/" 30
 }
-
 stop_apps() {
   stop_process "Backend" "$RUN_DIR/backend.pid" "app.main:app"
   stop_process "Agent Service" "$RUN_DIR/agent.pid" "agent_service_v2.main:app"
 }
-
 show_status() {
   for item in "Backend:$RUN_DIR/backend.pid:app.main:app" "Agent:$RUN_DIR/agent.pid:agent_service_v2.main:app"; do
     IFS=: read -r name pid_file marker <<<"$item"
@@ -267,7 +267,6 @@ show_status() {
   docker ps -a --filter 'name=eduagent-' --filter 'name=judge0-v1130-' \
     --format 'container: {{.Names}} | {{.Status}}'
 }
-
 command="${1:---help}"
 case "$command" in
   --help|-h) usage ;;

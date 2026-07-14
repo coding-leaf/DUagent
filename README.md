@@ -37,6 +37,35 @@ curl --version
 - Python 需要支持创建 `venv`。
 - Node.js/npm 用于构建前端，`uv` 用于安装 Agent Service。
 
+### 2.1 自动检查与安装（可选）
+
+初始化脚本仅支持 Ubuntu 24.04+ 的 amd64/arm64。先执行只读检查：
+
+```bash
+./bootstrap_ubuntu.sh check
+```
+
+没有干净环境时，可以查看计划但不修改系统：
+
+```bash
+./bootstrap_ubuntu.sh dry-run
+```
+
+只有确认需要安装缺失工具时才执行：
+
+```bash
+sudo ./bootstrap_ubuntu.sh install
+```
+
+安装模式会跳过满足要求的现有工具，不卸载、不降级，也不操作项目容器和数据卷。检测到与 Docker CE 冲突的软件包时会停止并要求人工处理。若脚本把当前用户加入 `docker` 组，需要退出服务器会话并重新登录，再执行：
+
+```bash
+./bootstrap_ubuntu.sh check
+./deploy_prod.sh check
+```
+
+安装源采用 [Docker 官方 Ubuntu 仓库](https://docs.docker.com/engine/install/ubuntu/)、[NodeSource Node.js 22 仓库](https://github.com/nodesource/distributions) 和 [Astral uv 官方安装器](https://docs.astral.sh/uv/getting-started/installation/)。
+
 ## 3. 拉取生产分支
 
 首次部署：

@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="$ROOT_DIR/.run/prod"
 LOG_DIR="$ROOT_DIR/.run_logs/prod"
 INFRA_COMPOSE="$ROOT_DIR/docker-compose.prod.yml"
 INFRA_ENV="$ROOT_DIR/.env"
 JUDGE_DIR="$ROOT_DIR/deploy/judge0"
+JUDGE_CONFIG="$RUN_DIR/judge0.conf"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 AGENT_PORT="${AGENT_PORT:-8002}"
-
 usage() {
   cat <<'EOF'
 Usage: ./deploy_prod.sh <command> [service]
@@ -27,21 +26,18 @@ EOF
 }
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
-
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
 require_file() {
   [[ -f "$1" ]] || fail "Missing required file: ${1#$ROOT_DIR/}"
 }
-
 container_exists() {
   docker container inspect "$1" >/dev/null 2>&1
 }
 container_running() {
   [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == "true" ]]
 }
-
 env_value() {
   local file="$1" key="$2"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$file"
@@ -52,7 +48,6 @@ infra_compose() {
   args+=(-f "$INFRA_COMPOSE" "$@")
   "${args[@]}"
 }
-
 preflight() {
   for cmd in docker curl npm python3 uv; do
     require_cmd "$cmd"
@@ -60,14 +55,13 @@ preflight() {
   docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required"
   docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable"
   require_file "$INFRA_COMPOSE"
-  require_file "$ROOT_DIR/backend/.env"
+  require_file "$INFRA_ENV"
   require_file "$ROOT_DIR/backend/requirements.txt"
-  require_file "$ROOT_DIR/agent_service_v2/.env"
   require_file "$ROOT_DIR/agent_service_v2/uv.lock"
   require_file "$ROOT_DIR/frontend/package-lock.json"
+  require_file "$JUDGE_DIR/render_judge0_config.sh"
   log "Preflight passed"
 }
-
 wait_http() {
   local name="$1" url="$2" attempts="${3:-60}"
   for _ in $(seq 1 "$attempts"); do
@@ -79,7 +73,6 @@ wait_http() {
   done
   fail "$name health check timed out: $url"
 }
-
 wait_tcp() {
   local name="$1" port="$2" attempts="${3:-60}"
   for _ in $(seq 1 "$attempts"); do
@@ -91,7 +84,6 @@ wait_tcp() {
   done
   fail "$name did not open port $port"
 }
-
 ensure_service() {
   local container="$1" service="$2"
   if container_exists "$container"; then
@@ -106,13 +98,12 @@ ensure_service() {
   log "Creating missing container $container"
   infra_compose up -d "$service"
 }
-
 initialize_fresh_mysql() {
   local password database
   require_file "$INFRA_ENV"
-  password="$(env_value "$INFRA_ENV" MYSQL_ROOT_PASSWORD)"
-  database="$(env_value "$INFRA_ENV" MYSQL_DATABASE)"
-  [[ -n "$password" && "$password" != replace-* ]] || fail "Set MYSQL_ROOT_PASSWORD in .env"
+  password="$(env_value "$INFRA_ENV" DB_PASSWORD)"
+  database="$(env_value "$INFRA_ENV" DB_NAME)"
+  [[ -n "$password" && "$password" != replace-* ]] || fail "Set DB_PASSWORD in .env"
   database="${database:-duagent}"
   for _ in $(seq 1 60); do
     if docker exec -e MYSQL_PWD="$password" eduagent-mysql \
@@ -130,21 +121,22 @@ initialize_fresh_mysql() {
 }
 
 ensure_core_infrastructure() {
-  local mysql_container_missing=false mysql_volume_missing=false mysql_port
+  local mysql_container_missing=false mysql_volume_missing=false mysql_port qdrant_port
   container_exists eduagent-mysql || mysql_container_missing=true
   docker volume inspect eduagent_mysql_data >/dev/null 2>&1 || mysql_volume_missing=true
 
   if [[ "$mysql_container_missing" == true ]]; then
     require_file "$INFRA_ENV"
-    [[ -n "$(env_value "$INFRA_ENV" MYSQL_ROOT_PASSWORD)" ]] || fail "MYSQL_ROOT_PASSWORD is required in .env"
+    [[ -n "$(env_value "$INFRA_ENV" DB_PASSWORD)" ]] || fail "DB_PASSWORD is required in .env"
   fi
 
   ensure_service eduagent-mysql mysql
   ensure_service eduagent-qdrant qdrant
   ensure_service eduagent-agentscope-redis redis
-  mysql_port="$(env_value "$INFRA_ENV" MYSQL_PORT 2>/dev/null || true)"
+  mysql_port="$(env_value "$INFRA_ENV" DB_PORT 2>/dev/null || true)"
+  qdrant_port="$(env_value "$INFRA_ENV" QDRANT_HTTP_PORT 2>/dev/null || true)"
   wait_tcp "MySQL" "${mysql_port:-3306}"
-  wait_http "Qdrant" "http://127.0.0.1:${QDRANT_HTTP_PORT:-6333}/collections"
+  wait_http "Qdrant" "http://127.0.0.1:${qdrant_port:-6333}/collections"
   docker exec eduagent-agentscope-redis redis-cli ping | grep -qx PONG || fail "Redis PING failed"
 
   if ! docker inspect -f '{{range .Mounts}}{{println .Destination}}{{end}}' eduagent-qdrant \
@@ -165,6 +157,7 @@ ensure_judge0() {
 
   local names=(judge0-v1130-redis-1 judge0-v1130-db-1 judge0-v1130-server-1 judge0-v1130-workers-1)
   local all_exist=true
+  "$JUDGE_DIR/render_judge0_config.sh" "$INFRA_ENV" "$JUDGE_CONFIG"
   for name in "${names[@]}"; do
     container_exists "$name" || all_exist=false
   done
@@ -172,7 +165,6 @@ ensure_judge0() {
   if [[ "$all_exist" == true ]]; then
     docker start "${names[@]}" >/dev/null
   else
-    require_file "$JUDGE_DIR/judge0.conf"
     docker compose -f "$JUDGE_DIR/docker-compose.yml" up -d
   fi
   wait_http "Judge0" "http://127.0.0.1:2358/languages" 90
@@ -234,21 +226,29 @@ stop_process() {
 }
 
 start_apps() {
+  local qdrant_port redis_port
   mkdir -p "$RUN_DIR" "$LOG_DIR"
   [[ -x "$ROOT_DIR/.venv/bin/python" ]] || fail "Run deploy first to install Backend dependencies"
   [[ -x "$ROOT_DIR/agent_service_v2/.venv/bin/uvicorn" ]] || fail "Run deploy first to install Agent dependencies"
   [[ -f "$ROOT_DIR/frontend/dist/index.html" ]] || fail "Run deploy first to build Frontend"
+  qdrant_port="$(env_value "$INFRA_ENV" QDRANT_HTTP_PORT 2>/dev/null || true)"
+  redis_port="$(env_value "$INFRA_ENV" REDIS_PORT 2>/dev/null || true)"
 
   start_process "Agent Service" "$RUN_DIR/agent.pid" "$LOG_DIR/agent.log" \
     "$ROOT_DIR/agent_service_v2" "agent_service_v2.main:app" \
-    env WEB_SEARCH_ENABLED="${WEB_SEARCH_ENABLED:-true}" \
+    env BACKEND_INTERNAL_AGENT_TOKEN="$(env_value "$INFRA_ENV" INTERNAL_AGENT_TOKEN)" \
+    QDRANT_URL="http://127.0.0.1:${qdrant_port:-6333}" \
+    AGENTSCOPE_REDIS_PORT="${redis_port:-6379}" \
+    COURSE_CATALOG_STORAGE_ROOT="$ROOT_DIR/backend/storage/course_catalogs" \
     "$ROOT_DIR/agent_service_v2/.venv/bin/uvicorn" agent_service_v2.main:app \
-    --host 127.0.0.1 --port "$AGENT_PORT"
+    --env-file "$INFRA_ENV" --host 127.0.0.1 --port "$AGENT_PORT"
   wait_http "Agent Service" "http://127.0.0.1:$AGENT_PORT/openapi.json" 90
 
   start_process "Backend" "$RUN_DIR/backend.pid" "$LOG_DIR/backend.log" \
     "$ROOT_DIR/backend" "app.main:app" \
-    "$ROOT_DIR/.venv/bin/python" -m uvicorn app.main:app \
+    env QDRANT_URL="http://127.0.0.1:${qdrant_port:-6333}" \
+    COURSE_CATALOG_STORAGE_ROOT="$ROOT_DIR/backend/storage/course_catalogs" \
+    "$ROOT_DIR/.venv/bin/python" -m uvicorn app.main:app --env-file "$INFRA_ENV" \
     --host 0.0.0.0 --port "$BACKEND_PORT"
   wait_http "Backend" "http://127.0.0.1:$BACKEND_PORT/health" 60
   wait_http "Frontend" "http://127.0.0.1:$BACKEND_PORT/" 30

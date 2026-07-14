@@ -5,36 +5,64 @@ import CatalogManagementPanel from '../components/admin/CatalogManagementPanel';
 import SystemLogsPanel from '../components/admin/SystemLogsPanel';
 import RegistrationCodesPanel from '../components/admin/RegistrationCodesPanel';
 import Icon from '../components/Icon';
+import { useAuth } from '../context/AuthContext';
 
 export default function AdminConsole() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-body-md">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-body-md">
       {/* Top NavBar */}
-      <nav className="fixed top-0 w-full z-40 bg-slate-900 text-white shadow-md">
-        <div className="flex items-center justify-between px-6 h-16 max-w-[1440px] mx-auto">
-          <div className="flex items-center gap-3">
-            <Icon name="admin_panel_settings" className="material-symbols-outlined text-cyan-400"/>
-            <div className="text-xl font-bold tracking-tight">智能学习助手 <span className="font-light text-cyan-400">Admin</span></div>
-          </div>
-          <div className="flex items-center space-x-6">
-            <button onClick={() => navigate('/admin')} className="text-sm text-slate-300 hover:text-white transition-colors cursor-pointer">
-              管理首页
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold border border-cyan-500/30">
-                A
-              </div>
-              <span className="text-sm font-medium">Super Admin</span>
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur-md font-['Public_Sans'] antialiased">
+        <div className="mx-auto flex min-h-20 max-w-[1280px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-700">
+              <Icon name="admin_panel_settings" className="material-symbols-outlined text-base" />
+              系统管理后台
+            </div>
+            <div className="flex min-w-0 items-baseline gap-3">
+              <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                智能学习助手
+              </h1>
+              <span className="hidden truncate text-sm text-slate-500 lg:inline">
+                Admin Console
+              </span>
             </div>
           </div>
+
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {/* User Pill */}
+            <div className="hidden items-center gap-2 rounded-full bg-slate-50 py-1.5 pl-1.5 pr-3 md:flex border border-slate-100">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-200 bg-cyan-100 text-sm font-bold text-cyan-700">
+                {(user?.real_name || user?.username || 'A').charAt(0).toUpperCase()}
+              </div>
+              <div className="leading-tight">
+                <p className="text-xs font-bold text-slate-800">{user?.real_name || user?.username || 'Super Admin'}</p>
+                <p className="text-[10px] text-slate-500">超级管理员</p>
+              </div>
+            </div>
+
+            {/* Logout button */}
+            <button
+              aria-label="退出登录"
+              title="退出登录"
+              className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              onClick={() => {
+                logout?.();
+                navigate('/');
+              }}
+            >
+              <Icon name="logout" className="material-symbols-outlined text-sm"/>
+              <span className="hidden lg:inline">退出登录</span>
+            </button>
+          </div>
         </div>
-      </nav>
+      </header>
 
       {/* Main Layout */}
-      <div className="pt-16 max-w-[1440px] mx-auto flex min-h-screen">
+      <div className="max-w-[1280px] w-full mx-auto flex flex-1">
         {/* Sidebar */}
         <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-2">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 px-3">系统管理</p>

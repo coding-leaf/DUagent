@@ -1,4 +1,5 @@
 import Icon from '../Icon';
+import { formatDisplayId } from '../../utils/format';
 
 export default function QuestionReviewList({ perQuestionResults }) {
   return (
@@ -10,7 +11,7 @@ export default function QuestionReviewList({ perQuestionResults }) {
             {idx + 1}
           </div>
           <div className="flex-1 min-w-0">
-            <h5 className="font-body-md font-medium text-on-surface truncate">题号：{q.question_id} 的解析回顾</h5>
+            <h5 className="font-body-md font-medium text-on-surface truncate">题号：{formatDisplayId(q.question_id, 'question')} 的解析回顾</h5>
             <div className="flex gap-sm mt-1">
               <span className="font-label-sm text-[11px] text-secondary flex items-center gap-1">
                 <Icon name={q.is_correct ? 'bolt' : 'timer'} className="material-symbols-outlined text-[14px]"/> 

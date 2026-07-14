@@ -305,7 +305,7 @@ def test_factory_prompt_defines_complex_work_and_real_code_problem_status(tmp_pa
     assert "规则优先级" in prompt
     assert "选择最直接的工具" in prompt
     assert "publish_personal_choice_quiz" in prompt
-    assert "先完成用户明确要求的教材、学情或画像读取" in prompt
+    assert "发布前，只完成用户明确要求的教材、学情或画像读取" in prompt
     assert "不会自行在未来返回并通知" in prompt
     assert "不要使用 write_artifact_file 创建 JSON" in prompt
     assert "public_inputs 与 hidden_inputs" not in prompt
@@ -337,6 +337,31 @@ def test_factory_prompt_requires_fact_tools_and_maps_dynamic_practice_groups(tmp
     assert "personal_code_problem=true" in prompt
     assert "未显式设为 true 的工具组会被关闭" in prompt
     assert "基础工具始终可用" in prompt
+
+
+def test_factory_prompt_always_includes_complete_interactive_practice_tutorial(
+    tmp_path: Path,
+):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1", course_id="c1", conversation_id="conv1"
+    )
+    prompt = WorkbenchAgentFactory(model_provider=lambda: FakeModel()).create_agent(
+        user_id="u1",
+        course_id="c1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )._system_prompt
+
+    assert "供其直接作答的练习" in prompt
+    assert "只有用户明确要求仅查看题面" in prompt
+    assert "不得停在 reset_tools" in prompt
+    assert "同一轮紧接着调用对应发布工具" in prompt
+    assert "不得自行在聊天中编写题目来替代发布工具" in prompt
+    assert "不得声称查询过学情或激活过工具" in prompt
 
 
 def test_factory_prompt_defines_injection_secrecy_and_bounded_style(tmp_path: Path):

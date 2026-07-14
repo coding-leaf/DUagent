@@ -66,14 +66,14 @@ async def seed_users(session):
     teacher = await upsert(session, User, {"email": "t@t.com"}, {
         "username": "teacher_e2e",
         "password_hash": hash_password("Abc12345"),
-        "real_name": "Teacher E2E",
+        "real_name": "韩林轩教授",
         "role": "teacher",
     })
     student = await upsert(session, User, {"email": "s@t.com"}, {
         "username": "student_e2e",
         "password_hash": hash_password("Abc12345"),
-        "real_name": "Student E2E",
-        "student_id": "S20260001",
+        "real_name": "顾志远",
+        "student_id": "2026090124",
         "role": "student",
         "major": "计算机科学与技术",
         "grade": "2026级",
@@ -84,14 +84,14 @@ async def seed_users(session):
 async def seed_courses(session, teacher, student):
     """Create 2 courses, enroll student in both."""
     print("\n-- Courses --")
-    course1 = await upsert(session, Course, {"course_code": "CS101-E2E"}, {
+    course1 = await upsert(session, Course, {"course_code": "DS2026"}, {
         "name": "数据结构与算法",
-        "description": "E2E test course 1",
+        "description": "计算机科学与技术专业核心必修课，涵盖线性表、树、图及查找排序算法。",
         "teacher_id": teacher.id,
     })
-    course2 = await upsert(session, Course, {"course_code": "CS102-E2E"}, {
+    course2 = await upsert(session, Course, {"course_code": "OS2026"}, {
         "name": "操作系统原理",
-        "description": "E2E test course 2",
+        "description": "计算机科学与技术专业核心课程，涵盖进程管理、内存管理、文件系统与设备管理。",
         "teacher_id": teacher.id,
     })
     for course in [course1, course2]:

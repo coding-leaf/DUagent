@@ -32,6 +32,8 @@ ENV/
 node_modules/
 .npm
 *.log
+.run/
+.run_logs/
 
 # IDE
 .vscode/
@@ -76,6 +78,7 @@ htmlcov/
 .next/
 out/
 .codex
+deploy/judge0/judge0.conf
 #规范
 !AGENTS.md
 .worktrees/

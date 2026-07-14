@@ -338,6 +338,7 @@ CREATE TABLE IF NOT EXISTS `evaluations` (
   `mastery_table` JSON DEFAULT NULL,
   `resource_usage_table` JSON DEFAULT NULL,
   `summary_text` TEXT,
+  `insight` JSON DEFAULT NULL,
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `create_by` VARCHAR(32) DEFAULT NULL,
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -505,6 +506,42 @@ CREATE TABLE IF NOT EXISTS `code_problem_test_cases` (
   PRIMARY KEY (`id`),
   KEY `idx_code_problem_cases_problem_order` (`problem_id`, `ordinal`),
   CONSTRAINT `code_problem_test_cases_problem_fk` FOREIGN KEY (`problem_id`) REFERENCES `code_problems` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS `personalized_resource_generations` (
+  `id` VARCHAR(32) NOT NULL,
+  `user_id` VARCHAR(32) NOT NULL,
+  `course_id` VARCHAR(32) NOT NULL,
+  `conversation_id` VARCHAR(32) DEFAULT NULL,
+  `run_id` VARCHAR(64) DEFAULT NULL,
+  `agent_run_id` VARCHAR(80) DEFAULT NULL,
+  `idempotency_key` VARCHAR(64) DEFAULT NULL,
+  `source_type` VARCHAR(30) NOT NULL,
+  `goal` TEXT NOT NULL,
+  `resource_type` VARCHAR(40) NOT NULL,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'drafted',
+  `draft` JSON NOT NULL,
+  `validation_report` JSON DEFAULT NULL,
+  `review_decision` VARCHAR(30) DEFAULT NULL,
+  `review_report` JSON DEFAULT NULL,
+  `artifact_payload` JSON DEFAULT NULL,
+  `delivery_error` TEXT,
+  `delivery_attempts` INT NOT NULL DEFAULT 0,
+  `published_resource_id` VARCHAR(32) DEFAULT NULL,
+  `published_code_problem_id` VARCHAR(32) DEFAULT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_prg_idempotency_key` (`idempotency_key`),
+  KEY `idx_prg_user_course` (`user_id`, `course_id`, `is_deleted`),
+  KEY `idx_prg_status` (`status`, `is_deleted`),
+  KEY `published_resource_id` (`published_resource_id`),
+  KEY `published_code_problem_id` (`published_code_problem_id`),
+  CONSTRAINT `fk_prg_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `fk_prg_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`),
+  CONSTRAINT `fk_prg_resource` FOREIGN KEY (`published_resource_id`) REFERENCES `resources` (`id`),
+  CONSTRAINT `fk_prg_code_problem` FOREIGN KEY (`published_code_problem_id`) REFERENCES `code_problems` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS `user_personalized_resources` (

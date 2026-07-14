@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.db.session import init_db
 from app.exceptions.base import DomainException
 from app.exceptions.handlers import domain_exception_handler
+from app.static_site import register_frontend_routes
 
 
 async def _recover_orphaned_background_tasks() -> None:
@@ -130,6 +131,9 @@ app.include_router(webhooks.router)
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": settings.APP_VERSION}
+
+
+register_frontend_routes(app)
 
 
 if __name__ == "__main__":

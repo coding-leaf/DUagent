@@ -8,21 +8,23 @@ x-logging: &default-logging
 
 services:
   server:
-    image: judge0/judge0:1.13.0
+    image: ${JUDGE0_IMAGE:-mrkushalsm/judge0:cgv2}
     volumes:
       - ../../.run/prod/judge0.conf:/judge0.conf:ro
     ports:
       - "127.0.0.1:2358:2358"
     privileged: true
+    cgroup: host
     restart: always
     <<: *default-logging
 
   workers:
-    image: judge0/judge0:1.13.0
+    image: ${JUDGE0_IMAGE:-mrkushalsm/judge0:cgv2}
     command: ["./scripts/workers"]
     volumes:
       - ../../.run/prod/judge0.conf:/judge0.conf:ro
     privileged: true
+    cgroup: host
     restart: always
     <<: *default-logging
 

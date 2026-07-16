@@ -178,6 +178,18 @@ curl -fsS http://127.0.0.1:8002/openapi.json >/dev/null && echo "Agent Service �
 curl -fsS http://127.0.0.1:2358/languages >/dev/null && echo "Judge0 正常"
 ```
 
+### Judge0 cgroup v2 验证
+
+本部署使用 `mrkushalsm/judge0:cgv2` 作为 Judge0 server 和 worker 镜像，以兼容仅提供 cgroup v2 的 Docker 主机。该镜像不是 Judge0 官方镜像；首次升级后必须实际执行一次代码提交，不能只检查 `/languages`。
+
+```bash
+curl -fsS -X POST 'http://127.0.0.1:2358/submissions?base64_encoded=false&wait=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"source_code":"print(\"judge0 cgroup v2 ok\")","language_id":71,"stdin":""}'
+```
+
+响应中的 `status.id` 应为 `3`，且 `stdout` 应为 `judge0 cgroup v2 ok`。如果执行日志出现 `Failed to create control group /sys/fs/cgroup/memory`，说明当前运行的仍是旧镜像；执行 `./deploy_prod.sh deploy` 会仅重建 Judge0 的 server 和 workers，保留其 PostgreSQL 和 Redis 数据卷。
+
 浏览器访问：
 
 ```text
@@ -257,6 +269,16 @@ ss -lntp | grep -E ':(8001|8002)\b'
 docker ps -a
 docker compose --env-file .env -f docker-compose.prod.yml config
 ```
+
+### Judge0 升级后需要回滚
+
+不要执行 `docker compose down -v`。将 `deploy/judge0/docker-compose.yml` 中 server 和 workers 的 `JUDGE0_IMAGE` 默认值改回 `judge0/judge0:1.13.0`，再执行：
+
+```bash
+./deploy_prod.sh deploy
+```
+
+这只会重建 Judge0 的 server 和 workers，不会删除 Judge0 的 PostgreSQL 或 Redis 数据卷。
 
 不要使用 `docker compose down -v`，它会删除项目管理的数据卷。
 

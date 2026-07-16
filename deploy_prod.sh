@@ -8,6 +8,7 @@ INFRA_ENV="$ROOT_DIR/.env"
 ENV_TEMPLATE="$ROOT_DIR/deploy/env.production.example"
 JUDGE_DIR="$ROOT_DIR/deploy/judge0"
 JUDGE_CONFIG="$RUN_DIR/judge0.conf"
+JUDGE0_IMAGE="${JUDGE0_IMAGE:-mrkushalsm/judge0:cgv2}"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 AGENT_PORT="${AGENT_PORT:-8002}"
 usage() {
@@ -134,20 +135,32 @@ ensure_core_infrastructure() {
   fi
 }
 ensure_judge0() {
-  if curl -fsS "http://127.0.0.1:2358/languages" >/dev/null 2>&1; then
-    log "Reusing healthy Judge0"
-    return 0
-  fi
   local names=(judge0-v1130-redis-1 judge0-v1130-db-1 judge0-v1130-server-1 judge0-v1130-workers-1)
   local all_exist=true
-  "$ROOT_DIR/deploy/render_judge0_config.sh" "$INFRA_ENV" "$JUDGE_CONFIG"
+  local judge0_image_matches=true
+  local name
   for name in "${names[@]}"; do
     container_exists "$name" || all_exist=false
   done
-  if [[ "$all_exist" == true ]]; then
-    docker start "${names[@]}" >/dev/null
+  for name in judge0-v1130-server-1 judge0-v1130-workers-1; do
+    [[ "$(docker inspect -f '{{.Config.Image}} {{.HostConfig.CgroupnsMode}}' "$name" 2>/dev/null || true)" \
+      == "$JUDGE0_IMAGE host" ]] \
+      || judge0_image_matches=false
+  done
+  if curl -fsS "http://127.0.0.1:2358/languages" >/dev/null 2>&1 \
+    && [[ "$judge0_image_matches" == true ]]; then
+    log "Reusing healthy Judge0"
+    return 0
+  fi
+  "$ROOT_DIR/deploy/render_judge0_config.sh" "$INFRA_ENV" "$JUDGE_CONFIG"
+  if [[ "$all_exist" == false ]]; then
+    JUDGE0_IMAGE="$JUDGE0_IMAGE" docker compose -f "$JUDGE_DIR/docker-compose.yml" up -d
+  elif [[ "$judge0_image_matches" == false ]]; then
+    log "Recreating Judge0 server and workers with $JUDGE0_IMAGE"
+    JUDGE0_IMAGE="$JUDGE0_IMAGE" docker compose -f "$JUDGE_DIR/docker-compose.yml" \
+      up -d --force-recreate server workers
   else
-    docker compose -f "$JUDGE_DIR/docker-compose.yml" up -d
+    docker start "${names[@]}" >/dev/null
   fi
   wait_http "Judge0" "http://127.0.0.1:2358/languages" 90
 }

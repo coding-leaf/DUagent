@@ -9,6 +9,7 @@ x-logging: &default-logging
 services:
   server:
     image: ${JUDGE0_IMAGE:-mrkushalsm/judge0:cgv2}
+    env_file: ../../.run/prod/judge0.conf
     volumes:
       - ../../.run/prod/judge0.conf:/judge0.conf:ro
     ports:
@@ -21,6 +22,7 @@ services:
   workers:
     image: ${JUDGE0_IMAGE:-mrkushalsm/judge0:cgv2}
     command: ["./scripts/workers"]
+    env_file: ../../.run/prod/judge0.conf
     volumes:
       - ../../.run/prod/judge0.conf:/judge0.conf:ro
     privileged: true

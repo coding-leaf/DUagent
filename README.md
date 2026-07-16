@@ -180,7 +180,7 @@ curl -fsS http://127.0.0.1:2358/languages >/dev/null && echo "Judge0 正常"
 
 ### Judge0 cgroup v2 验证
 
-本部署使用 `mrkushalsm/judge0:cgv2` 作为 Judge0 server 和 worker 镜像，以兼容仅提供 cgroup v2 的 Docker 主机。该镜像不是 Judge0 官方镜像；首次升级后必须实际执行一次代码提交，不能只检查 `/languages`。
+本部署使用 `mrkushalsm/judge0:cgv2` 作为 Judge0 server 和 worker 镜像，以兼容仅提供 cgroup v2 的 Docker 主机。Judge0 运行容器会加载同一份 `judge0.conf`，以获得 PostgreSQL 和 Redis 的容器网络地址。该镜像不是 Judge0 官方镜像；首次升级后必须实际执行一次代码提交，不能只检查 `/languages`。
 
 ```bash
 curl -fsS -X POST 'http://127.0.0.1:2358/submissions?base64_encoded=false&wait=true' \

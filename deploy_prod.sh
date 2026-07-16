@@ -40,6 +40,10 @@ container_exists() {
 container_running() {
   [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == "true" ]]
 }
+container_has_env() {
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1" 2>/dev/null \
+    | grep -Fxq "$2"
+}
 env_value() {
   local file="$1" key="$2"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$file"
@@ -146,6 +150,8 @@ ensure_judge0() {
     [[ "$(docker inspect -f '{{.Config.Image}} {{.HostConfig.CgroupnsMode}}' "$name" 2>/dev/null || true)" \
       == "$JUDGE0_IMAGE host" ]] \
       || judge0_image_matches=false
+    container_has_env "$name" "POSTGRES_HOST=db" || judge0_image_matches=false
+    container_has_env "$name" "REDIS_HOST=redis" || judge0_image_matches=false
   done
   if curl -fsS "http://127.0.0.1:2358/languages" >/dev/null 2>&1 \
     && [[ "$judge0_image_matches" == true ]]; then

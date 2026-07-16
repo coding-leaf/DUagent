@@ -9,3 +9,7 @@
 **验证：** 部署脚本语法检查、Compose 配置解析、部署配置静态契约检查和 `git diff --check` 通过。实际服务器仍需完成 Python、C、C++ 的 Judge0 提交验证后，记录拉取到的不可变镜像摘要。
 
 **接口漂移：** 无。Backend、Agent Service 和 Judge0 API 路径、语言 ID 均未变更。
+
+### cgroup v2 镜像运行配置补充
+
+社区镜像不会像 Judge0 1.13 原镜像一样自动加载挂载的 `/judge0.conf`。server 和 workers 因而显式加载该文件，获得 `POSTGRES_HOST=db` 与 `REDIS_HOST=redis`。部署脚本同步检查这两个运行环境变量，缺失时只重建 Judge0 的执行容器。

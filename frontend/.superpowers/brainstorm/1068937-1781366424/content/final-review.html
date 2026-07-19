@@ -1,0 +1,118 @@
+<h2>综合预览：你的学习专属空间</h2>
+<p class="subtitle">这是结合了所有已确认决策的最终视觉原型，请确认整体感觉是否到位。</p>
+
+<div class="mockup" style="display: flex; height: 500px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #f8fafc; font-family: sans-serif;">
+  
+  <!-- Left Sidebar (History) -->
+  <div style="width: 240px; background: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column;">
+    <div style="padding: 20px; font-weight: bold; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 8px;">
+      <div style="width: 24px; height: 24px; background: #0ea5e9; border-radius: 6px; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px;">AI</div>
+      智能学习助手
+    </div>
+    <div style="padding: 16px 12px; flex: 1;">
+      <div style="font-size: 12px; color: #94a3b8; font-weight: bold; margin-bottom: 12px;">历史对话</div>
+      <div style="padding: 8px 12px; background: #f1f5f9; border-radius: 6px; font-size: 13px; color: #334155; margin-bottom: 4px;">C语言指针复习</div>
+      <div style="padding: 8px 12px; font-size: 13px; color: #64748b;">排序算法分析</div>
+    </div>
+  </div>
+
+  <!-- Middle Area (Chat & Input) -->
+  <div style="flex: 1; display: flex; flex-direction: column; position: relative;">
+    <!-- Top Bar (Lightweight) -->
+    <div style="height: 56px; border-bottom: 1px solid #e2e8f0; background: rgba(255,255,255,0.8); backdrop-filter: blur(8px); display: flex; align-items: center; padding: 0 24px; justify-content: space-between;">
+      <div style="font-size: 14px; color: #334155; font-weight: 500;">当前会话：C语言指针复习</div>
+    </div>
+
+    <!-- Chat Scroll Area -->
+    <div style="flex: 1; padding: 32px 40px; overflow-y: auto;">
+      
+      <!-- Empty State -->
+      <div style="max-width: 680px; margin: 0 auto 40px auto; text-align: center;">
+        <h2 style="font-size: 24px; color: #0f172a; margin-bottom: 8px;">有什么我可以帮你的吗？</h2>
+        <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">探索本课程的内容，或直接向我提问。</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="background: white; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; text-align: left; cursor: pointer;">
+            <div style="font-weight: 600; color: #334155; font-size: 14px; margin-bottom: 4px;">📖 解释知识点</div>
+            <div style="color: #94a3b8; font-size: 12px;">“帮我解释C语言指针和数组的关系”</div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; text-align: left; cursor: pointer;">
+            <div style="font-weight: 600; color: #334155; font-size: 14px; margin-bottom: 4px;">💻 分析代码</div>
+            <div style="color: #94a3b8; font-size: 12px;">“帮我分析这段代码为什么会段错误”</div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; text-align: left; cursor: pointer;">
+            <div style="font-weight: 600; color: #334155; font-size: 14px; margin-bottom: 4px;">📚 推荐资源</div>
+            <div style="color: #94a3b8; font-size: 12px;">“给我推荐适合复习指针的学习资料”</div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; padding: 16px; border-radius: 12px; text-align: left; cursor: pointer;">
+            <div style="font-weight: 600; color: #334155; font-size: 14px; margin-bottom: 4px;">🎯 规划复习</div>
+            <div style="color: #94a3b8; font-size: 12px;">“我想一周内补齐动态内存分配”</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sample Document-Style Message -->
+      <div style="max-width: 680px; margin: 0 auto; display: flex; gap: 16px;">
+        <div style="width: 32px; height: 32px; background: #e0f2fe; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #0ea5e9; flex-shrink: 0;">AI</div>
+        <div style="flex: 1;">
+          <!-- Tool Call -->
+          <div style="display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 13px; margin-bottom: 12px;">
+            <span style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #cbd5e1; border-top-color: #64748b;"></span>
+            正在检索《C语言程序设计》知识库...
+          </div>
+          <div style="font-size: 15px; line-height: 1.7; color: #334155;">
+            <p style="margin: 0 0 16px 0;">数组名在多数情况下会退化为指向数组首元素的指针。这意味着你可以使用指针算术来遍历数组。</p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; margin-bottom: 16px;">
+              int arr[5] = {1, 2, 3, 4, 5};<br>
+              int *p = arr;<br>
+              // *p 即为 1
+            </div>
+          </div>
+          <!-- Knowledge Tags -->
+          <div style="display: flex; gap: 8px;">
+            <span style="padding: 4px 10px; background: #f1f5f9; color: #475569; border-radius: 6px; font-size: 12px;"># 指针与数组</span>
+            <span style="padding: 4px 10px; background: #f1f5f9; color: #475569; border-radius: 6px; font-size: 12px;"># 内存布局</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Composer -->
+    <div style="padding: 0 40px 24px 40px;">
+      <div style="max-width: 680px; margin: 0 auto; background: white; border: 1px solid #cbd5e1; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+        <input type="text" placeholder="在这里输入你的问题..." style="border: none; outline: none; width: 100%; font-size: 15px; color: #334155; background: transparent;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; gap: 8px;">
+            <div style="width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; background: #f8fafc;">📎</div>
+          </div>
+          <div style="width: 32px; height: 32px; background: #0ea5e9; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">↑</div>
+        </div>
+      </div>
+      <div style="text-align: center; font-size: 11px; color: #94a3b8; margin-top: 8px;">AI 生成内容仅供学习参考</div>
+    </div>
+  </div>
+
+  <!-- Right Sidebar (Resources - Competition Focus) -->
+  <div style="width: 280px; background: #fdfdfd; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column;">
+    <div style="padding: 20px; border-bottom: 1px solid #f1f5f9;">
+      <div style="font-size: 12px; color: #94a3b8; font-weight: bold; margin-bottom: 4px;">当前学习上下文</div>
+      <div style="font-weight: 600; color: #0f172a;">C语言程序设计</div>
+    </div>
+    <div style="padding: 16px; flex: 1;">
+      <div style="font-size: 12px; color: #94a3b8; font-weight: bold; margin-bottom: 12px; display: flex; justify-content: space-between;">
+        相关资源推荐
+        <span style="color: #0ea5e9; font-weight: normal; cursor: pointer;">全部</span>
+      </div>
+      <!-- Placeholder for Resource Card -->
+      <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: white; margin-bottom: 12px;">
+        <div style="width: 100%; height: 60px; background: #f1f5f9; border-radius: 4px; margin-bottom: 8px;"></div>
+        <div style="font-size: 13px; font-weight: 600; color: #334155;">深入理解指针内存模型</div>
+        <div style="font-size: 12px; color: #64748b;">视频课程 · 15分钟</div>
+      </div>
+      <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: white;">
+        <div style="font-size: 13px; font-weight: 600; color: #334155;">C语言核心代码片段</div>
+        <div style="font-size: 12px; color: #64748b;">图文资料</div>
+      </div>
+    </div>
+  </div>
+
+</div>

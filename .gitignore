@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Node
+node_modules/
+.npm
+*.log
+.run/
+.run_logs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI-assisted development metadata and process records
+.agent/
+.agents/
+.claude/
+.codex/
+.gemini/
+.antigravitycli/
+.worktrees/
+AGENTS.md
+CLAUDE.md
+WORKFLOW.md
+WorkLine.md
+PROJECT.md
+TODO.md
+**/docs/superpowers/
+docs/90-review/
+docs/archive/
+# Environments
+.env
+.env.*
+!.env.example
+
+# Database
+*.sqlite3
+*.sqlite3-journal
+*.db
+*.sqlite
+*.sqlite-journal
+
+# Local vector stores
+qdrant_data/
+**/qdrant_data/
+qdrant_storage/
+**/qdrant_storage/
+
+# Agent runtime workspace artifacts
+agent_service_v2/workspaces/
+
+# Retired v1 local data retained for manual archival
+agent_service/knowledge_base/
+
+# Coverage & Build
+coverage/
+.coverage
+.coverage.*
+.nyc_output/
+htmlcov/
+.next/
+out/
+deploy/judge0/judge0.conf

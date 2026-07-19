@@ -1,0 +1,133 @@
+import { useCourse } from '../context/CourseContext';
+import Navbar from '../components/Navbar';
+import Icon from '../components/Icon';
+import { useLearningEffects } from '../hooks/useLearningEffects';
+import EffectsOverviewCards from '../components/effects/EffectsOverviewCards';
+import EffectsSummaryCard from '../components/effects/EffectsSummaryCard';
+import MasteryDistributionCard from '../components/effects/MasteryDistributionCard';
+import KnowledgeProgressTable from '../components/effects/KnowledgeProgressTable';
+import { formatDateTime } from '../utils/date';
+import { useNavigate } from 'react-router-dom';
+
+export default function LearningEffects() {
+  const { activeCourseId } = useCourse();
+  const navigate = useNavigate();
+
+  const {
+    effectsData,
+    effectsLoading,
+    effectsError,
+    isPolling: refreshInProgress,
+    refreshFailed,
+    refreshFailureMessage,
+    overview,
+    masteryDistribution,
+    nodeRows,
+    handleRefresh,
+  } = useLearningEffects(activeCourseId);
+
+  return (
+    <div className="bg-background text-on-surface font-body-md min-h-screen">
+      <Navbar />
+
+      <main className="pt-24 pb-12 px-6 max-w-[1280px] mx-auto min-h-screen">
+        <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h1 className="font-h1 text-h1 text-on-surface text-4xl font-bold mb-2">学习效果展示</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1.5 text-slate-500 mt-2 text-body-md">
+              <span className="text-outline">基于课程知识图谱、练习记录和评估快照的节点掌握情况</span>
+              {effectsData?.generated_at && (
+                <span className="hidden sm:inline text-slate-300">|</span>
+              )}
+              {effectsData?.generated_at && (
+                <span className="text-xs font-semibold bg-cyan-50 text-cyan-700 px-2.5 py-0.5 rounded-full border border-cyan-100 flex items-center w-fit">
+                  <Icon name="schedule" className="material-symbols-outlined text-[14px] mr-1" />
+                  评估时间：{formatDateTime(effectsData.generated_at)}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={!activeCourseId || refreshInProgress}
+              className="flex items-center px-4 py-2 bg-primary-container text-on-primary-container rounded-xl font-label-sm text-label-sm font-bold shadow-sm hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Icon name="refresh" className="material-symbols-outlined mr-2"/>
+              {refreshInProgress ? '评估中' : '重新评估'}
+            </button>
+          </div>
+        </div>
+
+        {!activeCourseId && (
+          <div className="bg-white border border-gray-100 rounded-xl p-8 text-center text-slate-500">
+            请先加入或选择课程
+          </div>
+        )}
+
+        {activeCourseId && (
+          <div className="space-y-6">
+            {effectsError && (
+              <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 text-sm">
+                {effectsError}
+              </div>
+            )}
+
+            {refreshFailed && (
+              <div className="bg-amber-50 border border-amber-100 text-amber-700 rounded-xl px-4 py-3 text-sm">
+                {refreshFailureMessage}
+              </div>
+            )}
+
+            <EffectsOverviewCards
+              overview={overview}
+            />
+
+            <section className="grid grid-cols-12 gap-6">
+              <div className="col-span-12 lg:col-span-8">
+                <EffectsSummaryCard
+                  summaryText={effectsData?.summary_text}
+                  loading={effectsLoading}
+                  onGenerateResources={() => navigate(
+                    '/personalized-resources/generate',
+                    {
+                      state: {
+                        goal: buildLearningEffectsGoal(effectsData),
+                        resourcePreferences: ['personal_lesson', 'practice'],
+                        sourceType: 'learning_effects',
+                      },
+                    },
+                  )}
+                />
+              </div>
+
+              <div className="col-span-12 lg:col-span-4">
+                <MasteryDistributionCard
+                  masteryDistribution={masteryDistribution}
+                  totalNodes={overview.total}
+                />
+              </div>
+            </section>
+
+            <KnowledgeProgressTable
+              nodeRows={nodeRows}
+              activeCourseId={activeCourseId}
+            />
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function buildLearningEffectsGoal(effectsData) {
+  const weakPoints = effectsData?.insight?.weak_points || [];
+  const names = weakPoints
+    .map((point) => point.name || point.title || point.knowledge_point)
+    .filter(Boolean)
+    .slice(0, 5);
+  if (names.length) {
+    return `请针对我的薄弱点生成复习资料与练习：${names.join('、')}`;
+  }
+  return `请根据这份最新学情总结生成复习资料与练习：${effectsData?.summary_text || ''}`;
+}

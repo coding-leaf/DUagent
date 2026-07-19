@@ -1,0 +1,29 @@
+[project]
+name = "agent-service-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "yezisama", email = "1526209863xjh@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "agentscope[full]>=2,<3",
+    "fastapi>=0.138.2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "sse-starlette>=3.4.5",
+    "uvicorn>=0.49.0",
+]
+
+[project.scripts]
+agent-service-v2 = "agent_service_v2:main"
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

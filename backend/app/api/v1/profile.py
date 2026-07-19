@@ -1,0 +1,142 @@
+# backend/app/api/v1/profile.py
+import asyncio
+import logging
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, get_db
+from app.models.user import User
+from app.models.course import CourseEnrollment
+from app.services.profile_presenters import profile_data
+from app.services.profile_service import ProfileService
+from app.services.profile_refresh_service import ProfileRefreshService, run_profile_refresh_background
+from app.schemas.profile import (
+    ProfileInitializeRequest,
+    ProfileGoalUpdateRequest,
+    ProfileInstructionUpdateRequest,
+    ProfileRefreshRequest,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
+
+async def _verify_course_enrollment(user: User, course_id: str, db: AsyncSession):
+    if user.role == "student":
+        check = await db.execute(
+            select(CourseEnrollment).where(
+                CourseEnrollment.student_id == user.id,
+                CourseEnrollment.course_id == course_id,
+                CourseEnrollment.is_deleted == False,
+            )
+        )
+        if not check.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 40300, "message": "未加入该课程", "data": None},
+            )
+
+@router.post("/initialize")
+async def initialize_profile(
+    req: ProfileInitializeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_course_enrollment(current_user, req.course_id, db)
+    try:
+        service = ProfileService(db)
+        pf = await service.initialize_profile(current_user.id, req.course_id, req.answers or {})
+        await db.commit()
+        return {"code": 200, "message": "success", "data": profile_data(pf, req.course_id, current_user)}
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+@router.get("")
+async def get_profile(
+    course_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_course_enrollment(current_user, course_id, db)
+    service = ProfileService(db)
+    pf = await service.get_or_create_profile(current_user.id, course_id)
+    return {"code": 200, "message": "success", "data": profile_data(pf, course_id, current_user)}
+
+@router.post("/learning-goal")
+async def update_learning_goal(
+    req: ProfileGoalUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_course_enrollment(current_user, req.course_id, db)
+    try:
+        service = ProfileService(db)
+        pf = await service.update_learning_goal(current_user.id, req.course_id, req.goal_type)
+        await db.commit()
+        return {"code": 200, "message": "success", "data": profile_data(pf, req.course_id, current_user)}
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+@router.post("/custom-instruction")
+async def update_custom_instruction(
+    req: ProfileInstructionUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_course_enrollment(current_user, req.course_id, db)
+    try:
+        service = ProfileService(db)
+        pf = await service.update_custom_instruction(current_user.id, req.course_id, req.instruction)
+        await db.commit()
+        return {"code": 200, "message": "success", "data": profile_data(pf, req.course_id, current_user)}
+    except Exception as e:
+        await db.rollback()
+        raise e
+
+@router.post("/refresh")
+async def refresh_profile(
+    req: ProfileRefreshRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_course_enrollment(current_user, req.course_id, db)
+    
+    refresh_service = ProfileRefreshService(db)
+    active_task = await refresh_service.get_processing_refresh_task(current_user.id, req.course_id)
+    if active_task:
+        return JSONResponse(
+            status_code=202,
+            content={
+                "code": 202,
+                "message": "accepted",
+                "data": {
+                    "task_id": active_task.id,
+                    "status": active_task.status,
+                    "created_at": active_task.create_time.isoformat(),
+                },
+            }
+        )
+
+    task = await refresh_service.create_refresh_task(current_user.id, req.course_id)
+    await db.commit()
+    await db.refresh(task)
+
+    asyncio.create_task(
+        run_profile_refresh_background(task.id, current_user.id, req.course_id)
+    )
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "code": 202,
+            "message": "accepted",
+            "data": {
+                "task_id": task.id,
+                "status": task.status,
+                "created_at": task.create_time.isoformat(),
+            },
+        }
+    )

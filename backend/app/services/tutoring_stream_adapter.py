@@ -1,0 +1,433 @@
+"""Adapt Agent tutoring SSE events to the Client API boundary."""
+
+import codecs
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import AsyncIterator, Awaitable, Callable
+
+from sqlalchemy import select, update
+
+from app.db.session import async_session_factory
+from app.models.conversation import Conversation, Message
+from app.models.personalized_resource_generation import PersonalizedResourceGeneration
+from app.services.agent_client import AgentServiceError, agent_client
+
+logger = logging.getLogger(__name__)
+TOOL_EVENT_TYPES = {"tool_started", "tool_completed", "tool_failed"}
+TOOL_EVENT_PAYLOAD_FIELDS = {
+    "tool_call_id",
+    "tool_name",
+    "state",
+    "status",
+    "reason",
+    "message",
+    "output_summary",
+    "summary",
+    "outcome",
+    "retryable",
+    "tool_title",
+    "tool_category",
+    "read_only",
+}
+
+StreamSSE = Callable[[str, dict], AsyncIterator[bytes]]
+PersistResult = Callable[
+    [str, str, str, list, list, dict],
+    Awaitable[None],
+]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentLogRecord:
+    endpoint: str
+    latency_ms: int
+    tokens_used: int
+    status: str
+    error_message: str | None
+
+
+RecordAgentLog = Callable[[AgentLogRecord], Awaitable[None]]
+
+
+@dataclass(slots=True)
+class StreamState:
+    conversation_id: str
+    assistant_message_id: str
+    chunks: list[str] = field(default_factory=list)
+    diagrams: list = field(default_factory=list)
+    knowledge_points: list = field(default_factory=list)
+    artifacts: list[dict] = field(default_factory=list)
+    event_timeline: list[dict] = field(default_factory=list)
+    timeline_has_text: bool = False
+    timeline_has_tool: bool = False
+    meta: dict = field(default_factory=dict)
+    done_sent: bool = False
+    persisted: bool = False
+
+
+async def persist_tutoring_result(
+    assistant_message_id: str,
+    conversation_id: str,
+    content: str,
+    diagrams: list,
+    knowledge_points: list,
+    meta: dict,
+) -> None:
+    """Persist the accumulated stream through a short independent session."""
+    async with async_session_factory() as db:
+        existing = await db.get(Message, assistant_message_id)
+        existing_meta = existing.meta_json if existing and isinstance(existing.meta_json, dict) else {}
+        merged_meta = {**existing_meta, **(meta or {})}
+        run_id = merged_meta.get("agent_run_id")
+        if isinstance(run_id, str) and run_id:
+            recovered = await _published_artifacts_for_run(db, run_id)
+            if recovered:
+                merged_meta["artifacts"] = _merge_artifacts(
+                    merged_meta.get("artifacts") or [],
+                    recovered,
+                )
+        await db.execute(
+            update(Message)
+            .where(Message.id == assistant_message_id)
+            .values(
+                content=content,
+                diagrams=diagrams or None,
+                knowledge_points=knowledge_points or None,
+                meta_json=merged_meta,
+            )
+        )
+        await db.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(update_time=datetime.now(timezone.utc))
+        )
+        await db.commit()
+
+
+async def persist_agent_log(record: AgentLogRecord) -> None:
+    from app.models.others import AgentLog
+
+    async with async_session_factory() as db:
+        db.add(
+            AgentLog(
+                agent_type="edu_ai",
+                endpoint=record.endpoint,
+                latency_ms=record.latency_ms,
+                tokens_used=record.tokens_used,
+                status=record.status,
+                error_message=record.error_message,
+            )
+        )
+        await db.commit()
+
+
+class TutoringStreamAdapter:
+    """Buffer arbitrary byte chunks, adapt events, and persist final state."""
+
+    def __init__(
+        self,
+        stream_sse: StreamSSE | None = None,
+        persist_result: PersistResult | None = None,
+        record_agent_log: RecordAgentLog | None = None,
+    ):
+        self._stream_sse = stream_sse or agent_client.stream_sse
+        self._persist_result = persist_result or persist_tutoring_result
+        self._record_agent_log = record_agent_log or persist_agent_log
+
+    @staticmethod
+    def _append_timeline_event(
+        state: StreamState,
+        event_type: str,
+        payload: dict,
+    ) -> None:
+        if event_type == "text_delta":
+            delta = payload.get("delta", "")
+            if not delta:
+                return
+            state.timeline_has_text = True
+            last = state.event_timeline[-1] if state.event_timeline else None
+            if last and last.get("type") == "text_delta":
+                last["payload"]["delta"] += delta
+            else:
+                state.event_timeline.append({
+                    "type": event_type,
+                    "payload": {"delta": delta},
+                })
+        else:
+            state.event_timeline.append({"type": event_type, "payload": payload})
+            if event_type in TOOL_EVENT_TYPES:
+                state.timeline_has_tool = True
+
+        if state.timeline_has_text and state.timeline_has_tool:
+            state.meta["event_timeline"] = state.event_timeline
+
+    @staticmethod
+    def _adapt_data(data_str: str, state: StreamState) -> str | None:
+        try:
+            parsed = json.loads(data_str)
+        except json.JSONDecodeError:
+            return data_str
+
+        event_type = parsed.get("type", "")
+        run_id = parsed.get("run_id")
+        if isinstance(run_id, str) and run_id:
+            state.meta["agent_run_id"] = run_id
+        payload = (
+            parsed.get("payload")
+            if isinstance(parsed.get("payload"), dict)
+            else {}
+        )
+
+        if event_type == "text_delta":
+            content = payload.get("delta", "")
+            state.chunks.append(content)
+            TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
+        elif event_type == "workflow_completed":
+            state.done_sent = True
+        elif event_type == "workflow_failed":
+            state.done_sent = True
+        elif event_type == "content_safety_reviewed":
+            if payload.get("action") == "block":
+                state.chunks.clear()
+                state.event_timeline.clear()
+                state.timeline_has_text = False
+                state.timeline_has_tool = False
+                state.meta.pop("event_timeline", None)
+                state.meta.pop("tool_events", None)
+            state.meta["content_safety_review"] = payload
+            TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
+        elif event_type == "source_refs":
+            state.meta["sources"] = payload.get("sources") or []
+        elif event_type in TOOL_EVENT_TYPES:
+            tool_payload = {
+                key: value
+                for key, value in payload.items()
+                if key in TOOL_EVENT_PAYLOAD_FIELDS
+            }
+            state.meta.setdefault("tool_events", []).append(
+                {"type": event_type, "payload": tool_payload}
+            )
+            TutoringStreamAdapter._append_timeline_event(
+                state, event_type, tool_payload
+            )
+        elif event_type == "plan_updated":
+            TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
+        elif event_type == "artifact_created":
+            artifact = payload.get("artifact")
+            if isinstance(artifact, dict):
+                artifact_id = artifact.get("id")
+                if artifact_id:
+                    existing_idx = next((i for i, a in enumerate(state.artifacts) if a.get("id") == artifact_id), None)
+                    if existing_idx is not None:
+                        state.artifacts[existing_idx] = artifact
+                    else:
+                        state.artifacts.append(artifact)
+                else:
+                    state.artifacts.append(artifact)
+                state.meta["artifacts"] = state.artifacts
+
+        parsed["conversation_id"] = state.conversation_id
+        parsed["message_id"] = state.assistant_message_id
+        return json.dumps(parsed, ensure_ascii=False)
+
+    @classmethod
+    def _adapt_line(cls, line: str, state: StreamState) -> dict | None:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("data:"):
+            return None
+        data_str = stripped[5:].strip()
+        if not data_str:
+            return None
+        adapted = cls._adapt_data(data_str, state)
+        if adapted is None:
+            return None
+        return {
+            "event": "message",
+            "data": adapted,
+        }
+
+    @staticmethod
+    def _is_terminal_event(event: dict) -> bool:
+        try:
+            event_type = json.loads(event.get("data", "")).get("type")
+        except (json.JSONDecodeError, AttributeError):
+            return False
+        return event_type in {"workflow_completed", "workflow_failed"}
+
+    async def _persist_state(
+        self,
+        state: StreamState,
+    ) -> bool:
+        try:
+            await self._persist_result(
+                state.assistant_message_id,
+                state.conversation_id,
+                "".join(state.chunks),
+                state.diagrams,
+                state.knowledge_points,
+                state.meta,
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to persist tutoring stream result",
+                extra={
+                    "conversation_id": state.conversation_id,
+                    "message_id": state.assistant_message_id,
+                },
+            )
+            return False
+
+    @staticmethod
+    def _build_workbench_payload(payload: dict) -> dict:
+        scope = payload.get("scope") or "global"
+        return {
+            "user_id": payload.get("user_id") or "",
+            "scope": scope,
+            "course_id": payload.get("course_id"),
+            "catalog_id": payload.get("catalog_id") if scope == "course" else None,
+            "conversation_id": payload.get("conversation_id"),
+            "message": payload.get("message") or "",
+            "context": payload,
+        }
+
+
+    async def stream(
+        self,
+        *,
+        payload: dict,
+        conversation_id: str,
+        assistant_message_id: str,
+    ) -> AsyncIterator[dict]:
+        state = StreamState(
+            conversation_id=conversation_id,
+            assistant_message_id=assistant_message_id,
+        )
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        text_buffer = ""
+
+        start_time = datetime.now(timezone.utc)
+        status_val = "success"
+        error_message = None
+
+        try:
+            async for raw_bytes in self._stream_sse(
+                "/agent/v2/workbench/chat",
+                self._build_workbench_payload(payload),
+            ):
+                text_buffer += decoder.decode(raw_bytes)
+                while "\n" in text_buffer:
+                    line, text_buffer = text_buffer.split("\n", 1)
+                    event = self._adapt_line(line.rstrip("\r"), state)
+                    if event is not None:
+                        if self._is_terminal_event(event):
+                            state.persisted = await self._persist_state(state)
+                        yield event
+
+            text_buffer += decoder.decode(b"", final=True)
+            if text_buffer:
+                event = self._adapt_line(text_buffer.rstrip("\r"), state)
+                if event is not None:
+                    if self._is_terminal_event(event):
+                        state.persisted = await self._persist_state(state)
+                    yield event
+        except AgentServiceError as e:
+            status_val = "error"
+            error_message = "AgentServiceError: Agent 服务不可用"
+            if not state.done_sent:
+                failed_event = {
+                    "event": "message",
+                    "data": json.dumps(
+                        {
+                            "type": "workflow_failed",
+                            "run_id": None,
+                            "conversation_id": conversation_id,
+                            "message_id": assistant_message_id,
+                            "seq": None,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "agent": "backend_proxy",
+                            "payload": {
+                                "reason": "agent_service_unavailable",
+                                "message": "Agent 服务暂时不可用",
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+                state.persisted = await self._persist_state(state)
+                yield failed_event
+        except Exception as e:
+            status_val = "error"
+            error_message = f"UnexpectedError: {str(e)}"
+            raise e
+        finally:
+            latency_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+            full_text = "".join(state.chunks)
+            if not full_text and not state.artifacts and status_val == "success":
+                status_val = "error"
+                error_message = "No output generated"
+
+            if not state.persisted:
+                state.persisted = await self._persist_state(state)
+
+            try:
+                await self._record_agent_log(
+                    AgentLogRecord(
+                        endpoint="/agent/v2/workbench/chat",
+                        latency_ms=latency_ms,
+                        tokens_used=0,
+                        status=status_val,
+                        error_message=error_message,
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to save real AgentLog in DB")
+
+
+async def _published_artifacts_for_run(db, run_id: str) -> list[dict]:
+    result = await db.execute(
+        select(PersonalizedResourceGeneration.artifact_payload).where(
+            PersonalizedResourceGeneration.agent_run_id == run_id,
+            PersonalizedResourceGeneration.status == "published",
+            PersonalizedResourceGeneration.artifact_payload.is_not(None),
+            PersonalizedResourceGeneration.is_deleted.is_(False),
+        )
+    )
+    return [
+        normalized
+        for payload in result.scalars().all()
+        if (normalized := _client_artifact(payload)) is not None
+    ]
+
+
+def _client_artifact(payload: dict | None) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+    artifact_type = payload.get("type")
+    if artifact_type == "QuizCard":
+        props = {
+            "course_id": payload.get("course_id"),
+            "question_ids": payload.get("question_ids") or [],
+        }
+    elif artifact_type == "CodeSandboxCard":
+        props = {
+            "problem_id": payload.get("problem_id"),
+            "language": payload.get("language"),
+        }
+    else:
+        return None
+    return {
+        "id": payload.get("id"),
+        "type": artifact_type,
+        "title": payload.get("title"),
+        "props": props,
+    }
+
+
+def _merge_artifacts(current: list[dict], recovered: list[dict]) -> list[dict]:
+    merged = {item.get("id"): item for item in current if isinstance(item, dict) and item.get("id")}
+    for artifact in recovered:
+        merged[artifact["id"]] = artifact
+    return list(merged.values())

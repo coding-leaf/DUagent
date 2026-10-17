@@ -30,10 +30,14 @@ apiClient.interceptors.response.use(
     if (error.response) {
       const { status } = error.response;
       if (status === 401) {
-        console.error('Authentication failed, token expired.');
-        localStorage.removeItem('access_token');
-        // No toast needed, redirect is explicit enough
-        window.location.href = '/login';
+        const isLoginRequest = error.config?.url?.includes('/auth/login');
+        const isLoginPage = typeof window !== 'undefined' && window.location?.pathname === '/login';
+
+        if (!isLoginRequest && !isLoginPage) {
+          console.error('Authentication failed, token expired.');
+          localStorage.removeItem('access_token');
+          window.location.href = '/login';
+        }
       } else if (status === 403) {
         toast.error('权限不足');
       } else if (status >= 500) {

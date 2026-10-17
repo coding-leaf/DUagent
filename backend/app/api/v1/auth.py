@@ -16,10 +16,15 @@ from app.schemas.auth import LoginRequest, RegisterRequest
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-PERMANENT_REGISTRATION_CODES = {
-    "student": "student",
-    "teacher": "teacher",
-}
+
+def get_permanent_registration_codes() -> dict[str, str]:
+    """Hardcoded fallback registration codes are strictly restricted to DEBUG mode."""
+    if getattr(settings, "DEBUG", False):
+        return {
+            "student": "student",
+            "teacher": "teacher",
+        }
+    return {}
 
 
 @router.get("/captcha")
@@ -55,7 +60,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         )
     )
     reg_code = result.scalar_one_or_none()
-    role = reg_code.role if reg_code else PERMANENT_REGISTRATION_CODES.get(req.registration_code)
+    permanent_codes = get_permanent_registration_codes()
+    role = reg_code.role if reg_code else permanent_codes.get(req.registration_code)
     if role is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

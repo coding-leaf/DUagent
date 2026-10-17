@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select, update
@@ -13,6 +15,23 @@ from app.schemas.operations import QuizGenerateRequest, QuizSubmitRequest
 from app.services.agent_client import AgentServiceError, agent_client
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_choice_answer(raw_ans: Any) -> list[str]:
+    """Safely parse multi-choice answer into a sorted list of uppercase options."""
+    if isinstance(raw_ans, list):
+        return sorted(str(x).strip().upper() for x in raw_ans if str(x).strip())
+    if isinstance(raw_ans, str):
+        raw_str = raw_ans.strip()
+        if raw_str.startswith("[") and raw_str.endswith("]"):
+            try:
+                parsed = json.loads(raw_str)
+                if isinstance(parsed, list):
+                    return sorted(str(x).strip().upper() for x in parsed if str(x).strip())
+            except Exception:
+                pass
+        return sorted(s.strip().upper() for s in raw_str.split(",") if s.strip())
+    return [str(raw_ans).strip().upper()] if raw_ans else []
 
 
 async def assemble_generate_payload(
@@ -229,19 +248,16 @@ def _grade_submission(
             correct_answer = question.correct_answer
             explanation = question.explanation or ""
             if question.type == "multi_choice":
-                user_sorted = sorted(user_answer) if isinstance(user_answer, list) else sorted(str(user_answer))
-                try:
-                    correct_sorted = sorted(eval(correct_answer)) if correct_answer.startswith("[") else sorted(correct_answer.split(","))
-                except Exception:
-                    correct_sorted = sorted(correct_answer.split(","))
-                is_correct = user_sorted == correct_sorted
+                user_sorted = _parse_choice_answer(user_answer)
+                correct_sorted = _parse_choice_answer(correct_answer)
+                is_correct = bool(user_sorted and user_sorted == correct_sorted)
             else:
                 is_correct = str(user_answer).strip().upper() == str(correct_answer).strip().upper()
 
             correct_for_agent = correct_answer
             if isinstance(correct_for_agent, str) and correct_for_agent.strip().startswith("["):
                 try:
-                    correct_for_agent = eval(correct_for_agent)
+                    correct_for_agent = json.loads(correct_for_agent)
                 except Exception:
                     pass
             agent_questions.append({

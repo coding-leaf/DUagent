@@ -143,10 +143,12 @@ start() {
   redis_port="$(env_value REDIS_PORT)"
 
   agent_log="$LOG_DIR/agent_service_v2.log"
+  internal_token="$(env_value INTERNAL_AGENT_TOKEN)"
   start_service "Agent Service" "$ROOT_DIR/agent_service_v2" "$agent_log" \
     env QDRANT_URL="http://$HOST:${qdrant_port:-6333}" \
     AGENTSCOPE_REDIS_PORT="${redis_port:-6379}" \
     COURSE_CATALOG_STORAGE_ROOT="$ROOT_DIR/backend/storage/course_catalogs" \
+    BACKEND_INTERNAL_AGENT_TOKEN="${internal_token}" \
     ./.venv/bin/uvicorn agent_service_v2.main:app --env-file "$ROOT_DIR/.env" \
     --host "$HOST" --port "$AGENT_PORT" --reload
   agent_pid="$LAST_PID"

@@ -17,6 +17,7 @@ class AgentModelSettings(BaseSettings):
     LLM_FORMATTER: str = "deepseek"
     BACKEND_INTERNAL_BASE_URL: str | None = None
     BACKEND_INTERNAL_AGENT_TOKEN: str | None = None
+    INTERNAL_AGENT_TOKEN: str | None = None
     BACKEND_INTERNAL_TIMEOUT: float = 10.0
     WEBHOOK_SECRET: str = ""
 

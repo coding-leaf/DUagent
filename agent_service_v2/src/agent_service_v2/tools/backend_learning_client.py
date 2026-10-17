@@ -81,10 +81,11 @@ def build_backend_learning_client_from_settings(
     settings: AgentModelSettings | None = None,
 ) -> BackendLearningClient | None:
     settings = settings or AgentModelSettings()
-    if not settings.BACKEND_INTERNAL_BASE_URL or not settings.BACKEND_INTERNAL_AGENT_TOKEN:
+    token = settings.BACKEND_INTERNAL_AGENT_TOKEN or settings.INTERNAL_AGENT_TOKEN
+    if not settings.BACKEND_INTERNAL_BASE_URL or not token:
         return None
     return BackendLearningClient(
         base_url=settings.BACKEND_INTERNAL_BASE_URL,
-        token=settings.BACKEND_INTERNAL_AGENT_TOKEN,
+        token=token,
         timeout=settings.BACKEND_INTERNAL_TIMEOUT,
     )

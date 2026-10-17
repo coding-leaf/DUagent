@@ -170,6 +170,13 @@ export const ChatProvider = ({ children }) => {
       abortControllerRef.current();
       abortControllerRef.current = null;
     }
+    setIsSending(false);
+    setMessages(prev => prev.map(m => m.loading ? {
+      ...m,
+      loading: false,
+      toolCalls: completeRunningToolCalls(m.toolCalls),
+      parts: completeRunningParts(m.parts)
+    } : m));
   };
 
   useEffect(() => {

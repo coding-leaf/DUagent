@@ -16,15 +16,13 @@ agent_service_v2/
     ├── artifacts/              # Generated files, manifests, artifact scanner
     ├── generators/             # Content generation pipelines
     ├── observability/          # Middleware logging, token tracking, traces
-    ├── runtime/                # Agent runtime loop, execution context
+    ├── runtime/                # Agent event adaptation, SSE broadcasting
     ├── safety/                 # Content review, internal disclosure policy
     ├── schemas/                # Pydantic v2 schemas for agent input/output
-    ├── session/                # Session store and history management
-    ├── team/                   # Multi-agent collaboration teams / topologies
+    ├── session/                # Run buses, session registries, history management
     ├── tools/                  # Tool implementations, MCP clients (e.g. web_search_mcp)
     ├── workspaces/             # Local workspace persistence
-    ├── main.py                 # FastAPI application & lifespan management
-    └── team_app.py             # Team runtime application integration
+    └── main.py                 # FastAPI application & lifespan management
 ```
 
 ---
@@ -33,6 +31,8 @@ agent_service_v2/
 
 - **Agents (`agents/`)**: Declare AgentScope agent instances or factory classes. Keep prompts explicit and role boundaries clear.
 - **Tools (`tools/`)**: Callable tools exposed to agents. Must validate inputs strictly and handle tool execution exceptions gracefully.
-- **API (`api/`)**: Handle external caller requests (FastAPI endpoints); push real-time agent output through SSE events.
-- **Runtime (`runtime/`)**: Manages agent loop execution, timeout, cancellation, and context injection.
+- **API (`api/`)**: Handle external caller requests (FastAPI endpoints); push real-time agent output through SSE events. Never mount another ASGI app or call the same process over HTTP — compose in-memory instead.
+- **Runtime (`runtime/`)**: Maps AgentScope events to `EduEventType` and serializes them for SSE (`event_broadcaster.py`, `protocol_adapter.py`). Must not contain business logic.
+- **Session (`session/`)**: Own in-process run state only (`run_bus.py` for workbench runs, `generation_registry.py` for personalized-resource generations). Durable state belongs to the Backend.
+- **Generators (`generators/`)**: Long-running pipelines (public resources, personalized resources). Each pipeline emits `EduEventType` events through an injected `emit` callback and must never raise into the SSE stream.
 - **Safety (`safety/`)**: Enforce disclosure filtering and policy inspection on agent inputs and outputs.

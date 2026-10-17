@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -117,7 +118,15 @@ def test_ingest_course_material_pdf_parsing_flow() -> None:
         )
         
         assert count == 2
-        mock_parser.parse.assert_called_once_with("/fake/storage/course_catalogs/python-intro.pdf", "python-intro.pdf")
+        # `ingest_course_material` resolves the path, so compare resolved paths
+        # instead of the raw string to stay platform agnostic (Windows uses
+        # backslashes and a drive prefix).
+        mock_parser.parse.assert_called_once()
+        parsed_path, parsed_name = mock_parser.parse.call_args.args
+        assert Path(parsed_path) == Path(
+            "/fake/storage/course_catalogs/python-intro.pdf"
+        ).resolve()
+        assert parsed_name == "python-intro.pdf"
         mock_kb.insert_document.assert_called_once()
 
 

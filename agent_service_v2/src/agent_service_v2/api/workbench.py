@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from agent_service_v2.agents.model_provider import build_chat_model_from_settings
 from agent_service_v2.agents.workbench_factory import WorkbenchAgentFactory
-from agent_service_v2.runtime.sse import format_sse
+from agent_service_v2.runtime.event_broadcaster import EventStreamBroadcaster
 from agent_service_v2.safety.content_review_client import AgentScopeContentReviewClient
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
 from agent_service_v2.schemas.workbench import WorkbenchChatRequest
@@ -42,9 +42,15 @@ async def workbench_chat(req: WorkbenchChatRequest, request: Request) -> Streami
     )
 
     async def event_stream():
+        broadcaster = EventStreamBroadcaster(
+            bus=run_bus,
+            run_id=run.run_id,
+            conversation_id=run.conversation_id,
+            agent=run.agent,
+        )
         try:
-            async for event in run_bus.subscribe(run.run_id):
-                yield format_sse(event)
+            async for chunk in broadcaster.sse_events():
+                yield chunk
         finally:
             await session.cancel_run(run.run_id)
 

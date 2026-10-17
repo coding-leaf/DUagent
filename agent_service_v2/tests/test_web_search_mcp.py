@@ -1,6 +1,5 @@
 import asyncio
 import importlib
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 main_module = importlib.import_module("agent_service_v2.main")
@@ -194,21 +193,10 @@ def test_fastapi_lifespan_owns_web_search_runtime(monkeypatch):
         async def close(self):
             calls.append("close")
 
-    @asynccontextmanager
-    async def fake_team_lifespan(_app):
-        calls.append("team-start")
-        yield
-        calls.append("team-close")
-
     monkeypatch.setattr(
         main_module,
         "build_web_search_runtime_from_environ",
         lambda: FakeRuntime(),
-    )
-    monkeypatch.setattr(
-        main_module.team_runtime_app.router,
-        "lifespan_context",
-        fake_team_lifespan,
     )
 
     async def run_lifespan():
@@ -217,5 +205,22 @@ def test_fastapi_lifespan_owns_web_search_runtime(monkeypatch):
 
     asyncio.run(run_lifespan())
 
-    assert calls == ["start", "team-start", "team-close", "close"]
+    assert calls == ["start", "close"]
     assert main_module.app.state.web_search_client is None
+
+
+def test_main_exposes_only_product_routers_without_team_runtime_mount():
+    mount_paths = {
+        route.path
+        for route in main_module.app.routes
+        if route.__class__.__name__ == "Mount"
+    }
+    assert mount_paths == set()
+
+    documented_paths = set(main_module.app.openapi()["paths"])
+    assert all("team-runtime" not in path for path in documented_paths)
+    assert "/agent/v2/workbench/chat" in documented_paths
+    assert "/agent/v2/personalized-resources/generations" in documented_paths
+    assert "/agent/v2/personalized-resources/generations/{session_id}/events" in (
+        documented_paths
+    )

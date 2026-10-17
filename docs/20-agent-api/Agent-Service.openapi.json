@@ -366,12 +366,13 @@
           "personalized-resources"
         ],
         "summary": "Start Personalized Resource Generation",
+        "description": "Start one in-memory generation run and stream its events separately.",
         "operationId": "start_personalized_resource_generation_agent_v2_personalized_resources_generations_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ResourceTeamRequest"
+                "$ref": "#/components/schemas/PersonalizedResourceGenerationRequest"
               }
             }
           },
@@ -753,6 +754,111 @@
         ],
         "title": "MaterialIngestionItem"
       },
+      "PersonalizedResourceGenerationRequest": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "course_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Title"
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Goal"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter"
+          },
+          "knowledge_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Point"
+          },
+          "resource_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resource Types"
+          },
+          "resource_preferences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resource Preferences"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": "manual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "user_id",
+          "course_id",
+          "goal"
+        ],
+        "title": "PersonalizedResourceGenerationRequest",
+        "description": "Payload Backend sends when starting one personalized-resource task.\n\nExtra keys (for example `webhook_url`) are ignored: publication results are\nreported through the Backend internal API instead of a webhook callback."
+      },
       "QuizDiagnoseRequest": {
         "properties": {
           "user_id": {
@@ -1125,92 +1231,6 @@
           "webhook_url"
         ],
         "title": "ResourceGenerationRequest"
-      },
-      "ResourceTeamRequest": {
-        "properties": {
-          "task_id": {
-            "type": "string",
-            "title": "Task Id"
-          },
-          "user_id": {
-            "type": "string",
-            "title": "User Id"
-          },
-          "course_id": {
-            "type": "string",
-            "title": "Course Id"
-          },
-          "course_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Course Title"
-          },
-          "goal": {
-            "type": "string",
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Goal"
-          },
-          "knowledge_point": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Knowledge Point"
-          },
-          "resource_preferences": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Resource Preferences"
-          },
-          "difficulty": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Difficulty"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "source_type": {
-            "type": "string",
-            "title": "Source Type",
-            "default": "manual"
-          }
-        },
-        "type": "object",
-        "required": [
-          "task_id",
-          "user_id",
-          "course_id",
-          "goal"
-        ],
-        "title": "ResourceTeamRequest"
       },
       "ResourceUsage": {
         "properties": {

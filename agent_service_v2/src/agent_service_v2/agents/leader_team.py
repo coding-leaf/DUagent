@@ -118,6 +118,7 @@ class ResourceWorkerAgent:
         difficulty: str | None = None,
         personalized: bool = False,
         personalization_context: dict[str, Any] | None = None,
+        repair_hint: str = "",
     ) -> dict[str, Any]:
         # 🚀 1. 根据 course_id 与 knowledge_point 触发 RAG 检索
         rag_context = ""
@@ -287,6 +288,8 @@ Language Requirements:
 """
         if not self.model:
             raise RuntimeError("LLM Model not configured in agent_service_v2")
+
+        prompt = f"{prompt}\n{repair_hint}" if repair_hint else prompt
 
         response = await self.model([UserMsg(name="resource_worker", content=prompt)])
         content = await _collect_model_text(response)

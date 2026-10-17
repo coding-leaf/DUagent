@@ -1,15 +1,17 @@
 [project]
 name = "agent-service-v2"
 version = "0.1.0"
-description = "Add your description here"
+description = "DUagent Agent Service v2"
 readme = "README.md"
 authors = [
     { name = "yezisama", email = "1526209863xjh@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "agentscope[full]>=2,<3",
+    "agentscope[models,rag,vdb-qdrant,storage-redis,workspace]>=2.0.10",
     "fastapi>=0.138.2",
+    "httpx>=0.28.1",
+    "mem0ai>=2.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "sse-starlette>=3.4.5",

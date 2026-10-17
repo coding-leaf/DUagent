@@ -20,7 +20,7 @@ Agent Service v2 (AgentScope 2.x)
 
 - Frontend 不直连 Agent Service。
 - Backend 负责鉴权、课程权限、MySQL、任务状态和业务落库。
-- Agent Service v2 负责 Agent/Team、工具、RAG、Memory、Workspace 和模型调用。
+- Agent Service v2 负责 Agent、工具、RAG、Memory、Workspace 和模型调用。
 - Agent Service 不访问 MySQL；Backend 不直接访问 Qdrant。
 
 ## 目录
@@ -45,7 +45,7 @@ docs/20-agent-api/           Backend ↔ Agent Service v2 契约
 | `/agent/v2/knowledge/resources/generations` | 公共学习资源生成 |
 | `/agent/v2/evaluation/generations` | 学情评估 |
 | `/agent/v2/evaluation/quiz/diagnose` | 作答诊断 |
-| `/agent/v2/personalized-resources/*` | 个性化资源 Agent Team |
+| `/agent/v2/personalized-resources/*` | 个性化资源生成（起草→校验→审核→发布） |
 
 画像刷新由 Backend 规则服务完成；学习路径由 Backend 根据 active KG 和实时进度计算。
 

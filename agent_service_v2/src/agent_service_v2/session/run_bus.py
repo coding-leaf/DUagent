@@ -31,9 +31,10 @@ class WorkbenchRunBus:
         *,
         conversation_id: str | None,
         agent: str = "edu_ai_chat_workbench",
+        run_id: str | None = None,
     ) -> WorkbenchRun:
         run = WorkbenchRun(
-            run_id=f"run_{uuid4().hex}",
+            run_id=run_id or f"run_{uuid4().hex}",
             conversation_id=conversation_id,
             agent=agent,
         )

@@ -5,7 +5,23 @@ from typing import Any, Literal
 
 ToolOutcome = Literal["success", "neutral", "warning", "failure"]
 
-_SUCCESS_STATUSES = {"available", "published", "ok", "success"}
+# Backend personalized-resource generation lifecycle statuses. A draft that was
+# persisted, a validation that was recorded and a review that was approved are
+# successful tool executions even though the resource is not published yet, so
+# they must not be reported to the frontend as `outcome: failure`.
+_GENERATION_PROGRESS_STATUSES = {
+    "drafted",
+    "validated",
+    "approved",
+    "approved_with_advice",
+}
+_SUCCESS_STATUSES = {
+    "available",
+    "published",
+    "ok",
+    "success",
+    *_GENERATION_PROGRESS_STATUSES,
+}
 _NEUTRAL_STATUSES = {"empty", "not_found"}
 _WARNING_STATUSES = {"degraded"}
 _FAILURE_STATUSES = {

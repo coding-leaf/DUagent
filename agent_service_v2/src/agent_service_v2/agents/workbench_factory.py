@@ -4,14 +4,12 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from agentscope.agent import Agent, ContextConfig, ReActConfig
 from agentscope.mcp import MCPClient
-from agentscope.state import AgentState
 from agentscope.tool import Toolkit
 from agentscope.workspace import LocalWorkspace
 
-from agent_service_v2.agents.permissions import build_workbench_permission_context
 from agent_service_v2.agents.prompts import WORKBENCH_SYSTEM_PROMPT
+from agent_service_v2.agents.workbench_react_agent import WorkbenchReActAgent
 from agent_service_v2.observability.agent_middleware import AgentRunLoggingMiddleware
 from agent_service_v2.observability.logging import LogSink
 from agent_service_v2.tools.backend_learning_client import build_backend_learning_client_from_settings
@@ -118,7 +116,7 @@ class WorkbenchAgentFactory:
         run_id: str | None = None,
         conversation_id: str | None = None,
         log_sink: LogSink | None = None,
-    ) -> Agent:
+    ) -> WorkbenchReActAgent:
         model = self._model_provider()
         if model is None:
             raise MissingModelConfigError("model_not_configured")
@@ -266,19 +264,15 @@ class WorkbenchAgentFactory:
                 )
             )
 
-        return Agent(
+        return WorkbenchReActAgent.build(
             name=_agent_name(course_id),
             system_prompt=_system_prompt(user_id=user_id, course_id=course_id),
             model=model,
             toolkit=toolkit,
+            workspace=workspace,
             middlewares=middlewares,
-            state=AgentState(
-                permission_context=build_workbench_permission_context(),
-                tool_context={"activated_groups": []},
-            ),
-            offloader=workspace,
-            context_config=ContextConfig(tool_result_limit=20000),
-            react_config=ReActConfig(max_iters=20),
+            max_iters=20,
+            tool_result_limit=20000,
         )
 
 

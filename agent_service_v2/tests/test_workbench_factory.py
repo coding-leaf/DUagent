@@ -12,10 +12,11 @@ from agent_service_v2.agents.workbench_factory import (
     MissingModelConfigError,
     WorkbenchAgentFactory,
 )
+from agent_service_v2.agents.workbench_react_agent import WorkbenchReActAgent
+from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
 from agent_service_v2.workspaces.workbench_workspace_manager import (
     WorkbenchWorkspaceManager,
 )
-from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
 
 
 def test_factory_raises_clear_error_without_model(tmp_path: Path):
@@ -44,6 +45,37 @@ def test_factory_creates_agentscope_agent_with_model(tmp_path: Path):
     agent = factory.create_agent(user_id="u1", course_id="c1", workspace=workspace, run_id="run-1")
 
     assert isinstance(agent, Agent)
+    assert isinstance(agent, WorkbenchReActAgent)
+    assert agent.react_config.max_iters == 20
+    assert agent.state.permission_context is not None
+
+
+def test_factory_agent_uses_native_toolkit_without_team_runtime(tmp_path: Path):
+    class FakeModel:
+        pass
+
+    workspace = WorkbenchWorkspaceManager(root_dir=tmp_path).get_workspace(
+        user_id="u1",
+        course_id="c1",
+        conversation_id="conv1",
+    )
+    factory = WorkbenchAgentFactory(model_provider=lambda: FakeModel())
+
+    agent = factory.create_agent(
+        user_id="u1",
+        course_id="c1",
+        workspace=workspace,
+        run_id="run-1",
+        conversation_id="conv1",
+    )
+
+    # Business tools are mounted on the AgentScope Toolkit itself; no ASGI
+    # sub-application or HTTP loopback is involved.
+    assert agent.toolkit is not None
+    schemas = asyncio.run(agent.toolkit.get_tool_schemas())
+    tool_names = {schema["function"]["name"] for schema in schemas}
+    assert "read_learner_profile" in tool_names
+    assert not any("team" in name.lower() for name in tool_names)
 
 
 def test_factory_accepts_catalog_id_separately_from_course_id(tmp_path: Path):

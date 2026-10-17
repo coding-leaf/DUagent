@@ -51,9 +51,8 @@ Thumbs.db
 .gemini/
 .antigravitycli/
 .worktrees/
-AGENTS.md
 CLAUDE.md
-WORKFLOW.md
+/WORKFLOW.md
 WorkLine.md
 PROJECT.md
 TODO.md

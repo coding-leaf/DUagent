@@ -28,3 +28,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 统一前后端代码扫描体系并沉淀架构红线逃生通道
+<!-- trellis-session: v=2 fp=23d37248190a35bd -->
+
+**Date**: 2026-10-18
+**Task**: 统一前后端代码扫描体系并沉淀架构红线逃生通道
+**Package**: backend
+**Branch**: `main`
+
+### Summary
+
+引入现代 Rust 工具 Ruff 统一后端与智能体端静态扫描，配置 ruff.toml 忽略 SQLAlchemy E712；修复 auth.py 与 evaluation.py 未定义变量及 Windows 文件句柄锁隐患；交付全仓 check_all.py 串联 6 大门禁全部绿灯通过；在 .trellis/spec/ 下固化负向红线与显式逃生通道 # arch-allow: 规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `53787ed` | chore(tooling,spec): 统一前后端代码扫描流水线与沉淀架构红线逃生通道 |
+
+### Status
+
+[OK] **Completed**

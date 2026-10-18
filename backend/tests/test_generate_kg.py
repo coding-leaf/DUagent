@@ -1,10 +1,10 @@
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from tools import generate_knowledge_graph as generate_kg_module
 from app.services.kg_generation import (
-    generate_kg_from_llm,
+    generate_outline_kg_from_agent,
     load_kg_json_file,
     load_grounding_matches,
     prune_kg_with_grounding_file,
@@ -168,32 +168,54 @@ def test_route_a_generation_strategy_uses_usable_name_only_for_default_threshold
 
 
 @pytest.mark.asyncio
-async def test_generate_kg_from_llm_uses_backend_settings_when_env_missing(monkeypatch) -> None:
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
-    monkeypatch.delenv("LLM_MODEL", raising=False)
-
-    with patch("app.services.kg_generation.settings.LLM_API_KEY", "settings-key"), patch(
-        "app.services.kg_generation.settings.LLM_BASE_URL", "https://settings.example"
-    ), patch("app.services.kg_generation.settings.LLM_MODEL", "settings-model"), patch(
-        "app.services.kg_generation.httpx.AsyncClient.post", new_callable=AsyncMock
+async def test_generate_outline_kg_from_agent_delegates_to_agent_service() -> None:
+    with patch(
+        "app.services.kg_generation.kg_agent_client.post_json",
+        new_callable=AsyncMock,
     ) as mock_post:
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": '{"nodes":[],"edges":[]}'}}]
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
+        mock_post.return_value = {"nodes": [], "edges": []}
 
-        result = await generate_kg_from_llm("课程内容")
+        result = await generate_outline_kg_from_agent("第 5 章 数组")
 
     assert result == {"nodes": [], "edges": []}
-    called_url = mock_post.await_args.args[0]
-    called_payload = mock_post.await_args.kwargs["json"]
-    called_headers = mock_post.await_args.kwargs["headers"]
-    assert called_url == "https://settings.example/chat/completions"
-    assert called_payload["model"] == "settings-model"
-    assert called_headers["Authorization"] == "Bearer settings-key"
+    mock_post.assert_awaited_once_with(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        {"source_type": "outline_text", "context": "第 5 章 数组"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_outline_kg_from_agent_forwards_course_title() -> None:
+    with patch(
+        "app.services.kg_generation.kg_agent_client.post_json",
+        new_callable=AsyncMock,
+        return_value={"nodes": [], "edges": []},
+    ) as mock_post:
+        await generate_outline_kg_from_agent("第 1 章 绪论", course_title="数据结构")
+        await generate_outline_kg_from_agent("第 1 章 绪论", course_title="   ")
+
+    assert mock_post.await_args_list[0].args[1] == {
+        "source_type": "outline_text",
+        "context": "第 1 章 绪论",
+        "course_title": "数据结构",
+    }
+    assert mock_post.await_args_list[1].args[1] == {
+        "source_type": "outline_text",
+        "context": "第 1 章 绪论",
+    }
+
+
+def test_outline_generation_no_longer_holds_llm_prompts_in_backend() -> None:
+    """Backend must not own any LLM prompt / chat-completions call for KG."""
+    source = (
+        Path(__file__).resolve().parent.parent / "app" / "services" / "kg_generation.py"
+    ).read_text(encoding="utf-8")
+
+    assert "generate_kg_from_llm" not in source
+    assert '"/chat/completions"' not in source
+    assert "You are a professional educational design expert" not in source
+    assert "import httpx" not in source
+    assert "LLM_API_KEY" not in source
 
 
 def test_prune_kg_with_grounding_file_keeps_supported_nodes_and_metrics(tmp_path: Path) -> None:

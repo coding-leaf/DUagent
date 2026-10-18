@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """CourseKnowledgeGraph 智能生成与导入工具（单课程临时运维工具）。
 
+大纲文本与目录切片的知识图谱生成统一委托给 Agent Service，Backend 不再
+直接调用大模型（不持有任何 Prompt 或 LLM 密钥）。
+
 用法：
-  LLM_API_KEY=your_key python tools/generate_knowledge_graph.py --course-id <id> --file <outline_path>
-  LLM_API_KEY=your_key python tools/generate_knowledge_graph.py --course-id <id> --outline "大纲内容文本"
+  python tools/generate_knowledge_graph.py --course-id <id> --file <outline_path>
+  python tools/generate_knowledge_graph.py --course-id <id> --outline "大纲内容文本"
 """
 import argparse
 import asyncio
@@ -15,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.db.session import engine
 from app.services.kg_generation import (
-    generate_kg_from_llm,
+    generate_outline_kg_from_agent,
     load_kg_json_file,
     prune_kg_with_grounding_file,
     route_a_generation_strategy_for_threshold,
@@ -34,6 +37,10 @@ load_kg_json = load_kg_json_file
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CourseKnowledgeGraph 智能生成与导入运维工具")
     parser.add_argument("--course-id", required=True, help="课程 ID")
+    parser.add_argument(
+        "--course-title",
+        help="课程名称；用于让 Agent Service 规划器锁定学科（缺省时由大纲自动推断）",
+    )
     parser.add_argument("--auto", action="store_true", help="跳过用户命令行交互，直接落库")
     parser.add_argument("--grounding-file", type=Path, help="Agent kg_body_grounding JSON output for Route A pruning")
     parser.add_argument(
@@ -45,7 +52,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--file", "-f", help="课程大纲文本文档路径")
     src.add_argument("--outline", "-o", help="直接传入课程大纲文本")
-    src.add_argument("--kg-json", type=Path, help="直接读取现有 KG JSON，跳过 LLM 生成")
+    src.add_argument("--kg-json", type=Path, help="直接读取现有 KG JSON，跳过智能体生成")
     return parser
 
 
@@ -79,11 +86,14 @@ async def main_async():
             print("ERROR: Syllabus/Outline content is empty.", file=sys.stderr)
             sys.exit(1)
 
-        # 1. 调大模型生成
+        # 1. 委托 Agent Service 通用课程规划智能体生成
         try:
-            raw_data = await generate_kg_from_llm(outline)
+            raw_data = await generate_outline_kg_from_agent(
+                outline,
+                course_title=args.course_title,
+            )
         except Exception as e:
-            print(f"ERROR: Failed to call LLM or parse response: {e}", file=sys.stderr)
+            print(f"ERROR: Failed to delegate KG planning to Agent Service: {e}", file=sys.stderr)
             sys.exit(1)
 
         # 2. 校验与去重
@@ -93,11 +103,11 @@ async def main_async():
             print(f"ERROR: Generated data format validation failed: {e}", file=sys.stderr)
             sys.exit(1)
         source_type = "outline_llm"
-        generation_strategy = "legacy_outline"
+        generation_strategy = "outline_agent_planner"
         metrics = {"node_count": len(nodes), "edge_count": len(edges)}
 
     if not nodes:
-        print("ERROR: No valid nodes extracted from LLM response.", file=sys.stderr)
+        print("ERROR: No valid nodes extracted from the Agent Service response.", file=sys.stderr)
         sys.exit(1)
 
     if args.grounding_file:

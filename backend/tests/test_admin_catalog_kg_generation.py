@@ -318,16 +318,16 @@ async def test_seed_ready_catalog_can_store_kg_host_course_id():
 
 
 @pytest.mark.asyncio
-async def test_generate_outline_text_uses_llm_and_creates_version():
+async def test_generate_outline_text_delegates_to_agent_and_creates_version():
     await _reset_db()
     _, course_id = await _seed_catalog_and_course()
 
     with patch(
-        "app.services.kg_generation.generate_kg_from_llm",
+        "app.services.kg_generation.kg_agent_client.post_json",
         new_callable=AsyncMock,
-    ) as mock_llm:
-        mock_llm.return_value = {
-            "nodes": [{"id": "array", "name": "数组", "chapter": "第 5 章"}],
+    ) as mock_post:
+        mock_post.return_value = {
+            "nodes": [{"id": "array", "name": "数组", "chapter": "第 5 章", "level": 2}],
             "edges": [],
         }
         result = await generate_knowledge_graph_version(
@@ -337,10 +337,34 @@ async def test_generate_outline_text_uses_llm_and_creates_version():
             activate=True,
         )
 
-    mock_llm.assert_awaited_once_with("第 5 章 数组")
+    mock_post.assert_awaited_once_with(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        {"source_type": "outline_text", "context": "第 5 章 数组"},
+    )
     assert result["source_type"] == "outline_llm"
-    assert result["generation_strategy"] == "legacy_outline"
+    assert result["generation_strategy"] == "outline_agent_planner"
     assert result["node_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_outline_text_preserves_agent_failure_as_input_error():
+    with patch(
+        "app.services.kg_generation.kg_agent_client.post_json",
+        new_callable=AsyncMock,
+        side_effect=AgentServiceError("agent unreachable", agent_code=None),
+    ) as mock_post:
+        with pytest.raises(KGGenerationInputError) as exc_info:
+            await generate_knowledge_graph_version(
+                course_id="course-1",
+                source_type="outline_text",
+                outline_text="第 1 章 绪论",
+            )
+
+    assert exc_info.value.error_code == "kg_agent_failed"
+    mock_post.assert_awaited_once_with(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        {"source_type": "outline_text", "context": "第 1 章 绪论"},
+    )
 
 
 @pytest.mark.asyncio
@@ -918,6 +942,50 @@ async def test_admin_catalog_kg_generation_creates_task_and_background_graph():
         outline_text=None,
         kg_json=None,
         activate=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_outline_generation_forwards_catalog_title_as_course_title():
+    """目录标题必须作为 course_title 透传给 Agent 规划器以锁定学科。"""
+    await _reset_db()
+    catalog_id, course_id = await _seed_catalog_and_course()
+    await _seed_user("admin-kg-title", "admin")
+
+    with patch(
+        "app.services.catalog_kg_service.generate_knowledge_graph_version",
+        new_callable=AsyncMock,
+    ) as mock_generate:
+        mock_generate.return_value = {
+            "course_id": course_id,
+            "graph_id": "graph-title",
+            "version": 1,
+            "node_count": 1,
+            "edge_count": 0,
+            "source_type": "outline_llm",
+            "generation_strategy": "outline_agent_planner",
+            "metrics": {},
+            "activated": True,
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/admin/course-catalogs/{catalog_id}/knowledge-graphs/generations",
+                headers=_auth_headers("admin-kg-title", "admin"),
+                json={"source_type": "outline_text", "outline_text": "第 1 章 绪论"},
+            )
+
+        assert response.status_code == 202, response.text
+        task = await _wait_for_task_completion(response.json()["data"]["task_id"])
+
+    assert task.status == "completed"
+    mock_generate.assert_awaited_once_with(
+        course_id=course_id,
+        source_type="outline_text",
+        catalog_id=catalog_id,
+        outline_text="第 1 章 绪论",
+        kg_json=None,
+        activate=True,
+        course_title="KG Catalog",
     )
 
 

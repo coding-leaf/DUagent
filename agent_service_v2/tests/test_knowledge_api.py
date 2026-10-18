@@ -186,7 +186,7 @@ def test_kg_generation_api_builds_context_from_catalog_chunks() -> None:
             return_value="指针保存变量地址。",
         ) as mock_context,
         patch(
-            "agent_service_v2.api.knowledge.run_leader_team_kg_generation",
+            "agent_service_v2.api.knowledge.run_curriculum_kg_generation",
             new_callable=AsyncMock,
             return_value=mock_graph,
         ) as mock_generate,
@@ -199,3 +199,84 @@ def test_kg_generation_api_builds_context_from_catalog_chunks() -> None:
     assert mock_context.await_args.args == ("catalog-1",)
     mock_generate.assert_called_once()
     assert mock_generate.await_args.args[1] == "指针保存变量地址。"
+    assert mock_generate.await_args.kwargs["course_title"] is None
+
+
+def test_kg_generation_api_forwards_course_title_to_curriculum_planner() -> None:
+    payload = {
+        "source_type": "outline_text",
+        "context": "第一章 数据结构绪论",
+        "course_title": "数据结构与算法",
+    }
+    mock_graph = {
+        "nodes": [{"id": "intro", "name": "绪论", "chapter": "第一章 数据结构绪论", "level": 1}],
+        "edges": [],
+    }
+    with patch(
+        "agent_service_v2.api.knowledge.run_curriculum_kg_generation",
+        new_callable=AsyncMock,
+        return_value=mock_graph,
+    ) as mock_generate:
+        response = client.post(
+            "/agent/v2/knowledge/knowledge-graphs/generations",
+            json=payload,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == mock_graph
+    mock_generate.assert_called_once()
+    assert mock_generate.await_args.args[1] == "第一章 数据结构绪论"
+    assert mock_generate.await_args.kwargs["course_title"] == "数据结构与算法"
+
+
+def test_kg_generation_api_rejects_empty_outline_text() -> None:
+    response = client.post(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        json={"source_type": "outline_text", "context": "   "},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "context is required for outline_text"
+
+
+def test_kg_generation_api_requires_catalog_id_for_catalog_chunks() -> None:
+    response = client.post(
+        "/agent/v2/knowledge/knowledge-graphs/generations",
+        json={"source_type": "catalog_chunks"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "catalog_id is required for catalog_chunks"
+
+
+def test_kg_generation_api_maps_empty_catalog_context_to_40918() -> None:
+    from agent_service_v2.tools.rag import CatalogKnowledgeContextEmpty
+
+    with patch(
+        "agent_service_v2.api.knowledge.build_catalog_kg_context",
+        new_callable=AsyncMock,
+        side_effect=CatalogKnowledgeContextEmpty("No catalog knowledge chunks found"),
+    ):
+        response = client.post(
+            "/agent/v2/knowledge/knowledge-graphs/generations",
+            json={"source_type": "catalog_chunks", "catalog_id": "catalog-1"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == 40918
+    assert response.json()["data"]["error_code"] == "kg_context_empty"
+
+
+def test_kg_generation_api_maps_planner_failure_to_502() -> None:
+    with patch(
+        "agent_service_v2.api.knowledge.run_curriculum_kg_generation",
+        new_callable=AsyncMock,
+        side_effect=ValueError("curriculum planner did not return a JSON object"),
+    ):
+        response = client.post(
+            "/agent/v2/knowledge/knowledge-graphs/generations",
+            json={"source_type": "outline_text", "context": "第一章 绪论"},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["code"] == 502

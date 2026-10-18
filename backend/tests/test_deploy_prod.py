@@ -93,3 +93,16 @@ def test_catalog_kg_generation_uses_extended_agent_timeout():
 
     assert "kg_agent_client = AgentClient(timeout=300.0)" in service
     assert "return await kg_agent_client.post_json(" in service
+
+
+def test_backend_kg_generation_never_calls_an_llm_directly():
+    """Backend owns persistence only; every KG path delegates to Agent Service."""
+    service = (ROOT_DIR / "backend" / "app" / "services" / "kg_generation.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "generate_kg_from_llm" not in service
+    assert "import httpx" not in service
+    assert "LLM_API_KEY" not in service
+    assert '"/chat/completions"' not in service
+    assert "generate_outline_kg_from_agent" in service

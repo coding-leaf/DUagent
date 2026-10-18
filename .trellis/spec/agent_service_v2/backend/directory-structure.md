@@ -29,8 +29,8 @@ agent_service_v2/
 
 ## Conventions
 
-- **Agents (`agents/`)**: Declare AgentScope agent instances or factory classes. Keep prompts explicit and role boundaries clear.
-- **Tools (`tools/`)**: Callable tools exposed to agents. Must validate inputs strictly and handle tool execution exceptions gracefully.
+- **Agents (`agents/`)**: Declare AgentScope agent instances or factory classes. Keep prompts explicit, discipline-agnostic, and role boundaries clear (e.g. `curriculum_planner.py` for universal DAG course planning). Never hardcode specific disciplines (such as C Programming) into generic planner prompts.
+- **Tools (`tools/`)**: Callable tools exposed to agents (e.g. `outline_extractor.py`). Must validate inputs strictly, return serializable JSON data, and handle tool execution exceptions gracefully without crashing the workflow.
 - **API (`api/`)**: Handle external caller requests (FastAPI endpoints); push real-time agent output through SSE events. Never mount another ASGI app or call the same process over HTTP — compose in-memory instead.
 - **Runtime (`runtime/`)**: Maps AgentScope events to `EduEventType` and serializes them for SSE (`event_broadcaster.py`, `protocol_adapter.py`). Must not contain business logic.
 - **Session (`session/`)**: Own in-process run state only (`run_bus.py` for workbench runs, `generation_registry.py` for personalized-resource generations). Durable state belongs to the Backend.

@@ -180,6 +180,10 @@ class KGGenerationRequest(BaseModel):
     context: str | None = Field(None, description="The course syllabus outline context")
     catalog_id: str | None = Field(None, description="Course catalog ID for catalog chunk input")
     source_type: str = Field("outline_text", description="Resource input origin")
+    course_title: str | None = Field(
+        None,
+        description="Course title used to inject the discipline for curriculum planning",
+    )
 
 
 class ResourceGenerationRequest(BaseModel):
@@ -218,17 +222,17 @@ class QuizGenerationRequest(BaseModel):
 
 
 
-from agent_service_v2.agents.leader_team import run_leader_team_kg_generation
+from agent_service_v2.agents.curriculum_planner import run_curriculum_kg_generation
 from agent_service_v2.generators.public_resource_flow import run_public_resource_generation
 
 @router.post(
     "/knowledge-graphs/generations",
     status_code=status.HTTP_200_OK,
     tags=["Knowledge Graph"],
-    summary="一键由 Leader 规划提取课程知识图谱（V2）",
+    summary="一键由通用课程规划智能体提取课程知识图谱（V2）",
 )
 async def generate_v2_knowledge_graph(request: KGGenerationRequest):
-    """一键通过 CoursePlannerAgent (Leader) 高度自检产生课程知识图谱大纲。"""
+    """委托通用 :class:`CourseCurriculumPlanner` 生成学科自适应的课程知识图谱 DAG。"""
     settings = AgentModelSettings()
     try:
         if request.source_type == "catalog_chunks":
@@ -257,7 +261,11 @@ async def generate_v2_knowledge_graph(request: KGGenerationRequest):
                     },
                 )
 
-        data = await run_leader_team_kg_generation(settings, context)
+        data = await run_curriculum_kg_generation(
+            settings,
+            context,
+            course_title=request.course_title,
+        )
         return {"code": 200, "message": "success", "data": data}
     except CatalogKnowledgeContextEmpty as exc:
         return JSONResponse(
@@ -269,7 +277,7 @@ async def generate_v2_knowledge_graph(request: KGGenerationRequest):
             },
         )
     except Exception as exc:
-        logger.exception("Leader team failed to extract KG: %s", exc)
+        logger.exception("Curriculum planner failed to extract KG: %s", exc)
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
             content={"code": 502, "message": str(exc), "data": None},

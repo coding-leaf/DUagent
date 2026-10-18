@@ -2,100 +2,35 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, AsyncIterator
-from agentscope.model import ChatResponse
+from typing import Any
 from agentscope.message import UserMsg
 
+from agent_service_v2.agents.curriculum_planner import (
+    CourseCurriculumPlanner,
+    collect_model_text as _collect_model_text,
+)
 from agent_service_v2.agents.model_provider import AgentModelSettings, build_chat_model_from_settings
 
 logger = logging.getLogger(__name__)
 
 
-def _text_from_chat_response(response: ChatResponse) -> str:
-    parts: list[str] = []
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            parts.append(text)
-    return "".join(parts)
+class CoursePlannerAgent(CourseCurriculumPlanner):
+    """Backward-compatible alias of :class:`CourseCurriculumPlanner`.
 
-
-async def _collect_model_text(
-    response: ChatResponse | AsyncIterator[ChatResponse] | Any,
-) -> str:
-    if isinstance(response, ChatResponse):
-        return _text_from_chat_response(response).strip()
-    if hasattr(response, "__aiter__"):
-        fallback_parts: list[str] = []
-        async for chunk in response:
-            text = _text_from_chat_response(chunk)
-            if chunk.is_last:
-                return text.strip()
-            fallback_parts.append(text)
-        return "".join(fallback_parts).strip()
-    text = getattr(response, "text", "")
-    return text.strip() if isinstance(text, str) else ""
-
-
-class CoursePlannerAgent:
-    """Leader Agent: Structuring the syllabus roadmap and extracting Knowledge Graph nodes."""
+    The old leader implementation hardcoded a single-discipline curriculum prompt.
+    The generic planner now infers the discipline from ``course_title`` and the
+    supplied material, so this class only keeps the historic name (and the
+    historic ``plan_curriculum(context)`` call signature) alive.
+    """
 
     def __init__(self, settings: AgentModelSettings):
-        self.settings = settings
-        self.model = build_chat_model_from_settings(settings, stream=False)
-
-    async def plan_curriculum(self, context_text: str) -> dict[str, Any]:
-        prompt = f"""You are a professional C Programming Curriculum Designer.
-Please extract a clean, pedagogical course knowledge graph from the provided course material/outline.
-You must construct a strict prerequisite relationship path.
-
-Input Course Context:
-\"\"\"
-{context_text}
-\"\"\"
-
-Requirements:
-1. Identify all critical C language topics as "nodes". Each node must contain:
-   - "id": Unique flat identifier, lowercase string (e.g. "c_pointers", "basic_syntax")
-   - "name": Concise human-readable name of the topic, which MUST be in Simplified Chinese (简体中文) (e.g., "指针基础")
-   - "chapter": Chapter heading it belongs to, which MUST be in Simplified Chinese (简体中文) (e.g., "第一章：指针基础")
-2. Identify dependencies between these nodes as prerequisite "edges". Each edge must contain:
-   - "from": ID of prerequisite node
-   - "to": ID of target node
-3. Validate there are no circular dependencies.
-
-Output MUST be a strict, raw JSON object without markdown wrappers, matching this format exactly:
-{{
-  "nodes": [
-    {{"id": "intro", "name": "C语言介绍", "chapter": "第一章：引言"}},
-    {{"id": "vars", "name": "变量与数据类型", "chapter": "第一章：引言"}}
-  ],
-  "edges": [
-    {{"from": "intro", "to": "vars"}}
-  ]
-}}
-"""
-        if not self.model:
-            raise RuntimeError("LLM Model not configured in agent_service_v2")
-
-        # Call OpenAICompatible model via AgentScope wrapper
-        response = await self.model([UserMsg(name="course_planner", content=prompt)])
-        content = await _collect_model_text(response)
-        
-        # Strip any markdown JSON indicators
-        if content.startswith("```"):
-            lines = content.splitlines()
-            if lines and lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            content = "\n".join(lines).strip()
-            
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError as exc:
-            logger.error("Leader Planner output invalid JSON: %s", content)
-            raise ValueError(f"Failed to generate structured KG from syllabus: {exc}")
+        # Build through this module's symbol so existing patches of
+        # `agent_service_v2.agents.leader_team.build_chat_model_from_settings`
+        # keep working.
+        super().__init__(
+            settings,
+            model=build_chat_model_from_settings(settings, stream=False),
+        )
 
 
 class ResourceWorkerAgent:
@@ -139,7 +74,13 @@ class ResourceWorkerAgent:
         if rag_context:
             course_reference_section = f"\n=== COURSE REFERENCE MATERIAL CHUNKS (RAG) ===\n{rag_context}\n"
 
-        course_info = f"Course Title: {course_title}" if course_title else "Course Title: C Programming Language"
+        resolved_title = (course_title or "").strip()
+        # 不写死任何学科：缺少课程标题时只声明“由材料推断”。
+        course_info = (
+            f"Course Title: {resolved_title}"
+            if resolved_title
+            else "Course Title: not provided (infer the subject from the chapter, topic and material)"
+        )
 
         if resource_type == "quiz":
             requested_types = question_types or ["single_choice", "multi_choice"]
@@ -175,7 +116,7 @@ class ResourceWorkerAgent:
                     "Make the explanations highly encouraging, educational, and scaffolded.\n"
                 )
 
-            prompt = f"""You are a C Programming Assessment Specialist (or specialist for {course_title or 'C Programming'}).
+            prompt = f"""You are an assessment specialist for {resolved_title or "the course under study"}.
 Please generate exactly {count} high-quality questions for the topic:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
@@ -186,7 +127,7 @@ Allowed Question Types: {q_types_str}
 Ensure the questions are precise and cover critical syllabus concepts.
 
 {course_info}
-If the course title specifies a particular language (e.g. C/C++), all terminology, options and explanations must match that exact course language.
+If the course title specifies a particular language or technology (e.g. a programming language), all terminology, options and explanations must match that exact course language.
 
 Your output MUST be a strict JSON object with this structure:
 {{
@@ -234,14 +175,14 @@ Language & Technology Requirements:
 2. Do not generate programming challenges, free-response questions, starter code or test cases in the ordinary quiz flow.
 """
         elif resource_type == "document":
-            prompt = f"""You are a {course_title or 'C Programming'} Lecturer.
+            prompt = f"""You are a lecturer for {resolved_title or "the course under study"}.
 Please generate an HTML-based interactive presentation slide deck (rich tutorial notes) for:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
 {course_info}
 {course_reference_section}
-Include code block examples and thorough explanations. All code examples, structural analysis, and concepts must be written in the specified course language (e.g., C Language). Absolutely never default to Python or other unrelated programming languages.
+Include code block examples (when the subject is technical) and thorough explanations. All examples, structural analysis, and concepts must stay inside the subject of this course; never default to an unrelated language or discipline.
 Output format MUST be a strict JSON:
 {{
   "title": "Presentation Title in Simplified Chinese",
@@ -252,14 +193,14 @@ Language Requirements:
 1. "title" and the inner HTML content in "html_content" (including slide headers, explanations, paragraph texts) MUST be fully generated in Simplified Chinese (简体中文).
 """
         elif resource_type == "mindmap":
-            prompt = f"""You are a {course_title or 'C Programming'} Knowledge-mapping assistant.
+            prompt = f"""You are a knowledge-mapping assistant for {resolved_title or "the course under study"}.
 Generate a structured Mermaid.js mindmap source string for:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
 {course_info}
 {course_reference_section}
-Ensure all mindmap nodes and concepts match the course topic and technical environment (e.g., C programming terminology, NOT Python concepts).
+Ensure all mindmap nodes and concepts match the course topic and its exact subject terminology.
 Output format MUST be a strict JSON:
 {{
   "title": "Mindmap title in Simplified Chinese",
@@ -272,11 +213,11 @@ Language Requirements:
 """
         else:
             # Fallback reading
-            prompt = f"""Generate rich, deep reading notes for {knowledge_point or "General"} inside {chapter or "General"}.
+            prompt = f"""Generate rich, deep reading notes for {knowledge_point or "General"} inside {chapter or "General"} for {resolved_title or "the course under study"}.
 
 {course_info}
 {course_reference_section}
-Ensure all descriptions, tutorial chapters, code snippets, and explanations are written in the exact language of the course (e.g., C language). Absolutely never default to Python.
+Ensure all descriptions, tutorial chapters, examples and explanations are written in the exact subject language of the course; never default to an unrelated language or discipline.
 Output MUST be JSON:
 {{
   "title": "Extra Reading in Simplified Chinese",
@@ -330,6 +271,12 @@ Language Requirements:
         return data
 
 
-async def run_leader_team_kg_generation(settings: AgentModelSettings, context_text: str) -> dict[str, Any]:
-    leader = CoursePlannerAgent(settings)
-    return await leader.plan_curriculum(context_text)
+async def run_leader_team_kg_generation(
+    settings: AgentModelSettings,
+    context_text: str,
+    *,
+    course_title: str | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible entry point for the generic curriculum planner."""
+    planner = CourseCurriculumPlanner(settings)
+    return await planner.plan_curriculum(context_text, course_title=course_title)

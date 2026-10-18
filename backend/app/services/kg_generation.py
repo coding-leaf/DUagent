@@ -5,9 +5,6 @@ import math
 from pathlib import Path
 from typing import Any
 
-import httpx
-
-from app.core.config import settings
 from app.db.session import async_session_factory
 from app.services.agent_client import AgentClient, AgentServiceError
 from app.services.course_knowledge_graphs import (
@@ -21,8 +18,8 @@ from app.services.kg_body_grounding import (
 )
 
 
-# KG generation includes Qdrant context assembly and an LLM request, so it needs
-# a longer budget than interactive Agent endpoints.
+# KG generation includes catalog context assembly and an Agent-side LLM planning
+# request, so it needs a longer budget than interactive Agent endpoints.
 kg_agent_client = AgentClient(timeout=300.0)
 
 
@@ -46,80 +43,31 @@ async def generate_catalog_kg_from_agent(catalog_id: str) -> dict[str, Any]:
         raise KGGenerationInputError(exc.message, error_code=error_code) from exc
 
 
-async def generate_kg_from_llm(outline: str) -> dict[str, Any]:
-    """Call the configured LLM to extract a course KG JSON payload from outline text."""
-    api_key = settings.LLM_API_KEY
-    base_url = settings.LLM_BASE_URL
-    model = settings.LLM_MODEL
-    if not api_key:
-        raise KGGenerationInputError("LLM_API_KEY environment variable is not set")
+async def generate_outline_kg_from_agent(
+    outline: str,
+    *,
+    course_title: str | None = None,
+) -> dict[str, Any]:
+    """Delegate outline-text curriculum planning to Agent Service.
 
-    prompt = f"""You are a professional educational design expert.
-Please extract a course knowledge graph from the given course material chunks or syllabus/outline.
-Your output must be a valid JSON object containing "nodes" and "edges".
-
-Requirements for nodes:
-- Each node represents a knowledge point.
-- Must contain fields: "id" (unique string identifier), "name" (string), and "chapter" (string).
-
-Requirements for edges:
-- Represent prerequisite relationships between nodes.
-- Must contain fields: "from" (the prerequisite node ID) and "to" (the target node ID).
-
-Course material context:
-\"\"\"
-{outline}
-\"\"\"
-
-Output JSON structure example:
-{{
-  "nodes": [
-    {{"id": "node_a", "name": "Node A", "chapter": "Chapter 1"}},
-    {{"id": "node_b", "name": "Node B", "chapter": "Chapter 1"}}
-  ],
-  "edges": [
-    {{"from": "node_a", "to": "node_b"}}
-  ]
-}}
-
-Ensure that the output contains ONLY the valid JSON object without any markdown formatting codeblocks or other explanations.
-"""
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1,
-        "max_tokens": 32768,
-        "response_format": {"type": "json_object"},
-    }
-
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        response = await client.post(
-            f"{base_url.rstrip('/')}/chat/completions",
-            json=payload,
-            headers=headers,
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"].strip()
-
-    if content.startswith("```"):
-        lines = content.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-
+    The backend owns persistence and validation only: no LLM prompt, API key or
+    completions call may live here. Agent Service plans the graph with its
+    generic :class:`CourseCurriculumPlanner`. ``course_title`` is optional and
+    only injected so the planner can pin the discipline; when omitted the planner
+    infers the subject from the outline itself.
+    """
+    payload: dict[str, Any] = {"source_type": "outline_text", "context": outline}
+    title = (course_title or "").strip()
+    if title:
+        payload["course_title"] = title
     try:
-        data = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise KGGenerationInputError("Invalid LLM KG JSON response") from exc
-    if not isinstance(data, dict):
-        raise KGGenerationInputError("LLM response must be a JSON object")
-    return data
+        return await kg_agent_client.post_json(
+            "/agent/v2/knowledge/knowledge-graphs/generations",
+            payload,
+        )
+    except AgentServiceError as exc:
+        error_code = "kg_context_empty" if exc.agent_code == 40918 else "kg_agent_failed"
+        raise KGGenerationInputError(exc.message, error_code=error_code) from exc
 
 
 def validate_kg_json_payload(
@@ -295,6 +243,7 @@ async def generate_knowledge_graph_version(
     source_type: str,
     catalog_id: str | None = None,
     outline_text: str | None = None,
+    course_title: str | None = None,
     kg_json: dict[str, Any] | None = None,
     kg_file: Path | None = None,
     grounding_file: Path | None = None,
@@ -318,9 +267,11 @@ async def generate_knowledge_graph_version(
         outline = (outline_text or "").strip()
         if not outline:
             raise KGGenerationInputError("outline_text is required")
-        nodes, edges = validate_kg_json_payload(await generate_kg_from_llm(outline))
+        nodes, edges = validate_kg_json_payload(
+            await generate_outline_kg_from_agent(outline, course_title=course_title)
+        )
         graph_source_type = "outline_llm"
-        generation_strategy = "legacy_outline"
+        generation_strategy = "outline_agent_planner"
         metrics: dict[str, Any] = {"node_count": len(nodes), "edge_count": len(edges)}
     elif source_type == "kg_json":
         if kg_json is not None:

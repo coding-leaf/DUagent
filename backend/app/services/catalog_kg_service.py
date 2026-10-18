@@ -198,6 +198,9 @@ class CatalogKGService:
         }
         if req.outline_text is not None:
             task_result["outline_text"] = req.outline_text
+            # 大纲文本没有课程标题就无从锁定学科，用目录标题兜底传给
+            # Agent Service 的通用课程规划器（缺失时规划器会自行推断）。
+            task_result["course_title"] = (catalog.title or "").strip() or None
         if req.kg_json is not None:
             task_result["kg_json"] = req.kg_json
 
@@ -228,14 +231,19 @@ async def run_catalog_kg_generation_background(task_id: str) -> None:
 
         task_context = task.result or {}
         try:
-            service_result = await generate_knowledge_graph_version(
-                course_id=str(task_context.get("course_id") or task.course_id or ""),
-                source_type=str(task_context.get("source_type") or ""),
-                catalog_id=task_context.get("catalog_id"),
-                outline_text=task_context.get("outline_text"),
-                kg_json=task_context.get("kg_json"),
-                activate=bool(task_context.get("activate", True)),
-            )
+            generate_kwargs = {
+                "course_id": str(task_context.get("course_id") or task.course_id or ""),
+                "source_type": str(task_context.get("source_type") or ""),
+                "catalog_id": task_context.get("catalog_id"),
+                "outline_text": task_context.get("outline_text"),
+                "kg_json": task_context.get("kg_json"),
+                "activate": bool(task_context.get("activate", True)),
+            }
+            course_title = task_context.get("course_title")
+            if course_title:
+                # 仅在真正拿到学科信息时透传，避免向 Agent 注入空标题。
+                generate_kwargs["course_title"] = course_title
+            service_result = await generate_knowledge_graph_version(**generate_kwargs)
             task.status = "completed"
             task.progress = 100
             task.error_code = None

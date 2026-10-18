@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Validate testing coverage and regression"}
+{"file": ".trellis/spec/agent_service_v2/backend/error-handling.md", "reason": "Verify streaming stability and exception guardrails"}

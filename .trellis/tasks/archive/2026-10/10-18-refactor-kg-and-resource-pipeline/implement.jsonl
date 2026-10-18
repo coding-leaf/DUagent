@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/agent_service_v2/backend/directory-structure.md", "reason": "Follow agent service directory layout and tool packaging conventions"}
+{"file": ".trellis/spec/agent_service_v2/backend/error-handling.md", "reason": "Follow error handling and SSE streaming failure recovery guidelines"}
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Follow pytest testing standards and type safety"}
+{"file": ".trellis/spec/backend/backend/directory-structure.md", "reason": "Follow backend layered service architecture"}

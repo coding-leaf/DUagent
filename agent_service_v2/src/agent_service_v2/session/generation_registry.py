@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from agent_service_v2.session.run_bus import WorkbenchRunBus
 
+
 MAX_TRACKED_SESSIONS = 200
 DEFAULT_GENERATION_AGENT = "personalized_resource_agent"
 

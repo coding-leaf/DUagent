@@ -23,6 +23,7 @@ from typing import Any
 
 from agentscope.tool import FunctionTool
 
+
 MARKDOWN_SUFFIXES = frozenset({".md", ".markdown", ".mdx", ".txt"})
 DOCX_SUFFIXES = frozenset({".docx"})
 

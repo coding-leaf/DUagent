@@ -7,15 +7,16 @@ from uuid import uuid4
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from agent_service_v2.schemas.personalized_resources import (
-    PersonalizedResourceGenerationRequest,
-)
 from agent_service_v2.generators.personalized_resource_flow import (
     PersonalizedResourceGenerationRunner,
     PersonalizedResourceUnavailable,
 )
 from agent_service_v2.runtime.event_broadcaster import EventStreamBroadcaster
+from agent_service_v2.schemas.personalized_resources import (
+    PersonalizedResourceGenerationRequest,
+)
 from agent_service_v2.session.generation_registry import GenerationSessionRegistry
+
 
 logger = logging.getLogger(__name__)
 

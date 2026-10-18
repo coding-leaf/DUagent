@@ -14,6 +14,7 @@ from app.models.quiz import QuizQuestion
 from app.services.agent_client import AgentClient, AgentServiceError
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 
+
 logger = logging.getLogger(__name__)
 quiz_agent_client = AgentClient(timeout=300.0)
 QUIZ_GENERATION_CONCURRENCY = 2

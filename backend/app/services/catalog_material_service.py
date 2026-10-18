@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial
 from app.schemas.catalog import CourseCatalogMaterialCreateRequest
 
+
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".pdf"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -55,17 +56,21 @@ class CatalogMaterialService:
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         file_size = 0
+        oversized = False
         try:
             with target_path.open("wb") as f:
                 while chunk := await file.read(UPLOAD_CHUNK_SIZE):
                     file_size += len(chunk)
                     if file_size > settings.COURSE_CATALOG_MAX_UPLOAD_BYTES:
-                        remove_material_dir(target_path)
-                        raise HTTPException(
-                            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                            detail={"code": 41320, "message": "资料文件过大", "data": None},
-                        )
+                        oversized = True
+                        break
                     f.write(chunk)
+            if oversized:
+                remove_material_dir(target_path)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail={"code": 41320, "message": "资料文件过大", "data": None},
+                )
         except HTTPException:
             raise
         except Exception:

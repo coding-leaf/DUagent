@@ -1,9 +1,11 @@
 import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.core.config import settings
 from app.core.security import (
     create_token,
     generate_captcha,
@@ -13,6 +15,7 @@ from app.core.security import (
 )
 from app.models.user import RegistrationCode, User
 from app.schemas.auth import LoginRequest, RegisterRequest
+
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 

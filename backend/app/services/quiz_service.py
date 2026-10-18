@@ -1,7 +1,5 @@
-import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -13,6 +11,7 @@ from app.models.others import Evaluation, LearningPath, UserProfile
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.schemas.operations import QuizGenerateRequest, QuizSubmitRequest
 from app.services.agent_client import AgentServiceError, agent_client
+
 
 logger = logging.getLogger(__name__)
 

@@ -6,6 +6,7 @@ from app.models.user import User
 from app.schemas.learning_activity import LearningActivityCreate
 from app.services import learning_activity_service
 
+
 router = APIRouter(prefix="/api/v1/learning-activities", tags=["learning-activities"])
 
 

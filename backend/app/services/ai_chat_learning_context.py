@@ -11,6 +11,7 @@ from app.services.course_knowledge_graphs import get_effective_knowledge_graph
 from app.services.knowledge_progress import build_node_progress_rows
 from app.services.learning_path_service import LearningPathService
 
+
 MAX_RECENT_ANSWERS = 10
 MAX_PROGRESS_NODES = 100
 

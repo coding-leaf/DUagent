@@ -7,6 +7,11 @@ from sse_starlette.sse import EventSourceResponse
 from app.api.deps import get_current_user, get_db, get_download_user
 from app.models.user import User
 from app.schemas.operations import TutoringChatRequest
+from app.services.agent_client import AgentServiceError
+from app.services.tutoring_artifact_service import (
+    TutoringArtifactNotFoundError,
+    TutoringArtifactService,
+)
 from app.services.tutoring_payload_builder import TutoringPayloadBuilder
 from app.services.tutoring_presenters import conversation_detail, conversation_item
 from app.services.tutoring_service import (
@@ -18,11 +23,7 @@ from app.services.tutoring_service import (
     TutoringService,
 )
 from app.services.tutoring_stream_adapter import TutoringStreamAdapter
-from app.services.tutoring_artifact_service import (
-    TutoringArtifactNotFoundError,
-    TutoringArtifactService,
-)
-from app.services.agent_client import AgentServiceError
+
 
 router = APIRouter(prefix="/api/v1/tutoring", tags=["tutoring"])
 

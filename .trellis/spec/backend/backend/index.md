@@ -21,4 +21,5 @@
 | [Database Guidelines](./database-guidelines.md) | SQLAlchemy 2.0 async session, models, queries | Baseline active |
 | [Error Handling](./error-handling.md) | `DomainException` and standard HTTP responses | Baseline active |
 | [Logging Guidelines](./logging-guidelines.md) | Standard logging, avoiding noisy output | Baseline active |
-| [Quality Guidelines](./quality-guidelines.md) | Code simplicity, test baselines | Baseline active |
+| [Quality Guidelines](./quality-guidelines.md) | Code simplicity, Ruff static analysis, test baselines | Baseline active |
+| [Architecture Guardrails](./architecture-guardrails.md) | 架构红线 (no direct LLM calls, no cross-layer imports) + `# arch-allow:` escape hatches | Baseline active |

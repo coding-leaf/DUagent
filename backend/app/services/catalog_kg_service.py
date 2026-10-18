@@ -15,6 +15,7 @@ from app.schemas.catalog import CatalogKnowledgeGraphGenerationRequest
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.kg_generation import KGGenerationInputError, generate_knowledge_graph_version
 
+
 logger = logging.getLogger(__name__)
 HOST_COURSE_NAME_PREFIX = "[KG HOST] "
 COURSE_NAME_MAX_LENGTH = 100

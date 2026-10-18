@@ -10,7 +10,6 @@
 from typing import AsyncIterator, Optional
 
 import httpx
-from fastapi import HTTPException, status
 
 from app.core.config import settings
 

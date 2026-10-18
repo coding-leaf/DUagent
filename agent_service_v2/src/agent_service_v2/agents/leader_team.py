@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
+
 from agentscope.message import UserMsg
 
 from agent_service_v2.agents.curriculum_planner import (
@@ -10,6 +11,7 @@ from agent_service_v2.agents.curriculum_planner import (
     collect_model_text as _collect_model_text,
 )
 from agent_service_v2.agents.model_provider import AgentModelSettings, build_chat_model_from_settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ class ResourceWorkerAgent:
                 raise ValueError("ordinary quiz only supports single_choice and multi_choice")
             q_types_str = ", ".join(requested_types)
             diff_str = difficulty or "medium"
-            
+
             personalization_prompt = ""
             if personalized and personalization_context:
                 personalization_prompt = "\n=== STUDENT PERSONALIZATION CONTEXT ===\n"
@@ -109,7 +111,7 @@ class ResourceWorkerAgent:
                 curr_node = personalization_context.get("current_path_node")
                 if curr_node:
                     personalization_prompt += f"Current Learning Node: {curr_node.get('name')}\n"
-                
+
                 personalization_prompt += (
                     "Please adapt the questions to specifically target the student's cognitive blindspots, "
                     "remedy their recent errors, and match their guidance level. "
@@ -234,7 +236,7 @@ Language Requirements:
 
         response = await self.model([UserMsg(name="resource_worker", content=prompt)])
         content = await _collect_model_text(response)
-        
+
         if content.startswith("```"):
             lines = content.splitlines()
             if lines and lines[0].startswith("```"):
@@ -244,7 +246,7 @@ Language Requirements:
             content = "\n".join(lines).strip()
 
         data = json.loads(content)
-        
+
         # Robust post-processing and schema normalization loop
         if isinstance(data, dict) and "questions" in data:
             for q in data["questions"]:
@@ -253,7 +255,7 @@ Language Requirements:
                     q["content"] = q["title"]
                 elif "content" in q and "title" not in q:
                     q["title"] = q["content"]
-                
+
                 if q.get("type") not in {"single_choice", "multi_choice"}:
                     raise ValueError("model returned unsupported ordinary quiz type")
 
@@ -267,7 +269,7 @@ Language Requirements:
                             {"key": keys[idx], "text": text}
                             for idx, text in enumerate(raw_options[:len(keys)])
                         ]
-        
+
         return data
 
 

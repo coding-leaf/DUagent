@@ -9,15 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.code_problem import CodeProblem
 from app.models.others import AsyncTask, Resource, UserPersonalizedResource
-from app.models.quiz import QuizQuestion
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
+from app.models.quiz import QuizQuestion
 from app.models.user import User
-from app.schemas.personalized import PersonalizedResourceGenerateRequest
-from app.services.agent_client import AgentServiceError, agent_client
-from app.services.course_catalog_gate import resolve_generation_catalog
-from app.services import quiz_service
 from app.schemas.internal_ai_chat import ChoiceQuestionDraft
+from app.schemas.personalized import PersonalizedResourceGenerateRequest
+from app.services import quiz_service
+from app.services.agent_client import AgentServiceError, agent_client
 from app.services.ai_chat_choice_quiz_service import persist_personal_choice_questions
+from app.services.course_catalog_gate import resolve_generation_catalog
+
 
 router = APIRouter(prefix="/api/v1/personalized-resources", tags=["personalized-resources"])
 

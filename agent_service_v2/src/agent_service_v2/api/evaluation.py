@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, status
-from fastapi.responses import JSONResponse
 
+from fastapi import APIRouter, status
+
+from agent_service_v2.agents.evaluation import (
+    generate_evaluation_data,
+    generate_evaluation_with_llm,
+    generate_quiz_diagnosis_with_llm,
+)
 from agent_service_v2.agents.model_provider import AgentModelSettings, build_chat_model_from_settings
 from agent_service_v2.schemas.evaluation import EvaluationGenerateRequest, QuizDiagnoseRequest
-from agent_service_v2.agents.evaluation import generate_evaluation_data, generate_evaluation_with_llm, generate_quiz_diagnosis_with_llm
+
 
 logger = logging.getLogger(__name__)
 

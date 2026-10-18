@@ -1,11 +1,10 @@
 import asyncio
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, Request, UploadFile
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
-from app.models.catalog import CourseCatalog
 from app.models.others import AsyncTask
 from app.models.user import User
 from app.schemas.catalog import (
@@ -14,13 +13,6 @@ from app.schemas.catalog import (
     CourseCatalogMaterialCreateRequest,
 )
 from app.schemas.operations import CatalogResourceGenerateRequest
-from app.services.catalog_presenters import (
-    catalog_item,
-    knowledge_graph_summary,
-    knowledge_graph_task_summary,
-    material_item,
-)
-from app.services.catalog_material_service import CatalogMaterialService
 from app.services.catalog_ingestion_service import (
     CatalogIngestionService,
     run_catalog_ingestion_background,
@@ -29,12 +21,20 @@ from app.services.catalog_kg_service import (
     CatalogKGService,
     run_catalog_kg_generation_background,
 )
-from app.services.catalog_resource_generation_service import CatalogResourceGenerationService
+from app.services.catalog_material_service import CatalogMaterialService
+from app.services.catalog_presenters import (
+    catalog_item,
+    knowledge_graph_summary,
+    knowledge_graph_task_summary,
+    material_item,
+)
 from app.services.catalog_quiz_generation_service import (
     CatalogQuizGenerationService,
     run_quiz_generation_background,
 )
+from app.services.catalog_resource_generation_service import CatalogResourceGenerationService
 from app.services.catalog_service import CatalogService
+
 
 router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 

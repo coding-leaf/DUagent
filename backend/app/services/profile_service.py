@@ -1,10 +1,13 @@
 from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
+
+from app.infrastructure.locks import profile_lock
 from app.models.others import UserProfile
 from app.services.profile_presenters import DEFAULT_PROFILE
-from app.infrastructure.locks import profile_lock
+
 
 class ProfileService:
     def __init__(self, db: AsyncSession):
@@ -34,7 +37,7 @@ class ProfileService:
         async with profile_lock(self.db, user_id, course_id):
             profile = await self.get_or_create_profile(user_id, course_id)
             now = datetime.now(timezone.utc)
-            
+
             profile.guidance_level_current = answers.get("guidance_level", "L2")
             profile.guidance_level_updated_at = now
             profile.modal_preference = {k: 60 for k in (answers.get("modal_preference") or ["text"])}
@@ -47,7 +50,7 @@ class ProfileService:
             }
             profile.knowledge_coordinates = [{"name": "入门", "status": "learning", "mastered_at": None}]
             profile.generated_at = now
-            
+
             await self.db.flush()
             await self.db.refresh(profile)
             return profile

@@ -6,6 +6,7 @@ from app.api.deps import get_current_user, get_db
 from app.models.others import AsyncTask
 from app.models.user import User
 
+
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
 

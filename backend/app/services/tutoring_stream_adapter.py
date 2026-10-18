@@ -14,6 +14,7 @@ from app.models.conversation import Conversation, Message
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
 from app.services.agent_client import AgentServiceError, agent_client
 
+
 logger = logging.getLogger(__name__)
 TOOL_EVENT_TYPES = {"tool_started", "tool_completed", "tool_failed"}
 TOOL_EVENT_PAYLOAD_FIELDS = {
@@ -180,13 +181,11 @@ class TutoringStreamAdapter:
             else {}
         )
 
-        if event_type == "text_delta":
-            content = payload.get("delta", "")
+        if event_type in ("text_delta", "chunk"):
+            content = payload.get("delta", "") if event_type == "text_delta" else parsed.get("content", "")
             state.chunks.append(content)
             TutoringStreamAdapter._append_timeline_event(state, event_type, payload)
-        elif event_type == "workflow_completed":
-            state.done_sent = True
-        elif event_type == "workflow_failed":
+        elif event_type in ("workflow_completed", "workflow_failed", "done"):
             state.done_sent = True
         elif event_type == "content_safety_reviewed":
             if payload.get("action") == "block":
@@ -254,7 +253,7 @@ class TutoringStreamAdapter:
             event_type = json.loads(event.get("data", "")).get("type")
         except (json.JSONDecodeError, AttributeError):
             return False
-        return event_type in {"workflow_completed", "workflow_failed"}
+        return event_type in {"workflow_completed", "workflow_failed", "done"}
 
     async def _persist_state(
         self,
@@ -333,7 +332,7 @@ class TutoringStreamAdapter:
                     if self._is_terminal_event(event):
                         state.persisted = await self._persist_state(state)
                     yield event
-        except AgentServiceError as e:
+        except AgentServiceError:
             status_val = "error"
             error_message = "AgentServiceError: Agent 服务不可用"
             if not state.done_sent:

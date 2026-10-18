@@ -10,6 +10,7 @@ from app.models.catalog import CourseCatalog, CourseCatalogMaterial
 from app.models.others import AsyncTask
 from app.services.agent_client import AgentClient, AgentServiceError
 
+
 logger = logging.getLogger(__name__)
 ingestion_agent_client = AgentClient(timeout=300.0)
 

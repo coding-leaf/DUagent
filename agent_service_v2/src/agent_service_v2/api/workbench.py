@@ -13,10 +13,11 @@ from agent_service_v2.safety.content_review_middleware import ContentSafetyRevie
 from agent_service_v2.schemas.workbench import WorkbenchChatRequest
 from agent_service_v2.session.run_bus import WorkbenchRunBus
 from agent_service_v2.session.workbench_session import WorkbenchSession
+from agent_service_v2.workspaces.workbench_artifacts import resolve_workbench_artifact
 from agent_service_v2.workspaces.workbench_workspace_manager import (
     WorkbenchWorkspaceManager,
 )
-from agent_service_v2.workspaces.workbench_artifacts import resolve_workbench_artifact
+
 
 router = APIRouter(prefix="/agent/v2/workbench", tags=["workbench"])
 

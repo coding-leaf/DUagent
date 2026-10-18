@@ -23,13 +23,13 @@ class ArtifactPublisher:
         published: list[PublishedArtifact] = []
         for scanned in ArtifactScanner(self._artifact_dir).scan():
             published_seq = None if seq_start is None else seq_start + len(published)
-            
+
             if scanned.file in file_to_idx:
                 idx = file_to_idx[scanned.file]
                 existing_record = manifest["artifacts"][idx]
                 if existing_record["sha256"] == scanned.sha256:
                     continue  # skip if content is identical
-                
+
                 # Keep same ID, update content hash and seq
                 artifact_id = existing_record["id"]
                 existing_record.update({

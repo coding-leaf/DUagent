@@ -4,6 +4,7 @@ from agentscope.permission import PermissionBehavior, PermissionContext, Permiss
 
 from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
 
+
 SAFE_WORKBENCH_TOOLS = [
     "reset_tools",
     "TaskCreate",

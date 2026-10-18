@@ -5,10 +5,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
-    admin, auth, catalogs, courses, evaluation, internal_ai_chat,
-    internal_personalized_resources, learning_path,
-    code_problems, learning_activities, personalized_resources, profile, quiz, resources,
-    sandbox, tasks, teaching, tutoring, users, webhooks,
+    admin,
+    auth,
+    catalogs,
+    code_problems,
+    courses,
+    evaluation,
+    internal_ai_chat,
+    internal_personalized_resources,
+    learning_activities,
+    learning_path,
+    personalized_resources,
+    profile,
+    quiz,
+    resources,
+    sandbox,
+    tasks,
+    teaching,
+    tutoring,
+    users,
+    webhooks,
 )
 from app.core.config import settings
 from app.db.session import init_db
@@ -29,6 +45,7 @@ async def _recover_orphaned_background_tasks() -> None:
     from datetime import datetime, timezone
 
     from sqlalchemy import update as sql_update
+
     from app.db.session import async_session_factory
     from app.models.others import AsyncTask
 

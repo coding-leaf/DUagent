@@ -12,8 +12,8 @@ from app.services.course_knowledge_graphs import (
     get_active_knowledge_graph,
 )
 from app.services.kg_body_grounding import (
-    GroundingMatch,
     USABLE_SUPPORT_THRESHOLD,
+    GroundingMatch,
     filter_supported_knowledge_graph,
 )
 

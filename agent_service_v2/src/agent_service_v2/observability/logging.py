@@ -9,6 +9,7 @@ from agentscope.event import ModelCallEndEvent, ModelCallStartEvent
 
 from agent_service_v2.runtime.edu_events import utc_now_iso
 
+
 LogSink = Callable[[dict[str, Any]], None]
 MAX_PREVIEW_CHARS = 2048
 SENSITIVE_KEYS = {

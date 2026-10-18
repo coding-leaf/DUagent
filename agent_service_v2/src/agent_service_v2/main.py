@@ -2,13 +2,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from agent_service_v2.api.workbench import router as workbench_router
-from agent_service_v2.api.knowledge import router as knowledge_router
 from agent_service_v2.api.evaluation import router as evaluation_router
+from agent_service_v2.api.knowledge import router as knowledge_router
 from agent_service_v2.api.personalized_resources import (
     router as personalized_resources_router,
     shutdown_generation_sessions,
 )
+from agent_service_v2.api.workbench import router as workbench_router
 from agent_service_v2.tools.web_search_mcp import build_web_search_runtime_from_environ
 
 

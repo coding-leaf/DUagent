@@ -5,6 +5,7 @@ from app.api.deps import get_db, require_role
 from app.models.user import User
 from app.services.teaching_service import TeachingService
 
+
 router = APIRouter(prefix="/api/v1/teaching", tags=["teaching"])
 
 

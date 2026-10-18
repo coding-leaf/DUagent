@@ -21,4 +21,5 @@
 | [Database Guidelines](./database-guidelines.md) | Workspace and session artifact persistence | Baseline active |
 | [Error Handling](./error-handling.md) | SSE streaming errors and agent fallback strategies | Baseline active |
 | [Logging Guidelines](./logging-guidelines.md) | Observability, tool call tracing, middleware logging | Baseline active |
-| [Quality Guidelines](./quality-guidelines.md) | Testing standards under `agent_service_v2/tests/` | Baseline active |
+| [Quality Guidelines](./quality-guidelines.md) | Testing standards under `agent_service_v2/tests/`, Ruff static analysis | Baseline active |
+| [Architecture Guardrails](./architecture-guardrails.md) | 架构红线 (no hardcoded subjects, no sandbox parse scripts) + `# arch-allow:` escape hatches | Baseline active |

@@ -1,5 +1,7 @@
 from fastapi import status
+
 from app.exceptions.base import DomainException
+
 
 class CatalogNotFoundError(DomainException):
     def __init__(self):

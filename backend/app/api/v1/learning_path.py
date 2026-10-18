@@ -8,6 +8,7 @@ from app.services.learning_path_service import (
 )
 from app.services.node_resource_service import NodeResourceService
 
+
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
 
 

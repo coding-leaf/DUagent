@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
 from app.services.resource_service import ResourceService
 
+
 router = APIRouter(prefix="/api/v1/resources", tags=["resources"])
 
 

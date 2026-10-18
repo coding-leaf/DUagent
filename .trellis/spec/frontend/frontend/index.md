@@ -22,4 +22,5 @@
 | [Hook Guidelines](./hook-guidelines.md) | Custom hooks and SWR data-fetching patterns | Baseline active |
 | [State Management](./state-management.md) | SWR server cache, local React state, context | Baseline active |
 | [Type Safety](./type-safety.md) | JavaScript/JSX conventions, prop validation | Baseline active |
-| [Quality Guidelines](./quality-guidelines.md) | ESLint, Vitest, and Playwright standards | Baseline active |
+| [Quality Guidelines](./quality-guidelines.md) | ESLint/build gate, Vitest, and Playwright standards | Baseline active |
+| [Architecture Guardrails](./architecture-guardrails.md) | 架构红线 (pure JSX, no heavy UI libs, SSE safe exit) + `# arch-allow:` escape hatches | Baseline active |

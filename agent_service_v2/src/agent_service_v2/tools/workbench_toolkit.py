@@ -4,8 +4,8 @@ from agentscope.tool import FunctionTool, ToolBase, ToolGroup
 from agentscope.workspace import LocalWorkspace
 
 from agent_service_v2.tools.artifact_files import build_write_artifact_file
-from agent_service_v2.tools.planning import build_planning_group
 from agent_service_v2.tools.input_models import ArtifactFileInput
+from agent_service_v2.tools.planning import build_planning_group
 
 
 OPTIONAL_PRACTICE_GROUPS = frozenset(

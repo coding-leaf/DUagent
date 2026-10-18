@@ -7,3 +7,9 @@
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+
+# Shell scripts must keep LF endings — CRLF makes bash fail with
+# "syntax error near unexpected token `$'{\r''". Windows checkouts with
+# core.autocrlf=true would otherwise corrupt them.
+*.sh text eol=lf
+*.bash text eol=lf

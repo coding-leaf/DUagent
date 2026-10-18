@@ -1,13 +1,16 @@
 import logging
 from datetime import datetime, timezone
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
+
 from app.db.session import async_session_factory
+from app.infrastructure.locks import LockAcquisitionTimeout, profile_lock
 from app.models.others import AsyncTask
 from app.models.user import User
-from app.infrastructure.locks import profile_lock, LockAcquisitionTimeout
 from app.services.profile_service import ProfileService
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +46,7 @@ class ProfileRefreshService:
 async def run_profile_refresh_background(task_id: str, user_id: str, course_id: str) -> None:
     async with async_session_factory() as db:
         try:
-            async with profile_lock(db, user_id, course_id) as lock_name:
+            async with profile_lock(db, user_id, course_id):
                 now = datetime.now(timezone.utc)
                 profile_service = ProfileService(db)
                 pf = await profile_service.get_or_create_profile(user_id, course_id)
@@ -52,7 +55,7 @@ async def run_profile_refresh_background(task_id: str, user_id: str, course_id: 
 
                 user_result = await db.execute(select(User).where(User.id == user_id))
                 user = user_result.scalars().first()
-                
+
                 from app.services.knowledge_progress import build_node_progress_rows
                 from app.services.profile_rules import compute_profile_fields
                 node_progress_rows = await build_node_progress_rows(user_id, course_id, db)
@@ -63,7 +66,7 @@ async def run_profile_refresh_background(task_id: str, user_id: str, course_id: 
                 pf.guidance_level_updated_at = now
                 pf.knowledge_coordinates = computed["knowledge_coordinates"]
                 pf.cognitive_blindspots = computed["cognitive_blindspots"]
-                
+
                 drive_intent = {
                     **(pf.drive_intent or {}),
                     "learning_habits": computed["learning_habits"],
@@ -74,7 +77,7 @@ async def run_profile_refresh_background(task_id: str, user_id: str, course_id: 
                 flag_modified(pf, "modal_preference")
                 flag_modified(pf, "knowledge_coordinates")
                 flag_modified(pf, "cognitive_blindspots")
-                
+
                 pf.discipline_badge = computed["discipline_badge"]
 
                 await db.execute(

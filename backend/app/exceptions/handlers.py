@@ -1,6 +1,8 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
 from .base import DomainException
+
 
 async def domain_exception_handler(request: Request, exc: DomainException):
     return JSONResponse(

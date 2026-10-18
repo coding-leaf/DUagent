@@ -1,9 +1,11 @@
-from contextlib import asynccontextmanager
 import hashlib
+from contextlib import asynccontextmanager
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.base import DomainException
+
 
 class LockAcquisitionTimeout(DomainException):
     """Exception raised when MySQL named lock acquisition times out."""
@@ -16,7 +18,7 @@ async def profile_lock(db: AsyncSession, user_id: str, course_id: str):
     # MySQL GET_LOCK 最大支持 64 字符，对超长 key 做 MD5 截断
     raw = f"profile_{user_id}_{course_id}"
     lock_name = hashlib.md5(raw.encode()).hexdigest()[:32]
-    
+
     # Query MySQL Named Lock
     lock_result = await db.execute(
         text("SELECT GET_LOCK(:key, 5)"),
@@ -25,7 +27,7 @@ async def profile_lock(db: AsyncSession, user_id: str, course_id: str):
     acquired = lock_result.scalar()
     if not acquired:
         raise LockAcquisitionTimeout(f"Lock timeout for profile of user: {user_id}, course: {course_id}")
-        
+
     try:
         yield lock_name
     finally:

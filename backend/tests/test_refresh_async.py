@@ -125,55 +125,49 @@ async def test():
         # 1. profile/refresh success
         # =============================================
         print("\n-- 1. profile/refresh success --")
-        with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-            mock_agent.return_value = {
-                "modal_preference": {"video_animation": 80},
-                "guidance_level_suggestion": {"recommended": "L3"},
-                "knowledge_coordinates": [],
-                "cognitive_blindspots": [],
-                "drive_intent": {"type": "casual"},
-                "discipline_badge": {"subject": "math"},
-            }
-            r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
-            chk("profile/refresh → 202", r.status_code == 202)
-            task_id = r.json()["data"]["task_id"]
-            chk("profile/refresh → task_id present", bool(task_id))
+        # NOTE: profile/refresh now computes the profile from local rules
+        # (`profile_rules.compute_profile_fields`) and no longer calls the agent
+        # service, so there is no longer an agent call to stub here.
+        r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
+        chk("profile/refresh → 202", r.status_code == 202)
+        task_id = r.json()["data"]["task_id"]
+        chk("profile/refresh → task_id present", bool(task_id))
 
-            # Verify true async: task should still be processing immediately after 202
-            r_imm = await client.get(f"/api/v1/tasks/{task_id}", headers=headers)
-            imm_data = r_imm.json().get("data", {})
-            chk("profile/refresh → still processing on immediate poll",
-                imm_data.get("status") == "processing")
+        # Verify true async: task should still be processing immediately after 202
+        r_imm = await client.get(f"/api/v1/tasks/{task_id}", headers=headers)
+        imm_data = r_imm.json().get("data", {})
+        chk("profile/refresh → still processing on immediate poll",
+            imm_data.get("status") == "processing")
 
-            result = await _poll_task(client, task_id, headers)
-            chk("profile/refresh → completed", result and result["status"] == "completed")
-            await asyncio.sleep(0.5)
+        result = await _poll_task(client, task_id, headers)
+        chk("profile/refresh → completed", result and result["status"] == "completed")
+        await asyncio.sleep(0.5)
 
 
-            # Verify DB write
-            async with async_session_factory() as db:
-                pf_r2 = await db.execute(
-                    select(UserProfile).where(
-                        UserProfile.course_id == course_id,
-                        UserProfile.is_deleted == False,
-                    )
+        # Verify DB write
+        async with async_session_factory() as db:
+            pf_r2 = await db.execute(
+                select(UserProfile).where(
+                    UserProfile.course_id == course_id,
+                    UserProfile.is_deleted == False,
                 )
-                profile = pf_r2.scalars().first()
-                chk("profile/refresh → DB record written", profile is not None)
-                drive_intent = profile.drive_intent or {}
-                chk(
-                    "profile/refresh → learning_habits persisted",
-                    isinstance(drive_intent.get("learning_habits"), dict),
-                )
-                chk(
-                    "profile/refresh → knowledge_progress_summary persisted",
-                    isinstance(drive_intent.get("knowledge_progress_summary"), dict),
-                )
-                used_lock_r = await db.execute(
-                    text("SELECT IS_USED_LOCK(:name)"),
-                    {"name": f"profile_{current_user.id}_{course_id}"},
-                )
-                chk("profile/refresh → lock released", used_lock_r.scalar() is None)
+            )
+            profile = pf_r2.scalars().first()
+            chk("profile/refresh → DB record written", profile is not None)
+            drive_intent = profile.drive_intent or {}
+            chk(
+                "profile/refresh → learning_habits persisted",
+                isinstance(drive_intent.get("learning_habits"), dict),
+            )
+            chk(
+                "profile/refresh → knowledge_progress_summary persisted",
+                isinstance(drive_intent.get("knowledge_progress_summary"), dict),
+            )
+            used_lock_r = await db.execute(
+                text("SELECT IS_USED_LOCK(:name)"),
+                {"name": f"profile_{current_user.id}_{course_id}"},
+            )
+            chk("profile/refresh → lock released", used_lock_r.scalar() is None)
 
         # =============================================
         # 2. profile/refresh duplicate request reuses active processing task
@@ -273,7 +267,7 @@ async def test():
             )
             await db.commit()
 
-        with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        with patch("app.services.evaluation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.return_value = {
                 "progress_table": {"columns": [], "rows": []},
                 "mastery_table": {"columns": [], "rows": []},
@@ -333,7 +327,7 @@ async def test():
         # 6. evaluation/refresh Agent failure
         # =============================================
         print("\n-- 6. evaluation/refresh Agent failure --")
-        with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+        with patch("app.services.evaluation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
             mock_agent.side_effect = AgentServiceError(
                 message="eval failed", status_code=500, agent_code=50001)
             r = await client.post("/api/v1/evaluation/refresh", headers=headers, json={"course_id": course_id})

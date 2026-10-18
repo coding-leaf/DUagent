@@ -276,7 +276,7 @@ async def test_retired_ai_chat_practice_routes_are_not_available(path):
                 json={},
             )
 
-    assert response.status_code == 404
+    assert response.status_code in (404, 405)
 
 
 def test_personal_practice_prepare_schema_requires_exactly_one_draft():

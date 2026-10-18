@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import get_db, require_role
 from app.core.security import hash_password
 from app.models.others import AgentLog, OperationLog
 from app.models.user import RegistrationCode, User
 from app.schemas.admin import AdminUpdateUserRequest, CreateRegistrationCodeRequest
+
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -169,16 +170,16 @@ async def agent_logs(
         "data": {
             "logs": [
                 {
-                    "timestamp": l.timestamp.isoformat() if l.timestamp else "",
-                    "agent_type": l.agent_type,
-                    "endpoint": l.endpoint,
-                    "latency_ms": l.latency_ms,
-                    "tokens_used": l.tokens_used,
-                    "status": l.status,
-                    "error_message": l.error_message,
-                    "security_blocked": l.security_blocked,
+                    "timestamp": log_entry.timestamp.isoformat() if log_entry.timestamp else "",
+                    "agent_type": log_entry.agent_type,
+                    "endpoint": log_entry.endpoint,
+                    "latency_ms": log_entry.latency_ms,
+                    "tokens_used": log_entry.tokens_used,
+                    "status": log_entry.status,
+                    "error_message": log_entry.error_message,
+                    "security_blocked": log_entry.security_blocked,
                 }
-                for l in logs
+                for log_entry in logs
             ],
             "total": total,
             "page": page,
@@ -220,14 +221,14 @@ async def operation_logs(
         "data": {
             "logs": [
                 {
-                    "timestamp": l.timestamp.isoformat() if l.timestamp else "",
-                    "event_type": l.event_type,
-                    "user_id": l.user_id,
-                    "description": l.description,
-                    "ip_address": l.ip_address,
-                    "detail": l.detail,
+                    "timestamp": log_entry.timestamp.isoformat() if log_entry.timestamp else "",
+                    "event_type": log_entry.event_type,
+                    "user_id": log_entry.user_id,
+                    "description": log_entry.description,
+                    "ip_address": log_entry.ip_address,
+                    "detail": log_entry.detail,
                 }
-                for l in logs
+                for log_entry in logs
             ],
             "total": total,
             "page": page,

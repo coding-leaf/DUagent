@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+
 SUPPORTED_ARTIFACT_TYPES = {
     "Markdown",
     "Mermaid",

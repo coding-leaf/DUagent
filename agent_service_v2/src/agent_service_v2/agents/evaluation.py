@@ -9,14 +9,15 @@ from typing import Any
 from pydantic import ValidationError
 
 from agent_service_v2.schemas.evaluation import (
-    ChapterProgressItem,
     EvaluationData,
     EvaluationGenerateRequest,
     InsightPoint,
     LearningInsight,
+    QuizDiagnoseRequest,
     TableColumn,
     TableData,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,7 @@ async def generate_evaluation_with_llm(
         result = _enrich_evaluation_result(request, rule_result, data)
         logger.info("LLM evaluation enrichment succeeded: %s", "evaluation/generate")
         return result
-    except Exception as exc:
+    except Exception:
         logger.warning("LLM evaluation enrichment failed, falling back to rule-based", exc_info=True)
         return None
 
@@ -332,8 +333,6 @@ async def generate_quiz_diagnosis_with_llm(
     model: Any,
 ) -> dict[str, Any]:
     """生成基于提交作答的通用学习诊断与补救建议。"""
-    from agent_service_v2.schemas.evaluation import QuizDiagnoseRequest
-
     questions_str = json.dumps(request.questions, ensure_ascii=False, indent=2)
     answers_str = json.dumps(request.answers, ensure_ascii=False, indent=2)
 

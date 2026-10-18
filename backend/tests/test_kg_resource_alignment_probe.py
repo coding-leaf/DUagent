@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, update
+from sqlalchemy import delete, text, update
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -19,7 +19,7 @@ from app.db.session import async_session_factory, engine, init_db
 from app.models.catalog import CourseCatalog, CourseCatalogMaterial, CourseOffering
 from app.models.course import Course, CourseEnrollment
 from app.models.others import AsyncTask, CourseKnowledgeGraph, LearningPath, Resource
-from app.models.quiz import QuizQuestion
+from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.services.kg_resource_alignment_probe import (
     MISMATCH_TYPES,
@@ -42,8 +42,11 @@ asyncio.run(engine.dispose())
 async def clean_db():
     await engine.dispose()
     async with async_session_factory() as db:
+        await db.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
         await db.execute(update(CourseKnowledgeGraph).values(parent_graph_id=None))
         for model in [
+            QuizAnswer,
+            QuizSession,
             QuizQuestion,
             Resource,
             LearningPath,
@@ -57,13 +60,17 @@ async def clean_db():
             User,
         ]:
             await db.execute(delete(model))
+        await db.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
         await db.commit()
     await engine.dispose()
     yield
     await engine.dispose()
     async with async_session_factory() as db:
+        await db.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
         await db.execute(update(CourseKnowledgeGraph).values(parent_graph_id=None))
         for model in [
+            QuizAnswer,
+            QuizSession,
             QuizQuestion,
             Resource,
             LearningPath,
@@ -77,6 +84,7 @@ async def clean_db():
             User,
         ]:
             await db.execute(delete(model))
+        await db.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
         await db.commit()
     await engine.dispose()
 

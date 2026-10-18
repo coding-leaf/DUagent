@@ -3,11 +3,13 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
+from app.infrastructure.locks import evaluation_lock
 from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import CourseEnrollment
 from app.models.others import AsyncTask, Evaluation, LearningActivity, Resource, UserProfile
@@ -15,13 +17,13 @@ from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.knowledge_progress import build_node_progress_rows
 from app.services.evaluation_facts import (
     aggregate_chapter_progress as _aggregate_chapter_progress,
     aggregate_quiz_results as _aggregate_quiz_results,
     aggregate_resource_usage as _aggregate_resource_usage,
 )
-from app.infrastructure.locks import evaluation_lock
+from app.services.knowledge_progress import build_node_progress_rows
+
 
 logger = logging.getLogger(__name__)
 

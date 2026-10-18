@@ -30,6 +30,7 @@ from agent_service_v2.tools.outline_extractor import (
     summarize_outline_for_planning,
 )
 
+
 logger = logging.getLogger(__name__)
 
 # 课程材料上下文上限，避免超长教材切片挤爆单次规划请求。

@@ -5,6 +5,7 @@ from agent_service_v2.tools.backend_learning_client import (
     BackendLearningClientError,
 )
 
+
 ALLOWED_HARD_FAILURES = {
     "privacy_leak",
     "unsafe_content",

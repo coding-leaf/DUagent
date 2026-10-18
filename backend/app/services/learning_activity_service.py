@@ -15,6 +15,7 @@ from app.services.resource_scope import (
     user_can_access_catalog_resources,
 )
 
+
 _DURATION_REQUIRED = {"resource_study", "node_practice_submit"}
 _DURATION_FORBIDDEN = {"resource_view", "node_view", "node_practice_start"}
 _RESOURCE_REQUIRED = {"resource_view", "resource_study"}

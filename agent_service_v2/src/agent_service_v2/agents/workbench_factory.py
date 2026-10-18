@@ -13,13 +13,13 @@ from agent_service_v2.agents.workbench_react_agent import WorkbenchReActAgent
 from agent_service_v2.observability.agent_middleware import AgentRunLoggingMiddleware
 from agent_service_v2.observability.logging import LogSink
 from agent_service_v2.tools.backend_learning_client import build_backend_learning_client_from_settings
-from agent_service_v2.tools.learning_progress import build_learning_progress_tools
-from agent_service_v2.tools.learner_profile import build_learner_profile_tools
 from agent_service_v2.tools.input_models import RAGRetrieveInput
+from agent_service_v2.tools.learner_profile import build_learner_profile_tools
+from agent_service_v2.tools.learning_progress import build_learning_progress_tools
 from agent_service_v2.tools.memory_guard import guard_memory_tools
 from agent_service_v2.tools.oj_execution import build_oj_execution_tools
-from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 from agent_service_v2.tools.personal_choice_quiz import build_personal_choice_quiz_tools
+from agent_service_v2.tools.personal_code_problem import build_personal_code_problem_tools
 from agent_service_v2.tools.personal_practice_delivery import build_resume_personal_practice_tools
 from agent_service_v2.tools.personalized_resources import build_personalized_resource_tools
 from agent_service_v2.tools.workbench_toolkit import (
@@ -167,6 +167,7 @@ class WorkbenchAgentFactory:
         )
 
         from agentscope.tool import FunctionTool
+
         from agent_service_v2.tools.rag import retrieve_course_context
 
         if catalog_id:
@@ -191,7 +192,7 @@ class WorkbenchAgentFactory:
             rag_tools = []
 
         # Initialize Mem0 long-term memory middleware & extract memory tools
-        from agent_service_v2.agents.model_provider import build_embedding_model_from_settings, AgentModelSettings
+        from agent_service_v2.agents.model_provider import AgentModelSettings, build_embedding_model_from_settings
         settings = AgentModelSettings()
         embedding_model = build_embedding_model_from_settings(settings)
 
@@ -200,9 +201,9 @@ class WorkbenchAgentFactory:
 
         if embedding_model and settings.QDRANT_URL:
             try:
-                from qdrant_client import QdrantClient
                 from agentscope.middleware import Mem0Middleware
                 from agentscope.middleware._longterm_memory._mem0._tools import _build_memory_tools
+                from qdrant_client import QdrantClient
 
                 q_client = QdrantClient(url=settings.QDRANT_URL)
                 _ensure_memory_collection(

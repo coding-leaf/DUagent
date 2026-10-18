@@ -6,8 +6,8 @@ from dataclasses import replace
 from agent_service_v2.safety.content_review_client import (
     ContentReviewClient,
 )
-from agent_service_v2.safety.schemas import ContentSafetyReview
 from agent_service_v2.safety.local_wordlist import LocalSensitiveWordFilter
+from agent_service_v2.safety.schemas import ContentSafetyReview
 
 
 class ContentSafetyReviewer:

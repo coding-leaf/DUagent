@@ -8,9 +8,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.infrastructure.locks import profile_lock
 from app.models.others import OperationLog, UserProfile
+from app.services.content_safety import count_sensitive_matches
 from app.services.profile_presenters import DEFAULT_PROFILE, profile_data
 from app.services.profile_service import ProfileService
-from app.services.content_safety import count_sensitive_matches
 
 
 _PREFERENCE_FIELDS = {

@@ -1,23 +1,25 @@
 # backend/app/api/v1/profile.py
 import asyncio
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.models.user import User
 from app.models.course import CourseEnrollment
-from app.services.profile_presenters import profile_data
-from app.services.profile_service import ProfileService
-from app.services.profile_refresh_service import ProfileRefreshService, run_profile_refresh_background
+from app.models.user import User
 from app.schemas.profile import (
-    ProfileInitializeRequest,
     ProfileGoalUpdateRequest,
+    ProfileInitializeRequest,
     ProfileInstructionUpdateRequest,
     ProfileRefreshRequest,
 )
+from app.services.profile_presenters import profile_data
+from app.services.profile_refresh_service import ProfileRefreshService, run_profile_refresh_background
+from app.services.profile_service import ProfileService
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
@@ -103,7 +105,7 @@ async def refresh_profile(
     db: AsyncSession = Depends(get_db),
 ):
     await _verify_course_enrollment(current_user, req.course_id, db)
-    
+
     refresh_service = ProfileRefreshService(db)
     active_task = await refresh_service.get_processing_refresh_task(current_user.id, req.course_id)
     if active_task:

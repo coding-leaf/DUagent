@@ -9,11 +9,15 @@ from app.schemas.internal_ai_chat import (
     LearnerProfileReadRequest,
     LearningProgressRequest,
     OJEvaluationRequest,
+    PersonalizedResourceRecommendRequest,
+    PersonalizedResourceStartRequest,
     PersonalPracticeDeliveryRequest,
     PersonalPracticePrepareRequest,
     RecentAnswersRequest,
-    PersonalizedResourceRecommendRequest,
-    PersonalizedResourceStartRequest,
+)
+from app.services.ai_chat_learning_context import (
+    build_learning_progress_overview,
+    query_recent_answers,
 )
 from app.services.ai_chat_profile_service import (
     read_dialogue_learner_profile,
@@ -23,11 +27,7 @@ from app.services.ai_chat_resource_service import (
     recommend_personalized_resources,
     start_ai_chat_resource_generation,
 )
-from app.services.ai_chat_learning_context import (
-    build_learning_progress_overview,
-    query_recent_answers,
-)
-from app.services.oj_execution_service import execute_code_in_oj, OJExecutionError
+from app.services.oj_execution_service import OJExecutionError, execute_code_in_oj
 from app.services.personal_practice_delivery_service import (
     PersonalPracticeDeliveryError,
     finalize_personal_practice_delivery,
@@ -35,6 +35,7 @@ from app.services.personal_practice_delivery_service import (
     record_personal_practice_delivery_failure,
     resume_personal_practice_delivery,
 )
+
 
 router = APIRouter(prefix="/internal/ai-chat", tags=["internal-ai-chat"])
 

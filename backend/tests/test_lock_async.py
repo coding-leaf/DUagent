@@ -127,20 +127,17 @@ async def test():
             # 2. Trigger profile/refresh — background task hits lock timeout
             # =============================================
             print("  (waiting ~5s for GET_LOCK timeout in background task...)")
-            with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-                mock_agent.return_value = {
-                    "modal_preference": {},
-                    "guidance_level_suggestion": {"recommended": "L3"},
-                }
-                r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
-                chk("lock held → 202", r.status_code == 202)
-                task_id = r.json()["data"]["task_id"]
-                chk("lock held → task_id present", bool(task_id))
+            # profile/refresh computes the profile from local rules and no longer
+            # calls the agent service, so no agent stub is needed here.
+            r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
+            chk("lock held → 202", r.status_code == 202)
+            task_id = r.json()["data"]["task_id"]
+            chk("lock held → task_id present", bool(task_id))
 
-                result = await _poll_task(client, task_id, headers, timeout=15)
-                chk("lock held → task failed", result and result["status"] == "failed")
-                chk("lock held → error_code=lock_timeout",
-                    result and result.get("error_code") == "lock_timeout")
+            result = await _poll_task(client, task_id, headers, timeout=15)
+            chk("lock held → task failed", result and result["status"] == "failed")
+            chk("lock held → error_code=lock_timeout",
+                result and result.get("error_code") == "lock_timeout")
         finally:
             await lock_session.execute(
                 text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name}
@@ -159,7 +156,7 @@ async def test():
             chk("eval lock acquired", lr.scalar() == 1)
 
             print("  (waiting ~5s for eval lock timeout...)")
-            with patch("app.api.v1.evaluation.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
+            with patch("app.services.evaluation_service.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
                 mock_agent.return_value = {"progress_table": {"columns": [], "rows": []}}
                 r = await client.post("/api/v1/evaluation/refresh", headers=headers, json={"course_id": course_id})
                 chk("eval lock held → 202", r.status_code == 202)
@@ -178,36 +175,30 @@ async def test():
         # 3. Lock competition: concurrent refresh → single active row
         # =============================================
         print("\n-- 3. lock competition --")
-        with patch("app.api.v1.profile.agent_client.post_json", new_callable=AsyncMock) as mock_agent:
-            mock_agent.return_value = {
-                "modal_preference": {},
-                "guidance_level_suggestion": {"recommended": "L3"},
-            }
+        async def _send_refresh():
+            r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
+            return r.json()["data"]["task_id"]
 
-            async def _send_refresh():
-                r = await client.post("/api/v1/profile/refresh", headers=headers, json={"course_id": course_id})
-                return r.json()["data"]["task_id"]
+        # Concurrent requests — both background tasks compete for the same lock
+        t1, t2 = await asyncio.gather(_send_refresh(), _send_refresh())
+        chk("competition → both 202", bool(t1) and bool(t2))
 
-            # Concurrent requests — both background tasks compete for the same lock
-            t1, t2 = await asyncio.gather(_send_refresh(), _send_refresh())
-            chk("competition → both 202", bool(t1) and bool(t2))
+        r1 = await _poll_task(client, t1, headers, timeout=15)
+        r2 = await _poll_task(client, t2, headers, timeout=15)
+        chk("competition → both terminal",
+            r1 and r2 and r1["status"] in ("completed", "failed") and r2["status"] in ("completed", "failed"))
 
-            r1 = await _poll_task(client, t1, headers, timeout=15)
-            r2 = await _poll_task(client, t2, headers, timeout=15)
-            chk("competition → both terminal",
-                r1 and r2 and r1["status"] in ("completed", "failed") and r2["status"] in ("completed", "failed"))
-
-            # Verify only one active row
-            async with async_session_factory() as db:
-                count_r = await db.execute(
-                    select(func.count(UserProfile.id)).where(
-                        UserProfile.user_id == user_id,
-                        UserProfile.course_id == course_id,
-                        UserProfile.is_deleted == False,
-                    )
+        # Verify only one active row
+        async with async_session_factory() as db:
+            count_r = await db.execute(
+                select(func.count(UserProfile.id)).where(
+                    UserProfile.user_id == user_id,
+                    UserProfile.course_id == course_id,
+                    UserProfile.is_deleted == False,
                 )
-                active_count = count_r.scalar()
-            chk("competition → single active row", active_count == 1)
+            )
+            active_count = count_r.scalar()
+        chk("competition → single active row", active_count == 1)
 
     print(f"\n{'='*50}")
     print(f"  Total: {ok} OK, {fail} FAIL")

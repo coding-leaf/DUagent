@@ -1,0 +1,46 @@
+# Shared Ruff configuration for the whole repository.
+# Docs: https://docs.astral.sh/ruff/configuration/
+#
+# Both the FastAPI backend (`backend/`) and the AgentScope agent service
+# (`agent_service_v2/`) are scanned with this single configuration so the two
+# Python packages cannot drift apart.
+
+target-version = "py312"
+line-length = 120
+
+# Directory layout:
+#   backend/            FastAPI service (installed deps live in backend/.venv)
+#   agent_service_v2/   AgentScope service (uv managed, .venv inside)
+#   frontend/           React/Vite app (scanned by ESLint, not Ruff)
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".trellis",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "node_modules",
+    "frontend",
+    "**/migrations/versions",
+]
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    # SQLAlchemy 2.0 ORM filters intentionally use `Model.is_deleted == False`
+    # so the comparison is pushed down into SQL. Rewriting it to
+    # `not Model.is_deleted` would evaluate the column truthiness in Python and
+    # silently break the query, so E712 must stay globally disabled here.
+    "E712",
+    # Line length is handled by the formatter; long URLs / prompt literals must
+    # not block static scanning.
+    "E501",
+]
+
+[lint.isort]
+# Treat both services as first-party roots so `app.*` and
+# `agent_service_v2.*` imports sort as local code.
+known-first-party = ["app", "agent_service_v2"]
+combine-as-imports = true
+lines-after-imports = 2

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 from agentscope.tool import FunctionTool
 
 from agent_service_v2.tools.backend_learning_client import (

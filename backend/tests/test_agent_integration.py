@@ -64,24 +64,34 @@ class TestProfileRefreshIntegration:
 
     async def _get_headers(self, client):
         """注册并登录，返回 student headers + course_id。"""
+        import re
+        import uuid
+
+        uid = uuid.uuid4().hex[:6]
+        s_code = f"p_std_{uid}"
+        t_code = f"p_tch_{uid}"
+        s_user = f"pstu_{uid}"
+        s_email = f"pstu_{uid}@test.com"
+        t_user = f"ptea_{uid}"
+        t_email = f"ptea_{uid}@test.com"
+
         from app.models.user import RegistrationCode
         async with async_session_factory() as db:
             for rc in [
-                RegistrationCode(code="p_student", role="student"),
-                RegistrationCode(code="p_teacher", role="teacher"),
+                RegistrationCode(code=s_code, role="student"),
+                RegistrationCode(code=t_code, role="teacher"),
             ]:
                 db.add(rc)
             await db.commit()
 
-        import re
         # Register student
         r = await client.get("/api/v1/auth/captcha")
         ct = r.json()["data"]
         nums = re.findall(r"\d+", ct["captcha_question"])
         ans = str(int(nums[0]) + int(nums[1])) if "+" in ct["captcha_question"] else str(int(nums[0]) - int(nums[1]))
         await client.post("/api/v1/auth/register", json={
-            "registration_code": "p_student", "email": "ps@t.com",
-            "password": "Abc12345", "username": "pstu",
+            "registration_code": s_code, "email": s_email,
+            "password": "Abc12345", "username": s_user,
             "captcha_token": ct["captcha_token"], "captcha_code": ans,
         })
         # Login
@@ -90,7 +100,7 @@ class TestProfileRefreshIntegration:
         nums2 = re.findall(r"\d+", ct2["captcha_question"])
         ans2 = str(int(nums2[0]) + int(nums2[1])) if "+" in ct2["captcha_question"] else str(int(nums2[0]) - int(nums2[1]))
         r = await client.post("/api/v1/auth/login", json={
-            "email": "ps@t.com", "password": "Abc12345",
+            "email": s_email, "password": "Abc12345",
             "captcha_token": ct2["captcha_token"], "captcha_code": ans2,
         })
         s_token = r.json()["data"]["token"]
@@ -102,8 +112,8 @@ class TestProfileRefreshIntegration:
         nums3 = re.findall(r"\d+", ct3["captcha_question"])
         ans3 = str(int(nums3[0]) + int(nums3[1])) if "+" in ct3["captcha_question"] else str(int(nums3[0]) - int(nums3[1]))
         await client.post("/api/v1/auth/register", json={
-            "registration_code": "p_teacher", "email": "pt@t.com",
-            "password": "Abc12345", "username": "ptea",
+            "registration_code": t_code, "email": t_email,
+            "password": "Abc12345", "username": t_user,
             "captcha_token": ct3["captcha_token"], "captcha_code": ans3,
         })
         r = await client.get("/api/v1/auth/captcha")
@@ -111,7 +121,7 @@ class TestProfileRefreshIntegration:
         nums4 = re.findall(r"\d+", ct4["captcha_question"])
         ans4 = str(int(nums4[0]) + int(nums4[1])) if "+" in ct4["captcha_question"] else str(int(nums4[0]) - int(nums4[1]))
         r = await client.post("/api/v1/auth/login", json={
-            "email": "pt@t.com", "password": "Abc12345",
+            "email": t_email, "password": "Abc12345",
             "captcha_token": ct4["captcha_token"], "captcha_code": ans4,
         })
         t_h = {"Authorization": f"Bearer {r.json()['data']['token']}"}
@@ -153,10 +163,17 @@ class TestProfileRefreshIntegration:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             import re
+            import uuid
+
+            uid = uuid.uuid4().hex[:6]
+            s_code = f"p_std2_{uid}"
+            s_user = f"pstu2_{uid}"
+            s_email = f"pstu2_{uid}@test.com"
+
             # Register new student who hasn't joined any course
             async with async_session_factory() as db:
                 from app.models.user import RegistrationCode
-                db.add(RegistrationCode(code="p_student2", role="student"))
+                db.add(RegistrationCode(code=s_code, role="student"))
                 await db.commit()
 
             r = await client.get("/api/v1/auth/captcha")
@@ -164,8 +181,8 @@ class TestProfileRefreshIntegration:
             nums = re.findall(r"\d+", ct["captcha_question"])
             ans = str(int(nums[0]) + int(nums[1])) if "+" in ct["captcha_question"] else str(int(nums[0]) - int(nums[1]))
             await client.post("/api/v1/auth/register", json={
-                "registration_code": "p_student2", "email": "ps2@t.com",
-                "password": "Abc12345", "username": "pstu2",
+                "registration_code": s_code, "email": s_email,
+                "password": "Abc12345", "username": s_user,
                 "captcha_token": ct["captcha_token"], "captcha_code": ans,
             })
             r = await client.get("/api/v1/auth/captcha")
@@ -173,7 +190,7 @@ class TestProfileRefreshIntegration:
             nums2 = re.findall(r"\d+", ct2["captcha_question"])
             ans2 = str(int(nums2[0]) + int(nums2[1])) if "+" in ct2["captcha_question"] else str(int(nums2[0]) - int(nums2[1]))
             r = await client.post("/api/v1/auth/login", json={
-                "email": "ps2@t.com", "password": "Abc12345",
+                "email": s_email, "password": "Abc12345",
                 "captcha_token": ct2["captcha_token"], "captcha_code": ans2,
             })
             h = {"Authorization": f"Bearer {r.json()['data']['token']}"}
@@ -353,6 +370,8 @@ class TestTutoringChatIntegration:
                         "conversation_id": conversation_id,
                     },
                 )
+                _ = edited.text
+                _ = regenerated.text
                 history = await client.get(
                     f"/api/v1/tutoring/conversations/{conversation_id}",
                     headers=headers,
@@ -589,7 +608,7 @@ class TestResourcesGenerateIntegration:
                     "resources": [
                         {
                             "title": "Agent 生成的讲义",
-                            "type": "document",
+                            "type": "lesson",
                             "description": "AI 自动生成",
                             "content": "# 第一章\n这是内容",
                             "chapter": "第1章",
@@ -614,7 +633,7 @@ class TestResourcesGenerateIntegration:
                 "task_id": task_id,
                 "task_type": "resource_generation",
                 "status": "completed",
-                "result": {"resources": [{"title": "重复的", "type": "document"}]},
+                "result": {"resources": [{"title": "重复的", "type": "lesson"}]},
             }, headers=headers)
             assert r.status_code == 200
             r = await client.get(f"/api/v1/resources?course_id={course_id}", headers=t_h)

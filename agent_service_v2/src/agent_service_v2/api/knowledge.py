@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from agent_service_v2.agents.curriculum_planner import run_curriculum_kg_generation
 from agent_service_v2.agents.model_provider import AgentModelSettings
+from agent_service_v2.generators.public_resource_flow import run_public_resource_generation
 from agent_service_v2.tools.rag import (
     CatalogKnowledgeContextEmpty,
     build_catalog_kg_context,
     ingest_course_material,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -171,10 +175,6 @@ def _resolve_material_path(storage_uri: str, storage_root: Path) -> Path:
 # V3 Multi-Agent Roadmap & Course Asset Generators (FastAPI Routes)
 # =====================================================================
 
-import asyncio
-from typing import Literal
-
-from pydantic import BaseModel, Field
 
 class KGGenerationRequest(BaseModel):
     context: str | None = Field(None, description="The course syllabus outline context")
@@ -220,10 +220,6 @@ class QuizGenerationRequest(BaseModel):
     personalization_context: dict[str, Any] | None = Field(None, description="Personalization context")
     source: str | None = Field(None, description="baseline or personalized")
 
-
-
-from agent_service_v2.agents.curriculum_planner import run_curriculum_kg_generation
-from agent_service_v2.generators.public_resource_flow import run_public_resource_generation
 
 @router.post(
     "/knowledge-graphs/generations",

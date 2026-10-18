@@ -1,4 +1,5 @@
 import logging
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +9,6 @@ from app.models.user import User
 from app.schemas.ai_features import RefreshRequest
 from app.services.evaluation_service import EvaluationService
 
-# Keep legacy mock target valid
-from app.services.agent_client import agent_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])

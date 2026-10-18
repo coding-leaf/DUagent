@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.services.oj_execution_service import execute_code_in_oj, OJExecutionError
+from app.services.oj_execution_service import OJExecutionError, execute_code_in_oj
+
 
 router = APIRouter(prefix="/api/v1/sandbox", tags=["sandbox"])
 

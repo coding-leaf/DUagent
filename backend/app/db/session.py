@@ -1,7 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.models  # noqa: F401  (registers every model on Base.metadata)
 from app.core.config import settings
 from app.db.base import Base
+
 
 _engine_kwargs: dict = {"echo": settings.DEBUG}
 if "mysql" in settings.resolved_database_url:
@@ -25,13 +27,3 @@ async def get_db() -> AsyncSession:
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-
-import app.models.user  # noqa: E402
-import app.models.course  # noqa: E402
-import app.models.catalog  # noqa: E402
-import app.models.quiz  # noqa: E402
-import app.models.conversation  # noqa: E402
-import app.models.others  # noqa: E402
-import app.models.code_problem  # noqa: E402
-import app.models.personalized_resource_generation  # noqa: E402

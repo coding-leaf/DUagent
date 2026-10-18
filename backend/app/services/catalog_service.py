@@ -1,7 +1,9 @@
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.catalog import CourseCatalog
+
 from app.exceptions.catalog_exceptions import CatalogNotFoundError
+from app.models.catalog import CourseCatalog
+
 
 class CatalogService:
     def __init__(self, db: AsyncSession):

@@ -1,12 +1,15 @@
 import logging
 from collections import defaultdict
 from datetime import datetime
+
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.others import LearningActivity
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.services.course_knowledge_graphs import get_effective_knowledge_graph
 from app.services.resource_scope import resolve_course_resource_scope
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +25,17 @@ def _mastery_label(score: float | None) -> str:
     return "需复习"
 
 def evaluate_mastery_state(
-    score: float | None, 
-    question_count: int, 
-    attempt_count: int, 
-    latest_score: float | None, 
+    score: float | None,
+    question_count: int,
+    attempt_count: int,
+    latest_score: float | None,
     has_activity: bool
 ) -> tuple[str, str, str]:
     """Evaluate mastery state based on score and activity."""
     if score is not None:
         min_evidence = min(3, question_count)
         has_minimum_evidence = attempt_count >= min_evidence
-        
+
         if score >= 80 and has_minimum_evidence:
             return "mastered", "已掌握", _mastery_label(score)
         elif score < 70 or (latest_score is not None and latest_score < 60):
@@ -236,7 +239,7 @@ async def build_node_progress_rows(user_id: str, course_id: str, db: AsyncSessio
         activity_stats = activity_by_node.get(node_id, {})
         has_activity = bool(activity_stats.get("duration") or activity_stats.get("activity_count"))
         latest_score = attempt_stats.get("latest_score", 100) if attempt_stats else None
-        
+
         assessment_state, status_text, mastery_label = evaluate_mastery_state(
             score=score,
             question_count=question_count,

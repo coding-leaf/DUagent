@@ -1,7 +1,9 @@
 import copy
-from typing import Dict, Any, List
-from app.models.user import User
+from typing import Any
+
 from app.models.others import UserProfile
+from app.models.user import User
+
 
 DEFAULT_PROFILE = {
     "modal_preference": {

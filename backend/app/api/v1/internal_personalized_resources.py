@@ -3,13 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.config import settings
+from app.schemas.internal_ai_chat import PersonalCodeProblemCreateRequest
 from app.schemas.personalized_resource_generation import (
     PersonalizedDraftCreateRequest,
     PersonalizedGenerationScopeRequest,
     PersonalizedReviewRequest,
     PersonalizedValidationRequest,
 )
-from app.schemas.internal_ai_chat import PersonalCodeProblemCreateRequest
 from app.services.code_problem_service import (
     CodeProblemValidationError,
     publish_reviewed_personal_problem,
@@ -20,6 +20,7 @@ from app.services.personalized_resource_generation_service import (
     PersonalizedResourceGenerationService,
     ResourcePublicationError,
 )
+
 
 router = APIRouter(
     prefix="/internal/personalized-resources",

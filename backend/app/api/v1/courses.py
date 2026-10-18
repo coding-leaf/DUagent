@@ -1,6 +1,7 @@
 import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
@@ -8,6 +9,7 @@ from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course, CourseEnrollment
 from app.models.user import User
 from app.schemas.course import CourseCreateRequest, CourseJoinRequest
+
 
 router = APIRouter(prefix="/api/v1/courses", tags=["courses"])
 

@@ -9,9 +9,9 @@ from app.models.code_problem import CodeProblem, CodeProblemTestCase
 from app.models.conversation import Conversation
 from app.models.course import CourseEnrollment
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
-from app.services.personalized_resource_generation_service import link_published_generation
 from app.schemas.code_problem import CodeProblemDraft
 from app.services.content_safety import ensure_student_visible_content_safe
+from app.services.personalized_resource_generation_service import link_published_generation
 
 
 class CodeProblemValidationError(ValueError):

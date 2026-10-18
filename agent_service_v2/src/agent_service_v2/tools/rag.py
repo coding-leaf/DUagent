@@ -4,12 +4,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agentscope.rag import PDFParser, TextParser, ApproxTokenChunker, KnowledgeBase, QdrantStore, Chunk
+from agentscope.rag import ApproxTokenChunker, Chunk, KnowledgeBase, PDFParser, QdrantStore, TextParser
+
 from agent_service_v2.agents.model_provider import (
     AgentModelSettings,
     build_embedding_model_from_settings,
     build_reranker_model_from_settings,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,7 @@ def get_course_knowledge_base(course_id: str, settings: AgentModelSettings) -> K
     """根据 course_id 构建隔离的 KnowledgeBase 实例。"""
     embedding_model = build_embedding_model_from_settings(settings)
     vector_store = build_qdrant_store(settings)
-    
+
     # 隔离性设计：在 KB 级别绑定 course_id 过滤
     return KnowledgeBase(
         name=f"course_kb_{course_id}",
@@ -81,7 +83,7 @@ async def ingest_course_material(
     settings: AgentModelSettings,
 ) -> int:
     """对课本教材进行高质量解析、切片，并写入对应课程的知识库。
-    
+
     返回生成的 Chunk 数量。
     """
     path = Path(file_path).resolve()
@@ -264,7 +266,7 @@ async def retrieve_course_context(
         chunk = res.chunk
         payload = chunk.metadata or {}
         filename = payload.get("filename") or chunk.source or "unknown_textbook"
-        
+
         context_parts.append(f"[{idx+1}] File: {filename}\nContent: {chunk.content.text}\n")
         sources.append(
             {

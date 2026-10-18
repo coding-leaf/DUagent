@@ -109,9 +109,9 @@ class OpenAICompatibleRerankerProvider:
     async def score(self, query: str, documents: list[str]) -> list[float]:
         if not documents:
             return []
+        import asyncio
         import json
         import urllib.request
-        import asyncio
 
         payload = {
             "model": self.model,

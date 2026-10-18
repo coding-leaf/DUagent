@@ -2,12 +2,15 @@ import asyncio
 import base64
 import logging
 from collections.abc import Awaitable, Callable
+
 import httpx
+
 from app.core.config import settings
 from app.services.code_language import (
     UnsupportedCodeLanguageError,
     judge0_language_id,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +100,7 @@ async def execute_code_in_oj(code: str, language: str, stdin: str = "") -> dict:
             if response.status_code >= 400:
                 logger.error("Judge0 returned error HTTP status=%d response=%s", response.status_code, response.text)
                 raise OJExecutionError("oj_http_error", f"OJ Service returned HTTP {response.status_code}")
-            
+
             data = response.json()
     except httpx.TimeoutException as exc:
         logger.error("OJ execution timed out connecting to: %s", url)

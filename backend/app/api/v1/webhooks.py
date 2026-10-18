@@ -9,6 +9,7 @@ from app.api.deps import get_db, verify_webhook_secret
 from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.schemas.webhook import AgentWebhookRequest
 
+
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 
 _RESOURCE_TYPES = {"lesson", "diagram", "example"}

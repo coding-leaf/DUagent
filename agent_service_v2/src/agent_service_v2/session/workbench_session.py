@@ -10,28 +10,28 @@ from agentscope.event import (
     TextBlockDeltaEvent,
 )
 
+from agent_service_v2.agents.permissions import SAFE_WORKBENCH_TOOLS
 from agent_service_v2.agents.workbench_factory import (
     MissingModelConfigError,
     WorkbenchAgentFactory,
 )
-from agent_service_v2.agents.permissions import SAFE_WORKBENCH_TOOLS
+from agent_service_v2.artifacts.manifest import ArtifactPublisher
 from agent_service_v2.observability.logging import (
-    build_log_record,
     build_agentscope_event_log,
+    build_log_record,
     input_preview,
 )
-from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.runtime.edu_events import EduEventType
-from agent_service_v2.artifacts.manifest import ArtifactPublisher
+from agent_service_v2.runtime.protocol_adapter import EDUProtocolAdapter
 from agent_service_v2.safety.content_review_middleware import ContentSafetyReviewer
 from agent_service_v2.safety.internal_disclosure_policy import StudentTextOutputGate
 from agent_service_v2.safety.workbench_guard import WorkbenchSafetyGuard
-from agent_service_v2.session.workbench_input import build_workbench_agent_input
 from agent_service_v2.session.run_bus import WorkbenchRun, WorkbenchRunBus
+from agent_service_v2.session.workbench_input import build_workbench_agent_input
+from agent_service_v2.workspaces.run_store import WorkbenchRunStore
 from agent_service_v2.workspaces.workbench_workspace_manager import (
     WorkbenchWorkspaceManager,
 )
-from agent_service_v2.workspaces.run_store import WorkbenchRunStore
 
 
 class WorkbenchSession:

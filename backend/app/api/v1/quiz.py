@@ -2,23 +2,23 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.db.session import async_session_factory
+from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.others import AsyncTask
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 from app.schemas.operations import QuizGenerateRequest, QuizSubmitRequest
-from app.models.catalog import CourseCatalog, CourseOffering
-from app.services.agent_client import AgentServiceError, agent_client
 from app.services import quiz_service
-from app.services.course_knowledge_graphs import get_active_knowledge_graph
+from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_catalog_gate import resolve_generation_catalog
+from app.services.course_knowledge_graphs import get_active_knowledge_graph
 from app.services.resource_scope import resolve_course_resource_scope
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/quiz", tags=["quiz"])

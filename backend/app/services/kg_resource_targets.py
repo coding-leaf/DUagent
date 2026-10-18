@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+
 SUPPORT_BAND_ORDER = ("strong", "good", "weak_but_usable")
 UNKNOWN_SUPPORT_BAND = "unknown"
 

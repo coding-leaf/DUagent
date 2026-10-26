@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/agent_service_v2/backend/architecture-guardrails.md", "reason": "Agent Service 架构红线与模型隔离规范"}
+{"file": ".trellis/spec/agent_service_v2/backend/error-handling.md", "reason": "Agent Service 错误处理与重试契约规范"}
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Agent Service 代码质量与测试规范"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层数据流转与契约一致性思考"}

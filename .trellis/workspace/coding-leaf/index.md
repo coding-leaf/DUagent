@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
-- **Last Active**: 2026-10-26
+- **Total Sessions**: 5
+- **Last Active**: 2026-10-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~99 | Active |
+| `journal-1.md` | ~122 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-10-27 | 稳定性收尾与新人交接前修复（Blob下载修复、Webhook白名单与生产密钥护栏、题库精确清理与7项CI门禁） | `7e24a94` | `main` |
 | 4 | 2026-10-26 | 交接前全仓死代码清理、跨层安全收尾、OpenAPI契约刷新与README重构 | `95eb44f` | `main` |
 | 3 | 2026-10-26 | 收口剩余P0安全越权、RAG错位与前端交互缺陷并完成前四阶段审计 | `5d71a9d` | `main` |
 | 2 | 2026-10-18 | 统一前后端代码扫描体系并沉淀架构红线逃生通道 | `53787ed` | `main` |

@@ -97,3 +97,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: 稳定性收尾与新人交接前修复（Blob下载修复、Webhook白名单与生产密钥护栏、题库精确清理与7项CI门禁）
+<!-- trellis-session: v=2 fp=e11b04e215d96eaa -->
+
+**Date**: 2026-10-27
+**Task**: 稳定性收尾与新人交接前修复（Blob下载修复、Webhook白名单与生产密钥护栏、题库精确清理与7项CI门禁）
+**Package**: backend
+**Branch**: `main`
+
+### Summary
+
+修复两处MarkdownViewer.jsx因apiClient拦截器已解包response.data导致的Blob下载回归并补齐点击下载单测；Backend回调URL统一走受信任内部配置BACKEND_INTERNAL_BASE_URL，Agent Service实施Origin白名单+路径双层校验并拦截生产环境默认弱JWT_SECRET_KEY；将题库批量重生成的旧题软删除收窄至已完成节点的(chapter, knowledge_point)组合并覆盖多教学班共享Catalog；将frontend-tests(Vitest)纳入check_all.py默认7项门禁并建立GitHub Actions CI。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7e24a94` | fix(frontend,backend,agent,ci): 修复文件下载Blob解包回归、加固Webhook白名单与生产密钥校验、收窄题库清理边界并纳管7项CI门禁 |
+
+### Status
+
+[OK] **Completed**

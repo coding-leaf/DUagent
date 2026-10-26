@@ -74,3 +74,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: 交接前全仓死代码清理、跨层安全收尾、OpenAPI契约刷新与README重构
+<!-- trellis-session: v=2 fp=8b491242f8cbb801 -->
+
+**Date**: 2026-10-26
+**Task**: 交接前全仓死代码清理、跨层安全收尾、OpenAPI契约刷新与README重构
+**Package**: backend
+**Branch**: `main`
+
+### Summary
+
+清理过时审计报告、测试残留库与前端0引用死组件/脚本/重复catalogService（净减3700+行历史包袱）；补齐Icon.jsx 23个缺失映射并合并错误解析函数；消除下载URL的Query Token泄露、Webhook生产防空密钥与SSRF校验、BackendLearningClient异常收敛；自动同步双端OpenAPI JSON并重构README交接与部署指南。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95eb44f` | chore(handover,security,docs): 清理过时报告与前端死代码、收尾跨层安全隐患并重构README与OpenAPI文档 |
+
+### Status
+
+[OK] **Completed**

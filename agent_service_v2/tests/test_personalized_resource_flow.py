@@ -52,6 +52,7 @@ class FakeBackendClient:
 class FakeWriter:
     def __init__(self, contents: list[str] | None = None) -> None:
         self.hints: list[str] = []
+        self.course_ids: list[str] = []
         self._contents = contents or ["flowchart TD\nA-->B"]
         self._index = 0
 
@@ -68,7 +69,7 @@ class FakeWriter:
         repair_hint: str,
     ) -> dict[str, Any]:
         assert resource_type == "diagram"
-        assert course_id == "course-1"
+        self.course_ids.append(course_id)
         self.hints.append(repair_hint)
         content = self._contents[min(self._index, len(self._contents) - 1)]
         self._index += 1
@@ -288,3 +289,26 @@ def test_every_emitted_payload_is_json_serializable():
 
     for _, payload in events:
         json.dumps(payload, ensure_ascii=False)
+
+
+def test_runner_uses_catalog_id_for_rag_writer_and_course_id_for_draft_persistence():
+    client = FakeBackendClient()
+    writer = FakeWriter()
+    runner = PersonalizedResourceGenerationRunner(client=client, writer=writer)
+
+    req = _request(catalog_id="catalog-42", course_id="class-course-101")
+    result, _events = _run(runner, req)
+
+    assert result["status"] == "completed"
+    # writer.write 应当收到 catalog_id（用于向 Qdrant 检索课程目录教材切片）
+    assert writer.course_ids == ["catalog-42"]
+
+    # Backend 工具调用（草稿、校验、审核、发布）应当收到真实的教学班 course_id
+    assert [path for path, _ in client.calls] == [
+        "/internal/personalized-resources/drafts",
+        "/internal/personalized-resources/g1/validation",
+        "/internal/personalized-resources/g1/review",
+        "/internal/personalized-resources/g1/publish",
+    ]
+    for _path, payload in client.calls:
+        assert payload["course_id"] == "class-course-101"

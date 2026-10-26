@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
+import { uid } from '../utils/id';
 
 const MAX_RUN_LOGS = 300;
 
 const normalizeRunLog = (event) => {
   const payload = event.payload || {};
   return {
-    id: `${event.run_id || 'local'}-${event.seq || Date.now()}-${crypto.randomUUID()}`,
+    id: `${event.run_id || 'local'}-${event.seq || Date.now()}-${uid()}`,
     type: event.type || 'unknown',
     level: payload.level || (event.type === 'workflow_failed' ? 'error' : 'info'),
     message: payload.message || payload.event || event.type || 'unknown',

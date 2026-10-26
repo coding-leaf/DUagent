@@ -125,6 +125,7 @@ async def test():
         r = await client.post("/api/v1/courses", json={"name": "Quiz Course"}, headers=tea_headers)
         assert r.status_code == 201
         course_id = r.json()["data"]["id"]
+        course_code = r.json()["data"]["course_code"]
 
         # Seed 3 single_choice + 1 multi_choice questions
         q_ids = []
@@ -159,8 +160,9 @@ async def test():
             mc_q_id = mc_q.id
             await db.commit()
 
-        await client.post("/api/v1/courses/join", json={"course_id": course_id},
-                          headers=stu_headers)
+        r_join = await client.post("/api/v1/courses/join", json={"course_code": course_code},
+                                   headers=stu_headers)
+        assert r_join.status_code == 200
 
         r = await client.get(f"/api/v1/quiz/questions?course_id={course_id}&limit=1", headers=stu_headers)
         chk("questions -> 200", r.status_code == 200)

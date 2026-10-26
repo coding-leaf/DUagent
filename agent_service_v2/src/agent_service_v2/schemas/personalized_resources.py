@@ -13,6 +13,7 @@ class PersonalizedResourceGenerationRequest(BaseModel):
     task_id: str
     user_id: str
     course_id: str
+    catalog_id: str | None = None
     course_title: str | None = None
     goal: str = Field(min_length=1, max_length=2000)
     chapter: str | None = None

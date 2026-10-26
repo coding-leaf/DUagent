@@ -16,7 +16,7 @@ const STUDENT_PAGE_SIZE = 14;
 
 export default function TeacherConsole() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const roleLabelMap = { teacher: '教师', admin: '管理员' };
   const isMockMode = isMockEnabled;
   const [activeClass, setActiveClass] = useState(null);
@@ -194,7 +194,10 @@ export default function TeacherConsole() {
               aria-label="退出登录"
               title="退出登录"
               className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-              onClick={() => navigate('/')}
+              onClick={() => {
+                logout?.();
+                navigate('/');
+              }}
             >
               <Icon name="logout" className="material-symbols-outlined text-sm"/>
               <span className="hidden lg:inline">退出登录</span>

@@ -191,41 +191,44 @@ async def run_quiz_generation_background(
             for r in results
             if isinstance(r, dict) and r.get("status") == "completed"
         )
+        completed_node_names = [
+            r["node_name"]
+            for r in results
+            if isinstance(r, dict) and r.get("status") == "completed" and r.get("node_name")
+        ]
         inserted_question_ids = [
             question_id
             for r in results
             if isinstance(r, dict)
             for question_id in (r.get("inserted_question_ids") or [])
         ]
-        if inserted_question_ids:
+        if inserted_question_ids and (completed_node_names or failed == 0):
             fanout_catalog_id = None
             for r in results:
                 if isinstance(r, dict) and r.get("fanout_catalog_id"):
                     fanout_catalog_id = r["fanout_catalog_id"]
                     break
             if fanout_catalog_id:
-                await db.execute(
-                    update(QuizQuestion)
-                    .where(
-                        QuizQuestion.catalog_id == fanout_catalog_id,
+                stmt = update(QuizQuestion).where(
+                    QuizQuestion.catalog_id == fanout_catalog_id,
+                    QuizQuestion.source == "baseline",
+                    QuizQuestion.is_deleted == False,
+                    ~QuizQuestion.id.in_(inserted_question_ids),
+                )
+                if completed_node_names:
+                    stmt = stmt.where(QuizQuestion.knowledge_point.in_(completed_node_names))
+                await db.execute(stmt.values(is_deleted=True))
+            else:
+                for cid in fanout_course_ids:
+                    stmt = update(QuizQuestion).where(
+                        QuizQuestion.course_id == cid,
                         QuizQuestion.source == "baseline",
                         QuizQuestion.is_deleted == False,
                         ~QuizQuestion.id.in_(inserted_question_ids),
                     )
-                    .values(is_deleted=True)
-                )
-            else:
-                for cid in fanout_course_ids:
-                    await db.execute(
-                        update(QuizQuestion)
-                        .where(
-                            QuizQuestion.course_id == cid,
-                            QuizQuestion.source == "baseline",
-                            QuizQuestion.is_deleted == False,
-                            ~QuizQuestion.id.in_(inserted_question_ids),
-                        )
-                        .values(is_deleted=True)
-                    )
+                    if completed_node_names:
+                        stmt = stmt.where(QuizQuestion.knowledge_point.in_(completed_node_names))
+                    await db.execute(stmt.values(is_deleted=True))
         parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
         parent.progress = 100
         parent.completed_at = now_utc()
@@ -322,6 +325,7 @@ async def generate_quiz_for_child(
         }
         return {
             "status": "completed",
+            "node_name": node_name,
             "question_count": len(new_questions),
             "inserted_question_ids": inserted_question_ids,
             "fanout_catalog_id": fanout_catalog_id,

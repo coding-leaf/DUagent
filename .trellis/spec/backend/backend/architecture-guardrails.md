@@ -63,6 +63,74 @@ evaluates Python truthiness on the instrumented attribute instead of emitting
 `WHERE is_deleted = 0`, silently breaking the filter. `E712` is globally ignored
 in `ruff.toml` precisely to protect this pattern.
 
+### ❌ 严禁课程级接口跳过访问权限校验或混用 `course_id` / `catalog_id` (Enforce course access & separate `course_id` vs `catalog_id`)
+
+1. **Course Access Guard**: Any endpoint accepting `course_id` for student/teacher data (`quiz`, `learning-path`, `resources`, `activities`) must call `await ensure_course_resource_access(db, current_user, course_id)` **before** querying `resolve_course_resource_scope` or minting session rows.
+2. **Partial Fanout Prune Guard**: When regenerating baseline resources/questions across multiple KG nodes in parallel, soft-delete pruning (`is_deleted = True`) must be scoped strictly to `completed_node_names` (`QuizQuestion.knowledge_point.in_(completed_node_names)`), never unconditional `~id.in_(inserted_ids)` when `failed > 0`.
+3. **Cross-Service RAG Scope**: Qdrant chunks are indexed by `catalog_id`. When calling `agent_service_v2` generation endpoints (`/agent/v2/personalized-resources/generations`), always pass both `course_id` (class offering ID for persistence) and `catalog_id` (curriculum catalog ID for RAG retrieval).
+
+---
+
+## Scenario: Course Access Guard, Partial Prune Protection & Cross-Service RAG `catalog_id` Contract
+
+### 1. Scope / Trigger
+- Trigger: Cross-layer contract between `backend` and `agent_service_v2` for personalized resource generation, plus course-scoped authorization and partial fanout data integrity.
+
+### 2. Signatures
+- `await ensure_course_resource_access(db: AsyncSession, current_user: User, course_id: str) -> Course` (`backend/app/services/resource_scope.py`)
+- `run_quiz_generation_background(parent_id: str, child_task_ids: list[str], fanout_course_ids: list[str]) -> None` (`backend/app/services/catalog_quiz_generation_service.py`)
+- `POST /agent/v2/personalized-resources/generations` (`PersonalizedResourceGenerationRequest`)
+
+### 3. Contracts
+- **Request fields (`PersonalizedResourceGenerationRequest`)**:
+  - `task_id: str` (required)
+  - `user_id: str` (required)
+  - `course_id: str` (required — class offering ID used for draft/validation/review/publish persistence)
+  - `catalog_id: str | None = None` (optional — catalog ID used by `writer.write` for Qdrant RAG retrieval; falls back to `course_id` when omitted)
+  - `course_title: str | None = None`
+  - `goal: str` (`min_length=1, max_length=2000`)
+- **Child task return contract (`generate_quiz_for_child`)**:
+  - Returns `{"status": "completed", "node_name": node_name, "question_count": ..., "inserted_question_ids": [...], "fanout_catalog_id": ...}`
+
+### 4. Validation & Error Matrix
+- `course_id` does not exist in `courses` (`is_deleted == False`) -> `HTTP 404` (`code: 40400, message: "课程不存在"`)
+- `current_user` is student not enrolled in `course_id` (or teacher not owning `course_id`) -> `HTTP 403` (`code: 40300, message: "无权访问该课程"`)
+- Quiz fanout has `failed > 0` (`status == "partial"`) -> Only questions matching `QuizQuestion.knowledge_point.in_(completed_node_names)` and `~QuizQuestion.id.in_(inserted_question_ids)` are soft-deleted; failed nodes' existing baseline questions remain `is_deleted == False`.
+
+### 5. Good/Base/Bad Cases
+- **Good**: Enrolled student calls `GET /api/v1/quiz/questions?course_id=cls_1` -> passes `ensure_course_resource_access`, returns questions and creates `QuizSession`.
+- **Base**: Goal-driven resource generation sends both `course_id="cls_1"` and `catalog_id="cat_1"` -> Agent queries Qdrant with `cat_1` and writes draft to Backend with `cls_1`.
+- **Bad**: Unenrolled student calls `GET /api/v1/learning-path?course_id=cls_other` -> rejected with `403` before any KG lookup.
+
+### 6. Tests Required
+- `backend/tests/test_learning_path_fallback.py`: assert `404` on unknown course, `403` on unenrolled student, `200` on enrolled student.
+- `backend/tests/test_admin_catalog_resource_generation.py`: `test_quiz_generation_background_partial_preserves_failed_node_baseline_questions` asserts failed node's baseline questions keep `is_deleted == False`.
+- `agent_service_v2/tests/test_personalized_resource_flow.py`: `test_runner_uses_catalog_id_for_rag_writer_and_course_id_for_draft_persistence`.
+
+### 7. Wrong vs Correct
+#### Wrong
+```python
+# ❌ Missing access check in route; passes class course_id as the only ID to Agent RAG
+scope = await resolve_course_resource_scope(db, course_id)
+await agent_client.post_json("/agent/v2/personalized-resources/generations", {
+    "task_id": task.id,
+    "user_id": current_user.id,
+    "course_id": req.course_id,  # Qdrant is indexed by catalog_id, so RAG returns 0 chunks!
+})
+```
+#### Correct
+```python
+# ✅ Enforce course access first; pass both course_id (class) and catalog_id (RAG)
+await ensure_course_resource_access(db, current_user, course_id)
+scope = await resolve_course_resource_scope(db, course_id)
+await agent_client.post_json("/agent/v2/personalized-resources/generations", {
+    "task_id": task.id,
+    "user_id": current_user.id,
+    "course_id": req.course_id,
+    "catalog_id": catalog_context.catalog_id,
+})
+```
+
 ---
 
 ## Escape Hatches (显式逃生通道)

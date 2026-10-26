@@ -318,13 +318,14 @@ class PersonalizedResourceGenerationRunner:
     ) -> dict[str, Any] | None:
         repair_hint = ""
         last_reason = "not_published"
+        rag_course_id = (request.catalog_id or request.course_id).strip()
         for attempt in range(MAX_ATTEMPTS):
             content = await writer.write(
                 resource_type,
                 goal=request.goal,
                 chapter=request.chapter or "",
                 knowledge_point=knowledge_point,
-                course_id=request.course_id,
+                course_id=rag_course_id,
                 course_title=request.course_title,
                 difficulty=request.difficulty,
                 repair_hint=repair_hint,

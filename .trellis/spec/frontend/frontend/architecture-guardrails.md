@@ -86,6 +86,11 @@ Data fetching belongs in SWR hooks or `useEffect`; never in the component body.
 Mutating refs, dispatching, or calling APIs during render breaks React 19's
 concurrent rendering.
 
+### ❌ 严禁直接调用裸 `crypto.randomUUID()` 或退出登录漏调 `logout()` (No bare `crypto.randomUUID()` & always clear auth state on logout)
+
+1. **Non-Secure Context UUID Safety**: `crypto.randomUUID` is `undefined` on plain HTTP LAN deployments (`http://<lan-ip>`). Always import `uid()` from `src/utils/id.js` instead of calling `crypto.randomUUID()` directly.
+2. **Logout Completeness**: Every "退出登录" button across all role consoles (`TeacherConsole`, `TeacherStudentReport`, `Navbar`, etc.) must destructure `logout` from `useAuth()` and invoke `logout()` before `navigate('/')`.
+
 ---
 
 ## Escape Hatches (显式逃生通道)

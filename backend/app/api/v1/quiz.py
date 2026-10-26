@@ -17,7 +17,10 @@ from app.services import quiz_service
 from app.services.agent_client import AgentServiceError, agent_client
 from app.services.course_catalog_gate import resolve_generation_catalog
 from app.services.course_knowledge_graphs import get_active_knowledge_graph
-from app.services.resource_scope import resolve_course_resource_scope
+from app.services.resource_scope import (
+    ensure_course_resource_access,
+    resolve_course_resource_scope,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,7 @@ async def get_questions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await ensure_course_resource_access(db, current_user, course_id)
     scope = await resolve_course_resource_scope(db, course_id)
     query = select(QuizQuestion).where(
         or_(

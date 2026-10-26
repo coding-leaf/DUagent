@@ -5,6 +5,7 @@ import { chatService } from '../api/services/chat';
 import { useCourse } from './CourseContext';
 import { normalizeMessages } from '../utils/chatContent';
 import { fetcherWrapper } from '../utils/fetcher';
+import { uid } from '../utils/id';
 import { useRunLogs } from '../hooks/useRunLogs';
 import {
   completeRunningToolCalls,
@@ -31,7 +32,7 @@ const artifactsFromMessages = (messages = []) => {
       artifacts
         .filter(artifact => artifact && artifact.type)
         .forEach(artifact => {
-          const id = artifact.id || `artifact-${crypto.randomUUID()}`;
+          const id = artifact.id || `artifact-${uid()}`;
           artifactsMap.set(id, {
             id,
             type: artifact.type,
@@ -347,7 +348,7 @@ export const ChatProvider = ({ children }) => {
 
     setMessages(prev => [
       ...prev,
-      { id: `user-${crypto.randomUUID()}`, role: 'user', content: textToSend },
+      { id: `user-${uid()}`, role: 'user', content: textToSend },
       createEmptyAiMessage()
     ]);
     

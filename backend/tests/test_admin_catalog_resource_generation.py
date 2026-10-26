@@ -318,6 +318,133 @@ async def test_quiz_generation_background_marks_parent_partial_when_one_child_ra
 
 
 @pytest.mark.asyncio
+async def test_quiz_generation_background_partial_preserves_failed_node_baseline_questions():
+    """When some child tasks fail, baseline questions for failed nodes must not be soft-deleted."""
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+    catalog_id = await _seed_ready_catalog()
+    class_id = await _seed_bound_class(catalog_id=catalog_id, class_id="class-admin-gen-a")
+
+    parent_id = "quiz-parent-partial-preserve"
+    completed_child_id = "quiz-child-node-a"
+    failed_child_id = "quiz-child-node-b"
+
+    async with async_session_factory() as db:
+        db.add_all(
+            [
+                QuizQuestion(
+                    id="q-old-node-a",
+                    course_id=class_id,
+                    catalog_id=catalog_id,
+                    chapter="第一章",
+                    knowledge_point="节点A",
+                    type="single_choice",
+                    source="baseline",
+                    content="旧节点A题目",
+                    correct_answer="A",
+                    options=["A", "B"],
+                    is_deleted=False,
+                ),
+                QuizQuestion(
+                    id="q-old-node-b",
+                    course_id=class_id,
+                    catalog_id=catalog_id,
+                    chapter="第一章",
+                    knowledge_point="节点B",
+                    type="single_choice",
+                    source="baseline",
+                    content="旧节点B题目",
+                    correct_answer="B",
+                    options=["A", "B"],
+                    is_deleted=False,
+                ),
+            ]
+        )
+        db.add(
+            AsyncTask(
+                id=parent_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                course_id=None,
+                result={
+                    "catalog_id": catalog_id,
+                    "total_node_count": 2,
+                    "completed_node_count": 0,
+                    "failed_node_count": 0,
+                    "total_question_count": 0,
+                },
+            )
+        )
+        db.add_all(
+            [
+                AsyncTask(
+                    id=completed_child_id,
+                    task_type="quiz_generation",
+                    status="processing",
+                    progress=10,
+                    user_id="admin-admin-gen",
+                    result={"parent_task_id": parent_id, "node_name": "节点A"},
+                ),
+                AsyncTask(
+                    id=failed_child_id,
+                    task_type="quiz_generation",
+                    status="processing",
+                    progress=10,
+                    user_id="admin-admin-gen",
+                    result={"parent_task_id": parent_id, "node_name": "节点B"},
+                ),
+            ]
+        )
+        await db.commit()
+
+    async def _child_result(db, child_id, fanout_course_ids):
+        if child_id == completed_child_id:
+            return {
+                "status": "completed",
+                "node_name": "节点A",
+                "question_count": 1,
+                "inserted_question_ids": ["q-new-node-a"],
+                "fanout_catalog_id": catalog_id,
+            }
+        return {
+            "status": "failed",
+            "error": "timeout",
+            "node_name": "节点B",
+            "fanout_catalog_id": catalog_id,
+        }
+
+    with patch(
+        "app.services.catalog_quiz_generation_service.generate_quiz_for_child",
+        new_callable=AsyncMock,
+    ) as mock_child:
+        mock_child.side_effect = _child_result
+        from app.services.catalog_quiz_generation_service import run_quiz_generation_background
+
+        await run_quiz_generation_background(
+            parent_id,
+            [completed_child_id, failed_child_id],
+            [class_id],
+        )
+
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, parent_id)
+        assert parent.status == "partial"
+
+        # 验证：成功重生成的节点A的旧题目被软删除
+        q_a = await db.get(QuizQuestion, "q-old-node-a")
+        assert q_a is not None
+        assert q_a.is_deleted is True
+
+        # 核心防误删断言：生成失败的节点B的存量题目保留完好（is_deleted is False）
+        q_b = await db.get(QuizQuestion, "q-old-node-b")
+        assert q_b is not None
+        assert q_b.is_deleted is False
+
+
+@pytest.mark.asyncio
 async def test_admin_catalog_quiz_child_uses_catalog_id_for_agent_rag_and_class_id_for_persistence():
     await _reset_db()
     await _seed_user("admin-admin-gen", "admin")

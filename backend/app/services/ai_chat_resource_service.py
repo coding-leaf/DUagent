@@ -184,6 +184,7 @@ async def start_ai_chat_resource_generation(
                 "task_id": task_id,
                 "user_id": user_id,
                 "course_id": course_id,
+                "catalog_id": catalog.catalog_id,
                 "course_title": catalog.catalog_title,
                 "goal": goal,
                 "resource_preferences": [resource_type],

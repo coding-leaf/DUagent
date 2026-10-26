@@ -1,11 +1,25 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import TeacherConsole from './TeacherConsole';
 import { useTeacherConsoleData } from '../hooks/useTeacherConsoleData';
 
+const mockLogout = vi.fn();
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ user: { username: 'teacher', real_name: '王老师', role: 'teacher' } })
+  useAuth: () => ({
+    user: { username: 'teacher', real_name: '王老师', role: 'teacher' },
+    logout: mockLogout,
+  })
 }));
 
 vi.mock('../hooks/useTeacherConsoleData', () => ({
@@ -67,4 +81,18 @@ test('uses the active class identity and dashboard-first section order', async (
   const resources = screen.getByRole('heading', { name: '本班学习资源' });
   expect(overview.compareDocumentPosition(students) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(students.compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('clicking logout button calls logout and navigates to home', async () => {
+  render(
+    <MemoryRouter>
+      <TeacherConsole />
+    </MemoryRouter>
+  );
+
+  const logoutBtn = screen.getByRole('button', { name: '退出登录' });
+  fireEvent.click(logoutBtn);
+
+  expect(mockLogout).toHaveBeenCalledTimes(1);
+  expect(mockNavigate).toHaveBeenCalledWith('/');
 });

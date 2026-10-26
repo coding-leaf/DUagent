@@ -74,6 +74,13 @@ Tools are generic plumbing (fetch profile, query progress, execute code). Any
 lookup table mapping a course topic to expected answers belongs in prompt context
 or data, not in Python literals inside `tools/`.
 
+### ❌ 严禁混用 RAG 检索 `catalog_id` 与业务归属 `course_id` (Never conflate RAG `catalog_id` with class `course_id`)
+
+Qdrant course material chunks are indexed with `metadata.course_id = catalog_id`.
+In `PersonalizedResourceGenerationRunner._produce_one`:
+- Pass `rag_course_id = (request.catalog_id or request.course_id).strip()` to `writer.write(...)` so `ResourceWorkerAgent` retrieves chunks from the catalog vector collection.
+- Pass `request.course_id` (the class offering ID) to `create_personalized_resource_draft`, `record_personalized_validation`, `review_personalized_resource`, and `publish_personalized_resource` so Backend persists records under the student's enrolled class.
+
 ---
 
 ## Escape Hatches (显式逃生通道)

@@ -1,3 +1,5 @@
+import { uid } from './id';
+
 export const updateTargetMessage = (messages, targetId, updater) => {
   return messages.map(m => m.id === targetId ? updater(m) : m);
 };
@@ -101,7 +103,7 @@ export const normalizeArtifact = (event) => {
   const artifact = event.payload?.artifact;
   if (!artifact || !artifact.type) return null;
   return {
-    id: artifact.id || `artifact-${crypto.randomUUID()}`,
+    id: artifact.id || `artifact-${uid()}`,
     type: artifact.type,
     title: artifact.title || null,
     props: artifact.props || {},
@@ -110,7 +112,7 @@ export const normalizeArtifact = (event) => {
 };
 
 export const completionMessageId = (event) => {
-  return event.message_id || event.payload?.message_id || `ai-${crypto.randomUUID()}`;
+  return event.message_id || event.payload?.message_id || `ai-${uid()}`;
 };
 
 export const createEmptyAiMessage = (id = 'ai-placeholder') => ({
@@ -138,7 +140,7 @@ export const reduceAssistantMessageForEvent = (message, event) => {
     case 'tool_started':
       {
         const toolCall = {
-          id: event.payload?.tool_call_id || `tool-${crypto.randomUUID()}`,
+          id: event.payload?.tool_call_id || `tool-${uid()}`,
           name: event.payload?.tool_name || '工具调用',
           ...(event.payload?.tool_title ? { title: event.payload.tool_title } : {}),
           ...(event.payload?.tool_category ? { category: event.payload.tool_category } : {}),

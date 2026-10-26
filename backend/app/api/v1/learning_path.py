@@ -7,6 +7,7 @@ from app.services.learning_path_service import (
     LearningPathService,
 )
 from app.services.node_resource_service import NodeResourceService
+from app.services.resource_scope import ensure_course_resource_access
 
 
 router = APIRouter(prefix="/api/v1/learning-path", tags=["learning-path"])
@@ -18,6 +19,7 @@ async def get_learning_path(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await ensure_course_resource_access(db, current_user, course_id)
     data = await LearningPathService(db).get_learning_path(current_user.id, course_id)
     return {
         "code": 200,

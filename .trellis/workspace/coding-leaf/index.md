@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-10-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~145 | Active |
+| `journal-1.md` | ~168 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-10-27 | RAG入库数据安全加固与CI门禁修复 | `5483143` | `fix/rag-safety-and-ci-fixes` |
 | 6 | 2026-10-27 | 教材安全切片与版本化幂等入库改造 | `cd7d815` | `fix/robust-catalog-ingestion` |
 | 5 | 2026-10-27 | 稳定性收尾与新人交接前修复（Blob下载修复、Webhook白名单与生产密钥护栏、题库精确清理与7项CI门禁） | `7e24a94` | `main` |
 | 4 | 2026-10-26 | 交接前全仓死代码清理、跨层安全收尾、OpenAPI契约刷新与README重构 | `95eb44f` | `main` |

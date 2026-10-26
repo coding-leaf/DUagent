@@ -143,3 +143,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 7: RAG入库数据安全加固与CI门禁修复
+<!-- trellis-session: v=2 fp=ceb381158d839af7 -->
+
+**Date**: 2026-10-27
+**Task**: RAG入库数据安全加固与CI门禁修复
+**Package**: backend
+**Branch**: `fix/rag-safety-and-ci-fixes`
+
+### Summary
+
+加固教材级粒度清理隔离与激活两阶段校验事务状态机，排查并阻断未激活临时切片泄露，增加长前缀与组合文本Token预算双重保护及历史Collection回退兼容，补齐CI测试依赖
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5483143` | fix(rag,ci): 加固教材级粒度隔离与激活事务状态机、防检索未激活泄露并补齐CI测试依赖 |
+
+### Status
+
+[OK] **Completed**

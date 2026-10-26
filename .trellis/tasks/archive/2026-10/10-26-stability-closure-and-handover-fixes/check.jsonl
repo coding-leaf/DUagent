@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/backend/index.md","reason":"Backend coding conventions and service boundaries"}
+{"file":".trellis/spec/backend/backend/architecture-guardrails.md","reason":"Backend security and partial fanout prune guardrails"}
+{"file":".trellis/spec/backend/backend/quality-guidelines.md","reason":"Backend Ruff and pytest verification rules"}
+{"file":".trellis/spec/agent_service_v2/backend/index.md","reason":"Agent Service v2 guidelines"}
+{"file":".trellis/spec/agent_service_v2/backend/architecture-guardrails.md","reason":"Agent Service v2 webhook SSRF and error guardrails"}
+{"file":".trellis/spec/agent_service_v2/backend/quality-guidelines.md","reason":"Agent Service v2 testing and Ruff standards"}
+{"file":".trellis/spec/frontend/frontend/index.md","reason":"Frontend React 19 + JSX guidelines"}
+{"file":".trellis/spec/frontend/frontend/architecture-guardrails.md","reason":"Frontend header-only file download and apiClient guardrails"}
+{"file":".trellis/spec/frontend/frontend/quality-guidelines.md","reason":"Frontend ESLint, build, and Vitest standards"}

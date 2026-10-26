@@ -149,11 +149,18 @@ ensure_service() {
 }
 ensure_core_infrastructure() {
   local mysql_port qdrant_port
-  ensure_service eduagent-mysql mysql
-  ensure_service eduagent-qdrant qdrant
-  ensure_service eduagent-agentscope-redis redis
   mysql_port="$(env_value "$INFRA_ENV" DB_PORT 2>/dev/null || true)"
   qdrant_port="$(env_value "$INFRA_ENV" QDRANT_HTTP_PORT 2>/dev/null || true)"
+
+  # If port 3306 is not yet occupied by native MySQL, manage eduagent-mysql container
+  if ! (echo >"/dev/tcp/127.0.0.1/${mysql_port:-3306}") >/dev/null 2>&1; then
+    ensure_service eduagent-mysql mysql
+  else
+    log "Reusing running MySQL on port ${mysql_port:-3306}"
+  fi
+
+  ensure_service eduagent-qdrant qdrant
+  ensure_service eduagent-agentscope-redis redis
   wait_tcp "MySQL" "${mysql_port:-3306}"
   "$ROOT_DIR/deploy/ensure_default_admin.sh" "$INFRA_ENV" "$ROOT_DIR/backend/schema.sql"
   wait_http "Qdrant" "http://127.0.0.1:${qdrant_port:-6333}/collections"

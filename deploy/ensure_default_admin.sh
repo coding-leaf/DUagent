@@ -7,6 +7,7 @@ DEFAULT_ADMIN_ID="admin000000000000000000000001"
 DEFAULT_ADMIN_EMAIL="admin@admin.com"
 DEFAULT_ADMIN_USERNAME="admin"
 DEFAULT_PASSWORD_HASH='$2b$12$k4zj0wRQqBBbfYHl3YGhJOjYhdXZijOubyMDT1Lk2OmuDP1D5kOcm'
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -15,8 +16,25 @@ env_value() {
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE"
 }
 mysql_query() {
-  docker exec -e MYSQL_PWD="$db_password" eduagent-mysql \
-    mysql -N -B -uroot "$db_name" -e "$1"
+  if docker ps --format '{{.Names}}' | grep -qx 'eduagent-mysql'; then
+    docker exec -e MYSQL_PWD="$db_password" eduagent-mysql \
+      mysql -N -B -uroot "$db_name" -e "$1"
+  elif command -v mysql >/dev/null 2>&1; then
+    MYSQL_PWD="$db_password" mysql -h 127.0.0.1 -P 3306 -N -B -uroot "$db_name" -e "$1"
+  else
+    local py_bin="python3"
+    [[ -x "$ROOT_DIR/.venv/bin/python" ]] && py_bin="$ROOT_DIR/.venv/bin/python"
+    "$py_bin" -c "
+import pymysql, sys
+conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='$db_password', database='$db_name')
+with conn.cursor() as cur:
+    cur.execute(sys.argv[1])
+    for row in cur.fetchall():
+        print('\t'.join(str(c) for c in row))
+conn.commit()
+conn.close()
+" "$1"
+  fi
 }
 
 [[ -f "$ENV_FILE" ]] || fail "环境配置不存在：$ENV_FILE"

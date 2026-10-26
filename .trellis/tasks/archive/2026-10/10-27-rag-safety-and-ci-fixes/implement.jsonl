@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/agent_service_v2/backend/index.md", "reason": "Agent Service 后端开发基线规范"}
+{"file": ".trellis/spec/agent_service_v2/backend/architecture-guardrails.md", "reason": "RAG入库蓝绿版本与向量集合物理隔离架构红线"}
+{"file": ".trellis/spec/backend/backend/index.md", "reason": "Backend 基础规范与依赖约定"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层数据流思考指南"}

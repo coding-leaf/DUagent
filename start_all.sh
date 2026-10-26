@@ -6,7 +6,8 @@ LOG_DIR="$ROOT_DIR/.run_logs/dev"
 HOST="127.0.0.1"
 BACKEND_PORT="8001"
 AGENT_PORT="8002"
-FRONTEND_FALLBACK_PORT="5173"
+FRONTEND_PORT="5173"
+FRONTEND_FALLBACK_PORT="$FRONTEND_PORT"
 PIDS=()
 NAMES=()
 LOGS=()
@@ -137,6 +138,7 @@ start() {
   require_dev_dependencies
   ensure_port_free "$AGENT_PORT" "Agent Service"
   ensure_port_free "$BACKEND_PORT" "Backend"
+  ensure_port_free "$FRONTEND_PORT" "Frontend"
   "$ROOT_DIR/deploy_prod.sh" prepare-infra
   mkdir -p "$LOG_DIR"
   qdrant_port="$(env_value QDRANT_HTTP_PORT)"

@@ -4,10 +4,11 @@ import asyncio
 import logging
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agent_service_v2.agents.curriculum_planner import run_curriculum_kg_generation
 from agent_service_v2.agents.model_provider import AgentModelSettings
@@ -198,6 +199,17 @@ class ResourceGenerationRequest(BaseModel):
         description="Public resource types requested",
     )
     webhook_url: str = Field(..., description="Callback target to inject generated results")
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError("Invalid or forbidden webhook_url")
+        hostname = (parsed.hostname or "").lower()
+        if hostname in ("169.254.169.254", "metadata.google.internal"):
+            raise ValueError("Invalid or forbidden webhook_url")
+        return v
 
 
 class QuizGenerationRequest(BaseModel):

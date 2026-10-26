@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,35 +42,10 @@ async def get_current_user(
 
 
 async def get_download_user(
-    token: str | None = Query(None),
-    credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    resolved_token = credentials.credentials if credentials else token
-    if not resolved_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 40100, "message": "未提供认证令牌", "data": None},
-        )
-    payload = decode_token(resolved_token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 40100, "message": "Token 无效或已过期", "data": None},
-        )
-    result = await db.execute(
-        select(User).where(
-            User.id == payload.get("sub"),
-            User.is_deleted == False,
-        )
-    )
-    user = result.scalar_one_or_none()
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 40100, "message": "用户不存在或已被禁用", "data": None},
-        )
-    return user
+    return await get_current_user(credentials=credentials, db=db)
 
 
 def require_role(*roles: str):
@@ -90,10 +65,15 @@ async def verify_webhook_secret(
 ) -> None:
     """Webhook 端点鉴权：校验 X-Webhook-Secret header。
 
-    WEBHOOK_SECRET 未配置时自动跳过（向后兼容）。
+    WEBHOOK_SECRET 未配置时：DEBUG 模式跳过（向后兼容测试），生产模式拒绝（503）。
     """
     if not settings.WEBHOOK_SECRET:
-        return
+        if getattr(settings, "DEBUG", False):
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": 50300, "message": "Webhook secret 未配置", "data": None},
+        )
     if x_webhook_secret != settings.WEBHOOK_SECRET:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

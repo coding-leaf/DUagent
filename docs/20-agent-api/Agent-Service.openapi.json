@@ -165,8 +165,8 @@
         "tags": [
           "Knowledge Graph"
         ],
-        "summary": "一键由 Leader 规划提取课程知识图谱（V2）",
-        "description": "一键通过 CoursePlannerAgent (Leader) 高度自检产生课程知识图谱大纲。",
+        "summary": "一键由通用课程规划智能体提取课程知识图谱（V2）",
+        "description": "委托通用 :class:`CourseCurriculumPlanner` 生成学科自适应的课程知识图谱 DAG。",
         "operationId": "generate_v2_knowledge_graph_agent_v2_knowledge_knowledge_graphs_generations_post",
         "requestBody": {
           "content": {
@@ -613,6 +613,18 @@
             "title": "Source Type",
             "description": "Resource input origin",
             "default": "outline_text"
+          },
+          "course_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Title",
+            "description": "Course title used to inject the discipline for curriculum planning"
           }
         },
         "type": "object",
@@ -767,6 +779,17 @@
           "course_id": {
             "type": "string",
             "title": "Course Id"
+          },
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
           },
           "course_title": {
             "anyOf": [

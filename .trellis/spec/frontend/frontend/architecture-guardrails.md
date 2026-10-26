@@ -90,6 +90,9 @@ concurrent rendering.
 
 1. **Non-Secure Context UUID Safety**: `crypto.randomUUID` is `undefined` on plain HTTP LAN deployments (`http://<lan-ip>`). Always import `uid()` from `src/utils/id.js` instead of calling `crypto.randomUUID()` directly.
 2. **Logout Completeness**: Every "退出登录" button across all role consoles (`TeacherConsole`, `TeacherStudentReport`, `Navbar`, etc.) must destructure `logout` from `useAuth()` and invoke `logout()` before `navigate('/')`.
+3. **Unified Error Extraction & Header-Only File Downloads**:
+   - Always import `getErrorMessage` (or alias `getApiErrorMessage`) from `src/utils/apiError.js`; do not create duplicate error parsers under `src/api/`.
+   - Never append `?token=` to download URLs in `MarkdownViewer`. Trigger file downloads via `apiClient.get(..., { responseType: 'blob' })` + `URL.createObjectURL` so JWTs stay inside the `Authorization` header.
 
 ---
 

@@ -313,9 +313,9 @@ test('ChatProvider handles workflow_failed as native EDU v2 error event', async 
   });
 
   await waitFor(() => {
-    expect(screen.getByTestId('assistant-loading').textContent).toBe('false');
+    expect(screen.getByTestId('assistant-error').textContent).toBe('true');
   });
-  expect(screen.getByTestId('assistant-error').textContent).toBe('true');
+  expect(screen.getByTestId('assistant-loading').textContent).toBe('false');
   expect(screen.getByTestId('assistant-content').textContent).toContain('模型未配置');
   expect(screen.getByTestId('assistant-parts').textContent).toContain('模型未配置');
 });

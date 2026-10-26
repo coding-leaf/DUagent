@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import mermaid, { sanitizeMermaidSource, getCachedSvg, setCachedSvg } from '../../utils/mermaid';
 import Icon from '../Icon';
+import apiClient from '../../api/client';
 import { useChat } from '../../context/ChatContext';
 import { markdownHeadingId } from '../../utils/markdownAnchors';
 
@@ -177,6 +178,26 @@ export default function MarkdownViewer({ content, className = '', compact = fals
   const activeSession = chat?.activeSession;
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
+  const handleArtifactDownload = useCallback(async (e, filename) => {
+    e.preventDefault();
+    try {
+      const response = await apiClient.get(
+        `/tutoring/conversations/${activeSession}/files/${encodeURIComponent(filename)}`,
+        { responseType: 'blob' }
+      );
+      const blobUrl = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
+  }, [activeSession]);
+
   const components = useMemo(() => ({
     h1({ children, ...rest }) {
       return <h1 id={markdownHeadingId(children)} {...rest}>{children}</h1>;
@@ -198,13 +219,18 @@ export default function MarkdownViewer({ content, className = '', compact = fals
     },
     a({ href, children, ...rest }) {
       if (href && href.startsWith('./') && activeSession) {
-        const filename = decodeURIComponent(href.slice(2));
-        const token = localStorage.getItem('access_token');
-        const downloadUrl = `${apiBaseUrl}/tutoring/conversations/${activeSession}/files/${encodeURIComponent(filename)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        let filename;
+        try {
+          filename = decodeURIComponent(href.slice(2));
+        } catch {
+          filename = href.slice(2);
+        }
+        const downloadUrl = `${apiBaseUrl}/tutoring/conversations/${activeSession}/files/${encodeURIComponent(filename)}`;
         return (
           <a
             href={downloadUrl}
             download={filename}
+            onClick={(e) => handleArtifactDownload(e, filename)}
             className="text-cyan-600 hover:text-cyan-700 font-semibold underline inline-flex items-center gap-1 transition-colors"
             {...rest}
           >
@@ -330,7 +356,7 @@ export default function MarkdownViewer({ content, className = '', compact = fals
         </summary>
       );
     }
-  }), [activeSession, apiBaseUrl, compact, loading]);
+  }), [activeSession, apiBaseUrl, compact, loading, handleArtifactDownload]);
 
   return (
     <div className={`markdown-body break-words leading-[1.7] ${compact ? 'chat-compact-markdown' : ''} ${className}`}>

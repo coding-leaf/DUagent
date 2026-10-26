@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getApiErrorMessage } from '../api/error';
+import { getApiErrorMessage } from '../utils/apiError';
 import { authService } from '../api/services/auth';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/Icon';

@@ -50,7 +50,7 @@ class BackendLearningClient:
                 response = await client.post(url, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
             raise BackendLearningClientError("backend_timeout") from exc
-        except httpx.ConnectError as exc:
+        except httpx.TransportError as exc:
             raise BackendLearningClientError("backend_unavailable") from exc
 
         if response.status_code >= 400:
@@ -61,7 +61,13 @@ class BackendLearningClient:
                 detail_reason=detail_reason,
             )
 
-        body = response.json()
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise BackendLearningClientError(
+                "backend_bad_response",
+                status_code=response.status_code,
+            ) from exc
         data = body.get("data") if isinstance(body, dict) else None
         return data if isinstance(data, dict) else {}
 

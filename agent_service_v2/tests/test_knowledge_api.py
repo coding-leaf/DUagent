@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from agent_service_v2.main import app
@@ -280,3 +281,39 @@ def test_kg_generation_api_maps_planner_failure_to_502() -> None:
 
     assert response.status_code == 502
     assert response.json()["code"] == 502
+
+
+def test_resource_generation_request_webhook_url_validation() -> None:
+    from agent_service_v2.api.knowledge import ResourceGenerationRequest
+    import pydantic
+
+    base_payload = {
+        "task_id": "t1",
+        "course_id": "c1",
+        "resource_types": ["lesson"],
+    }
+
+    # Valid URLs
+    req = ResourceGenerationRequest(
+        **base_payload, webhook_url="http://127.0.0.1:8001/api/v1/webhooks/agent"
+    )
+    assert req.webhook_url == "http://127.0.0.1:8001/api/v1/webhooks/agent"
+
+    req_https = ResourceGenerationRequest(
+        **base_payload, webhook_url="https://example.com/webhook"
+    )
+    assert req_https.webhook_url == "https://example.com/webhook"
+
+    # Forbidden scheme / missing netloc
+    for bad_url in ("ftp://example.com/hook", "not-a-url", "http:///no-host"):
+        with pytest.raises(pydantic.ValidationError):
+            ResourceGenerationRequest(**base_payload, webhook_url=bad_url)
+
+    # Cloud metadata SSRF targets
+    for ssrf_url in (
+        "http://169.254.169.254/latest/meta-data",
+        "http://metadata.google.internal/computeMetadata/v1/",
+    ):
+        with pytest.raises(pydantic.ValidationError):
+            ResourceGenerationRequest(**base_payload, webhook_url=ssrf_url)
+

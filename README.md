@@ -1,343 +1,191 @@
-# DUagent 生产部署指南
+# DUagent 开发者交接与生产部署指南
 
-这份分支只保留运行代码和生产部署脚本。完成部署后，通过 Backend 的 `8001` 端口同时访问前端页面和 API；Agent Service 只监听本机 `8002` 端口。
+DUagent 是面向高校课程教学的多智能体个性化导学平台。本仓库包含完整的三端源码（`frontend/`、`backend/`、`agent_service_v2/`）、生产部署脚本（`deploy_prod.sh`）以及 **Trellis 规范化 AI 工程工作流**（`.trellis/`）。
 
-## 分支职责
+---
 
-- `main`：唯一可部署、可交付的稳定版本；服务器与交付方均从此分支拉取。
-- `dev`：日常集成分支；新功能先在 `feature/*` 分支开发并合入 `dev`，验证完成后再合入 `main`。
-- `release/prod`：历史生产快照，仅供回滚参考，不再作为部署入口或日常更新目标。
+## 一、快速上手与架构全景（接手必读）
 
-## 开发环境
+### 1.1 系统拓扑与职责边界
 
-开发者应从 `dev` 创建功能分支。首次准备本地环境：
-
-```bash
-git switch dev
-./start_all.sh setup
-./start_all.sh start
+```text
+Frontend (React 19 + Vite, 开发 :5173 / 生产同源托管)
+    │  HTTP (/api/v1/*) + SSE 流式对话 (Bearer JWT)
+    ▼
+Backend (FastAPI + SQLAlchemy 2.0, :8001)  ──► MySQL (:3306, 唯一关系数据权威源)
+    │  内部 REST (/agent/v2/*) + Webhook (/api/v1/webhooks/agent)
+    │  Agent 回写 (/internal/*, X-Internal-Agent-Token)
+    ▼
+Agent Service v2 (AgentScope 2.x + uv, 127.0.0.1:8002)
+    ├── Qdrant (:6333/6334, 课程教材向量库，按 catalog_id 索引)
+    ├── Redis (:6379, AgentScope 运行时状态)
+    ├── Judge0 (:2358, 代码沙箱评测)
+    └── Workspaces (agent_service_v2/workspaces/, 会话受控文件产物)
 ```
 
-`start_all.sh start` 会准备 Docker 依赖，并以 Backend/Agent Service 热重载和 Vite 热更新启动本地环境；它不会构建生产静态文件。按 `Ctrl+C` 仅停止本机开发进程，不删除数据库或 Docker 卷。
+- **核心隔离原则**：
+  - `Frontend` 仅与 `Backend` 通信，**严禁**直连 `Agent Service`；
+  - `Backend` 是业务编排与 MySQL 唯一入口，**严禁**直接调用任何 LLM SDK（所有大模型能力均经由 `app/services/agent_client.py` 委托给 `Agent Service v2`）；
+  - `Agent Service v2` 负责 Prompt、ReAct 工具链、RAG 检索与课程规划，**不直接连接 MySQL**，需读写业务数据时统一通过 `BackendLearningClient` 调用 Backend 的 `/internal/*` 接口。
 
-## 1. 部署结构
+### 1.2 核心目录与关键文件速览
 
-| 服务 | 运行方式 | 默认地址 |
+| 目录 / 文件 | 说明 |
+| --- | --- |
+| `backend/` | FastAPI 业务后端（`app/api/v1/` 公开路由、`app/api/internal_*.py` 内部回调、`app/services/` 业务逻辑、`app/models/` ORM 模型、`tests/` 单测） |
+| `agent_service_v2/` | AgentScope 2.x 智能体服务（`agents/workbench_react_agent.py` 对话工作台、`agents/curriculum_planner.py` 学科自适应知识图谱规划、`generators/` 资源与题库生成流水线、`tools/` 工具集） |
+| `frontend/` | React 19 + Vite + Tailwind v4 纯 JSX 前端（`src/api/` 统一 Axios 客户端与服务、`src/pages/` 页面、`src/components/` 组件、`src/hooks/` SWR 状态钩子） |
+| `docs/` | 自动导出的最新接口契约：`10-client-api/Client-API.openapi.json`（前后端）与 `20-agent-api/Agent-Service.openapi.json`（后端与 Agent） |
+| `.trellis/` | **Trellis 工程规范与任务记忆库**：`.trellis/spec/` 存放三端架构红线与代码规范，`.trellis/tasks/archive/` 存放历次重构的设计与验收记录 |
+| `check_all.py` | **全仓唯一质量门禁脚本**：一键串联前端 ESLint、Vite Build、Backend Ruff + Pytest、Agent Ruff + Pytest 共 6 项检查 |
+
+### 1.3 本地开发环境启动
+
+首次拉取仓库后，在根目录准备 `.env`（可参考 `deploy/env.production.example`）并启动本地热重载开发环境：
+
+```bash
+./start_all.sh setup   # 检查基础环境并安装三端依赖 (.venv / uv / npm)
+./start_all.sh start   # 启动 Docker 基础组件 + Backend(8001) + Agent(8002) + Vite(5173) 热重载
+```
+
+- `start_all.sh start` 会锁定前端端口为 `5173`（`strictPort: true`）并自动注入 `BACKEND_INTERNAL_AGENT_TOKEN`。
+- 按 `Ctrl+C` 仅停止本机开发进程，不会删除数据库或 Docker 数据卷。
+
+### 1.4 质量门禁与测试命令
+
+在提交任何代码前，**必须**在仓库根目录执行统一门禁：
+
+```bash
+# 全仓 6 大门禁（Frontend Lint + Build, Backend Ruff + Pytest, Agent Ruff + Pytest）
+python -X utf8 check_all.py
+
+# 快速静态门禁（跳过耗时 Pytest，仅跑三端 Lint + 前端 Build，约 10 秒）
+python -X utf8 check_all.py --fast
+
+# 前端 Vitest 单元测试
+cd frontend && npm run test:unit
+```
+
+---
+
+## 二、Trellis 规范化开发工作流导览
+
+本项目使用 **Trellis** 管理架构约束（Specs）、开发任务（Tasks）与会话演进日志（Workspace Journal）。建议在支持 `AGENTS.md` / Skills 的 AI 编程助手（如 Pi、Claude Code、Codex、Cursor、OpenCode）中按以下流程协作：
+
+### 2.1 三端架构红线（写代码前必查 `.trellis/spec/`）
+
+每个模块均设有不可逾越的 `architecture-guardrails.md` 与 `quality-guidelines.md`：
+
+1. **Backend (`.trellis/spec/backend/backend/architecture-guardrails.md`)**：
+   - 严禁在 `backend` 内直调大模型或拼装 Prompt；
+   - SQLAlchemy 布尔过滤必须写 `Model.is_deleted == False`，严禁写 `not Model.is_deleted`（`ruff.toml` 已为此全局豁免 `E712`）；
+   - 课程级接口必须前置调用 `await ensure_course_resource_access(db, current_user, course_id)`；
+   - 触发 Agent 个性化资源生成时必须同时传递业务教学班 `course_id` 与教材向量索引键 `catalog_id`；
+   - 文件下载接口仅接受 `Authorization: Bearer` Header，严禁使用 Query `?token=`。
+2. **Agent Service v2 (`.trellis/spec/agent_service_v2/backend/architecture-guardrails.md`)**：
+   - Prompt 必须保持**学科中立**（从 `course_title` 与大纲动态注入学科，严禁硬编码“C语言/Python”等词）；
+   - 严禁在沙箱中动态生成脚本解析文档，统一使用 `tools/outline_extractor.py` 与 `tools/rag.py`；
+   - `ResourceGenerationRequest.webhook_url` 强制校验协议与云元数据 SSRF 防护；`BackendLearningClient.post_json` 统一收敛传输层与非 JSON 异常。
+3. **Frontend (`.trellis/spec/frontend/frontend/architecture-guardrails.md`)**：
+   - 纯 JavaScript / JSX 项目，严禁擅自引入 TypeScript（`.ts/.tsx`）或重型第三方 UI 组件库；
+   - 局域网 HTTP 部署兼容：生成客户端唯一 ID 必须使用 `src/utils/id.js` 的 `uid()`，严禁裸调 `crypto.randomUUID()`；
+   - 错误提取统一使用 `src/utils/apiError.js` 的 `getErrorMessage`；图标统一通过 `src/components/Icon.jsx` 映射至 `lucide-react`。
+
+### 2.2 标准任务生命周期
+
+```bash
+# 1. 查看当前工作流上下文与活跃任务
+python ./.trellis/scripts/get_context.py
+
+# 2. 创建新任务并编写规划文档 (prd.md / design.md / implement.md)
+python ./.trellis/scripts/task.py create "<任务标题>" --slug <task-slug> -p <backend|frontend|agent_service_v2>
+
+# 3. 校验上下文清单并激活任务进入实施阶段 (in_progress)
+python ./.trellis/scripts/task.py validate .trellis/tasks/<task-dir>
+python ./.trellis/scripts/task.py start .trellis/tasks/<task-dir>
+
+# 4. 实施并通过 python -X utf8 check_all.py 后，提交代码、归档任务并记录日志
+python ./.trellis/scripts/task.py archive <task-slug> --skip-branch-validation
+python -X utf8 ./.trellis/scripts/add_session.py --title "<标题>" --commit "<hash>" --summary "<摘要>"
+```
+
+### 2.3 OpenAPI 契约同步刷新
+
+当修改了 `backend` 或 `agent_service_v2` 的接口路由/Schema 时，请运行以下命令保持 `docs/` 下的契约文件同步：
+
+```bash
+./.venv/Scripts/python -c "import json, sys; sys.path.insert(0, 'backend'); from app.main import app; open('docs/10-client-api/Client-API.openapi.json', 'w', encoding='utf-8').write(json.dumps(app.openapi(), indent=2, ensure_ascii=False) + '\n')"
+uv run --project agent_service_v2 python -c "import json; from agent_service_v2.main import app; open('docs/20-agent-api/Agent-Service.openapi.json', 'w', encoding='utf-8').write(json.dumps(app.openapi(), indent=2, ensure_ascii=False) + '\n')"
+```
+
+---
+
+## 三、生产环境部署与运维指南
+
+生产部署后，通过 Backend 的 `8001` 端口同时托管前端静态产物与公开 API；Agent Service 及数据库等基础设施仅监听本机回环地址。
+
+### 3.1 分支与部署拓扑
+
+- **分支约定**：`main` 为唯一可部署稳定分支；日常开发在 `dev` 或 `feature/*` 进行，通过全量门禁后合入 `main`。
+- **运行端口**：
+
+| 服务 | 运行方式 | 默认监听地址 |
 | --- | --- | --- |
-| Frontend | 构建后由 Backend 同源托管 | `http://服务器IP:8001` |
-| Backend | 宿主机 Python 进程 | `0.0.0.0:8001` |
-| Agent Service | 宿主机 Python 进程 | `127.0.0.1:8002` |
-| MySQL | Docker | `127.0.0.1:3306` |
-| Qdrant | Docker | `127.0.0.1:6333/6334` |
-| AgentScope Redis | Docker | `127.0.0.1:6379` |
-| Judge0 | Docker | `127.0.0.1:2358` |
+| Frontend + Backend | 宿主机 Python 进程（Backend 同源托管前端 `dist/`） | `0.0.0.0:8001` |
+| Agent Service v2 | 宿主机 Python (`uv`) 进程 | `127.0.0.1:8002` |
+| MySQL / Qdrant / Redis / Judge0 | Docker Compose | `127.0.0.1:3306` / `6333` / `6379` / `2358` |
 
-部署脚本会复用同名的已有容器，只创建缺失的 Docker 依赖。执行 `stop` 不会停止数据库、Qdrant、Redis 或 Judge0。
+### 3.2 服务器环境准备（Ubuntu 24.04+）
 
-## 2. 准备服务器
-
-服务器需要以下命令：
+需要安装：`docker`、`docker compose` (v2)、`python3` (支持 `venv`)、`npm` (Node.js 22)、`uv`、`curl`。可使用仓库内置脚本自动检查或安装：
 
 ```bash
-docker --version
-docker compose version
-docker info
-python3 --version
-npm --version
-uv --version
-curl --version
+./bootstrap_ubuntu.sh check          # 只读检查缺失工具
+sudo ./bootstrap_ubuntu.sh install   # 自动安装缺失工具（不破坏已有容器与数据卷）
 ```
 
-要求：
-
-- Docker Compose 必须是 v2，即使用 `docker compose` 命令。
-- 当前用户必须有权限执行 `docker info`。
-- Python 需要支持创建 `venv`。
-- Node.js/npm 用于构建前端，`uv` 用于安装 Agent Service。
-
-### 2.1 自动检查与安装（可选）
-
-初始化脚本仅支持 Ubuntu 24.04+ 的 amd64/arm64。先执行只读检查：
-
-```bash
-./bootstrap_ubuntu.sh check
-```
-
-没有干净环境时，可以查看计划但不修改系统：
-
-```bash
-./bootstrap_ubuntu.sh dry-run
-```
-
-只有确认需要安装缺失工具时才执行：
-
-```bash
-sudo ./bootstrap_ubuntu.sh install
-```
-
-安装模式会跳过满足要求的现有工具，不卸载、不降级，也不操作项目容器和数据卷。检测到与 Docker CE 冲突的软件包时会停止并要求人工处理。若脚本把当前用户加入 `docker` 组，需要退出服务器会话并重新登录，再执行：
-
-```bash
-./bootstrap_ubuntu.sh check
-./deploy_prod.sh check
-```
-
-安装源采用 [Docker 官方 Ubuntu 仓库](https://docs.docker.com/engine/install/ubuntu/)、[NodeSource Node.js 22 仓库](https://github.com/nodesource/distributions) 和 [Astral uv 官方安装器](https://docs.astral.sh/uv/getting-started/installation/)。
-
-## 3. 快速部署
-
-以下命令适用于全新的 Ubuntu 服务器。执行到 `nano .env` 时，按模板填写密码、模型和密钥；保存后继续执行余下命令。
+### 3.3 首次部署与配置 `.env`
 
 ```bash
 git clone --branch main --single-branch https://github.com/coding-leaf/DUagent.git DUagent-prod
 cd DUagent-prod
 
-./bootstrap_ubuntu.sh check
-# 只有上一步提示缺少工具时才执行：sudo ./bootstrap_ubuntu.sh install
-
-./deploy_prod.sh check
-nano .env
-./deploy_prod.sh deploy
-./deploy_prod.sh status
-
-curl -fsS http://127.0.0.1:8001/health
-curl -fsS http://127.0.0.1:2358/languages >/dev/null && echo "Judge0 正常"
-```
-
-浏览器访问 `http://服务器IP:8001`。首次部署会下载镜像、安装依赖并构建前端，耗时较长。
-
-## 4. 获取部署分支
-
-首次部署：
-
-```bash
-git clone \
-  --branch main \
-  --single-branch \
-  https://github.com/coding-leaf/DUagent.git \
-  DUagent-prod
-
-cd DUagent-prod
-git branch --show-current
-git log -1 --oneline
-```
-
-当前分支应为 `main`。
-
-已有目录更新：
-
-```bash
-cd DUagent-prod
-git pull --ff-only origin main
-```
-
-## 5. 配置唯一的 `.env`
-
-生产部署只维护根目录一份 `.env`。首次执行预检时，脚本会自动复制中文模板并将权限设置为 `600`：
-
-```bash
+# 1. 首次执行 check 会自动从模板生成权限为 600 的根 .env
 ./deploy_prod.sh check
 nano .env
 ```
 
-首次预检会因为 `.env` 仍有占位值而停止，这是预期行为。脚本不会覆盖已经存在的 `.env`；填写完成后，在下一节重新执行预检即可。
+在 `.env` 中替换所有占位符（可使用 `openssl rand -hex 32` 生成随机密钥）：
+- **安全密钥**：`DB_PASSWORD`、`JWT_SECRET_KEY`、`WEBHOOK_SECRET`、`INTERNAL_AGENT_TOKEN`、`JUDGE0_POSTGRES_PASSWORD`、`JUDGE0_REDIS_PASSWORD`（注：生产模式下 `WEBHOOK_SECRET` 为空将拒绝服务）。
+- **模型配置**：`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 以及 `EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY`、`EMBEDDING_MODEL`。
 
-模板已用中文标记填写要求。至少需要确认以下配置：
-
-- `DB_PASSWORD`：新 MySQL 使用新强密码；复用已有 `eduagent-mysql` 时填写其真实密码。
-- `JWT_SECRET_KEY`：Backend 登录令牌签名密钥。
-- `WEBHOOK_SECRET`：Backend 与 Agent Service 共用的 Webhook 密钥。
-- `INTERNAL_AGENT_TOKEN`：Backend 与 Agent Service 共用的内部接口令牌。
-- `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`：对话模型配置。
-- `EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY`、`EMBEDDING_MODEL`：向量模型配置。
-- `JUDGE0_POSTGRES_PASSWORD`、`JUDGE0_REDIS_PASSWORD`：Judge0 内部独立密码。
-
-可使用下面的命令生成随机密钥，每个配置分别生成一次：
+填写完成后执行正式部署与健康检查：
 
 ```bash
-openssl rand -hex 32
-```
-
-检查是否仍有未替换的值：
-
-```bash
-grep -En '^[A-Z][A-Z0-9_]*=(replace-with-|.*your-)' .env
-```
-
-没有输出才继续。部署脚本也会执行同样的占位值检查，避免使用模板密码启动服务。`.env` 已被 Git 忽略，不要提交、截图或发送其中的真实密码和 API Key。
-
-## 6. 检查并部署
-
-先执行预检：
-
-```bash
-./deploy_prod.sh check
-```
-
-看到 `Preflight passed` 后正式部署：
-
-```bash
-./deploy_prod.sh deploy
-```
-
-首次部署会安装 Backend 和 Agent Service 依赖、安装前端依赖并构建页面，耗时比后续更新长。部署期间不要中断终端。
-
-脚本的基础设施策略：
-
-- 已存在且正在运行：直接复用。
-- 已存在但已停止：自动启动。
-- 容器缺失：通过 Compose 自动创建。
-- MySQL 中缺少 `users` 表：导入 `backend/schema.sql` 初始化数据库结构。
-- 已有有效管理员：保留原账号和密码，不重复创建、不覆盖数据。
-- 没有有效管理员且默认标识未被占用：自动补建默认管理员。
-- 默认邮箱、用户名或 ID 被普通账号占用：为避免静默提权，停止部署并明确报错。
-- Judge0 `2358` 健康检查通过：直接复用现有 Judge0。
-
-数据库初始化或管理员缺失时创建的默认管理员：
-
-```text
-账号：admin@admin.com
-密码：Admin123456
-```
-
-首次登录后立即修改密码。管理员初始化检查是幂等的，后续部署不会重置已有管理员密码。
-
-## 7. 验证部署
-
-查看总体状态：
-
-```bash
+./deploy_prod.sh check     # 确认输出 Preflight passed
+./deploy_prod.sh deploy    # 构建前端、安装依赖、初始化数据库并启动服务
 ./deploy_prod.sh status
-```
 
-检查服务：
-
-```bash
+# 验证服务与 Judge0 (cgroup v2 镜像)
 curl -fsS http://127.0.0.1:8001/health
-curl -fsS http://127.0.0.1:8002/openapi.json >/dev/null && echo "Agent Service 正常"
-curl -fsS http://127.0.0.1:2358/languages >/dev/null && echo "Judge0 正常"
-```
-
-### Judge0 cgroup v2 验证
-
-本部署使用 `mrkushalsm/judge0:cgv2` 作为 Judge0 server 和 worker 镜像，以兼容仅提供 cgroup v2 的 Docker 主机。Judge0 配置由 Compose 的 `env_file` 注入，生成文件可安全地保持仅当前用户可读。该镜像不是 Judge0 官方镜像；首次升级后必须实际执行一次代码提交，不能只检查 `/languages`。
-
-```bash
 curl -fsS -X POST 'http://127.0.0.1:2358/submissions?base64_encoded=false&wait=true' \
   -H 'Content-Type: application/json' \
   -d '{"source_code":"print(\"judge0 cgroup v2 ok\")","language_id":71,"stdin":""}'
 ```
 
-响应中的 `status.id` 应为 `3`，且 `stdout` 应为 `judge0 cgroup v2 ok`。如果执行日志出现 `Failed to create control group /sys/fs/cgroup/memory`，说明当前运行的仍是旧镜像；执行 `./deploy_prod.sh deploy` 会仅重建 Judge0 的 server 和 workers，保留其 PostgreSQL 和 Redis 数据卷。
+- **默认管理员账号**（仅在库中无管理员时幂等创建，首次登录后请立即修改密码）：
+  - 账号：`admin@admin.com`
+  - 密码：`Admin123456`
 
-浏览器访问：
-
-```text
-http://服务器IP:8001
-```
-
-如果本机可以访问但其他设备不能访问，请检查服务器防火墙或云安全组是否允许 TCP `8001`。MySQL、Qdrant、Redis、Judge0 和 Agent Service 默认只监听本机，不应直接暴露到公网。
-
-## 8. 日常管理
+### 3.4 常用运维命令与排障
 
 ```bash
-# 启动已经安装和构建好的应用
-./deploy_prod.sh start
+./deploy_prod.sh start | stop | restart | status   # 启停或查看应用进程状态（stop 不停止 Docker 容器）
+./deploy_prod.sh logs [backend|agent]              # 查看 .run_logs/prod/ 下的运行日志
+./deploy_prod.sh reset-judge0 --confirm            # 仅重置 Judge0 容器与卷（不影响业务 MySQL/Qdrant）
 
-# 仅停止 Backend 和 Agent Service
-./deploy_prod.sh stop
-
-# 重启 Backend 和 Agent Service
-./deploy_prod.sh restart
-
-# 查看状态
-./deploy_prod.sh status
-
-# 清空 Judge0 的提交记录和内部数据库后重建（不可恢复）
-./deploy_prod.sh reset-judge0 --confirm
-
-# 查看 Backend 日志
-./deploy_prod.sh logs backend
-
-# 查看 Agent Service 日志
-./deploy_prod.sh logs agent
-
-# 同时查看两侧日志
-./deploy_prod.sh logs
+# 版本更新
+git pull --ff-only origin main && ./deploy_prod.sh deploy
 ```
 
-日志保存在 `.run_logs/prod/`，PID 文件保存在 `.run/prod/`。
-
-## 9. 更新版本
-
-```bash
-cd DUagent-prod
-git pull --ff-only origin main
-./deploy_prod.sh deploy
-./deploy_prod.sh status
-```
-
-`git pull` 不会覆盖根 `.env`。再次执行 `deploy` 会更新依赖、重新构建前端并重启应用，但不会删除数据库卷。
-
-## 10. 常见问题
-
-### `Preflight passed` 后出现大量安装输出
-
-正常。首次部署需要创建两个 Python 虚拟环境并安装 100 个以上的 Agent 依赖，还会执行 `npm ci` 和 Vite 构建。
-
-### `Backend is not running` 或 `Agent Service is not running`
-
-首次部署在启动前会先尝试停止旧进程。没有旧进程时出现这两行是正常现象，继续观察后续是否出现 `started` 和 `is ready`。
-
-### 前端提示 chunk 大于 500 KB
-
-这是 Vite 的性能提示，不是构建失败。只要最后出现 `built` 和 `Frontend is ready` 即可。
-
-### Backend 或 Agent Service 启动失败
-
-```bash
-./deploy_prod.sh logs backend
-./deploy_prod.sh logs agent
-```
-
-同时检查端口占用：
-
-```bash
-ss -lntp | grep -E ':(8001|8002)\b'
-```
-
-### Docker 服务异常
-
-```bash
-docker ps -a
-docker compose --env-file .env -f docker-compose.prod.yml config
-```
-
-### Judge0 无法启动或密码配置已变更
-
-如果部署提示 Judge0 Redis 或 PostgreSQL 密码与 `.env` 不一致，而旧的 Judge0 提交记录无需保留，可执行：
-
-```bash
-./deploy_prod.sh reset-judge0 --confirm
-```
-
-该命令只删除 Judge0 的 PostgreSQL、Redis 数据卷和对应容器，不会影响 EDUagent 的 MySQL、Qdrant、AgentScope Redis 或课程文件。需要保留 Judge0 数据时，不要执行该命令；应将当前 `.env` 中的 Judge0 密码改回初始化该实例时使用的值。
-
-### Qdrant 没有持久化挂载
-
-如果部署输出：
-
-```text
-WARNING: existing eduagent-qdrant has no persistent /qdrant/storage mount
-```
-
-说明复用的旧 Qdrant 把向量数据写在容器层。当前容器继续运行不受影响，但删除或重建容器可能造成数据丢失。不要直接删除该容器；应先创建快照或备份 `/qdrant/storage`，再迁移到 `eduagent_qdrant_data` 命名卷。
-
-## 11. 安全检查
-
-- 不提交根 `.env`、生成的 Judge0 配置、日志或运行目录。
-- 不在聊天、截图、Issue 或日志中暴露 API Key、数据库密码和内部 Token。
-- 泄露过的密钥必须在服务商控制台撤销并重新生成，仅删除消息不够。
-- 部署后立即修改默认管理员密码。
-- 不对公网开放 `3306`、`6333`、`6379`、`8002` 和 `2358`。
-- 操作 Docker 数据卷前先备份，并确认当前容器的挂载情况。
+- **安全基线**：严禁提交 `.env` 或暴露内部端口（`3306`/`6333`/`6379`/`8002`/`2358`）至公网；云安全组仅需放行 TCP `8001`。

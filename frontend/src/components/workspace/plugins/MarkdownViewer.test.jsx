@@ -23,8 +23,10 @@ test('renders heading anchors and conversation artifact downloads', () => {
 
   expect(screen.getByRole('heading', { name: '第一章' })).toHaveAttribute('id', '第一章');
   expect(screen.getByRole('link', { name: '目录' })).not.toHaveAttribute('target');
-  expect(screen.getByRole('link', { name: /下载讲义/ })).toHaveAttribute(
+  const downloadLink = screen.getByRole('link', { name: /下载讲义/ });
+  expect(downloadLink).toHaveAttribute(
     'href',
     expect.stringContaining('/tutoring/conversations/conversation-1/files/')
   );
+  expect(downloadLink.getAttribute('href')).not.toContain('token=');
 });

@@ -81,6 +81,11 @@ In `PersonalizedResourceGenerationRunner._produce_one`:
 - Pass `rag_course_id = (request.catalog_id or request.course_id).strip()` to `writer.write(...)` so `ResourceWorkerAgent` retrieves chunks from the catalog vector collection.
 - Pass `request.course_id` (the class offering ID) to `create_personalized_resource_draft`, `record_personalized_validation`, `review_personalized_resource`, and `publish_personalized_resource` so Backend persists records under the student's enrolled class.
 
+### ❌ 严禁放行未校验的 `webhook_url` 或逃逸 `BackendLearningClient` 传输异常 (Validate webhook URLs & catch all transport/JSON errors)
+
+1. **SSRF Guard on Webhooks**: `ResourceGenerationRequest.webhook_url` must validate `http/https` scheme, non-empty `netloc`, and block cloud metadata hosts (`169.254.169.254`, `metadata.google.internal`).
+2. **Transport & JSON Error Convergence**: `BackendLearningClient.post_json` must catch `httpx.TransportError` (mapping timeouts to `backend_timeout` and all other transport errors to `backend_unavailable`) and `ValueError` on `response.json()` (mapping to `backend_bad_response`).
+
 ---
 
 ## Escape Hatches (显式逃生通道)

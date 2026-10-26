@@ -109,3 +109,42 @@ def test_build_backend_learning_client_from_settings_requires_base_url_and_token
     client = build_backend_learning_client_from_settings(configured)
     assert isinstance(client, BackendLearningClient)
     assert client.base_url == "http://backend"
+
+
+def test_backend_learning_client_handles_transport_read_error():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadError("connection closed abruptly", request=request)
+
+    client = BackendLearningClient(
+        base_url="http://backend",
+        token="secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(BackendLearningClientError) as exc:
+        asyncio.run(client.post_json("/internal/ai-chat/learning-progress", {}))
+
+    assert exc.value.reason == "backend_unavailable"
+
+
+def test_backend_learning_client_handles_non_json_response():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text="<html><head><title>502 Bad Gateway</title></head><body>502</body></html>",
+            headers={"Content-Type": "text/html"},
+            request=request,
+        )
+
+    client = BackendLearningClient(
+        base_url="http://backend",
+        token="secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(BackendLearningClientError) as exc:
+        asyncio.run(client.post_json("/internal/ai-chat/learning-progress", {}))
+
+    assert exc.value.reason == "backend_bad_response"
+    assert exc.value.status_code == 200
+

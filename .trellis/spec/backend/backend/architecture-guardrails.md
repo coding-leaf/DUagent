@@ -68,6 +68,9 @@ in `ruff.toml` precisely to protect this pattern.
 1. **Course Access Guard**: Any endpoint accepting `course_id` for student/teacher data (`quiz`, `learning-path`, `resources`, `activities`) must call `await ensure_course_resource_access(db, current_user, course_id)` **before** querying `resolve_course_resource_scope` or minting session rows.
 2. **Partial Fanout Prune Guard**: When regenerating baseline resources/questions across multiple KG nodes in parallel, soft-delete pruning (`is_deleted = True`) must be scoped strictly to `completed_node_names` (`QuizQuestion.knowledge_point.in_(completed_node_names)`), never unconditional `~id.in_(inserted_ids)` when `failed > 0`.
 3. **Cross-Service RAG Scope**: Qdrant chunks are indexed by `catalog_id`. When calling `agent_service_v2` generation endpoints (`/agent/v2/personalized-resources/generations`), always pass both `course_id` (class offering ID for persistence) and `catalog_id` (curriculum catalog ID for RAG retrieval).
+4. **No Query-String JWT & Fail-Closed Production Webhooks**:
+   - File download endpoints (`get_download_user`) must authenticate exclusively via `Authorization: Bearer <token>` headers — never accept `?token=` in query strings.
+   - `verify_webhook_secret` must fail closed (`HTTP 503`) in production (`DEBUG=False`) if `WEBHOOK_SECRET` is empty.
 
 ---
 

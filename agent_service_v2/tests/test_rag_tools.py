@@ -4,22 +4,20 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+from agentscope.message import TextBlock
 from agentscope.rag import Chunk, VectorSearchResult
+
+from agent_service_v2.agents.model_provider import AgentModelSettings
 from agent_service_v2.tools.rag import (
     build_catalog_kg_context,
     ingest_course_material,
     retrieve_course_context,
 )
-from agent_service_v2.agents.model_provider import AgentModelSettings
 
 
 def test_retrieve_course_context_with_mocked_kb_and_rerank() -> None:
     settings = AgentModelSettings()
-    
-    # Mock VectorSearchResult
-    from agentscope.message import TextBlock
-    
+
     mock_res1 = MagicMock(spec=VectorSearchResult)
     mock_res1.chunk = Chunk(
         content=TextBlock(text="Python variable scopes include local, global, nonlocal."),
@@ -66,14 +64,14 @@ def test_retrieve_course_context_with_mocked_kb_and_rerank() -> None:
         assert result["outcome"] == "success"
         assert "sources" in result
         citations = result["sources"]
-        
+
         # 验证返回 2 条引文
         assert len(citations) == 2
-        
+
         # 验证 Reranker 置顶了第二个文档
         assert citations[0]["snippet"] == "Global variables can be modified inside functions using global keyword."
         assert citations[0]["score"] == 0.9
-        
+
         # 验证第一个文档排在第二位
         assert citations[1]["snippet"] == "Python variable scopes include local, global, nonlocal."
         assert citations[1]["score"] == 0.1
@@ -81,29 +79,28 @@ def test_retrieve_course_context_with_mocked_kb_and_rerank() -> None:
 
 def test_ingest_course_material_pdf_parsing_flow() -> None:
     settings = AgentModelSettings()
-    
+
     # Mock Parser & Chunker outputs
     mock_section = MagicMock()
-    
+
     mock_parser = MagicMock()
     mock_parser.parse = AsyncMock(return_value=[mock_section])
-    
-    from agentscope.message import TextBlock
+
     mock_chunk1 = MagicMock()
     mock_chunk1.content = TextBlock(text="Section 1: basic python syntax")
     mock_chunk2 = MagicMock()
     mock_chunk2.content = TextBlock(text="Section 2: flow control structures")
-    
+
     mock_chunker = MagicMock()
     mock_chunker.chunk = AsyncMock(return_value=[mock_chunk1, mock_chunk2])
-    
+
     # Mock KnowledgeBase and Store
     mock_kb = MagicMock()
     mock_kb.insert_document = AsyncMock(return_value="doc_123")
-    
+
     with (
         patch("agent_service_v2.tools.rag.PDFParser", return_value=mock_parser),
-        patch("agent_service_v2.tools.rag.ApproxTokenChunker", return_value=mock_chunker),
+        patch("agent_service_v2.tools.rag.TokenAwareRecursiveChunker", return_value=mock_chunker),
         patch("agent_service_v2.tools.rag.get_course_knowledge_base", return_value=mock_kb),
         patch("agent_service_v2.tools.rag.ensure_qdrant_collection_exists", new_callable=AsyncMock),
         patch("pathlib.Path.exists", return_value=True),
@@ -116,7 +113,7 @@ def test_ingest_course_material_pdf_parsing_flow() -> None:
                 settings=settings,
             )
         )
-        
+
         assert count == 2
         # `ingest_course_material` resolves the path, so compare resolved paths
         # instead of the raw string to stay platform agnostic (Windows uses

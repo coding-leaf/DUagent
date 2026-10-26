@@ -86,6 +86,18 @@ In `PersonalizedResourceGenerationRunner._produce_one`:
 1. **SSRF Guard & Origin Whitelist on Webhooks**: `ResourceGenerationRequest.webhook_url` and `public_resource_flow::_post_webhook` must validate `http/https` scheme, non-empty `netloc`, block cloud metadata hosts (`169.254.169.254`, `metadata.google.internal`), enforce exact path `/api/v1/webhooks/agent`, and require origin to match trusted whitelist (`BACKEND_INTERNAL_BASE_URL`, localhost 8000/8001, or `WEBHOOK_ALLOWED_ORIGINS`).
 2. **Transport & JSON Error Convergence**: `BackendLearningClient.post_json` must catch `httpx.TransportError` (mapping timeouts to `backend_timeout` and all other transport errors to `backend_unavailable`) and `ValueError` on `response.json()` (mapping to `backend_bad_response`).
 
+### ❌ 严禁破坏性清库式入库与混用不同模型向量空间 (No destructive overwrite in RAG ingestion; enforce model-isolated collections)
+
+1. **教材切片与分块红线**：
+   - 必须通过语法保护机制（如 `clean_text_preserving_syntax`）对代码块（````...```` / `~~~...~~~`）与数学公式（`$$...$$`、`$...$`）建立原子保护区，**严禁激进正则误伤代码缩进、注释及公式结构**；
+   - 严禁对切片使用静默字符截断丢弃内容。必须采用 Token 感知递归二次分块（`TokenAwareRecursiveChunker`），当段落超限时在语义边界（双换行 -> 标点 -> 字符窗口）细分，确保所有块严格受控于模型安全 Token 窗口；
+   - 提取的章节大纲路径必须作为结构化 Payload（`chapter_path`、`headings`）写入并前缀注入向量文本。
+2. **Qdrant 蓝绿版本化与原子切换**：
+   - **严禁“先删后写”**破坏线上检索可用性。写入新版本切片时绑定唯一 `ingestion_version` 并置 `is_active=False`；
+   - 经批量写入校验完整性后，原子切换版本（`is_active=True`），再异步清理旧版本点位；若入库中途异常失败，仅回滚清理当前未完成版本，保证线上零中断。
+3. **向量空间物理隔离**：
+   - 严禁不同 Embedding 模型或不同输出维度的向量混存在同一个 Qdrant Collection。集合名称必须动态绑定模型标识与维度（如 `course_knowledge_{model_slug}_{dim}`），保障向量空间纯净度。
+
 ---
 
 ## Escape Hatches (显式逃生通道)

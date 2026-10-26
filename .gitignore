@@ -77,6 +77,10 @@ qdrant_data/
 qdrant_storage/
 **/qdrant_storage/
 
+# Course catalog file storage
+backend/storage/
+**/storage/course_catalogs/
+
 # Agent runtime workspace artifacts
 agent_service_v2/workspaces/
 

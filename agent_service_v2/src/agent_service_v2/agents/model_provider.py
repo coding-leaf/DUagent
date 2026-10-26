@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,11 +17,12 @@ class AgentModelSettings(BaseSettings):
     LLM_MODEL: str | None = None
     LLM_TIMEOUT: float = 60.0
     LLM_FORMATTER: str = "deepseek"
-    BACKEND_INTERNAL_BASE_URL: str | None = None
+    BACKEND_INTERNAL_BASE_URL: str | None = "http://127.0.0.1:8001"
     BACKEND_INTERNAL_AGENT_TOKEN: str | None = None
     INTERNAL_AGENT_TOKEN: str | None = None
     BACKEND_INTERNAL_TIMEOUT: float = 10.0
     WEBHOOK_SECRET: str = ""
+    WEBHOOK_ALLOWED_ORIGINS: str = ""
 
     EMBEDDING_PROVIDER: str | None = None
     EMBEDDING_MODEL: str | None = None
@@ -38,6 +41,56 @@ class AgentModelSettings(BaseSettings):
     QDRANT_COURSE_KNOWLEDGE_COLLECTION: str = "course_knowledge_v1_1024"
 
     COURSE_CATALOG_STORAGE_ROOT: str = "../backend/storage/course_catalogs"
+
+
+def validate_trusted_webhook_url(
+    url: str, settings: AgentModelSettings | None = None
+) -> str:
+    """Validate webhook URL scheme, path, and trusted origin."""
+    if not url or not isinstance(url, str):
+        raise ValueError("Invalid or forbidden webhook_url")
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("Invalid or forbidden webhook_url")
+    if parsed.path != "/api/v1/webhooks/agent":
+        raise ValueError("Invalid or forbidden webhook_url")
+
+    hostname = (parsed.hostname or "").lower()
+    if hostname in ("169.254.169.254", "metadata.google.internal"):
+        raise ValueError("Invalid or forbidden webhook_url")
+
+    origin = f"{parsed.scheme}://{parsed.netloc}".lower()
+
+    allowed_origins = {
+        "http://127.0.0.1:8001",
+        "http://localhost:8001",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "https://127.0.0.1:8001",
+        "https://localhost:8001",
+        "https://127.0.0.1:8000",
+        "https://localhost:8000",
+    }
+    current_settings = settings or AgentModelSettings()
+    if current_settings.BACKEND_INTERNAL_BASE_URL:
+        base = current_settings.BACKEND_INTERNAL_BASE_URL.strip()
+        if base:
+            p = urlparse(base)
+            if p.scheme and p.netloc:
+                allowed_origins.add(f"{p.scheme}://{p.netloc}".lower())
+    if current_settings.WEBHOOK_ALLOWED_ORIGINS:
+        for item in current_settings.WEBHOOK_ALLOWED_ORIGINS.split(","):
+            raw = item.strip()
+            if raw:
+                p = urlparse(raw)
+                if p.scheme and p.netloc:
+                    allowed_origins.add(f"{p.scheme}://{p.netloc}".lower())
+                else:
+                    allowed_origins.add(raw.lower())
+
+    if origin not in allowed_origins:
+        raise ValueError("Invalid or forbidden webhook_url")
+    return url
 
 
 def build_chat_model_from_settings(

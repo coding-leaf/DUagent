@@ -67,6 +67,6 @@ generated parse scripts in the sandbox, no swallowed stream errors, and the
 uv tool run ruff==0.13.0 check agent_service_v2/src/agent_service_v2/
 uv run --project agent_service_v2 pytest agent_service_v2/tests/ -q
 
-# Whole repo (frontend lint+build, both Python packages, both test suites)
+# Whole repo (frontend lint+build+tests, both Python packages, both test suites)
 python check_all.py
 ```

@@ -2,8 +2,10 @@ import sys
 import os
 from pathlib import Path
 
-# Add virtual environment site-packages to sys.path
-sys.path.insert(0, "/home/yezisama/workspace/workflow/EDUagent/.venv/lib/python3.12/site-packages")
+# Add virtual environment site-packages to sys.path if present
+venv_site = Path("/home/yezisama/workspace/workflow/EDUagent/.venv/lib/python3.12/site-packages")
+if venv_site.exists():
+    sys.path.insert(0, str(venv_site))
 
 # Also add the backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -29,10 +31,11 @@ def configure_and_cleanup_db(request):
     }
     
     # Resolve the database URL for this test module
-    db_url = DB_MAPPING.get(
-        mod_name,
-        "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent_test?charset=utf8mb4"
+    default_mysql = os.environ.get(
+        "TEST_DATABASE_URL",
+        "mysql+aiomysql://root:123456@127.0.0.1:3306/duagent_test?charset=utf8mb4",
     )
+    db_url = DB_MAPPING.get(mod_name, default_mysql)
     
     # Sync os.environ and app settings
     os.environ["DATABASE_URL"] = db_url

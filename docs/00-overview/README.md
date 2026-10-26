@@ -66,7 +66,7 @@ check_all.py                 全仓统一静态检查与单元测试门禁
 ./start_all.sh setup
 ./start_all.sh start
 
-# 运行全仓 6 大质量门禁（ESLint + Vite Build + 双端 Ruff + 双端 Pytest）
+# 运行全仓 7 大质量门禁（ESLint + Vite Build + Vitest + 双端 Ruff + 双端 Pytest）
 python -X utf8 check_all.py
 
 # 运行前端单元测试

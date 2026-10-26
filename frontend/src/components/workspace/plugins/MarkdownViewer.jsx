@@ -98,7 +98,13 @@ export default function MarkdownViewer({ title, content }) {
         `/tutoring/conversations/${activeSession}/files/${encodeURIComponent(filename)}`,
         { responseType: 'blob' }
       );
-      const blobUrl = URL.createObjectURL(response.data);
+      const blob =
+        response instanceof Blob
+          ? response
+          : response?.data instanceof Blob
+            ? response.data
+            : new Blob([response?.data ?? response ?? '']);
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = filename;

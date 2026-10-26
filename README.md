@@ -37,7 +37,7 @@ Agent Service v2 (AgentScope 2.x + uv, 127.0.0.1:8002)
 | `frontend/` | React 19 + Vite + Tailwind v4 纯 JSX 前端（`src/api/` 统一 Axios 客户端与服务、`src/pages/` 页面、`src/components/` 组件、`src/hooks/` SWR 状态钩子） |
 | `docs/` | 自动导出的最新接口契约：`10-client-api/Client-API.openapi.json`（前后端）与 `20-agent-api/Agent-Service.openapi.json`（后端与 Agent） |
 | `.trellis/` | **Trellis 工程规范与任务记忆库**：`.trellis/spec/` 存放三端架构红线与代码规范，`.trellis/tasks/archive/` 存放历次重构的设计与验收记录 |
-| `check_all.py` | **全仓唯一质量门禁脚本**：一键串联前端 ESLint、Vite Build、Backend Ruff + Pytest、Agent Ruff + Pytest 共 6 项检查 |
+| `check_all.py` | **全仓唯一质量门禁脚本**：一键串联前端 ESLint、Vite Build、Vitest、Backend Ruff + Pytest、Agent Ruff + Pytest 共 7 项检查 |
 
 ### 1.3 本地开发环境启动
 
@@ -56,14 +56,14 @@ Agent Service v2 (AgentScope 2.x + uv, 127.0.0.1:8002)
 在提交任何代码前，**必须**在仓库根目录执行统一门禁：
 
 ```bash
-# 全仓 6 大门禁（Frontend Lint + Build, Backend Ruff + Pytest, Agent Ruff + Pytest）
+# 全仓 7 大门禁（Frontend Lint + Build + Vitest, Backend Ruff + Pytest, Agent Ruff + Pytest）
 python -X utf8 check_all.py
 
-# 快速静态门禁（跳过耗时 Pytest，仅跑三端 Lint + 前端 Build，约 10 秒）
+# 快速静态门禁（跳过单测，仅跑三端 Lint + 前端 Build，约 10 秒）
 python -X utf8 check_all.py --fast
 
-# 前端 Vitest 单元测试
-cd frontend && npm run test:unit
+# 支持按模块别名分组运行
+python -X utf8 check_all.py --only frontend,backend
 ```
 
 ---

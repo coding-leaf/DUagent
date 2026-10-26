@@ -92,7 +92,7 @@ concurrent rendering.
 2. **Logout Completeness**: Every "退出登录" button across all role consoles (`TeacherConsole`, `TeacherStudentReport`, `Navbar`, etc.) must destructure `logout` from `useAuth()` and invoke `logout()` before `navigate('/')`.
 3. **Unified Error Extraction & Header-Only File Downloads**:
    - Always import `getErrorMessage` (or alias `getApiErrorMessage`) from `src/utils/apiError.js`; do not create duplicate error parsers under `src/api/`.
-   - Never append `?token=` to download URLs in `MarkdownViewer`. Trigger file downloads via `apiClient.get(..., { responseType: 'blob' })` + `URL.createObjectURL` so JWTs stay inside the `Authorization` header.
+   - Never append `?token=` to download URLs in `MarkdownViewer`. Trigger file downloads via `apiClient.get(..., { responseType: 'blob' })` + `URL.createObjectURL` so JWTs stay inside the `Authorization` header. Because `apiClient` response interceptor already returns `response.data`, unwrap the returned `Blob` directly (`response instanceof Blob ? response : response?.data`) rather than calling `URL.createObjectURL(response.data)`.
 
 ---
 

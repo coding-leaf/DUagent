@@ -33,6 +33,40 @@ class Settings(BaseSettings):
     # Agent service (internal)
     AGENT_SERVICE_URL: str = "http://localhost:8002"
 
+    # Internal base URL for trusted callbacks from agent service
+    BACKEND_INTERNAL_BASE_URL: str = "http://127.0.0.1:8001"
+
+    @property
+    def webhook_callback_url(self) -> str:
+        base = (self.BACKEND_INTERNAL_BASE_URL or "").strip().rstrip("/")
+        if not base:
+            host = "127.0.0.1" if self.HOST in ("0.0.0.0", "::", "") else self.HOST
+            base = f"http://{host}:{self.PORT}"
+        return f"{base}/api/v1/webhooks/agent"
+
+    def is_weak_jwt_secret(self) -> bool:
+        val = (self.JWT_SECRET_KEY or "").strip()
+        default_val = type(self).model_fields["JWT_SECRET_KEY"].default
+        return (
+            not val
+            or val == default_val
+            or val.startswith("duagent-jwt-")
+            or val == "duagent-jwt-secret-change-in-production"
+            or val.startswith("replace-with-")
+            or len(val) < 16
+        )
+
+    def validate_production_security(self) -> None:
+        if self.DEBUG:
+            return
+        if self.is_weak_jwt_secret():
+            raise ValueError(
+                "JWT_SECRET_KEY must be configured with a secure secret (min 16 chars) in production."
+            )
+        val_webhook = (self.WEBHOOK_SECRET or "").strip()
+        if not val_webhook or val_webhook.startswith("replace-with-"):
+            raise ValueError("WEBHOOK_SECRET must be configured with a secure secret in production.")
+
     # LLM provider used by backend-side KG generation
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.deepseek.com"

@@ -53,8 +53,8 @@ streaming components or adding dependencies.
 
 ```bash
 # Frontend only
-cd frontend && npm run lint && npm run build
+cd frontend && npm run lint && npm run build && npm run test:unit
 
-# Whole repo (frontend lint+build, both Python packages, both test suites)
+# Whole repo (frontend lint+build+tests, both Python packages, both test suites)
 python check_all.py
 ```

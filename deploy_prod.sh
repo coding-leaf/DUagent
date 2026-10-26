@@ -68,6 +68,24 @@ validate_env_placeholders() {
     printf '%s\n' "$placeholders" >&2
     fail ".env 仍包含占位值；请编辑 .env 后重试"
   fi
+
+  local debug_val
+  debug_val="$(env_value "$INFRA_ENV" "DEBUG" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$debug_val" != "false" ]]; then
+    fail ".env 中生产环境 DEBUG 必须设为 false"
+  fi
+
+  local weak_default="duagent-jwt-secret-change-in-production"
+  local key val
+  for key in JWT_SECRET_KEY WEBHOOK_SECRET INTERNAL_AGENT_TOKEN; do
+    val="$(env_value "$INFRA_ENV" "$key")"
+    if [[ -z "$val" ]]; then
+      fail ".env 中 $key 不能为空"
+    fi
+    if [[ "$val" == "$weak_default" || "$val" == duagent-jwt-* ]]; then
+      fail ".env 中 $key 不能使用默认弱密钥"
+    fi
+  done
 }
 infra_compose() {
   local args=(docker compose)

@@ -162,7 +162,7 @@ def test_resource_generation_api_success() -> None:
         "chapter": "chapter 1",
         "knowledge_point": "pointers",
         "resource_types": ["lesson"],
-        "webhook_url": "http://test-webhook.local"
+        "webhook_url": "http://127.0.0.1:8001/api/v1/webhooks/agent"
     }
     with patch("agent_service_v2.api.knowledge.run_public_resource_generation", new_callable=AsyncMock) as mock_run:
         response = client.post("/agent/v2/knowledge/resources/generations", json=payload)
@@ -285,6 +285,7 @@ def test_kg_generation_api_maps_planner_failure_to_502() -> None:
 
 def test_resource_generation_request_webhook_url_validation() -> None:
     from agent_service_v2.api.knowledge import ResourceGenerationRequest
+    from agent_service_v2.agents.model_provider import AgentModelSettings, validate_trusted_webhook_url
     import pydantic
 
     base_payload = {
@@ -293,16 +294,25 @@ def test_resource_generation_request_webhook_url_validation() -> None:
         "resource_types": ["lesson"],
     }
 
-    # Valid URLs
-    req = ResourceGenerationRequest(
-        **base_payload, webhook_url="http://127.0.0.1:8001/api/v1/webhooks/agent"
-    )
-    assert req.webhook_url == "http://127.0.0.1:8001/api/v1/webhooks/agent"
+    # Valid URLs in default whitelist
+    for valid_url in (
+        "http://127.0.0.1:8001/api/v1/webhooks/agent",
+        "http://localhost:8001/api/v1/webhooks/agent",
+        "http://127.0.0.1:8000/api/v1/webhooks/agent",
+        "http://localhost:8000/api/v1/webhooks/agent",
+    ):
+        req = ResourceGenerationRequest(**base_payload, webhook_url=valid_url)
+        assert req.webhook_url == valid_url
 
-    req_https = ResourceGenerationRequest(
-        **base_payload, webhook_url="https://example.com/webhook"
-    )
-    assert req_https.webhook_url == "https://example.com/webhook"
+    # External domain / wrong path should be rejected
+    for invalid_target in (
+        "https://example.com/webhook",
+        "http://evil.com/api/v1/webhooks/agent",
+        "http://127.0.0.1:8001/other/path",
+        "http://127.0.0.1:8001/api/v1/webhooks/other",
+    ):
+        with pytest.raises(pydantic.ValidationError):
+            ResourceGenerationRequest(**base_payload, webhook_url=invalid_target)
 
     # Forbidden scheme / missing netloc
     for bad_url in ("ftp://example.com/hook", "not-a-url", "http:///no-host"):
@@ -316,4 +326,17 @@ def test_resource_generation_request_webhook_url_validation() -> None:
     ):
         with pytest.raises(pydantic.ValidationError):
             ResourceGenerationRequest(**base_payload, webhook_url=ssrf_url)
+
+    # WEBHOOK_ALLOWED_ORIGINS support
+    custom_settings = AgentModelSettings(WEBHOOK_ALLOWED_ORIGINS="https://partner.edu")
+    assert (
+        validate_trusted_webhook_url(
+            "https://partner.edu/api/v1/webhooks/agent", settings=custom_settings
+        )
+        == "https://partner.edu/api/v1/webhooks/agent"
+    )
+    with pytest.raises(ValueError):
+        validate_trusted_webhook_url(
+            "https://untrusted.edu/api/v1/webhooks/agent", settings=custom_settings
+        )
 

@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.core.config import settings
 from app.models.others import AsyncTask
 from app.models.user import User
 from app.schemas.catalog import (
@@ -41,9 +42,8 @@ router = APIRouter(prefix="/api/v1", tags=["course-catalogs"])
 
 
 
-def _webhook_url(request: Request) -> str:
-    base = str(request.base_url).rstrip("/")
-    return f"{base}/api/v1/webhooks/agent"
+def _webhook_url(request: Request | None = None) -> str:
+    return settings.webhook_callback_url
 
 
 def _async_task_catalog_id_expr():

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
@@ -191,44 +191,56 @@ async def run_quiz_generation_background(
             for r in results
             if isinstance(r, dict) and r.get("status") == "completed"
         )
-        completed_node_names = [
-            r["node_name"]
-            for r in results
-            if isinstance(r, dict) and r.get("status") == "completed" and r.get("node_name")
-        ]
+        completed_predicates = []
+        for r in results:
+            if isinstance(r, dict) and r.get("status") == "completed" and r.get("node_name"):
+                node_name = r["node_name"]
+                if "chapter" in r and r["chapter"] is not None:
+                    completed_predicates.append(
+                        and_(
+                            QuizQuestion.chapter == r["chapter"],
+                            QuizQuestion.knowledge_point == node_name,
+                        )
+                    )
+                else:
+                    completed_predicates.append(
+                        QuizQuestion.knowledge_point == node_name
+                    )
         inserted_question_ids = [
             question_id
             for r in results
             if isinstance(r, dict)
             for question_id in (r.get("inserted_question_ids") or [])
         ]
-        if inserted_question_ids and (completed_node_names or failed == 0):
+        if inserted_question_ids and (completed_predicates or failed == 0):
             fanout_catalog_id = None
             for r in results:
                 if isinstance(r, dict) and r.get("fanout_catalog_id"):
                     fanout_catalog_id = r["fanout_catalog_id"]
                     break
-            if fanout_catalog_id:
-                stmt = update(QuizQuestion).where(
+
+            if fanout_catalog_id and fanout_course_ids:
+                scope_filter = or_(
                     QuizQuestion.catalog_id == fanout_catalog_id,
+                    QuizQuestion.course_id.in_(fanout_course_ids),
+                )
+            elif fanout_catalog_id:
+                scope_filter = QuizQuestion.catalog_id == fanout_catalog_id
+            elif fanout_course_ids:
+                scope_filter = QuizQuestion.course_id.in_(fanout_course_ids)
+            else:
+                scope_filter = None
+
+            if scope_filter is not None:
+                stmt = update(QuizQuestion).where(
+                    scope_filter,
                     QuizQuestion.source == "baseline",
                     QuizQuestion.is_deleted == False,
                     ~QuizQuestion.id.in_(inserted_question_ids),
                 )
-                if completed_node_names:
-                    stmt = stmt.where(QuizQuestion.knowledge_point.in_(completed_node_names))
+                if completed_predicates:
+                    stmt = stmt.where(or_(*completed_predicates))
                 await db.execute(stmt.values(is_deleted=True))
-            else:
-                for cid in fanout_course_ids:
-                    stmt = update(QuizQuestion).where(
-                        QuizQuestion.course_id == cid,
-                        QuizQuestion.source == "baseline",
-                        QuizQuestion.is_deleted == False,
-                        ~QuizQuestion.id.in_(inserted_question_ids),
-                    )
-                    if completed_node_names:
-                        stmt = stmt.where(QuizQuestion.knowledge_point.in_(completed_node_names))
-                    await db.execute(stmt.values(is_deleted=True))
         parent.status = "completed" if failed == 0 else ("partial" if completed > 0 else "failed")
         parent.progress = 100
         parent.completed_at = now_utc()
@@ -310,7 +322,13 @@ async def generate_quiz_for_child(
             child.error_message = "Agent returned only skeleton fallback questions"
             child.completed_at = now_utc()
             child.result = {**child_data, "question_count": 0, "rejected_reason": "skeleton"}
-            return {"status": "failed", "error": "skeleton_rejected"}
+            return {
+                "status": "failed",
+                "chapter": chapter,
+                "node_name": node_name,
+                "error": "skeleton_rejected",
+                "fanout_catalog_id": fanout_catalog_id,
+            }
         for q in new_questions:
             db.add(q)
 
@@ -325,6 +343,7 @@ async def generate_quiz_for_child(
         }
         return {
             "status": "completed",
+            "chapter": chapter,
             "node_name": node_name,
             "question_count": len(new_questions),
             "inserted_question_ids": inserted_question_ids,
@@ -336,14 +355,26 @@ async def generate_quiz_for_child(
         child.error_code = str(e.agent_code or "agent_error")
         child.error_message = e.message
         child.completed_at = now_utc()
-        return {"status": "failed", "error": e.message, "fanout_catalog_id": fanout_catalog_id}
+        return {
+            "status": "failed",
+            "chapter": chapter,
+            "node_name": node_name,
+            "error": e.message,
+            "fanout_catalog_id": fanout_catalog_id,
+        }
     except Exception as e:
         child.status = "failed"
         child.progress = 100
         child.error_code = "unexpected_error"
         child.error_message = str(e)[:500]
         child.completed_at = now_utc()
-        return {"status": "failed", "error": str(e)[:500], "fanout_catalog_id": fanout_catalog_id}
+        return {
+            "status": "failed",
+            "chapter": chapter,
+            "node_name": node_name,
+            "error": str(e)[:500],
+            "fanout_catalog_id": fanout_catalog_id,
+        }
 
 
 def build_baseline_quiz_payload(

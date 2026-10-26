@@ -85,6 +85,6 @@ exceptions, `# arch-allow:` escape hatches) live in
 # Backend only
 cd backend && uv tool run ruff==0.13.0 check app/ && ./.venv/Scripts/python.exe -m pytest tests/ -q
 
-# Whole repo (frontend lint+build, both Python packages, both test suites)
+# Whole repo (frontend lint+build+tests, both Python packages, both test suites)
 python check_all.py
 ```

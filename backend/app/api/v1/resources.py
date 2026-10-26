@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.operations import ResourceGenerateRequest
 from app.services.resource_service import ResourceService
@@ -85,10 +86,9 @@ async def get_resource_detail(
     }
 
 
-def _webhook_url(request: Request) -> str:
+def _webhook_url(request: Request | None = None) -> str:
     """构造 Backend webhook 回调地址。"""
-    base = str(request.base_url).rstrip("/")
-    return f"{base}/api/v1/webhooks/agent"
+    return settings.webhook_callback_url
 
 
 @router.post("/generate")

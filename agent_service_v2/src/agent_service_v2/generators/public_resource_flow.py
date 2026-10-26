@@ -9,6 +9,7 @@ import httpx
 from agent_service_v2.agents.model_provider import (
     AgentModelSettings,
     build_chat_model_from_settings,
+    validate_trusted_webhook_url,
 )
 from agent_service_v2.generators.public_resources import PublicResourceGenerator
 
@@ -105,6 +106,7 @@ async def _post_webhook(
 ) -> None:
     if not url:
         return
+    validate_trusted_webhook_url(url, settings)
     headers = (
         {"X-Webhook-Secret": settings.WEBHOOK_SECRET}
         if settings.WEBHOOK_SECRET

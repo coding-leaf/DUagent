@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from fastapi import HTTPException
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -16,6 +17,14 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _captcha_store: dict[str, dict] = {}
 
 
+def _check_jwt_secret_configured() -> None:
+    if not settings.DEBUG and settings.is_weak_jwt_secret():
+        raise HTTPException(
+            status_code=503,
+            detail={"code": 50300, "message": "JWT secret 未安全配置", "data": None},
+        )
+
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -26,6 +35,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_token(user_id: str, role: str) -> str:
     """v1: Single JWT token, 7-day expiry."""
+    _check_jwt_secret_configured()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
@@ -37,6 +47,7 @@ def create_token(user_id: str, role: str) -> str:
 
 
 def decode_token(token: str) -> Optional[dict]:
+    _check_jwt_secret_configured()
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         return payload

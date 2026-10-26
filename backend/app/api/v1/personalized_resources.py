@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.core.config import settings
 from app.models.code_problem import CodeProblem
 from app.models.others import AsyncTask, Resource, UserPersonalizedResource
 from app.models.personalized_resource_generation import PersonalizedResourceGeneration
@@ -23,9 +24,8 @@ from app.services.course_catalog_gate import resolve_generation_catalog
 router = APIRouter(prefix="/api/v1/personalized-resources", tags=["personalized-resources"])
 
 
-def _webhook_url(request: Request) -> str:
-    base = str(request.base_url).rstrip("/")
-    return f"{base}/api/v1/webhooks/agent"
+def _webhook_url(request: Request | None = None) -> str:
+    return settings.webhook_callback_url
 
 
 @router.get("")

@@ -66,11 +66,12 @@ in `ruff.toml` precisely to protect this pattern.
 ### ❌ 严禁课程级接口跳过访问权限校验或混用 `course_id` / `catalog_id` (Enforce course access & separate `course_id` vs `catalog_id`)
 
 1. **Course Access Guard**: Any endpoint accepting `course_id` for student/teacher data (`quiz`, `learning-path`, `resources`, `activities`) must call `await ensure_course_resource_access(db, current_user, course_id)` **before** querying `resolve_course_resource_scope` or minting session rows.
-2. **Partial Fanout Prune Guard**: When regenerating baseline resources/questions across multiple KG nodes in parallel, soft-delete pruning (`is_deleted = True`) must be scoped strictly to `completed_node_names` (`QuizQuestion.knowledge_point.in_(completed_node_names)`), never unconditional `~id.in_(inserted_ids)` when `failed > 0`.
+2. **Partial Fanout Prune Guard**: When regenerating baseline resources/questions across multiple KG nodes in parallel, soft-delete pruning (`is_deleted = True`) must be scoped strictly to completed `(chapter, knowledge_point)` combinations (`and_(QuizQuestion.chapter == r["chapter"], QuizQuestion.knowledge_point == r["node_name"])`), never unconditional `~id.in_(inserted_ids)` when `failed > 0`. This prevents cross-chapter duplicate knowledge points and failed nodes from being pruned, while covering multi-class shared catalog bindings (`QuizQuestion.catalog_id == fanout_catalog_id` or `QuizQuestion.course_id.in_(fanout_course_ids)`).
 3. **Cross-Service RAG Scope**: Qdrant chunks are indexed by `catalog_id`. When calling `agent_service_v2` generation endpoints (`/agent/v2/personalized-resources/generations`), always pass both `course_id` (class offering ID for persistence) and `catalog_id` (curriculum catalog ID for RAG retrieval).
-4. **No Query-String JWT & Fail-Closed Production Webhooks**:
+4. **No Query-String JWT, Trusted Internal Webhooks & Production Secrets**:
    - File download endpoints (`get_download_user`) must authenticate exclusively via `Authorization: Bearer <token>` headers — never accept `?token=` in query strings.
-   - `verify_webhook_secret` must fail closed (`HTTP 503`) in production (`DEBUG=False`) if `WEBHOOK_SECRET` is empty.
+   - Webhook callback URLs must be generated from trusted internal configuration (`settings.webhook_callback_url` based on `BACKEND_INTERNAL_BASE_URL`), never from client-controlled `request.base_url` or `Host` headers.
+   - `verify_webhook_secret` and JWT signing/decoding must fail closed (`HTTP 503` / `ValueError`) in production (`DEBUG=False`) if `WEBHOOK_SECRET` or `JWT_SECRET_KEY` are empty or default weak secrets.
 
 ---
 

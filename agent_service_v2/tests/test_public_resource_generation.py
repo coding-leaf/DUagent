@@ -204,7 +204,7 @@ async def test_public_resource_flow_limits_node_generation_concurrency_and_uses_
                     chapter="第一章",
                     knowledge_point=f"知识点-{index}",
                     resource_types=["lesson"],
-                    webhook_url="http://backend.test/webhook",
+                    webhook_url="http://127.0.0.1:8001/api/v1/webhooks/agent",
                 )
             )
             for index in range(3)
@@ -224,7 +224,7 @@ async def test_public_resource_flow_limits_node_generation_concurrency_and_uses_
             chapter="第一章",
             knowledge_point="失败节点",
             resource_types=["lesson"],
-            webhook_url="http://backend.test/webhook",
+            webhook_url="http://127.0.0.1:8001/api/v1/webhooks/agent",
         )
 
         assert result == []
@@ -240,7 +240,7 @@ def test_resource_generation_api_accepts_only_truthful_public_types():
         "chapter": "第一章",
         "knowledge_point": "变量",
         "resource_types": ["lesson", "diagram", "example"],
-        "webhook_url": "http://backend.test/api/v1/webhooks/agent",
+        "webhook_url": "http://127.0.0.1:8001/api/v1/webhooks/agent",
     }
 
     def close_background(coroutine):
@@ -256,3 +256,14 @@ def test_resource_generation_api_accepts_only_truthful_public_types():
 
     assert response.status_code == 202
     assert legacy.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_post_webhook_rejects_untrusted_url():
+    from agent_service_v2.generators.public_resource_flow import _post_webhook
+    from agent_service_v2.agents.model_provider import AgentModelSettings
+
+    settings = AgentModelSettings()
+    with pytest.raises(ValueError, match="Invalid or forbidden webhook_url"):
+        await _post_webhook("http://attacker.example.com/api/v1/webhooks/agent", settings, {})
+

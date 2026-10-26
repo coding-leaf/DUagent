@@ -31,6 +31,7 @@ async def _dispose_db_engine_after_test():
 
 
 async def _reset_db():
+    await engine.dispose()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
@@ -63,7 +64,13 @@ async def _seed_ready_catalog(
     status: str = "ready",
     knowledge_status: str = "ready",
     chunk_count: int = 5,
+    material_id: str | None = None,
 ) -> str:
+    mat_id = material_id or (
+        "material-admin-gen"
+        if catalog_id == "catalog-admin-gen"
+        else f"material-{catalog_id}"
+    )
     async with async_session_factory() as db:
         db.add(
             CourseCatalog(
@@ -77,11 +84,11 @@ async def _seed_ready_catalog(
         )
         db.add(
             CourseCatalogMaterial(
-                id="material-admin-gen",
+                id=mat_id,
                 catalog_id=catalog_id,
                 filename="lesson.md",
                 source_type="file",
-                storage_uri="course_catalogs/catalog-admin-gen/material-admin-gen/lesson.md",
+                storage_uri=f"course_catalogs/{catalog_id}/{mat_id}/lesson.md",
                 status="ingested",
                 chunk_count=chunk_count,
             )
@@ -224,7 +231,7 @@ async def test_admin_catalog_quiz_generation_does_not_delete_existing_baseline_b
         )
         await db.commit()
 
-    with patch("app.services.catalog_quiz_generation_service.run_quiz_generation_background", new_callable=AsyncMock):
+    with patch("app.api.v1.catalogs.run_quiz_generation_background", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 f"/api/v1/admin/course-catalogs/{catalog_id}/quiz/generations",
@@ -442,6 +449,231 @@ async def test_quiz_generation_background_partial_preserves_failed_node_baseline
         q_b = await db.get(QuizQuestion, "q-old-node-b")
         assert q_b is not None
         assert q_b.is_deleted is False
+
+
+@pytest.mark.asyncio
+async def test_quiz_generation_background_scoped_by_chapter_and_shared_classes():
+    """验证同名知识点跨章节时，仅成功章节的旧题目被清理，失败章节及其他 Catalog 的旧题完好保留；且覆盖多教学班。"""
+    await _reset_db()
+    await _seed_user("admin-admin-gen", "admin")
+    await _seed_user("teacher-admin-gen", "teacher")
+
+    catalog_id = await _seed_ready_catalog(catalog_id="catalog-multi-class")
+    class_1 = await _seed_bound_class(catalog_id=catalog_id, class_id="class-multi-1")
+    class_2 = await _seed_bound_class(catalog_id=catalog_id, class_id="class-multi-2")
+
+    other_catalog = await _seed_ready_catalog(catalog_id="catalog-unrelated")
+    other_class = await _seed_bound_class(catalog_id=other_catalog, class_id="class-unrelated")
+
+    parent_id = "quiz-parent-cross-chapter"
+    child_c1_id = "quiz-child-ch1-overview"
+    child_c2_id = "quiz-child-ch2-overview"
+
+    async with async_session_factory() as db:
+        # 第一章“概述”：class_1 与 class_2 存量旧题
+        db.add(
+            QuizQuestion(
+                id="q-c1-overview-1",
+                course_id=class_1,
+                catalog_id=catalog_id,
+                chapter="第一章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="第1章概述旧题-班级1",
+                correct_answer="A",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        db.add(
+            QuizQuestion(
+                id="q-c1-overview-2",
+                course_id=class_2,
+                catalog_id=catalog_id,
+                chapter="第一章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="第1章概述旧题-班级2",
+                correct_answer="A",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        # 第二章同名“概述”：class_1 与 class_2 存量旧题（应当保留）
+        db.add(
+            QuizQuestion(
+                id="q-c2-overview-1",
+                course_id=class_1,
+                catalog_id=catalog_id,
+                chapter="第二章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="第2章概述存量题-班级1",
+                correct_answer="B",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        db.add(
+            QuizQuestion(
+                id="q-c2-overview-2",
+                course_id=class_2,
+                catalog_id=catalog_id,
+                chapter="第二章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="第2章概述存量题-班级2",
+                correct_answer="B",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        # 其他目录下的同名知识点题目（应当不受影响）
+        db.add(
+            QuizQuestion(
+                id="q-unrelated-c1",
+                course_id=other_class,
+                catalog_id=other_catalog,
+                chapter="第一章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="其他目录第1章概述",
+                correct_answer="A",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        # 新生成插入的题目
+        db.add(
+            QuizQuestion(
+                id="q-c1-new-1",
+                course_id=class_1,
+                catalog_id=catalog_id,
+                chapter="第一章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="第1章概述新题-班级1",
+                correct_answer="A",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        db.add(
+            QuizQuestion(
+                id="q-c1-new-2",
+                course_id=class_2,
+                catalog_id=catalog_id,
+                chapter="第一章",
+                knowledge_point="概述",
+                type="single_choice",
+                source="baseline",
+                content="第1章概述新题-班级2",
+                correct_answer="A",
+                options=["A", "B"],
+                is_deleted=False,
+            )
+        )
+        # 任务记录
+        db.add(
+            AsyncTask(
+                id=parent_id,
+                task_type="quiz_generation",
+                status="processing",
+                progress=10,
+                user_id="admin-admin-gen",
+                result={
+                    "catalog_id": catalog_id,
+                    "total_node_count": 2,
+                    "completed_node_count": 0,
+                    "failed_node_count": 0,
+                    "total_question_count": 0,
+                },
+            )
+        )
+        db.add_all(
+            [
+                AsyncTask(
+                    id=child_c1_id,
+                    task_type="quiz_generation",
+                    status="processing",
+                    progress=10,
+                    user_id="admin-admin-gen",
+                    result={"parent_task_id": parent_id, "chapter": "第一章", "node_name": "概述"},
+                ),
+                AsyncTask(
+                    id=child_c2_id,
+                    task_type="quiz_generation",
+                    status="processing",
+                    progress=10,
+                    user_id="admin-admin-gen",
+                    result={"parent_task_id": parent_id, "chapter": "第二章", "node_name": "概述"},
+                ),
+            ]
+        )
+        await db.commit()
+
+    async def _child_result(db, child_id, fanout_course_ids):
+        if child_id == child_c1_id:
+            return {
+                "status": "completed",
+                "chapter": "第一章",
+                "node_name": "概述",
+                "question_count": 2,
+                "inserted_question_ids": ["q-c1-new-1", "q-c1-new-2"],
+                "fanout_catalog_id": catalog_id,
+            }
+        return {
+            "status": "failed",
+            "chapter": "第二章",
+            "node_name": "概述",
+            "error": "timeout",
+            "fanout_catalog_id": catalog_id,
+        }
+
+    with patch(
+        "app.services.catalog_quiz_generation_service.generate_quiz_for_child",
+        new_callable=AsyncMock,
+    ) as mock_child:
+        mock_child.side_effect = _child_result
+        from app.services.catalog_quiz_generation_service import run_quiz_generation_background
+
+        await run_quiz_generation_background(
+            parent_id,
+            [child_c1_id, child_c2_id],
+            [class_1, class_2],
+        )
+
+    async with async_session_factory() as db:
+        parent = await db.get(AsyncTask, parent_id)
+        assert parent.status == "partial"
+
+        # 验证 1：第一章“概述”在两个班级下的存量旧题均被软删除
+        q_c1_1 = await db.get(QuizQuestion, "q-c1-overview-1")
+        assert q_c1_1.is_deleted is True
+        q_c1_2 = await db.get(QuizQuestion, "q-c1-overview-2")
+        assert q_c1_2.is_deleted is True
+
+        # 验证 2：第一章“概述”新生成的题目保留
+        q_new_1 = await db.get(QuizQuestion, "q-c1-new-1")
+        assert q_new_1.is_deleted is False
+        q_new_2 = await db.get(QuizQuestion, "q-c1-new-2")
+        assert q_new_2.is_deleted is False
+
+        # 核心验证 3：第二章同名“概述”（失败节点）在两个班级下的存量题完好保留
+        q_c2_1 = await db.get(QuizQuestion, "q-c2-overview-1")
+        assert q_c2_1.is_deleted is False
+        q_c2_2 = await db.get(QuizQuestion, "q-c2-overview-2")
+        assert q_c2_2.is_deleted is False
+
+        # 核心验证 4：其他无关 Catalog 下的同名知识点题目不受影响
+        q_unrelated = await db.get(QuizQuestion, "q-unrelated-c1")
+        assert q_unrelated.is_deleted is False
 
 
 @pytest.mark.asyncio

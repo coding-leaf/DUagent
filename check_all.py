@@ -16,6 +16,7 @@ Checks
 ------
     frontend-lint    frontend: `npm run lint`
     frontend-build   frontend: `npm run build`
+    frontend-tests   frontend: `npm run test:unit`
     backend-lint     `uv tool run ruff check backend/app/`
     backend-tests    backend: pytest
     agent-lint       `uv tool run ruff check agent_service_v2/src/agent_service_v2/`
@@ -198,6 +199,14 @@ def build_checks() -> list[Check]:
             kind="build",
         ),
         Check(
+            name="frontend-tests",
+            description="frontend: npm run test:unit (Vitest)",
+            command=[_npm(), "run", "test:unit"],
+            cwd=FRONTEND,
+            hint="cd frontend && npm install",
+            kind="test",
+        ),
+        Check(
             name="backend-lint",
             description="backend: ruff check",
             command=[*_ruff(), "check", BACKEND_LINT_PATH],
@@ -291,8 +300,29 @@ def _tail(text: str, lines: int = 40) -> str:
     return "\n".join(f"    {row}" for row in rows)
 
 
+ALIAS_GROUPS: dict[str, list[str]] = {
+    "frontend": ["frontend-lint", "frontend-build", "frontend-tests"],
+    "backend": ["backend-lint", "backend-tests"],
+    "agent": ["agent-lint", "agent-tests"],
+}
+
+
+def _expand_aliases(names: set[str], valid_check_names: set[str]) -> tuple[set[str], set[str]]:
+    expanded = set()
+    unknown = set()
+    for name in names:
+        if name in ALIAS_GROUPS:
+            expanded.update(ALIAS_GROUPS[name])
+        elif name in valid_check_names:
+            expanded.add(name)
+        else:
+            unknown.add(name)
+    return expanded, unknown
+
+
 def main(argv: list[str] | None = None) -> int:
     checks = build_checks()
+    valid_names = {c.name for c in checks}
     parser = argparse.ArgumentParser(
         prog="check_all.py",
         description="Run every lint/build/test gate in the DUagent repo.",
@@ -300,12 +330,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--only",
         default="",
-        help="comma-separated check names to run (default: all)",
+        help="comma-separated check names or group aliases (frontend, backend, agent) to run (default: all)",
     )
     parser.add_argument(
         "--skip",
         default="",
-        help="comma-separated check names to skip",
+        help="comma-separated check names or group aliases to skip",
     )
     parser.add_argument(
         "--fast",
@@ -324,20 +354,24 @@ def main(argv: list[str] | None = None) -> int:
         width = max(len(c.name) for c in checks)
         for check in checks:
             print(f"  {C.cyan(check.name.ljust(width))}  {check.description}")
+        print(f"\n{C.bold('Group aliases:')}")
+        for alias, group in ALIAS_GROUPS.items():
+            print(f"  {C.cyan(alias.ljust(width))}  {', '.join(group)}")
         return 0
 
     selected = checks
     if args.only:
         wanted = {name.strip() for name in args.only.split(",") if name.strip()}
-        unknown = wanted - {c.name for c in checks}
+        expanded, unknown = _expand_aliases(wanted, valid_names)
         if unknown:
             print(C.red(f"unknown check(s): {', '.join(sorted(unknown))}"))
             print(C.dim("run `python check_all.py --list` to see valid names"))
             return 2
-        selected = [c for c in checks if c.name in wanted]
+        selected = [c for c in checks if c.name in expanded]
     if args.skip:
         skipped = {name.strip() for name in args.skip.split(",") if name.strip()}
-        selected = [c for c in selected if c.name not in skipped]
+        expanded_skip, _ = _expand_aliases(skipped, valid_names)
+        selected = [c for c in selected if c.name not in expanded_skip]
     if args.fast:
         selected = [c for c in selected if c.kind != "test"]
 

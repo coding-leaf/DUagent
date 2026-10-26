@@ -83,7 +83,7 @@ In `PersonalizedResourceGenerationRunner._produce_one`:
 
 ### ❌ 严禁放行未校验的 `webhook_url` 或逃逸 `BackendLearningClient` 传输异常 (Validate webhook URLs & catch all transport/JSON errors)
 
-1. **SSRF Guard on Webhooks**: `ResourceGenerationRequest.webhook_url` must validate `http/https` scheme, non-empty `netloc`, and block cloud metadata hosts (`169.254.169.254`, `metadata.google.internal`).
+1. **SSRF Guard & Origin Whitelist on Webhooks**: `ResourceGenerationRequest.webhook_url` and `public_resource_flow::_post_webhook` must validate `http/https` scheme, non-empty `netloc`, block cloud metadata hosts (`169.254.169.254`, `metadata.google.internal`), enforce exact path `/api/v1/webhooks/agent`, and require origin to match trusted whitelist (`BACKEND_INTERNAL_BASE_URL`, localhost 8000/8001, or `WEBHOOK_ALLOWED_ORIGINS`).
 2. **Transport & JSON Error Convergence**: `BackendLearningClient.post_json` must catch `httpx.TransportError` (mapping timeouts to `backend_timeout` and all other transport errors to `backend_unavailable`) and `ValueError` on `response.json()` (mapping to `backend_bad_response`).
 
 ---

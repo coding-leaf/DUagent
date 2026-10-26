@@ -120,3 +120,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: 教材安全切片与版本化幂等入库改造
+<!-- trellis-session: v=2 fp=42efd7d4094548fe -->
+
+**Date**: 2026-10-27
+**Task**: 教材安全切片与版本化幂等入库改造
+**Package**: agent_service_v2
+**Branch**: `fix/robust-catalog-ingestion`
+
+### Summary
+
+修复教材PDF切片Token溢出400错误，实现敏感格式防误伤清洗、Token感知递归安全二次分块，以及Qdrant版本化幂等入库
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cd7d815` | feat(agent): 实施教材语法保护清洗、Token感知递归分块与Qdrant蓝绿版本化幂等入库 |
+
+### Status
+
+[OK] **Completed**

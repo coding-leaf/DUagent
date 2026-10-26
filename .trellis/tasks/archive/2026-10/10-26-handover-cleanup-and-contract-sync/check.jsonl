@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/backend/architecture-guardrails.md", "reason": "Verify backend guardrails compliance"}
+{"file": ".trellis/spec/backend/backend/quality-guidelines.md", "reason": "Verify backend Ruff and pytest gates"}
+{"file": ".trellis/spec/agent_service_v2/backend/architecture-guardrails.md", "reason": "Verify agent_service_v2 guardrails compliance"}
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Verify agent_service_v2 Ruff and pytest gates"}
+{"file": ".trellis/spec/frontend/frontend/architecture-guardrails.md", "reason": "Verify frontend guardrails compliance"}
+{"file": ".trellis/spec/frontend/frontend/quality-guidelines.md", "reason": "Verify frontend ESLint, build, and unit test gates"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify cross-layer contract and OpenAPI alignment"}

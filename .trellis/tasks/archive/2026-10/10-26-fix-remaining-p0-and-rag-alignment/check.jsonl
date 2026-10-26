@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/backend/index.md", "reason": "验证后端架构原则与规范索引"}
+{"file": ".trellis/spec/backend/backend/architecture-guardrails.md", "reason": "验证后端架构红线与逃生通道合规性"}
+{"file": ".trellis/spec/backend/backend/quality-guidelines.md", "reason": "验证后端 Ruff 扫描与测试规范"}
+{"file": ".trellis/spec/agent_service_v2/backend/index.md", "reason": "验证 Agent Service 架构原则与规范索引"}
+{"file": ".trellis/spec/agent_service_v2/backend/architecture-guardrails.md", "reason": "验证 Agent Service 架构红线与逃生通道合规性"}
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "验证 Agent Service 质量与单测标准"}
+{"file": ".trellis/spec/frontend/frontend/index.md", "reason": "验证前端 React 19 + JSX 规范索引"}
+{"file": ".trellis/spec/frontend/frontend/architecture-guardrails.md", "reason": "验证前端纯 JSX 红线与状态安全退出"}
+{"file": ".trellis/spec/frontend/frontend/quality-guidelines.md", "reason": "验证前端 ESLint、Build 与 Vitest 质量标准"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "验证跨服务契约与数据流一致性"}

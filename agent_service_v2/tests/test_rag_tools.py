@@ -95,7 +95,15 @@ def test_ingest_course_material_pdf_parsing_flow() -> None:
     mock_chunker.chunk = AsyncMock(return_value=[mock_chunk1, mock_chunk2])
 
     # Mock KnowledgeBase and Store
+    mock_client = MagicMock()
+    mock_client.count = AsyncMock(return_value=MagicMock(count=2))
+    mock_client.set_payload = AsyncMock()
+    mock_client.delete = AsyncMock()
+    mock_store = MagicMock()
+    mock_store.get_client.return_value = mock_client
+
     mock_kb = MagicMock()
+    mock_kb.vector_store = mock_store
     mock_kb.insert_document = AsyncMock(return_value="doc_123")
 
     with (

@@ -157,7 +157,7 @@ def get_safe_token_threshold(
 def detect_heading(line: str) -> tuple[int, str] | None:
     """检测单行是否为大纲章节标题，返回 (层级, 标题文本) 或 None。"""
     text = line.strip()
-    if not text or len(text) > 80:
+    if not text:
         return None
     if _SENTENCE_END_RE.search(text):
         return None
@@ -172,6 +172,10 @@ def detect_heading(line: str) -> tuple[int, str] | None:
     m_atx = _ATX_HEADING_RE.match(text)
     if m_atx:
         return min(len(m_atx.group(1)), 3), m_atx.group(2).strip()
+
+    # 针对非 ATX 样式的启发式标题匹配，限制长度避免正文长单句误判
+    if len(text) > 80:
+        return None
 
     if _NUMBERED_UNIT_RE.match(text):
         return 1, text
@@ -388,20 +392,96 @@ class TokenAwareRecursiveChunker(ChunkerBase):
                 chapter_path = " > ".join(breadcrumbs)
                 prefix = f"[{chapter_path}]\n" if chapter_path else ""
                 prefix_tokens = estimate_token_count(prefix)
-                max_body_tokens = max(self.safe_threshold - prefix_tokens, self.safe_threshold // 2)
 
+                # 1. 前缀预算约束：若 prefix_tokens 过长，动态折叠或裁剪章节路径
+                max_allowed_prefix = max(self.safe_threshold // 3, 20)
+                if prefix_tokens > max_allowed_prefix and len(breadcrumbs) > 1:
+                    for k in range(1, len(breadcrumbs)):
+                        folded_crumbs = ["..."] + breadcrumbs[k:]
+                        cand_path = " > ".join(folded_crumbs)
+                        cand_prefix = f"[{cand_path}]\n"
+                        if estimate_token_count(cand_prefix) <= max_allowed_prefix:
+                            chapter_path = cand_path
+                            prefix = cand_prefix
+                            prefix_tokens = estimate_token_count(prefix)
+                            break
+                    else:
+                        cand_path = f"... > {breadcrumbs[-1]}"
+                        cand_prefix = f"[{cand_path}]\n"
+                        chapter_path = cand_path
+                        prefix = cand_prefix
+                        prefix_tokens = estimate_token_count(prefix)
+
+                if prefix_tokens > max_allowed_prefix:
+                    # 单级标题或折叠后仍超限，截断末尾字符以硬性保障前缀在预算内
+                    while chapter_path and estimate_token_count(f"[{chapter_path}...]\n") > max_allowed_prefix:
+                        chapter_path = chapter_path[:-4].rstrip()
+                    if chapter_path:
+                        chapter_path = f"{chapter_path}..."
+                        prefix = f"[{chapter_path}]\n"
+                        prefix_tokens = estimate_token_count(prefix)
+                    else:
+                        prefix = ""
+                        prefix_tokens = 0
+
+                # 2. 动态正文预算计算
+                max_body_tokens = max(self.safe_threshold - prefix_tokens - 10, self.chunk_size // 2)
+
+                # 3. 初步切片
                 pieces = recursive_split_text(body_text, max_tokens=max_body_tokens, overlap_tokens=self.overlap)
+
+                # 4. 最终文本双重预算检查：确保 full_text <= safe_threshold
+                def _split_into_safe_pieces(p: str) -> list[str]:
+                    cand = f"{prefix}{p}" if prefix else p
+                    if estimate_token_count(cand) <= self.safe_threshold:
+                        return [p]
+                    strict_budget = max(self.safe_threshold - prefix_tokens - 10, 20)
+                    sub_pieces = recursive_split_text(
+                        p,
+                        max_tokens=strict_budget,
+                        overlap_tokens=min(self.overlap, strict_budget // 4),
+                    )
+                    safe_list: list[str] = []
+                    for sp in sub_pieces:
+                        if estimate_token_count(f"{prefix}{sp}" if prefix else sp) <= self.safe_threshold:
+                            safe_list.append(sp)
+                        else:
+                            # 字符级滑动窗口保底二次降级
+                            avail_tokens = max(self.safe_threshold - prefix_tokens - 5, 10)
+                            chars_per_tok = len(sp) / max(estimate_token_count(sp), 1)
+                            step = max(int(avail_tokens * chars_per_tok * 0.7), 10)
+                            st = 0
+                            while st < len(sp):
+                                ed = min(st + step, len(sp))
+                                sub_sp = sp[st:ed].strip()
+                                while (
+                                    sub_sp
+                                    and estimate_token_count(
+                                        f"{prefix}{sub_sp}" if prefix else sub_sp
+                                    ) > self.safe_threshold
+                                    and ed > st + 5
+                                ):
+                                    ed -= 5
+                                    sub_sp = sp[st:ed].strip()
+                                if sub_sp:
+                                    safe_list.append(sub_sp)
+                                if ed >= len(sp):
+                                    break
+                                st = ed
+                    return safe_list
+
                 for piece in pieces:
-                    full_text = f"{prefix}{piece}" if prefix else piece
-                    chunk_meta = dict(section.metadata) if section.metadata else {}
-                    chunk_meta["chapter_path"] = chapter_path
-                    chunk_meta["headings"] = list(breadcrumbs)
-                    chunk_meta["raw_text"] = piece
-                    raw_chunks.append({
-                        "content": TextBlock(text=full_text),
-                        "source": section.source,
-                        "metadata": chunk_meta,
-                    })
+                    for safe_piece in _split_into_safe_pieces(piece):
+                        full_text = f"{prefix}{safe_piece}" if prefix else safe_piece
+                        chunk_meta = dict(section.metadata) if section.metadata else {}
+                        chunk_meta["chapter_path"] = chapter_path
+                        chunk_meta["headings"] = list(breadcrumbs)
+                        chunk_meta["raw_text"] = safe_piece
+                        raw_chunks.append({
+                            "content": TextBlock(text=full_text),
+                            "source": section.source,
+                            "metadata": chunk_meta,
+                        })
 
         total = len(raw_chunks)
         chunks: list[Chunk] = []
@@ -452,6 +532,65 @@ def get_course_knowledge_collection_name(settings: AgentModelSettings) -> str:
         return f"course_knowledge_{model_slug}_{settings.EMBEDDING_DIMENSION}"
 
     return f"{raw_collection}_{model_slug}_{settings.EMBEDDING_DIMENSION}"
+
+
+def _matches_vector_dim(info: Any, expected_dim: int) -> bool:
+    """检查集合向量维度是否与预期配置一致。"""
+    if not info or not hasattr(info, "config") or not hasattr(info.config, "params"):
+        return False
+    vectors = getattr(info.config.params, "vectors", None)
+    if hasattr(vectors, "size"):
+        return bool(vectors.size == expected_dim)
+    if isinstance(vectors, dict):
+        return any(getattr(v, "size", None) == expected_dim for v in vectors.values())
+    return False
+
+
+async def _get_historical_fallback_collection(
+    client: Any,
+    settings: AgentModelSettings,
+    target_collection: str,
+) -> str | None:
+    """检查是否存在兼容的历史默认集合（如 course_knowledge_v1_1024）。
+
+    仅在集合存在且向量维度与配置一致时返回集合名称，支持透明只读回退。
+    """
+    if not client:
+        return None
+
+    raw_collection = settings.QDRANT_COURSE_KNOWLEDGE_COLLECTION
+    candidates: list[str] = []
+    if raw_collection and raw_collection != target_collection:
+        candidates.append(raw_collection)
+    if (
+        "course_knowledge_v1_1024" != target_collection
+        and "course_knowledge_v1_1024" not in candidates
+    ):
+        candidates.append("course_knowledge_v1_1024")
+
+    for candidate in candidates:
+        try:
+            exists = False
+            if hasattr(client, "collection_exists"):
+                exists = await _safe_call(client.collection_exists, collection_name=candidate)
+            elif hasattr(client, "get_collections"):
+                collections = await _safe_call(client.get_collections)
+                names = {c.name for c in getattr(collections, "collections", [])}
+                exists = candidate in names
+            else:
+                exists = True
+
+            if not exists:
+                continue
+
+            info = await _safe_call(client.get_collection, collection_name=candidate)
+            if _matches_vector_dim(info, settings.EMBEDDING_DIMENSION):
+                return candidate
+        except Exception as exc:
+            logger.debug("Candidate fallback collection %s check failed: %s", candidate, exc)
+            continue
+
+    return None
 
 
 def build_qdrant_store(settings: AgentModelSettings) -> QdrantStore:
@@ -645,6 +784,25 @@ async def ingest_course_material(
     client = getattr(getattr(kb, "vector_store", None), "get_client", lambda: None)()
 
     # 5. 分批（16块）安全写入，带指数退避重试，防御临时网络抖动
+    async def _rollback_batch() -> None:
+        if client and hasattr(client, "delete"):
+            try:
+                rollback_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="chunk.metadata.ingestion_version",
+                            match=MatchValue(value=ingestion_version),
+                        )
+                    ]
+                )
+                await _safe_call(
+                    client.delete,
+                    collection_name=collection_name,
+                    points_selector=rollback_filter,
+                )
+            except Exception as rollback_err:
+                logger.warning("Failed to rollback version %s: %s", ingestion_version, rollback_err)
+
     batch_size = 16
     try:
         for i in range(0, len(chunks), batch_size):
@@ -679,26 +837,10 @@ async def ingest_course_material(
             ingestion_version,
             exc,
         )
-        if client:
-            try:
-                rollback_filter = Filter(
-                    must=[
-                        FieldCondition(
-                            key="chunk.metadata.ingestion_version",
-                            match=MatchValue(value=ingestion_version),
-                        )
-                    ]
-                )
-                await _safe_call(
-                    client.delete,
-                    collection_name=collection_name,
-                    points_selector=rollback_filter,
-                )
-            except Exception as rollback_err:
-                logger.warning("Failed to rollback version %s: %s", ingestion_version, rollback_err)
+        await _rollback_batch()
         raise
 
-    # 6. 完整性校验：验证实际写入切片总数
+    # 6. 完整性校验：验证实际写入切片总数（强校验：数量不一致或客户端异常立即阻断回滚）
     if client and hasattr(client, "count"):
         try:
             count_filter = Filter(
@@ -706,6 +848,10 @@ async def ingest_course_material(
                     FieldCondition(
                         key="chunk.metadata.course_id",
                         match=MatchValue(value=course_id),
+                    ),
+                    FieldCondition(
+                        key="chunk.metadata.material_id",
+                        match=MatchValue(value=path.name),
                     ),
                     FieldCondition(
                         key="chunk.metadata.ingestion_version",
@@ -719,31 +865,20 @@ async def ingest_course_material(
                 count_filter=count_filter,
                 exact=True,
             )
-            inserted_count = getattr(count_res, "count", len(chunks))
-            if isinstance(inserted_count, int) and inserted_count < len(chunks):
-                # 写入不完整，实施回滚
-                rollback_filter = Filter(
-                    must=[
-                        FieldCondition(
-                            key="chunk.metadata.ingestion_version",
-                            match=MatchValue(value=ingestion_version),
-                        )
-                    ]
-                )
-                await _safe_call(
-                    client.delete,
-                    collection_name=collection_name,
-                    points_selector=rollback_filter,
-                )
+            inserted_count = getattr(count_res, "count", None)
+            if not isinstance(inserted_count, int) or inserted_count != len(chunks):
                 raise RuntimeError(
                     f"Ingestion count verification failed: expected {len(chunks)}, got {inserted_count}"
                 )
         except Exception as exc:
+            await _rollback_batch()
             if isinstance(exc, RuntimeError):
                 raise
-            logger.warning("Could not verify point count via Qdrant client: %s", exc)
+            raise RuntimeError(
+                f"Qdrant count check failed for version {ingestion_version}: {exc}"
+            ) from exc
 
-    # 7. 原子生效切换：更新 is_active = True
+    # 7. 原子生效切换：更新 is_active = True（强前置：激活失败必须立即回滚，严禁清理旧版本）
     if client and hasattr(client, "set_payload"):
         try:
             activate_filter = Filter(
@@ -776,9 +911,59 @@ async def ingest_course_material(
                 points=activate_filter,
             )
         except Exception as exc:
-            logger.warning("Failed to activate ingestion version %s: %s", ingestion_version, exc)
+            logger.error(
+                "Failed to activate ingestion version %s: %s. Rolling back uncompleted points.",
+                ingestion_version,
+                exc,
+            )
+            await _rollback_batch()
+            raise RuntimeError(
+                f"Failed to activate ingestion version {ingestion_version}: {exc}"
+            ) from exc
 
-    # 8. 淘汰清理旧版本：删除同一课程下其他版本的陈旧点位
+    # 8. 激活验证：验证实际激活点位数是否等于写入切片总数
+    if client and hasattr(client, "count"):
+        try:
+            active_verify_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="chunk.metadata.course_id",
+                        match=MatchValue(value=course_id),
+                    ),
+                    FieldCondition(
+                        key="chunk.metadata.material_id",
+                        match=MatchValue(value=path.name),
+                    ),
+                    FieldCondition(
+                        key="chunk.metadata.ingestion_version",
+                        match=MatchValue(value=ingestion_version),
+                    ),
+                    FieldCondition(
+                        key="chunk.metadata.is_active",
+                        match=MatchValue(value=True),
+                    ),
+                ]
+            )
+            active_res = await _safe_call(
+                client.count,
+                collection_name=collection_name,
+                count_filter=active_verify_filter,
+                exact=True,
+            )
+            active_count = getattr(active_res, "count", None)
+            if not isinstance(active_count, int) or active_count != len(chunks):
+                raise RuntimeError(
+                    f"Activation verification failed: expected {len(chunks)} active points, got {active_count}"
+                )
+        except Exception as exc:
+            await _rollback_batch()
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError(
+                f"Activation verification check failed for version {ingestion_version}: {exc}"
+            ) from exc
+
+    # 9. 淘汰清理旧版本：仅在激活校验成功后执行，且必须同时指定 course_id 与 material_id
     if client and hasattr(client, "delete"):
         try:
             cleanup_filter = Filter(
@@ -786,7 +971,11 @@ async def ingest_course_material(
                     FieldCondition(
                         key="chunk.metadata.course_id",
                         match=MatchValue(value=course_id),
-                    )
+                    ),
+                    FieldCondition(
+                        key="chunk.metadata.material_id",
+                        match=MatchValue(value=path.name),
+                    ),
                 ],
                 must_not=[
                     FieldCondition(
@@ -801,7 +990,12 @@ async def ingest_course_material(
                 points_selector=cleanup_filter,
             )
         except Exception as exc:
-            logger.warning("Failed to cleanup obsolete points for course %s: %s", course_id, exc)
+            logger.warning(
+                "Failed to cleanup obsolete points for course %s material %s: %s",
+                course_id,
+                path.name,
+                exc,
+            )
 
     return len(chunks)
 
@@ -833,27 +1027,74 @@ def _truncate_chunk(text: str, max_chars: int = 1200) -> str:
     return text[:max_chars].rstrip() + "..."
 
 
-async def build_catalog_kg_context(
-    catalog_id: str,
-    *,
-    settings: AgentModelSettings | None = None,
-    limit: int = 24,
-    max_chars: int = 18000,
-) -> str:
-    """Build KG generation context from AgentScope 2.x Qdrant chunks.
+def _is_payload_active(payload: dict[str, Any]) -> bool:
+    """判断 Payload 是否属于已生效的切片。"""
+    if not isinstance(payload, dict):
+        return False
+    chunk = payload.get("chunk") or {}
+    meta = chunk.get("metadata") if isinstance(chunk, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    is_active = meta.get("is_active", payload.get("is_active"))
+    return is_active is True
 
-    具有蓝绿版本感知与向后兼容支持：
-    - 优先匹配已生效版本（排除 is_active=False 的正在入库切片）；
-    - 向后兼容无版本标记的老数据。
-    """
+
+def _is_payload_legacy_compatible(payload: dict[str, Any]) -> bool:
+    """判断 Payload 是否属于合法的历史遗留切片（无 is_active 且无 ingestion_version）。"""
+    if not isinstance(payload, dict):
+        return False
+    chunk = payload.get("chunk") or {}
+    meta = chunk.get("metadata") if isinstance(chunk, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    is_active = meta.get("is_active", payload.get("is_active"))
+    ingestion_version = meta.get("ingestion_version", payload.get("ingestion_version"))
+    return is_active is not False and ingestion_version is None
+
+
+async def _fetch_kg_records_from_collection(
+    client: Any,
+    collection_name: str,
+    catalog_id: str,
+    limit: int,
+) -> list[Any]:
+    """从指定集合检索符合条件的知识切片点位，防泄露未激活数据。"""
     from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-    settings = settings or AgentModelSettings()
-    collection_name = get_course_knowledge_collection_name(settings)
-    store = build_qdrant_store(settings)
-    client = store.get_client()
+    if not client:
+        return []
 
-    scroll_filter = Filter(
+    # 1. 主检索：显式限定 must: [course_id == catalog_id, is_active == True]
+    active_filter = Filter(
+        must=[
+            FieldCondition(
+                key="chunk.metadata.course_id",
+                match=MatchValue(value=catalog_id),
+            ),
+            FieldCondition(
+                key="chunk.metadata.is_active",
+                match=MatchValue(value=True),
+            ),
+        ]
+    )
+    scroll_res = await _safe_call(
+        client.scroll,
+        collection_name=collection_name,
+        scroll_filter=active_filter,
+        limit=limit,
+        with_payload=True,
+        with_vectors=False,
+    )
+    records = scroll_res[0] if scroll_res else []
+    valid_records = [
+        rec for rec in records
+        if _is_payload_active(getattr(rec, "payload", {}) or {})
+    ]
+    if valid_records:
+        return valid_records
+
+    # 2. 历史 Legacy 兜底：仅当主检索未命中且存在无版本标记的老数据时回退
+    legacy_filter = Filter(
         must=[
             FieldCondition(
                 key="chunk.metadata.course_id",
@@ -870,32 +1111,45 @@ async def build_catalog_kg_context(
     scroll_res = await _safe_call(
         client.scroll,
         collection_name=collection_name,
-        scroll_filter=scroll_filter,
+        scroll_filter=legacy_filter,
         limit=limit,
         with_payload=True,
         with_vectors=False,
     )
-    records = scroll_res[0] if scroll_res else []
+    candidate_records = scroll_res[0] if scroll_res else []
+    valid_legacy = [
+        rec for rec in candidate_records
+        if _is_payload_legacy_compatible(getattr(rec, "payload", {}) or {})
+    ]
+    return valid_legacy
 
-    # 兜底：若带 must_not 的查询返回空，尝试基础匹配
+
+async def build_catalog_kg_context(
+    catalog_id: str,
+    *,
+    settings: AgentModelSettings | None = None,
+    limit: int = 24,
+    max_chars: int = 18000,
+) -> str:
+    """Build KG generation context from AgentScope 2.x Qdrant chunks.
+
+    具有蓝绿版本感知与向后兼容支持：
+    - 优先匹配已生效版本（排除 is_active=False 的正在入库切片）；
+    - 向后兼容无版本标记的老数据；
+    - 目标集合无切片时支持历史兼容 Collection 透明回退。
+    """
+    settings = settings or AgentModelSettings()
+    collection_name = get_course_knowledge_collection_name(settings)
+    store = build_qdrant_store(settings)
+    client = store.get_client()
+
+    records = await _fetch_kg_records_from_collection(client, collection_name, catalog_id, limit)
+
+    # 兜底：若目标模型派生集合未命中任何切片，尝试历史 Collection 回退读取
     if not records:
-        fallback_filter = Filter(
-            must=[
-                FieldCondition(
-                    key="chunk.metadata.course_id",
-                    match=MatchValue(value=catalog_id),
-                )
-            ]
-        )
-        scroll_res = await _safe_call(
-            client.scroll,
-            collection_name=collection_name,
-            scroll_filter=fallback_filter,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
-        )
-        records = scroll_res[0] if scroll_res else []
+        fallback_col = await _get_historical_fallback_collection(client, settings, collection_name)
+        if fallback_col:
+            records = await _fetch_kg_records_from_collection(client, fallback_col, catalog_id, limit)
 
     chunks: list[str] = []
     used_chars = 0
@@ -933,18 +1187,41 @@ async def retrieve_course_context(
     settings = settings or AgentModelSettings()
     kb = get_course_knowledge_base(course_id, settings)
 
+    def _is_chunk_valid_and_active(chunk: Any) -> bool:
+        if not chunk:
+            return False
+        meta = getattr(chunk, "metadata", None)
+        if not isinstance(meta, dict):
+            meta = {}
+        is_active = meta.get("is_active")
+        ingestion_version = meta.get("ingestion_version")
+        if is_active is False:
+            return False
+        if is_active is True:
+            return True
+        return ingestion_version is None
+
     # 1. 使用绑定了 course_id 的 KB.search 执行向量检索
     raw_results = await kb.search(queries=[query], top_k=limit * 2)
-    # 过滤未激活（is_active is False）的临时点位，兼容 legacy 历史点位（is_active is None）
     active_results = [
         res
         for res in (raw_results or [])
-        if not (
-            getattr(res, "chunk", None)
-            and getattr(res.chunk, "metadata", None)
-            and res.chunk.metadata.get("is_active") is False
-        )
+        if _is_chunk_valid_and_active(getattr(res, "chunk", None))
     ]
+
+    # 2. 若目标派生集合未命中，尝试历史 Collection 透明只读回退
+    if not active_results:
+        client = getattr(getattr(kb, "vector_store", None), "get_client", lambda: None)()
+        current_collection = get_course_knowledge_collection_name(settings)
+        fallback_col = await _get_historical_fallback_collection(client, settings, current_collection)
+        if fallback_col:
+            fallback_kb = get_course_knowledge_base(course_id, settings, collection_name=fallback_col)
+            fallback_raw = await fallback_kb.search(queries=[query], top_k=limit * 2)
+            active_results = [
+                res
+                for res in (fallback_raw or [])
+                if _is_chunk_valid_and_active(getattr(res, "chunk", None))
+            ]
 
     if not active_results:
         return {
@@ -968,7 +1245,7 @@ async def retrieve_course_context(
             return content
         return str(content) if content is not None else ""
 
-    # 2. 提取文本，进行语义重排（Rerank）提升质量
+    # 3. 提取文本，进行语义重排（Rerank）提升质量
     reranker = build_reranker_model_from_settings(settings)
     documents = [_extract_chunk_text(res.chunk) for res in active_results]
 
@@ -988,7 +1265,7 @@ async def retrieve_course_context(
     else:
         filtered_results = [(res, res.score or 0.0) for res in active_results[:limit]]
 
-    # 3. 组装最终检索结果和引文 citations
+    # 4. 组装最终检索结果和引文 citations
     context_parts: list[str] = []
     sources: list[dict[str, Any]] = []
 

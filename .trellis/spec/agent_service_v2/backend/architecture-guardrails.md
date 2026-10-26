@@ -93,10 +93,20 @@ In `PersonalizedResourceGenerationRunner._produce_one`:
    - 严禁对切片使用静默字符截断丢弃内容。必须采用 Token 感知递归二次分块（`TokenAwareRecursiveChunker`），当段落超限时在语义边界（双换行 -> 标点 -> 字符窗口）细分，确保所有块严格受控于模型安全 Token 窗口；
    - 提取的章节大纲路径必须作为结构化 Payload（`chapter_path`、`headings`）写入并前缀注入向量文本。
 2. **Qdrant 蓝绿版本化与原子切换**：
-   - **严禁“先删后写”**破坏线上检索可用性。写入新版本切片时绑定唯一 `ingestion_version` 并置 `is_active=False`；
-   - 经批量写入校验完整性后，原子切换版本（`is_active=True`），再异步清理旧版本点位；若入库中途异常失败，仅回滚清理当前未完成版本，保证线上零中断。
-3. **向量空间物理隔离**：
-   - 严禁不同 Embedding 模型或不同输出维度的向量混存在同一个 Qdrant Collection。集合名称必须动态绑定模型标识与维度（如 `course_knowledge_{model_slug}_{dim}`），保障向量空间纯净度。
+   - **严禁“先删后写”与跨教材误删**：入库与旧版本清理必须遵循**教材级粒度隔离**（同时限定 `course_id` 与 `material_id`），严禁跨教材清理导致同课程其他教材向量丢失；
+   - **写入新版本绑定事务状态**：写入新版本切片时绑定唯一 `ingestion_version` 并置 `is_active=False`；
+   - **激活强前置与失败防护**：写入后必须执行两阶段校验——激活前 `count()` 点位数强校验，以及 `set_payload` 激活后的 `is_active=True` 完整性校验；
+   - **失败即刻回滚且保护旧版**：若写入不完整、激活异常或校验失败，立即回滚当前 `ingestion_version` 临时点位并阻断流程，**严禁触动与清理旧版本数据**；
+   - **仅验证通过后清理旧版**：唯有在新版本激活且验证通过后，才允许淘汰同课程、同教材的历史旧版本切片。
+3. **检索隔离与防未激活数据泄露**：
+   - 知识库检索（`build_catalog_kg_context`、`retrieve_course_context`）严禁召回 `is_active=False` 的未激活临时切片；
+   - 仅对无版本标记的 Legacy 历史切片在主检索未命中时提供透明只读回退；未完成或激活失败的版本绝对不得参与图谱生成或问答检索。
+4. **Token 预算大纲前缀与完整文本双重兜底**：
+   - 章节大纲路径作为结构化 Payload（`chapter_path`、`headings`）写入并前缀注入向量文本；
+   - 大纲前缀过长时必须动态折叠高层目录（`[... > 当前节]`）或截断；拼接完整文本后必须进行最终 Token 校验，超标时强制二次递归拆分，硬性保障全部输出 Chunk 严格 `<= safe_threshold`。
+5. **向量空间物理隔离与历史集合平滑兼容**：
+   - 严禁不同 Embedding 模型或不同输出维度的向量混存在同一个 Qdrant Collection。集合名称必须动态绑定模型标识与维度（如 `course_knowledge_{model_slug}_{dim}`），保障向量空间纯净度；
+   - 模型派生集合未查到数据时，仅当历史遗留集合（如 `course_knowledge_v1_1024`）存在且向量维度完全匹配时，才允许只读回退查询，严禁维度冲突时强制访问。
 
 ---
 

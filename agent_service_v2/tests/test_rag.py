@@ -10,6 +10,8 @@ from agentscope.rag import Chunk, Section, VectorSearchResult
 from agent_service_v2.agents.model_provider import AgentModelSettings
 from agent_service_v2.tools.rag import (
     TokenAwareRecursiveChunker,
+    _get_historical_fallback_collection,
+    _matches_vector_dim,
     _text_from_agentscope_payload,
     build_catalog_kg_context,
     clean_text_preserving_syntax,
@@ -250,8 +252,11 @@ def test_ingest_course_material_blue_green_lifecycle() -> None:
         version = meta["ingestion_version"]
         assert meta["is_active"] is False
 
-        # 2. 验证写入后执行 count 校验
-        mock_client.count.assert_called_once()
+        # 2. 验证写入后与激活后共执行 2 次 count 校验 (写入强校验 + 激活完整性验证)
+        assert mock_client.count.call_count == 2
+        first_count_filter = mock_client.count.call_args_list[0].kwargs["count_filter"]
+        assert any(c.key == "chunk.metadata.course_id" and c.match.value == "catalog_100" for c in first_count_filter.must)
+        assert any(c.key == "chunk.metadata.material_id" and c.match.value == "c_book.pdf" for c in first_count_filter.must)
 
         # 3. 验证校验通过后原子切换生效 (set_payload is_active=True)
         assert mock_client.set_payload.called
@@ -259,12 +264,12 @@ def test_ingest_course_material_blue_green_lifecycle() -> None:
         # 至少一次嵌套更新与一次顶层更新
         assert len(set_payload_calls) >= 2
 
-        # 4. 验证切换生效后异步删除旧版本淘汰数据点 (必须包含当前 course_id 且排除当前 version)
+        # 4. 验证切换生效后异步删除旧版本淘汰数据点 (必须指定当前 course_id 与 material_id 且排除当前 version)
         mock_client.delete.assert_called_once()
         delete_filter = mock_client.delete.call_args.kwargs["points_selector"]
-        must_cond = delete_filter.must[0]
-        assert must_cond.key == "chunk.metadata.course_id"
-        assert must_cond.match.value == "catalog_100"
+        must_keys = {c.key: c.match.value for c in delete_filter.must}
+        assert must_keys["chunk.metadata.course_id"] == "catalog_100"
+        assert must_keys["chunk.metadata.material_id"] == "c_book.pdf"
         must_not_cond = delete_filter.must_not[0]
         assert must_not_cond.key == "chunk.metadata.ingestion_version"
         assert must_not_cond.match.value == version
@@ -357,6 +362,103 @@ def test_ingest_course_material_parser_fallback_on_exception() -> None:
         mock_kb.insert_document.assert_called_once()
 
 
+def test_ingest_course_material_rollback_on_count_mismatch() -> None:
+    settings = AgentModelSettings()
+
+    mock_parser = MagicMock()
+    mock_parser.parse = AsyncMock(
+        return_value=[
+            Section(
+                content=TextBlock(text="章节内容。"),
+                source="test.pdf",
+                metadata={"page": 1},
+            )
+        ]
+    )
+
+    mock_client = MagicMock()
+    mock_client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    # 模拟实际写入计数不一致 (预期 1，返回 0)
+    mock_client.count = AsyncMock(return_value=MagicMock(count=0))
+    mock_client.delete = AsyncMock()
+
+    mock_store = MagicMock()
+    mock_store.get_client.return_value = mock_client
+
+    mock_kb = MagicMock()
+    mock_kb.vector_store = mock_store
+    mock_kb.insert_document = AsyncMock(return_value="doc_123")
+
+    with (
+        patch("agent_service_v2.tools.rag.PDFParser", return_value=mock_parser),
+        patch("agent_service_v2.tools.rag.get_course_knowledge_base", return_value=mock_kb),
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.is_file", return_value=True),
+    ):
+        with pytest.raises(RuntimeError, match="Ingestion count verification failed"):
+            asyncio.run(
+                ingest_course_material(
+                    file_path="/fake/test.pdf",
+                    course_id="c_err",
+                    settings=settings,
+                )
+            )
+
+        # 验证触发回滚且删除当前版本未完成切片
+        mock_client.delete.assert_called_once()
+        rollback_filter = mock_client.delete.call_args.kwargs["points_selector"]
+        assert rollback_filter.must[0].key == "chunk.metadata.ingestion_version"
+
+
+def test_ingest_course_material_rollback_on_activation_exception() -> None:
+    settings = AgentModelSettings()
+
+    mock_parser = MagicMock()
+    mock_parser.parse = AsyncMock(
+        return_value=[
+            Section(
+                content=TextBlock(text="章节内容。"),
+                source="test.pdf",
+                metadata={"page": 1},
+            )
+        ]
+    )
+
+    mock_client = MagicMock()
+    mock_client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    mock_client.count = AsyncMock(return_value=MagicMock(count=1))
+    mock_client.set_payload = AsyncMock(side_effect=RuntimeError("Qdrant set_payload timeout"))
+    mock_client.delete = AsyncMock()
+
+    mock_store = MagicMock()
+    mock_store.get_client.return_value = mock_client
+
+    mock_kb = MagicMock()
+    mock_kb.vector_store = mock_store
+    mock_kb.insert_document = AsyncMock(return_value="doc_123")
+
+    with (
+        patch("agent_service_v2.tools.rag.PDFParser", return_value=mock_parser),
+        patch("agent_service_v2.tools.rag.get_course_knowledge_base", return_value=mock_kb),
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.is_file", return_value=True),
+    ):
+        with pytest.raises(RuntimeError, match="Failed to activate ingestion version"):
+            asyncio.run(
+                ingest_course_material(
+                    file_path="/fake/test.pdf",
+                    course_id="c_err",
+                    settings=settings,
+                )
+            )
+
+        # 验证回滚且绝不调用淘汰清理旧版本
+        mock_client.delete.assert_called_once()
+        rollback_filter = mock_client.delete.call_args.kwargs["points_selector"]
+        assert rollback_filter.must[0].key == "chunk.metadata.ingestion_version"
+
+
+
 def test_build_catalog_kg_context_respects_active_filter_and_fallback() -> None:
     settings = AgentModelSettings()
 
@@ -381,11 +483,10 @@ def test_build_catalog_kg_context_respects_active_filter_and_fallback() -> None:
 
     assert "指针是存储内存地址的变量。" in context
     scroll_filter = mock_client.scroll.await_args.kwargs["scroll_filter"]
-    # 验证 must 条件与 must_not 排除 is_active=False
-    assert scroll_filter.must[0].key == "chunk.metadata.course_id"
-    assert scroll_filter.must[0].match.value == "catalog-1"
-    assert scroll_filter.must_not[0].key == "chunk.metadata.is_active"
-    assert scroll_filter.must_not[0].match.value is False
+    # 验证主检索 must 显式限定 course_id 与 is_active=True
+    must_keys = {c.key: c.match.value for c in scroll_filter.must}
+    assert must_keys["chunk.metadata.course_id"] == "catalog-1"
+    assert must_keys["chunk.metadata.is_active"] is True
 
 
 def test_retrieve_course_context_excludes_unactivated_chunks() -> None:
@@ -526,4 +627,75 @@ def test_retrieve_course_context_handles_string_content() -> None:
         assert result["outcome"] == "success"
         assert result["sources"][0]["snippet"] == "纯字符串内容切片"
         assert "Content: 纯字符串内容切片" in result["context_text"]
+
+
+def test_matches_vector_dim() -> None:
+    # 1. 单向量且维度匹配
+    info_match = MagicMock()
+    info_match.config.params.vectors.size = 1024
+    assert _matches_vector_dim(info_match, 1024) is True
+    assert _matches_vector_dim(info_match, 512) is False
+
+    # 2. 命名多向量且其中一个匹配
+    v1 = MagicMock(size=512)
+    v2 = MagicMock(size=1024)
+    info_multi = MagicMock()
+    info_multi.config.params.vectors = {"text": v1, "dense": v2}
+    assert _matches_vector_dim(info_multi, 1024) is True
+    assert _matches_vector_dim(info_multi, 768) is False
+
+    # 3. 畸形或缺失字段
+    assert _matches_vector_dim(None, 1024) is False
+    assert _matches_vector_dim(MagicMock(config=None), 1024) is False
+
+
+def test_get_historical_fallback_collection_dimension_check() -> None:
+    settings = AgentModelSettings(
+        QDRANT_COURSE_KNOWLEDGE_COLLECTION="course_knowledge_v1_1024",
+        EMBEDDING_DIMENSION=1024,
+    )
+    mock_client = MagicMock()
+    mock_client.collection_exists = AsyncMock(return_value=True)
+
+    # 维度匹配场景：返回候选集合名称
+    mock_info_match = MagicMock()
+    mock_info_match.config.params.vectors.size = 1024
+    mock_client.get_collection = AsyncMock(return_value=mock_info_match)
+
+    res = asyncio.run(
+        _get_historical_fallback_collection(
+            mock_client,
+            settings,
+            target_collection="course_knowledge_v1_1024_baai_1024",
+        )
+    )
+    assert res == "course_knowledge_v1_1024"
+
+    # 维度不匹配场景（例如历史集合为 512 维，当前配置为 1024 维）：严禁回退，返回 None
+    mock_info_mismatch = MagicMock()
+    mock_info_mismatch.config.params.vectors.size = 512
+    mock_client.get_collection = AsyncMock(return_value=mock_info_mismatch)
+
+    res_mismatch = asyncio.run(
+        _get_historical_fallback_collection(
+            mock_client,
+            settings,
+            target_collection="course_knowledge_v1_1024_baai_1024",
+        )
+    )
+    assert res_mismatch is None
+
+    # 集合不存在场景：返回 None
+    mock_client.collection_exists = AsyncMock(return_value=False)
+    res_not_exists = asyncio.run(
+        _get_historical_fallback_collection(
+            mock_client,
+            settings,
+            target_collection="course_knowledge_v1_1024_baai_1024",
+        )
+    )
+    assert res_not_exists is None
+
+    # Client 为 None：返回 None
+    assert asyncio.run(_get_historical_fallback_collection(None, settings, "target")) is None
 

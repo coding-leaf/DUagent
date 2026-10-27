@@ -25,9 +25,6 @@ os.environ["DATABASE_URL"] = os.environ.get(
 from app.db.session import async_session_factory, engine, init_db
 from httpx import AsyncClient, ASGITransport
 
-asyncio.run(init_db())
-asyncio.run(engine.dispose())
-
 from app.main import app
 from app.models.user import RegistrationCode
 
@@ -37,8 +34,8 @@ from app.models.quiz import QuizQuestion
 
 
 @pytest_asyncio.fixture(scope="module", autouse=True)
-async def _dispose_engine_for_module_loop():
-    await engine.dispose()
+async def setup_test_schema():
+    await init_db()
     yield
     await engine.dispose()
 

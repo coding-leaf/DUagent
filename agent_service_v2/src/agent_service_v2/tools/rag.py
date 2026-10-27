@@ -546,6 +546,53 @@ def _matches_vector_dim(info: Any, expected_dim: int) -> bool:
     return False
 
 
+def _is_historical_collection_model_compatible(
+    candidate: str,
+    settings: AgentModelSettings,
+) -> bool:
+    """严格校验历史 Qdrant 集合与当前 Embedding 模型的语义空间兼容性。
+
+    严禁仅凭向量维度相同即静默回退。对模型来源无法确认或模型不匹配的 Legacy 集合，
+    采取保守策略，拒绝回退查询。
+    """
+    current_model = (settings.EMBEDDING_MODEL or "").strip()
+    if not current_model:
+        return False
+
+    current_slug = re.sub(r"[^a-zA-Z0-9]+", "_", current_model).strip("_").lower()
+
+    # 1. 显式白名单配置
+    whitelist = getattr(settings, "HISTORICAL_FALLBACK_COMPATIBLE_MODELS", None)
+    if whitelist:
+        if isinstance(whitelist, str):
+            allowed = [m.strip().lower() for m in whitelist.split(",") if m.strip()]
+        else:
+            allowed = [str(m).strip().lower() for m in whitelist if str(m).strip()]
+        if any(
+            m in current_model.lower()
+            or re.sub(r"[^a-zA-Z0-9]+", "_", m).strip("_").lower() == current_slug
+            for m in allowed
+        ):
+            return True
+
+    # 2. 候选集合名称中明确包含当前模型标识
+    if current_slug in candidate.lower():
+        return True
+
+    # 3. 历史 v1 约定基准集合（course_knowledge_v1_1024 / course_knowledge_v1 / course_knowledge_legacy）
+    if (
+        "course_knowledge_v1" in candidate
+        or "course_knowledge_legacy" in candidate
+        or candidate == "course_knowledge_v1_1024"
+    ):
+        # DUagent 历史基准模型约定为 BAAI/bge-large-zh-v1.5
+        if "bge_large_zh" in current_slug:
+            return True
+        return False
+
+    return False
+
+
 async def _get_historical_fallback_collection(
     client: Any,
     settings: AgentModelSettings,
@@ -553,7 +600,7 @@ async def _get_historical_fallback_collection(
 ) -> str | None:
     """检查是否存在兼容的历史默认集合（如 course_knowledge_v1_1024）。
 
-    仅在集合存在且向量维度与配置一致时返回集合名称，支持透明只读回退。
+    仅在集合存在、语义空间模型兼容且向量维度与配置一致时返回集合名称，支持透明只读回退。
     """
     if not client:
         return None
@@ -581,6 +628,15 @@ async def _get_historical_fallback_collection(
                 exists = True
 
             if not exists:
+                continue
+
+            # 语义空间兼容性强校验：模型不匹配严格拒绝回退
+            if not _is_historical_collection_model_compatible(candidate, settings):
+                logger.debug(
+                    "Candidate fallback collection %s rejected: model %s incompatible",
+                    candidate,
+                    settings.EMBEDDING_MODEL,
+                )
                 continue
 
             info = await _safe_call(client.get_collection, collection_name=candidate)
@@ -667,6 +723,7 @@ async def ingest_course_material(
     settings: AgentModelSettings,
     chunk_size: int = 512,
     overlap: int = 50,
+    material_id: str | None = None,
 ) -> int:
     """对课本教材进行语法防误伤预处理、递归二次分块与 Qdrant 蓝绿版本化幂等入库。
 
@@ -684,6 +741,8 @@ async def ingest_course_material(
     path = Path(file_path).resolve()
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(f"Course material file not found: {path}")
+
+    effective_material_id = material_id or path.name
 
     # 1. 选用对应 Parser 解析，提供平滑容错降级
     sections: list[Section] = []
@@ -753,7 +812,7 @@ async def ingest_course_material(
         meta.update({
             "course_id": course_id,
             "catalog_id": course_id,
-            "material_id": path.name,
+            "material_id": effective_material_id,
             "ingestion_version": ingestion_version,
             "is_active": False,
             "filename": path.name,
@@ -815,7 +874,7 @@ async def ingest_course_material(
                         document_metadata={
                             "course_id": course_id,
                             "catalog_id": course_id,
-                            "material_id": path.name,
+                            "material_id": effective_material_id,
                             "ingestion_version": ingestion_version,
                             "is_active": False,
                         },
@@ -851,7 +910,7 @@ async def ingest_course_material(
                     ),
                     FieldCondition(
                         key="chunk.metadata.material_id",
-                        match=MatchValue(value=path.name),
+                        match=MatchValue(value=effective_material_id),
                     ),
                     FieldCondition(
                         key="chunk.metadata.ingestion_version",
@@ -905,7 +964,7 @@ async def ingest_course_material(
                     "is_active": True,
                     "course_id": course_id,
                     "catalog_id": course_id,
-                    "material_id": path.name,
+                    "material_id": effective_material_id,
                     "ingestion_version": ingestion_version,
                 },
                 points=activate_filter,
@@ -932,7 +991,7 @@ async def ingest_course_material(
                     ),
                     FieldCondition(
                         key="chunk.metadata.material_id",
-                        match=MatchValue(value=path.name),
+                        match=MatchValue(value=effective_material_id),
                     ),
                     FieldCondition(
                         key="chunk.metadata.ingestion_version",
@@ -974,7 +1033,7 @@ async def ingest_course_material(
                     ),
                     FieldCondition(
                         key="chunk.metadata.material_id",
-                        match=MatchValue(value=path.name),
+                        match=MatchValue(value=effective_material_id),
                     ),
                 ],
                 must_not=[
@@ -993,7 +1052,7 @@ async def ingest_course_material(
             logger.warning(
                 "Failed to cleanup obsolete points for course %s material %s: %s",
                 course_id,
-                path.name,
+                effective_material_id,
                 exc,
             )
 

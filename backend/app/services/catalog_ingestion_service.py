@@ -139,7 +139,13 @@ async def run_catalog_ingestion_background(task_id: str) -> None:
             materials = material_result.scalars().all()
             payload = {
                 "catalog_id": catalog.id,
-                "materials": [{"storage_uri": material.storage_uri or ""} for material in materials],
+                "materials": [
+                    {
+                        "storage_uri": material.storage_uri or "",
+                        "material_id": material.id,
+                    }
+                    for material in materials
+                ],
             }
 
             try:
@@ -165,6 +171,11 @@ async def run_catalog_ingestion_background(task_id: str) -> None:
                 await db.commit()
                 return
 
+            results_by_id = {
+                item.get("material_id"): item
+                for item in (agent_data.get("materials") or [])
+                if item.get("material_id")
+            }
             results_by_uri = {
                 item.get("storage_uri"): item
                 for item in (agent_data.get("materials") or [])
@@ -175,7 +186,7 @@ async def run_catalog_ingestion_background(task_id: str) -> None:
             completed_at = now_utc()
 
             for material in materials:
-                item = results_by_uri.get(material.storage_uri or "")
+                item = results_by_id.get(material.id) or results_by_uri.get(material.storage_uri or "")
                 if item and item.get("status") == "ingested":
                     chunk_count_raw = item.get("chunk_count")
                     chunk_count = int(chunk_count_raw) if chunk_count_raw is not None else 0

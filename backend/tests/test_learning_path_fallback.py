@@ -99,10 +99,15 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_learning_path_fb.db",
 )
 
+import pytest_asyncio
 from app.db.session import async_session_factory, engine, init_db  # noqa: E402
 
-asyncio.run(init_db())
-asyncio.run(engine.dispose())
+
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_schema():
+    await init_db()
+    yield
+    await engine.dispose()
 
 from app.main import app  # noqa: E402
 from app.models.catalog import CourseCatalog, CourseOffering  # noqa: E402

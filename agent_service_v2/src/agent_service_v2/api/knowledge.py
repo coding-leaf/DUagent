@@ -28,6 +28,7 @@ _SUPPORTED_SUFFIXES = {".txt", ".md", ".pdf"}
 
 class MaterialIngestionItem(BaseModel):
     storage_uri: str = Field(..., description="课本资源的相对路径或 URI")
+    material_id: str | None = Field(None, description="真实教材业务 ID")
 
 
 class KnowledgeIngestionRequest(BaseModel):
@@ -37,6 +38,7 @@ class KnowledgeIngestionRequest(BaseModel):
 
 class KnowledgeIngestionMaterialResult(BaseModel):
     storage_uri: str
+    material_id: str | None = None
     status: str  # "ingested" | "failed"
     chunk_count: int = 0
     error: str | None = None
@@ -86,6 +88,7 @@ async def create_knowledge_ingestion(
             material_results.append(
                 KnowledgeIngestionMaterialResult(
                     storage_uri=material.storage_uri,
+                    material_id=material.material_id,
                     status="failed",
                     error="material does not exist",
                 )
@@ -96,6 +99,7 @@ async def create_knowledge_ingestion(
             material_results.append(
                 KnowledgeIngestionMaterialResult(
                     storage_uri=material.storage_uri,
+                    material_id=material.material_id,
                     status="failed",
                     error=f"unsupported file type: {source_path.suffix}",
                 )
@@ -108,10 +112,12 @@ async def create_knowledge_ingestion(
                 file_path=source_path,
                 course_id=request.catalog_id,
                 settings=settings,
+                material_id=material.material_id,
             )
             material_results.append(
                 KnowledgeIngestionMaterialResult(
                     storage_uri=material.storage_uri,
+                    material_id=material.material_id,
                     status="ingested",
                     chunk_count=chunk_count,
                 )
@@ -121,6 +127,7 @@ async def create_knowledge_ingestion(
             material_results.append(
                 KnowledgeIngestionMaterialResult(
                     storage_uri=material.storage_uri,
+                    material_id=material.material_id,
                     status="failed",
                     error=str(exc),
                 )

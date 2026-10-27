@@ -34,8 +34,11 @@ from app.services.kg_resource_alignment_probe import (
 import tools.probe_kg_resource_alignment as probe_cli
 from tools.probe_kg_resource_alignment import build_parser, render_inventory_output, render_output
 
-asyncio.run(init_db())
-asyncio.run(engine.dispose())
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_schema():
+    await init_db()
+    yield
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture(autouse=True)

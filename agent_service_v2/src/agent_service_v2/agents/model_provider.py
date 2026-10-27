@@ -39,6 +39,7 @@ class AgentModelSettings(BaseSettings):
     QDRANT_API_KEY: str | None = None
     QDRANT_PATH: str | None = None
     QDRANT_COURSE_KNOWLEDGE_COLLECTION: str = "course_knowledge_v1_1024"
+    HISTORICAL_FALLBACK_COMPATIBLE_MODELS: list[str] | str | None = None
 
     COURSE_CATALOG_STORAGE_ROOT: str = "../backend/storage/course_catalogs"
 

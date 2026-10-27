@@ -22,6 +22,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 
 from app.db.session import async_session_factory
+import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
@@ -30,15 +31,16 @@ from app.models.catalog import CourseCatalog, CourseOffering
 from app.models.course import Course, CourseEnrollment
 from app.models.others import Resource
 
-async def init_test_db():
+
+@pytest_asyncio.fixture(autouse=True)
+async def setup_test_schema():
     from app.db.base import Base
-    from app.db.session import engine
-    async with engine.begin() as conn:
+    import app.db.session as db_session
+    async with db_session.engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-
-# Ensure tables exist and are clean
-asyncio.run(init_test_db())
+    yield
+    await db_session.engine.dispose()
 
 
 

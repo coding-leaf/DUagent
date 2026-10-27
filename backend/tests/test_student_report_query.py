@@ -12,6 +12,7 @@ if not database_url.startswith("mysql+"):
     pytest.skip("requires TEST_DATABASE_URL=mysql+...", allow_module_level=True)
 os.environ["DATABASE_URL"] = database_url
 
+import pytest_asyncio
 from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course
 from app.models.others import Evaluation, LearningPath, UserProfile
@@ -19,12 +20,11 @@ from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 
 
-async def _init_schema() -> None:
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_schema():
     await init_db()
+    yield
     await engine.dispose()
-
-
-asyncio.run(_init_schema())
 
 from app.services.student_report_query import StudentReportQuery, _overall_score
 

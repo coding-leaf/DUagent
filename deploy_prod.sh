@@ -123,15 +123,15 @@ wait_http() {
   fail "$name health check timed out: $url"
 }
 wait_tcp() {
-  local name="$1" port="$2" attempts="${3:-60}"
+  local name="$1" port="$2" host="${3:-127.0.0.1}" attempts="${4:-60}"
   for _ in $(seq 1 "$attempts"); do
-    if (echo >"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1; then
-      log "$name is accepting connections on port $port"
+    if (echo >"/dev/tcp/$host/$port") >/dev/null 2>&1; then
+      log "$name is accepting connections on $host:$port"
       return 0
     fi
     sleep 2
   done
-  fail "$name did not open port $port"
+  fail "$name did not open $host:$port"
 }
 ensure_service() {
   local container="$1" service="$2"
@@ -148,20 +148,23 @@ ensure_service() {
   infra_compose up -d "$service"
 }
 ensure_core_infrastructure() {
-  local mysql_port qdrant_port
+  local mysql_host mysql_port qdrant_port
+  mysql_host="$(env_value "$INFRA_ENV" DB_HOST 2>/dev/null || true)"
+  mysql_host="${mysql_host:-127.0.0.1}"
   mysql_port="$(env_value "$INFRA_ENV" DB_PORT 2>/dev/null || true)"
+  mysql_port="${mysql_port:-3306}"
   qdrant_port="$(env_value "$INFRA_ENV" QDRANT_HTTP_PORT 2>/dev/null || true)"
 
-  # If port 3306 is not yet occupied by native MySQL, manage eduagent-mysql container
-  if ! (echo >"/dev/tcp/127.0.0.1/${mysql_port:-3306}") >/dev/null 2>&1; then
+  # If port is not yet occupied by native MySQL, manage eduagent-mysql container
+  if ! (echo >"/dev/tcp/${mysql_host}/${mysql_port}") >/dev/null 2>&1; then
     ensure_service eduagent-mysql mysql
   else
-    log "Reusing running MySQL on port ${mysql_port:-3306}"
+    log "Reusing running MySQL on ${mysql_host}:${mysql_port}"
   fi
 
   ensure_service eduagent-qdrant qdrant
   ensure_service eduagent-agentscope-redis redis
-  wait_tcp "MySQL" "${mysql_port:-3306}"
+  wait_tcp "MySQL" "${mysql_port}" "${mysql_host}"
   "$ROOT_DIR/deploy/ensure_default_admin.sh" "$INFRA_ENV" "$ROOT_DIR/backend/schema.sql"
   wait_http "Qdrant" "http://127.0.0.1:${qdrant_port:-6333}/collections"
   docker exec eduagent-agentscope-redis redis-cli ping | grep -qx PONG || fail "Redis PING failed"

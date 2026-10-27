@@ -70,6 +70,39 @@ def test_knowledge_ingestion_api_normal_flow_success() -> None:
         mock_ingest.assert_called_once()
 
 
+def test_knowledge_ingestion_api_with_material_id() -> None:
+    payload = {
+        "catalog_id": "c1",
+        "materials": [
+            {
+                "storage_uri": "local://python-intro.pdf",
+                "material_id": "cmat_test_123",
+            }
+        ],
+    }
+
+    with (
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.is_file", return_value=True),
+        patch(
+            "agent_service_v2.api.knowledge.ingest_course_material",
+            new_callable=AsyncMock,
+            return_value=15,
+        ) as mock_ingest,
+    ):
+        response = client.post("/agent/v2/knowledge/ingestions", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()["data"]
+        assert data["chunk_count"] == 15
+        assert data["materials"][0]["material_id"] == "cmat_test_123"
+        assert data["materials"][0]["status"] == "ingested"
+        assert data["materials"][0]["chunk_count"] == 15
+        assert data["materials"][0]["error"] is None
+        mock_ingest.assert_called_once()
+        assert mock_ingest.call_args.kwargs.get("material_id") == "cmat_test_123"
+
+
 def test_quiz_generation_api_success() -> None:
     payload = {
         "task_id": "task_123",

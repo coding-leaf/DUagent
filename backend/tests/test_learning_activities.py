@@ -15,9 +15,15 @@ os.environ["DATABASE_URL"] = os.environ.get(
 
 from app.api.deps import get_current_user
 from app.services.knowledge_progress import build_node_progress_rows as _build_node_progress_rows
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
+import pytest_asyncio
 
-asyncio.run(init_db())
+
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_schema():
+    await init_db()
+    yield
+    await engine.dispose()
 
 from app.main import app
 from app.models.catalog import CourseCatalog, CourseOffering

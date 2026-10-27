@@ -7,11 +7,12 @@ from datetime import datetime
 
 import pytest
 
-database_url = os.environ.get("TEST_DATABASE_URL")
-if not database_url or not database_url.startswith("mysql+aiomysql://"):
-    raise RuntimeError("TEST_DATABASE_URL must point to an isolated MySQL database")
+database_url = os.environ.get("TEST_DATABASE_URL", "")
+if not database_url.startswith("mysql+aiomysql://"):
+    pytest.skip("TEST_DATABASE_URL must point to an isolated MySQL database", allow_module_level=True)
 os.environ["DATABASE_URL"] = database_url
 
+import pytest_asyncio
 from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course, CourseEnrollment
 from app.models.others import LearningPath
@@ -19,12 +20,11 @@ from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
 from app.models.user import User
 
 
-async def _init_schema() -> None:
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_schema():
     await init_db()
+    yield
     await engine.dispose()
-
-
-asyncio.run(_init_schema())
 
 from app.services.class_insights_query import ClassInsightsQuery
 

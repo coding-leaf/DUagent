@@ -275,6 +275,67 @@ def test_ingest_course_material_blue_green_lifecycle() -> None:
         assert must_not_cond.match.value == version
 
 
+def test_ingest_course_material_with_custom_material_id() -> None:
+    settings = AgentModelSettings()
+
+    mock_parser = MagicMock()
+    mock_parser.parse = AsyncMock(
+        return_value=[
+            Section(
+                content=TextBlock(text="自定义教材测试正文。"),
+                source="custom.pdf",
+                metadata={"page": 1},
+            )
+        ]
+    )
+
+    mock_client = MagicMock()
+    mock_client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
+    mock_client.create_collection = AsyncMock()
+    mock_client.count = AsyncMock(return_value=MagicMock(count=1))
+    mock_client.set_payload = AsyncMock()
+    mock_client.delete = AsyncMock()
+
+    mock_store = MagicMock()
+    mock_store.get_client.return_value = mock_client
+
+    mock_kb = MagicMock()
+    mock_kb.vector_store = mock_store
+    mock_kb.insert_document = AsyncMock(return_value="doc_custom")
+
+    with (
+        patch("agent_service_v2.tools.rag.PDFParser", return_value=mock_parser),
+        patch("agent_service_v2.tools.rag.get_course_knowledge_base", return_value=mock_kb),
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.is_file", return_value=True),
+    ):
+        cnt = asyncio.run(
+            ingest_course_material(
+                file_path="/fake/custom.pdf",
+                course_id="catalog_200",
+                settings=settings,
+                material_id="cmat_unique_999",
+            )
+        )
+
+        assert cnt == 1
+        mock_kb.insert_document.assert_called_once()
+        inserted_chunks = mock_kb.insert_document.call_args.args[0]
+        meta = inserted_chunks[0].metadata
+        assert meta["material_id"] == "cmat_unique_999"
+        assert meta["filename"] == "custom.pdf"
+
+        # 校验 count filter 绑定的是 material_id
+        first_count_filter = mock_client.count.call_args_list[0].kwargs["count_filter"]
+        assert any(c.key == "chunk.metadata.material_id" and c.match.value == "cmat_unique_999" for c in first_count_filter.must)
+
+        # 校验 delete 淘汰旧版绑定的是 material_id
+        mock_client.delete.assert_called_once()
+        delete_filter = mock_client.delete.call_args.kwargs["points_selector"]
+        must_keys = {c.key: c.match.value for c in delete_filter.must}
+        assert must_keys["chunk.metadata.material_id"] == "cmat_unique_999"
+
+
 def test_ingest_course_material_rollback_on_failure() -> None:
     settings = AgentModelSettings()
 
@@ -695,6 +756,39 @@ def test_get_historical_fallback_collection_dimension_check() -> None:
         )
     )
     assert res_not_exists is None
+
+    # 维度相同但模型不兼容：严格拒绝回退返回 None
+    mock_client.collection_exists = AsyncMock(return_value=True)
+    mock_client.get_collection = AsyncMock(return_value=mock_info_match)
+    incompat_settings = AgentModelSettings(
+        QDRANT_COURSE_KNOWLEDGE_COLLECTION="course_knowledge_v1_1024",
+        EMBEDDING_DIMENSION=1024,
+        EMBEDDING_MODEL="incompatible-model-foo",
+    )
+    res_incompat = asyncio.run(
+        _get_historical_fallback_collection(
+            mock_client,
+            incompat_settings,
+            target_collection="course_knowledge_v1_1024_other",
+        )
+    )
+    assert res_incompat is None
+
+    # 显式白名单机制生效
+    whitelist_settings = AgentModelSettings(
+        QDRANT_COURSE_KNOWLEDGE_COLLECTION="course_knowledge_v1_1024",
+        EMBEDDING_DIMENSION=1024,
+        EMBEDDING_MODEL="incompatible-model-foo",
+        HISTORICAL_FALLBACK_COMPATIBLE_MODELS=["incompatible-model-foo"],
+    )
+    res_wl = asyncio.run(
+        _get_historical_fallback_collection(
+            mock_client,
+            whitelist_settings,
+            target_collection="course_knowledge_v1_1024_other",
+        )
+    )
+    assert res_wl == "course_knowledge_v1_1024"
 
     # Client 为 None：返回 None
     assert asyncio.run(_get_historical_fallback_collection(None, settings, "target")) is None

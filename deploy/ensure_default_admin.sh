@@ -15,18 +15,44 @@ env_value() {
   local key="$1"
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE"
 }
+[[ -f "$ENV_FILE" ]] || fail "环境配置不存在：$ENV_FILE"
+[[ -f "$SCHEMA_FILE" ]] || fail "数据库结构文件不存在：$SCHEMA_FILE"
+db_host="$(env_value DB_HOST)"
+db_host="${db_host:-127.0.0.1}"
+db_port="$(env_value DB_PORT)"
+db_port="${db_port:-3306}"
+db_user="$(env_value DB_USER)"
+db_user="${db_user:-root}"
+db_password="$(env_value DB_PASSWORD)"
+db_name="$(env_value DB_NAME)"
+db_name="${db_name:-duagent}"
+[[ -n "$db_password" && "$db_password" != replace-* ]] || fail "请先配置 DB_PASSWORD"
+[[ "$db_name" =~ ^[A-Za-z0-9_]+$ ]] || fail "DB_NAME 只能包含字母、数字和下划线"
+
 mysql_query() {
-  if docker ps --format '{{.Names}}' | grep -qx 'eduagent-mysql'; then
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'eduagent-mysql'; then
     docker exec -e MYSQL_PWD="$db_password" eduagent-mysql \
-      mysql -N -B -uroot "$db_name" -e "$1"
+      mysql -N -B -u"$db_user" "$db_name" -e "$1"
   elif command -v mysql >/dev/null 2>&1; then
-    MYSQL_PWD="$db_password" mysql -h 127.0.0.1 -P 3306 -N -B -uroot "$db_name" -e "$1"
+    MYSQL_PWD="$db_password" mysql -h "$db_host" -P "$db_port" -N -B -u"$db_user" "$db_name" -e "$1"
   else
     local py_bin="python3"
-    [[ -x "$ROOT_DIR/.venv/bin/python" ]] && py_bin="$ROOT_DIR/.venv/bin/python"
+    if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+      py_bin="$ROOT_DIR/.venv/bin/python"
+    elif [[ -x "$ROOT_DIR/backend/.venv/bin/python" ]]; then
+      py_bin="$ROOT_DIR/backend/.venv/bin/python"
+    fi
+    DB_HOST="$db_host" DB_PORT="$db_port" DB_USER="$db_user" DB_PASSWORD="$db_password" DB_NAME="$db_name" \
     "$py_bin" -c "
-import pymysql, sys
-conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='$db_password', database='$db_name')
+import os, sys, pymysql
+
+host = os.environ.get('DB_HOST', '127.0.0.1')
+port = int(os.environ.get('DB_PORT', '3306'))
+user = os.environ.get('DB_USER', 'root')
+password = os.environ.get('DB_PASSWORD', '')
+database = os.environ.get('DB_NAME', 'duagent')
+
+conn = pymysql.connect(host=host, port=port, user=user, password=password, database=database)
 with conn.cursor() as cur:
     cur.execute(sys.argv[1])
     for row in cur.fetchall():
@@ -37,20 +63,58 @@ conn.close()
   fi
 }
 
-[[ -f "$ENV_FILE" ]] || fail "环境配置不存在：$ENV_FILE"
-[[ -f "$SCHEMA_FILE" ]] || fail "数据库结构文件不存在：$SCHEMA_FILE"
-db_password="$(env_value DB_PASSWORD)"
-db_name="$(env_value DB_NAME)"
-db_name="${db_name:-duagent}"
-[[ -n "$db_password" && "$db_password" != replace-* ]] || fail "请先配置 DB_PASSWORD"
-[[ "$db_name" =~ ^[A-Za-z0-9_]+$ ]] || fail "DB_NAME 只能包含字母、数字和下划线"
+init_schema() {
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'eduagent-mysql'; then
+    docker exec -e MYSQL_PWD="$db_password" -i eduagent-mysql \
+      mysql -u"$db_user" "$db_name" <"$SCHEMA_FILE"
+  elif command -v mysql >/dev/null 2>&1; then
+    MYSQL_PWD="$db_password" mysql -h "$db_host" -P "$db_port" -u"$db_user" "$db_name" <"$SCHEMA_FILE"
+  else
+    local py_bin="python3"
+    if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+      py_bin="$ROOT_DIR/.venv/bin/python"
+    elif [[ -x "$ROOT_DIR/backend/.venv/bin/python" ]]; then
+      py_bin="$ROOT_DIR/backend/.venv/bin/python"
+    fi
+    DB_HOST="$db_host" DB_PORT="$db_port" DB_USER="$db_user" DB_PASSWORD="$db_password" DB_NAME="$db_name" \
+    SCHEMA_FILE="$SCHEMA_FILE" \
+    "$py_bin" -c "
+import os, sys, pymysql
+
+host = os.environ.get('DB_HOST', '127.0.0.1')
+port = int(os.environ.get('DB_PORT', '3306'))
+user = os.environ.get('DB_USER', 'root')
+password = os.environ.get('DB_PASSWORD', '')
+database = os.environ.get('DB_NAME', 'duagent')
+schema_path = os.environ['SCHEMA_FILE']
+
+with open(schema_path, 'r', encoding='utf-8') as f:
+    sql = f.read()
+
+conn = pymysql.connect(
+    host=host,
+    port=port,
+    user=user,
+    password=password,
+    database=database,
+    client_flag=pymysql.constants.CLIENT.MULTI_STATEMENTS,
+)
+with conn.cursor() as cur:
+    for statement in sql.split(';'):
+        stmt = statement.strip()
+        if stmt:
+            cur.execute(stmt)
+conn.commit()
+conn.close()
+"
+  fi
+}
 
 users_table_exists="$(mysql_query \
   "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='users';")"
 if [[ "$users_table_exists" != "1" ]]; then
   log "数据库结构缺失，正在初始化"
-  docker exec -e MYSQL_PWD="$db_password" -i eduagent-mysql \
-    mysql -uroot "$db_name" <"$SCHEMA_FILE"
+  init_schema
 fi
 
 active_admin_count="$(mysql_query \

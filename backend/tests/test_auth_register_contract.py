@@ -100,7 +100,9 @@ async def test_register_saves_profile_fields_and_reuses_registration_code():
 
 
 @pytest.mark.asyncio
-async def test_register_accepts_builtin_teacher_code_without_db_seed():
+async def test_register_accepts_builtin_teacher_code_without_db_seed(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "DEBUG", True)
     await init_db()
     suffix = uuid.uuid4().hex[:8]
 

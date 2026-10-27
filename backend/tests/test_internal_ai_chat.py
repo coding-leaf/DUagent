@@ -3,6 +3,7 @@ import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,17 +13,17 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_internal_ai_chat.db",
 )
 
-from app.db.session import init_db
+from app.db.session import engine, init_db
 from app.main import app
 from app.schemas.internal_ai_chat import PersonalPracticePrepareRequest
 from app.schemas.internal_ai_chat import DialogueProfileUpdateRequest
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _init_db():
-    import asyncio
-
-    asyncio.run(init_db())
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def _init_db():
+    await init_db()
+    yield
+    await engine.dispose()
 
 
 @pytest.mark.asyncio

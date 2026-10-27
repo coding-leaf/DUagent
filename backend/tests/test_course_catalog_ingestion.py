@@ -676,6 +676,9 @@ async def _api_test_start_catalog_ingestion_success(tmp_path, monkeypatch):
                     mock_agent.await_args.args[0]
                     == "/agent/v2/knowledge/ingestions"
                 )
+                sent_payload = mock_agent.await_args.args[1]
+                assert sent_payload["catalog_id"] == catalog_id
+                assert sent_payload["materials"][0]["material_id"] == material_id
                 task_id = response.json()["data"]["task_id"]
 
             task_data = await _wait_for_task_status(client, admin_headers, task_id, {"completed"})

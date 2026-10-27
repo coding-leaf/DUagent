@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import math
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from agentscope.embedding._embedding_base import EmbeddingResponse
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
@@ -19,6 +22,43 @@ from agent_service_v2.tools.rag import (
     ingest_course_material,
     retrieve_course_context,
 )
+
+
+class DeterministicTestEmbeddingModel:
+    """确定性本地测试 Embedding 实现，输出固定 1024 维归一化向量，彻底摆脱对外部付费 API 的依赖。"""
+
+    supports_multimodal: bool = False
+
+    def __init__(self, dimension: int = 1024):
+        self.dimension = dimension
+
+    def _embed_text(self, text: str) -> list[float]:
+        h = hashlib.sha256(text.encode("utf-8")).digest()
+        vec = []
+        for i in range(self.dimension):
+            b = h[i % len(h)]
+            val = ((b + i * 31) % 256) / 255.0 - 0.5
+            vec.append(val)
+        norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+        return [x / norm for x in vec]
+
+    async def __call__(self, inputs: list, **kwargs) -> EmbeddingResponse:
+        embeddings = []
+        for item in inputs:
+            text = item.text if hasattr(item, "text") else str(item)
+            embeddings.append(self._embed_text(text))
+        return EmbeddingResponse(embeddings=embeddings)
+
+
+@pytest.fixture(autouse=True)
+def deterministic_embedding_env(monkeypatch):
+    """为集成测试注入确定性的本地测试 Embedding 模型实现，无需任何外部 API Key。"""
+    dummy_model = DeterministicTestEmbeddingModel(1024)
+    monkeypatch.setattr(
+        "agent_service_v2.tools.rag.build_embedding_model_from_settings",
+        lambda settings=None: dummy_model,
+    )
+    return dummy_model
 
 
 def _is_qdrant_running(url: str = "http://127.0.0.1:6333") -> bool:
@@ -283,7 +323,7 @@ def test_real_qdrant_retrieval_strictly_excludes_unactivated_chunks(
     if not asyncio.run(client.collection_exists(coll_name)):
         asyncio.run(client.create_collection(coll_name, vectors_config=VectorParams(size=real_settings.EMBEDDING_DIMENSION, distance=Distance.COSINE)))
 
-    dummy_vector = [0.01] * real_settings.EMBEDDING_DIMENSION
+    dummy_vector = DeterministicTestEmbeddingModel(real_settings.EMBEDDING_DIMENSION)._embed_text("考试答案")
     unactivated_id = str(uuid.uuid4())
 
     # 插入一条明确 is_active=False 的临时点位
@@ -378,7 +418,7 @@ def test_real_qdrant_historical_collection_fallback_query(
         )
     )
 
-    dummy_vector = [0.02] * real_settings.EMBEDDING_DIMENSION
+    dummy_vector = DeterministicTestEmbeddingModel(real_settings.EMBEDDING_DIMENSION)._embed_text("重要资料")
     asyncio.run(
         client.upsert(
             legacy_coll_name,
@@ -436,4 +476,140 @@ def test_real_qdrant_historical_collection_fallback_query(
         asyncio.run(client.delete_collection(legacy_coll_name))
         asyncio.run(client.delete_collection(derived_name))
     finally:
+        asyncio.run(client.close())
+
+
+def test_real_qdrant_same_filename_different_material_id_isolation(
+    real_settings: AgentModelSettings,
+    tmp_path: Path,
+) -> None:
+    """6. 同一 Catalog 下同名但 material_id 不同的教材物理隔离测试：
+
+    同一 Catalog 下入库两份物理文件名相同但 material_id 不同的教材，
+    两份教材的切片互不影响，各自更新时不误删另一份教材的向量。
+    """
+    course_id = f"course_same_name_{uuid.uuid4().hex[:6]}"
+
+    dir_a = tmp_path / "mat_a"
+    dir_b = tmp_path / "mat_b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+
+    file_a = dir_a / "textbook.txt"
+    file_b = dir_b / "textbook.txt"
+    file_a.write_text("第一章 微积分 极限理论与导数计算。", encoding="utf-8")
+    file_b.write_text("第一章 线性代数 矩阵行列式与秩计算。", encoding="utf-8")
+
+    mat_id_a = "cmat_001_aaa"
+    mat_id_b = "cmat_002_bbb"
+
+    cnt_a = asyncio.run(
+        ingest_course_material(file_a, course_id, real_settings, material_id=mat_id_a)
+    )
+    cnt_b = asyncio.run(
+        ingest_course_material(file_b, course_id, real_settings, material_id=mat_id_b)
+    )
+    assert cnt_a >= 1
+    assert cnt_b >= 1
+
+    coll_name = get_course_knowledge_collection_name(real_settings)
+    client = AsyncQdrantClient(url=real_settings.QDRANT_URL, check_compatibility=False)
+
+    filter_a = Filter(
+        must=[
+            FieldCondition(key="chunk.metadata.course_id", match=MatchValue(value=course_id)),
+            FieldCondition(key="chunk.metadata.material_id", match=MatchValue(value=mat_id_a)),
+            FieldCondition(key="chunk.metadata.is_active", match=MatchValue(value=True)),
+        ]
+    )
+    filter_b = Filter(
+        must=[
+            FieldCondition(key="chunk.metadata.course_id", match=MatchValue(value=course_id)),
+            FieldCondition(key="chunk.metadata.material_id", match=MatchValue(value=mat_id_b)),
+            FieldCondition(key="chunk.metadata.is_active", match=MatchValue(value=True)),
+        ]
+    )
+
+    res_a = asyncio.run(client.count(coll_name, count_filter=filter_a))
+    res_b = asyncio.run(client.count(coll_name, count_filter=filter_b))
+    assert res_a.count == cnt_a
+    assert res_b.count == cnt_b
+
+    # 更新教材 A 新版本
+    file_a.write_text("第一章 微积分修订版 多元微积分与偏导数计算。", encoding="utf-8")
+    cnt_a_new = asyncio.run(
+        ingest_course_material(file_a, course_id, real_settings, material_id=mat_id_a)
+    )
+    assert cnt_a_new >= 1
+
+    try:
+        # 教材 A 点位数更新为新版本切片数
+        res_a_after = asyncio.run(client.count(coll_name, count_filter=filter_a))
+        assert res_a_after.count == cnt_a_new
+
+        # 教材 B 点位数保持完好，毫发无损！
+        res_b_after = asyncio.run(client.count(coll_name, count_filter=filter_b))
+        assert res_b_after.count == cnt_b
+    finally:
+        asyncio.run(client.close())
+
+
+def test_historical_collection_rejects_incompatible_model_even_same_dimension(
+    real_settings: AgentModelSettings,
+) -> None:
+    """7. 历史 Collection 回退逻辑在维度相同但模型不同时严格拒绝回退。"""
+    from agent_service_v2.tools.rag import _get_historical_fallback_collection
+
+    legacy_coll_name = f"course_knowledge_v1_{uuid.uuid4().hex[:6]}"
+    client = AsyncQdrantClient(url=real_settings.QDRANT_URL, check_compatibility=False)
+
+    # 创建 1024 维历史集合
+    asyncio.run(
+        client.create_collection(
+            legacy_coll_name,
+            vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+        )
+    )
+
+    try:
+        # 1. 维度同为 1024，但模型不兼容（如 custom-1024 / bge-m3），拒绝回退返回 None
+        incompatible_settings = AgentModelSettings(
+            QDRANT_URL=real_settings.QDRANT_URL,
+            QDRANT_COURSE_KNOWLEDGE_COLLECTION=legacy_coll_name,
+            EMBEDDING_MODEL="custom-incompatible-model-1024",
+            EMBEDDING_DIMENSION=1024,
+        )
+        target_name = get_course_knowledge_collection_name(incompatible_settings)
+        fallback = asyncio.run(
+            _get_historical_fallback_collection(client, incompatible_settings, target_name)
+        )
+        assert fallback is None, "Incompatible model must be rejected from historical fallback"
+
+        # 2. 模型为兼容 baseline 模型（BAAI/bge-large-zh-v1.5），允许回退
+        compatible_settings = AgentModelSettings(
+            QDRANT_URL=real_settings.QDRANT_URL,
+            QDRANT_COURSE_KNOWLEDGE_COLLECTION=legacy_coll_name,
+            EMBEDDING_MODEL="BAAI/bge-large-zh-v1.5",
+            EMBEDDING_DIMENSION=1024,
+        )
+        comp_target_name = get_course_knowledge_collection_name(compatible_settings)
+        fallback_ok = asyncio.run(
+            _get_historical_fallback_collection(client, compatible_settings, comp_target_name)
+        )
+        assert fallback_ok == legacy_coll_name
+
+        # 3. 显式白名单机制生效
+        whitelist_settings = AgentModelSettings(
+            QDRANT_URL=real_settings.QDRANT_URL,
+            QDRANT_COURSE_KNOWLEDGE_COLLECTION=legacy_coll_name,
+            EMBEDDING_MODEL="custom-incompatible-model-1024",
+            EMBEDDING_DIMENSION=1024,
+            HISTORICAL_FALLBACK_COMPATIBLE_MODELS=["custom-incompatible-model-1024"],
+        )
+        fallback_wl = asyncio.run(
+            _get_historical_fallback_collection(client, whitelist_settings, target_name)
+        )
+        assert fallback_wl == legacy_coll_name
+    finally:
+        asyncio.run(client.delete_collection(legacy_coll_name))
         asyncio.run(client.close())

@@ -24,14 +24,19 @@ if os.path.exists(db_file):
 
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_agent_v1.db"
 
-from app.db.session import init_db, async_session_factory
-
-asyncio.run(init_db())
-
+from app.db.session import init_db, async_session_factory, engine
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.services.agent_client import AgentClient, AgentServiceError, agent_client
+
+
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_schema():
+    await init_db()
+    yield
+    await engine.dispose()
 
 
 class TestAgentClient:

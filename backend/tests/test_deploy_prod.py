@@ -6,6 +6,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT_DIR / "deploy_prod.sh"
 JUDGE0_COMPOSE = ROOT_DIR / "deploy" / "judge0" / "docker-compose.yml"
 DEV_SCRIPT = ROOT_DIR / "start_all.sh"
+ENSURE_ADMIN_SCRIPT = ROOT_DIR / "deploy" / "ensure_default_admin.sh"
 
 
 def _bash(script: Path, *args: str, check_syntax: bool = False) -> subprocess.CompletedProcess:
@@ -26,6 +27,7 @@ def _bash(script: Path, *args: str, check_syntax: bool = False) -> subprocess.Co
         cwd=str(script.parent),
         capture_output=True,
         text=True,
+        errors="replace",
         check=False,
     )
 
@@ -108,3 +110,18 @@ def test_backend_kg_generation_never_calls_an_llm_directly():
     assert "LLM_API_KEY" not in service
     assert '"/chat/completions"' not in service
     assert "generate_outline_kg_from_agent" in service
+
+
+def test_ensure_default_admin_script_syntax_and_security():
+    syntax = _bash(ENSURE_ADMIN_SCRIPT, check_syntax=True)
+    assert syntax.returncode == 0, syntax.stderr
+
+    content = ENSURE_ADMIN_SCRIPT.read_text(encoding="utf-8")
+    assert 'db_host="$(env_value DB_HOST)"' in content
+    assert 'db_port="$(env_value DB_PORT)"' in content
+    assert 'db_user="$(env_value DB_USER)"' in content
+    assert "init_schema" in content
+    # Ensure password is NOT templated into python string literal
+    assert "password='$db_password'" not in content
+    assert 'password = os.environ.get(\'DB_PASSWORD\'' in content
+

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import pytest_asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,7 +13,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "sqlite+aiosqlite:///./test_ai_chat_learning_context.db",
 )
 
-from app.db.session import async_session_factory, init_db
+from app.db.session import async_session_factory, engine, init_db
 from app.models.course import Course
 from app.models.others import CourseKnowledgeGraph, LearningActivity
 from app.models.quiz import QuizAnswer, QuizQuestion, QuizSession
@@ -25,11 +26,11 @@ from app.services.ai_chat_learning_context import (
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _init_db():
-    import asyncio
-
-    asyncio.run(init_db())
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def _init_db():
+    await init_db()
+    yield
+    await engine.dispose()
 
 
 async def _seed_context():

@@ -71,6 +71,7 @@ class ResourceWorkerAgent:
         if course_id and knowledge_point:
             try:
                 from agent_service_v2.tools.rag import retrieve_course_context
+
                 rag_res = await retrieve_course_context(
                     query=knowledge_point,
                     course_id=course_id,
@@ -112,10 +113,7 @@ class ResourceWorkerAgent:
                     personalization_prompt += f"Cognitive Blindspots: {profile_data.get('blindspots')}\n"
                 wrong_pts = personalization_context.get("wrong_points")
                 if wrong_pts:
-                    wrong_pts_str = ", ".join(
-                        pt.get("name") if isinstance(pt, dict) else str(pt)
-                        for pt in wrong_pts
-                    )
+                    wrong_pts_str = ", ".join(pt.get("name") if isinstance(pt, dict) else str(pt) for pt in wrong_pts)
                     personalization_prompt += f"Recent Wrong Topics: {wrong_pts_str}\n"
                 curr_node = personalization_context.get("current_path_node")
                 if curr_node:
@@ -185,23 +183,31 @@ Language & Technology Requirements:
 1. ALL descriptive textual fields (including: "title", "content", options' "text", "explanation", "description") MUST be generated in Simplified Chinese (简体中文).
 2. Do not generate programming challenges, free-response questions, starter code or test cases in the ordinary quiz flow.
 """
-        elif resource_type == "document":
-            prompt = f"""You are a lecturer for {resolved_title or "the course under study"}.
-Please generate an HTML-based interactive presentation slide deck (rich tutorial notes) for:
+        elif resource_type in {"document", "personal_lesson"}:
+            prompt = f"""You are a senior lecturer for {resolved_title or "the course under study"}.
+Please generate a comprehensive, structured Markdown lecture tutorial (rich teaching notes) for:
 Chapter: {chapter or "General"}
 Topic: {knowledge_point or "General"}
 
 {course_info}
 {course_reference_section}
-Include code block examples (when the subject is technical) and thorough explanations. All examples, structural analysis, and concepts must stay inside the subject of this course; never default to an unrelated language or discipline.
+Structure the notes pedagogically:
+1. Core Concepts & Theoretical Intuition
+2. Key Mechanisms & Syntax Comparisons (use Markdown tables)
+3. Concrete, runnable code examples (when technical) with line-by-line explanations
+4. Common Pitfalls & Anti-patterns analysis
+5. Student Self-check Summary & Checklist
+
+All code examples, structural analysis, and concepts must stay inside the subject of this course; never default to an unrelated language or discipline.
 Output format MUST be a strict JSON:
 {{
-  "title": "Presentation Title in Simplified Chinese",
-  "html_content": "<div class='slide'><h1>{knowledge_point or "General"}</h1><p>...</p></div>"
+  "title": "Lecture Title in Simplified Chinese",
+  "markdown_content": "# {knowledge_point or "General"}\\n\\n## 1. 核心概念与原理\\n..."
 }}
 
-Language Requirements:
-1. "title" and the inner HTML content in "html_content" (including slide headers, explanations, paragraph texts) MUST be fully generated in Simplified Chinese (简体中文).
+Language & Format Requirements:
+1. "title" and the inner Markdown tutorial "markdown_content" (including headers, explanations, tables, code blocks) MUST be fully generated in Simplified Chinese (简体中文).
+2. Use standard Markdown formatting only. Absolutely DO NOT generate HTML slides, <script>, or inline DOM event handlers.
 """
         elif resource_type == "mindmap":
             prompt = f"""You are a knowledge-mapping assistant for {resolved_title or "the course under study"}.
@@ -275,8 +281,7 @@ Language Requirements:
                         # Convert flat string options ["Opt A", "Opt B", ...] to standard dict structure
                         keys = ["A", "B", "C", "D", "E", "F"]
                         q["options"] = [
-                            {"key": keys[idx], "text": text}
-                            for idx, text in enumerate(raw_options[:len(keys)])
+                            {"key": keys[idx], "text": text} for idx, text in enumerate(raw_options[: len(keys)])
                         ]
 
         return data
@@ -339,8 +344,7 @@ class CurriculumLeaderAgent(Agent):
         if not self._dispatched and self.assigned_types:
             self._dispatched = True
             delta_msg = (
-                f"正在为目标规划并分派 {len(self.assigned_types)} 份专家资源生成任务："
-                f"{', '.join(self.assigned_types)}"
+                f"正在为目标规划并分派 {len(self.assigned_types)} 份专家资源生成任务：{', '.join(self.assigned_types)}"
             )
             yield ThinkingBlockDeltaEvent(
                 reply_id=reply_id,
@@ -365,9 +369,10 @@ class CurriculumLeaderAgent(Agent):
                             "resource_type": r_type,
                             "goal": getattr(self.request, "goal", "") if self.request else "",
                             "knowledge_point": (
-                                getattr(self.request, "knowledge_point", "")
-                                or getattr(self.request, "goal", "")
-                            ) if self.request else "",
+                                getattr(self.request, "knowledge_point", "") or getattr(self.request, "goal", "")
+                            )
+                            if self.request
+                            else "",
                             "chapter": getattr(self.request, "chapter", "") if self.request else "",
                             "course_id": getattr(self.request, "course_id", "") if self.request else "",
                         },
@@ -441,8 +446,7 @@ class BaseResourceWorkerAgent(Agent):
         super().__init__(
             name=name,
             system_prompt=(
-                f"You are {name}, a specialist domain agent for {self.resource_type} resources. "
-                f"{self.description}"
+                f"You are {name}, a specialist domain agent for {self.resource_type} resources. {self.description}"
             ),
             model=resolved_model,
             toolkit=tk,
@@ -493,10 +497,10 @@ class BaseResourceWorkerAgent(Agent):
 
 
 class LessonWorkerAgent(BaseResourceWorkerAgent):
-    """Worker Agent specialized in interactive presentation slides and courseware."""
+    """Worker Agent specialized in structured lecture tutorials and courseware."""
 
     resource_type = "personal_lesson"
-    description = "课件与精讲专家：负责基于课程教材与知识点生成结构化、互动式课件讲义（HTML/Markdown）"
+    description = "课件与精讲专家：负责基于课程教材与知识点生成结构化专业讲义教程（Markdown）"
 
     def __init__(
         self,
@@ -607,4 +611,3 @@ __all__ = [
     "ReadingWorkerAgent",
     "run_leader_team_kg_generation",
 ]
-

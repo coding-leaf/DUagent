@@ -5,7 +5,9 @@ import { useCourse } from '../context/CourseContext';
 import Icon from '../components/Icon';
 import MarkdownViewer from '../components/common/MarkdownViewer';
 
-const TYPE_LABELS = {
+// eslint-disable-next-line react-refresh/only-export-components
+export const TYPE_LABELS = {
+  personal_lesson: '专业课程讲解',
   lesson: '标准讲义',
   diagram: '知识图解',
   example: '代码示例',
@@ -15,6 +17,34 @@ const TYPE_LABELS = {
   mindmap: '思维导图',
   video: '视频',
 };
+
+// eslint-disable-next-line react-refresh/only-export-components, no-unused-vars
+export function sanitizeResourceContent(content, type) {
+  if (!content || typeof content !== 'string') return '';
+
+  // 仅对包含 HTML slide/deck 结构的遗留内容执行清洗平铺
+  if (/<(?:div|section)[^>]+(?:class=['"][^'"]*slide|id=['"]deck)/i.test(content)) {
+    let cleaned = content;
+    // 1. 移除 script 标签及其中内容（含未闭合的悬空 script 标签）
+    cleaned = cleaned.replace(/<script\b[\s\S]*?(?:<\/script>|$)/gi, '');
+    // 2. 移除 nav 翻页栏及上一页/下一页死按钮
+    cleaned = cleaned.replace(/<div\b[^>]*id=['"][^'"]*nav[^'"]*['"][^>]*>[\s\S]*?<\/div>/gi, '');
+    cleaned = cleaned.replace(/<div\b[^>]*class=['"][^'"]*nav(?:igation)?['"][^>]*>[\s\S]*?<\/div>/gi, '');
+    cleaned = cleaned.replace(/<button\b[^>]*>[\s\S]*?(?:上一页|下一页|Prev(?:ious)?|Next)[\s\S]*?<\/button>/gi, '');
+    cleaned = cleaned.replace(/<a\b[^>]*>[\s\S]*?(?:上一页|下一页|Prev(?:ious)?|Next)[\s\S]*?<\/a>/gi, '');
+    // 3. 移除 body / html 级别的污染样式，保留其他局部样式
+    cleaned = cleaned.replace(/(?:html\s*,\s*)?body(?:\s*,\s*html)?\s*\{[^}]*\}/gi, '');
+    // 4. 解除 .slide 的 display:none 隐藏属性，改为块级平铺并增加间距
+    cleaned = cleaned.replace(/\.slide\s*\{[^}]*\}/gi, '.slide { display: block !important; margin-bottom: 2rem; }');
+    // 5. 如果没有自带 .slide 样式覆盖，注入一个微型覆盖样式确保所有 slide 均可见
+    if (!cleaned.includes('.slide { display: block')) {
+      cleaned = `<style>.slide { display: block !important; margin-bottom: 2rem; }</style>\n` + cleaned;
+    }
+    return cleaned;
+  }
+
+  return content;
+}
 
 const getDisplayContent = (resource) => {
   if (!resource) return '';
@@ -70,7 +100,8 @@ export default function ResourceDetail() {
   // 清洗展示标签
   const displayTags = (resource.tags || []).map(formatTag).filter(Boolean);
 
-  let finalContent = getDisplayContent(resource) || '';
+  let rawContent = getDisplayContent(resource) || '';
+  let finalContent = sanitizeResourceContent(rawContent, resource.type);
   if (['diagram', 'mindmap'].includes(resource.type) && !/^```/m.test(finalContent)) {
     finalContent = `\`\`\`mermaid\n${finalContent}\n\`\`\``;
   } else if (['example', 'code'].includes(resource.type) && !finalContent.includes('```') && !/^#+\s/m.test(finalContent)) {

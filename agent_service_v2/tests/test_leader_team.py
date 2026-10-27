@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from agentscope.message import Msg
-from agentscope.message import TextBlock
+from agentscope.message import Msg, TextBlock
 from agentscope.model import ChatResponse
 
 from agent_service_v2.agents.leader_team import (
@@ -26,18 +25,14 @@ async def _streamed_response(text: str):
 
 def test_course_planner_awaits_agentscope_chat_model() -> None:
     mock_model = AsyncMock(
-        return_value=_streamed_response(
-            '{"nodes":[{"id":"pointer","name":"指针","chapter":"第 5 章"}],"edges":[]}'
-        ),
+        return_value=_streamed_response('{"nodes":[{"id":"pointer","name":"指针","chapter":"第 5 章"}],"edges":[]}'),
     )
 
     with patch(
         "agent_service_v2.agents.leader_team.build_chat_model_from_settings",
         return_value=mock_model,
     ) as mock_build_model:
-        result = asyncio.run(
-            CoursePlannerAgent(AgentModelSettings()).plan_curriculum("指针保存变量地址。")
-        )
+        result = asyncio.run(CoursePlannerAgent(AgentModelSettings()).plan_curriculum("指针保存变量地址。"))
 
     assert mock_build_model.call_args.kwargs["stream"] is False
     assert result["nodes"][0]["id"] == "pointer"
@@ -79,6 +74,65 @@ def test_resource_worker_awaits_agentscope_chat_model() -> None:
     assert isinstance(messages[0], Msg)
     assert messages[0].role == "user"
     assert "指针" in messages[0].content[0].text
+
+
+def test_resource_worker_generates_markdown_document() -> None:
+    mock_model = AsyncMock(
+        return_value=_streamed_response(
+            '{"title":"深入理解指针","markdown_content":"# 指针基础\\n\\n## 1. 核心概念与原理\\n指针是内存地址的抽象。"}'
+        ),
+    )
+
+    with patch(
+        "agent_service_v2.agents.leader_team.build_chat_model_from_settings",
+        return_value=mock_model,
+    ) as mock_build_model:
+        result = asyncio.run(
+            ResourceWorkerAgent(AgentModelSettings()).generate_asset(
+                "document",
+                "第 5 章",
+                "指针基础",
+                course_title="C语言程序设计",
+            )
+        )
+
+    assert mock_build_model.call_args.kwargs["stream"] is False
+    assert result["title"] == "深入理解指针"
+    assert "markdown_content" in result
+    assert "指针是内存地址的抽象。" in result["markdown_content"]
+    mock_model.assert_awaited_once()
+    messages = mock_model.await_args.args[0]
+    prompt_text = messages[0].content[0].text
+    assert "Markdown lecture tutorial" in prompt_text
+    assert "DO NOT generate HTML slides, <script>" in prompt_text
+
+
+def test_resource_worker_accepts_personal_lesson_resource_type() -> None:
+    mock_model = AsyncMock(
+        return_value=_streamed_response(
+            '{"title":"个性化讲义","markdown_content":"# 知识要点\\n\\n## 1. 深度剖析"}'
+        ),
+    )
+
+    with patch(
+        "agent_service_v2.agents.leader_team.build_chat_model_from_settings",
+        return_value=mock_model,
+    ):
+        result = asyncio.run(
+            ResourceWorkerAgent(AgentModelSettings()).generate_asset(
+                "personal_lesson",
+                "第 3 章",
+                "递归与栈",
+                course_title="数据结构",
+            )
+        )
+
+    assert result["title"] == "个性化讲义"
+    assert result["markdown_content"] == "# 知识要点\n\n## 1. 深度剖析"
+    messages = mock_model.await_args.args[0]
+    prompt_text = messages[0].content[0].text
+    assert "Markdown lecture tutorial" in prompt_text
+
 
 
 def test_leader_team_member_agent_types_and_descriptions() -> None:
@@ -123,4 +177,3 @@ def test_curriculum_leader_and_member_agents_pipeline_dispatch() -> None:
 
     asyncio.run(run_pipeline())
     assert len(events) >= 2
-

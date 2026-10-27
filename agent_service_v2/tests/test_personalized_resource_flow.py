@@ -3,12 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_service_v2.schemas.personalized_resources import (
-    PersonalizedResourceGenerationRequest,
-)
 from agent_service_v2.generators import personalized_resource_flow as flow
 from agent_service_v2.generators.personalized_resource_flow import (
     PersonalizedResourceGenerationRunner,
@@ -16,6 +14,9 @@ from agent_service_v2.generators.personalized_resource_flow import (
     resolve_resource_types,
 )
 from agent_service_v2.runtime.edu_events import EduEventType
+from agent_service_v2.schemas.personalized_resources import (
+    PersonalizedResourceGenerationRequest,
+)
 
 
 class FakeBackendClient:
@@ -141,11 +142,7 @@ def test_runner_drafts_validates_reviews_and_publishes_without_loopback():
     assert types[0] is EduEventType.WORKFLOW_STARTED
     assert types[-1] is EduEventType.WORKFLOW_COMPLETED
     assert EduEventType.THOUGHT in types
-    started_tools = [
-        payload["tool_name"]
-        for event_type, payload in events
-        if event_type is EduEventType.TOOL_STARTED
-    ]
+    started_tools = [payload["tool_name"] for event_type, payload in events if event_type is EduEventType.TOOL_STARTED]
     assert started_tools == [
         "create_personalized_resource_draft",
         "record_personalized_validation",
@@ -153,9 +150,7 @@ def test_runner_drafts_validates_reviews_and_publishes_without_loopback():
         "publish_personalized_resource",
     ]
     completed_tools = [
-        payload["tool_name"]
-        for event_type, payload in events
-        if event_type is EduEventType.TOOL_COMPLETED
+        payload["tool_name"] for event_type, payload in events if event_type is EduEventType.TOOL_COMPLETED
     ]
     assert completed_tools == started_tools
 
@@ -178,10 +173,7 @@ def test_runner_retries_once_when_deterministic_validation_fails():
         "/internal/personalized-resources/g2/review",
         "/internal/personalized-resources/g2/publish",
     ]
-    assert any(
-        event_type is EduEventType.THOUGHT and "返修" in payload["delta"]
-        for event_type, payload in events
-    )
+    assert any(event_type is EduEventType.THOUGHT and "返修" in payload["delta"] for event_type, payload in events)
 
 
 def test_runner_reports_workflow_failed_after_exhausting_retries():
@@ -194,9 +186,7 @@ def test_runner_reports_workflow_failed_after_exhausting_retries():
     assert result == {"status": "failed", "reason": "not_published"}
     assert events[-1][0] is EduEventType.WORKFLOW_FAILED
     assert events[-1][1]["reason"] == "validation_failed"
-    assert not any(
-        event_type is EduEventType.WORKFLOW_COMPLETED for event_type, _ in events
-    )
+    assert not any(event_type is EduEventType.WORKFLOW_COMPLETED for event_type, _ in events)
 
 
 def test_runner_reports_lifecycle_tool_results_as_successful():
@@ -213,10 +203,7 @@ def test_runner_reports_lifecycle_tool_results_as_successful():
 
     _, events = _run(runner, _request())
 
-    completed = [
-        payload for event_type, payload in events
-        if event_type is EduEventType.TOOL_COMPLETED
-    ]
+    completed = [payload for event_type, payload in events if event_type is EduEventType.TOOL_COMPLETED]
     assert [item["status"] for item in completed] == [
         "drafted",
         "validated",
@@ -254,8 +241,7 @@ def test_runner_never_raises_when_a_tool_fails():
     assert result == {"status": "failed", "reason": "not_published"}
     assert events[-1][0] is EduEventType.WORKFLOW_FAILED
     assert any(
-        event_type is EduEventType.TOOL_COMPLETED and payload["outcome"] == "failure"
-        for event_type, payload in events
+        event_type is EduEventType.TOOL_COMPLETED and payload["outcome"] == "failure" for event_type, payload in events
     )
 
 
@@ -265,9 +251,7 @@ def test_preflight_rejects_missing_model_or_backend(monkeypatch):
         PersonalizedResourceGenerationRunner(client=FakeBackendClient()).preflight()
 
     monkeypatch.setattr(flow, "build_chat_model_from_settings", lambda *_, **__: object())
-    monkeypatch.setattr(
-        flow, "build_backend_learning_client_from_settings", lambda *_, **__: None
-    )
+    monkeypatch.setattr(flow, "build_backend_learning_client_from_settings", lambda *_, **__: None)
     with pytest.raises(PersonalizedResourceUnavailable, match="backend_not_configured"):
         PersonalizedResourceGenerationRunner().preflight()
 
@@ -369,3 +353,62 @@ def test_runner_notifies_backend_task_fail_on_unhandled_exception():
         for path, payload in client.calls
     )
 
+
+def test_model_resource_content_writer_extracts_markdown_content():
+    writer = flow.ModelResourceContentWriter()
+
+    mock_worker = AsyncMock()
+    mock_worker.generate_asset.return_value = {
+        "title": "指针进阶讲义",
+        "markdown_content": "# 指针进阶\n\n## 1. 核心概念",
+    }
+
+    with patch("agent_service_v2.agents.leader_team.ResourceWorkerAgent", return_value=mock_worker):
+        result = asyncio.run(
+            writer.write(
+                "personal_lesson",
+                goal="深入掌握指针",
+                chapter="第 5 章",
+                knowledge_point="指针进阶",
+                course_id="course-1",
+                course_title="C语言",
+            )
+        )
+
+    assert result["title"] == "指针进阶讲义"
+    assert result["content"] == "# 指针进阶\n\n## 1. 核心概念"
+    assert "个性化讲义" in result["description"]
+    assert result["tags"] == ["lesson"]
+    mock_worker.generate_asset.assert_awaited_once_with(
+        "document",
+        "第 5 章",
+        "指针进阶",
+        course_id="course-1",
+        course_title="C语言",
+        difficulty=None,
+        repair_hint="",
+    )
+
+
+def test_model_resource_content_writer_falls_back_to_html_content():
+    writer = flow.ModelResourceContentWriter()
+
+    mock_worker = AsyncMock()
+    mock_worker.generate_asset.return_value = {
+        "title": "历史课件",
+        "html_content": "<div class='slide'><h1>旧课件</h1></div>",
+    }
+
+    with patch("agent_service_v2.agents.leader_team.ResourceWorkerAgent", return_value=mock_worker):
+        result = asyncio.run(
+            writer.write(
+                "personal_lesson",
+                goal="指针",
+                chapter="第 1 章",
+                knowledge_point="指针",
+                course_id="c1",
+                course_title="C",
+            )
+        )
+
+    assert result["content"] == "<div class='slide'><h1>旧课件</h1></div>"

@@ -158,10 +158,11 @@ class ModelResourceContentWriter:
             )
         if resource_type == "personal_lesson":
             data = await worker.generate_asset("document", chapter, topic, **common)
+            raw_content = data.get("markdown_content") or data.get("html_content") or data.get("content") or ""
             return _typed(
                 title=data.get("title") or topic,
-                content=data.get("html_content") or "",
-                description=f"围绕“{topic}”的互动课件",
+                content=raw_content,
+                description=f"围绕“{topic}”的个性化讲义",
                 tags=["lesson"],
             )
         data = await worker.generate_asset("reading", chapter, topic, **common)
@@ -249,9 +250,7 @@ class PersonalizedResourceGenerationRunner:
                 return {"status": "failed", "reason": "backend_not_configured"}
 
             writer = self._writer or ModelResourceContentWriter(self._settings)
-            resource_types = resolve_resource_types(
-                request.resource_preferences, request.resource_types
-            )
+            resource_types = resolve_resource_types(request.resource_preferences, request.resource_types)
 
             emit(
                 EduEventType.WORKFLOW_STARTED,
@@ -290,9 +289,7 @@ class PersonalizedResourceGenerationRunner:
                 )
                 worker.set_execution_context(request=request, emit=emit)
                 workers.append(worker)
-                team_members.append(
-                    TeamMember(agent=worker, description=worker.description)
-                )
+                team_members.append(TeamMember(agent=worker, description=worker.description))
 
             # Build Leader agent
             leader = CurriculumLeaderAgent(
@@ -331,9 +328,7 @@ class PersonalizedResourceGenerationRunner:
             )
             raise
         except Exception as exc:  # noqa: BLE001 - never break the SSE stream
-            logger.exception(
-                "Personalized resource generation failed: task_id=%s", request.task_id
-            )
+            logger.exception("Personalized resource generation failed: task_id=%s", request.task_id)
             emit(
                 EduEventType.WORKFLOW_FAILED,
                 {"reason": exc.__class__.__name__, "message": str(exc)[:500]},
@@ -347,10 +342,7 @@ class PersonalizedResourceGenerationRunner:
 
         emit(
             EduEventType.TEXT_DELTA,
-            {
-                "delta": f"已完成 {len(published)} 份学习资源："
-                + "、".join(item["title"] for item in published)
-            },
+            {"delta": f"已完成 {len(published)} 份学习资源：" + "、".join(item["title"] for item in published)},
         )
         emit(
             EduEventType.WORKFLOW_COMPLETED,
@@ -358,9 +350,7 @@ class PersonalizedResourceGenerationRunner:
                 "task_id": request.task_id,
                 "status": "completed",
                 "generation_ids": [item["generation_id"] for item in published],
-                "published_resource_ids": [
-                    item["resource_id"] for item in published if item.get("resource_id")
-                ],
+                "published_resource_ids": [item["resource_id"] for item in published if item.get("resource_id")],
             },
         )
         return {"status": "completed", "items": published}
@@ -513,11 +503,7 @@ async def produce_resource_item(
                 )
                 setattr(worker, "_last_reason", last_reason)
                 return None
-            repair_hint = (
-                "\n\n上一版未通过确定性校验（"
-                + (", ".join(hard_failures) or "unknown")
-                + "），请据此修正。"
-            )
+            repair_hint = "\n\n上一版未通过确定性校验（" + (", ".join(hard_failures) or "unknown") + "），请据此修正。"
             emit(
                 EduEventType.THOUGHT,
                 {"delta": f"“{resource_type}”草案未通过确定性校验，正在按反馈返修一次。"},
@@ -592,9 +578,7 @@ class _ToolCallEmitter:
         self.call_id = f"tool_{uuid4().hex}"
 
     def start(self) -> None:
-        title, category, read_only = TOOL_METADATA.get(
-            self.tool_name, (self.tool_name, "other", False)
-        )
+        title, category, read_only = TOOL_METADATA.get(self.tool_name, (self.tool_name, "other", False))
         self._emit(
             EduEventType.TOOL_STARTED,
             {
@@ -611,9 +595,13 @@ class _ToolCallEmitter:
         outcome = outcome_for_status(status)
         failed = outcome == "failure"
         reason = payload.get("reason")
-        summary = reason if isinstance(reason, str) and reason else TOOL_SUMMARY.get(
-            status,
-            status,
+        summary = (
+            reason
+            if isinstance(reason, str) and reason
+            else TOOL_SUMMARY.get(
+                status,
+                status,
+            )
         )
         self._emit(
             EduEventType.TOOL_COMPLETED,

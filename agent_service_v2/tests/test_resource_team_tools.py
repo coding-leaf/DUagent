@@ -46,6 +46,34 @@ def test_draft_validator_separates_hard_failures_from_warnings():
     }
 
 
+def test_draft_validator_rejects_script_tags_in_document_resources():
+    from agent_service_v2.tools.resource_drafts import validate_typed_resource
+
+    report = validate_typed_resource(
+        "personal_lesson",
+        "# 讲义\n<script>alert(1)</script>\n" + "详细知识点讲解内容" * 5,
+    )
+    assert report["status"] == "failed"
+    assert "invalid_script_tags" in report["hard_failures"]
+
+    client = FakeClient()
+    tools = {tool.name: tool for tool in build_resource_draft_tools(client)}
+
+    response = asyncio.run(
+        tools["record_personalized_validation"].call(
+            generation_id="g1",
+            user_id="u1",
+            course_id="c1",
+            resource_type="personal_lesson",
+            content="# 讲义\n<script>window.location='...'</script>\n" + "详细知识点讲解内容" * 5,
+        )
+    )
+
+    result = _result(response)
+    assert result["report"]["status"] == "failed"
+    assert "invalid_script_tags" in result["report"]["hard_failures"]
+
+
 def test_reviewer_warnings_do_not_block_approval():
     client = FakeClient()
     tools = {tool.name: tool for tool in build_resource_review_tools(client)}

@@ -16,6 +16,13 @@ the ones that repeatedly caused rework, so they are non-negotiable.
 
 ## Hard Negative Constraints (架构红线)
 
+### ❌ 严禁生成带 `<script>` 或未受控 HTML 的文档资源 (Enforce Markdown Output Contract for Document Resources)
+
+`personal_lesson`、`reading`、`lesson` 等讲义文档资源**必须采用标准 Markdown 格式**输出（标题、段落、Markdown 代码块、表格等），**严禁输出包含 `<script>`、`<div class="slide">`、`<style>` 或内联 DOM 事件监听的原生 HTML 幻灯片**。
+
+**Why**:
+前端渲染引擎依赖 React 与虚拟 DOM，出于 XSS 安全防御铁律不会执行内嵌 `<script>`。放任模型生成原生 HTML 幻灯片不仅会导致翻页按钮失效卡死、样式污染，还会使除首屏外的所有内容因 `display: none` 被隐性截断，严重破坏用户体验与系统安全性。在校验层（`validate_typed_resource`）必须硬性检测并阻断 `<script>` 标签。
+
 ### ❌ 严禁在 Prompt 中硬编码学科 / 技术栈 (No hardcoded subject or tech stack in prompts)
 
 Prompts must stay **discipline-agnostic**. The curriculum planner, resource

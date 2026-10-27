@@ -125,6 +125,9 @@ def validate_typed_resource(resource_type: str, content: str) -> dict:
         diagram_prefixes = ("flowchart", "graph", "mindmap", "sequenceDiagram", "classDiagram", "stateDiagram")
         if not stripped.startswith(diagram_prefixes):
             hard_failures.append("invalid_mermaid_source")
+    if resource_type in {"personal_lesson", "reading", "lesson"} and stripped:
+        if "<script" in stripped.lower():
+            hard_failures.append("invalid_script_tags")
     if resource_type in {"personal_lesson", "practice", "reading"} and stripped:
         if len(stripped) < 40:
             warnings.append("content_is_brief")

@@ -166,3 +166,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 8: DUagent交接前稳定性修复
+<!-- trellis-session: v=2 fp=b38b903cbe302e87 -->
+
+**Date**: 2026-10-27
+**Task**: DUagent交接前稳定性修复
+**Package**: backend
+**Branch**: `fix/pre-handover-stability-fixes`
+
+### Summary
+
+贯穿教材业务ID隔离并修复同名教材切片互删缺陷，历史集合回退增加模型身份强校验，加固原生MySQL部署环境参数与密码安全传递，根除Backend异步测试事件循环冲突并为Agent真实Qdrant测试注入确定性离线Embedding
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3bf26bf` | fix(rag,deploy,ci): 实施教材业务ID物理隔离、历史Collection模型身份判定、原生MySQL部署安全加固与测试事件循环解耦 |
+
+### Status
+
+[OK] **Completed**

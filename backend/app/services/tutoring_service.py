@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.models.conversation import Conversation, Message
 
@@ -331,39 +330,23 @@ class TutoringService:
         counts = {conversation_id: count for conversation_id, count in count_rows}
 
         role_rank = case((Message.role == "user", 0), else_=1)
-        ranked = (
-            select(
-                Message,
-                func.row_number()
-                .over(
-                    partition_by=Message.conversation_id,
-                    order_by=(
-                        Message.create_time.desc(),
-                        Message.update_time.desc(),
-                        role_rank.desc(),
-                    ),
-                )
-                .label("row_number"),
-            )
+        stmt = (
+            select(Message)
             .where(
                 Message.conversation_id.in_(conversation_ids),
                 Message.is_deleted == False,
             )
-            .subquery()
-        )
-        ranked_message = aliased(Message, ranked)
-        last_messages = list(
-            (
-                await self.db.execute(
-                    select(ranked_message).where(ranked.c.row_number == 1)
-                )
+            .order_by(
+                Message.create_time.desc(),
+                Message.update_time.desc(),
+                role_rank.desc(),
             )
-            .scalars()
-            .all()
         )
-        last_by_conversation = {
-            message.conversation_id: message for message in last_messages
-        }
+        messages = list((await self.db.execute(stmt)).scalars().all())
+        last_by_conversation = {}
+        for message in messages:
+            if message.conversation_id not in last_by_conversation:
+                last_by_conversation[message.conversation_id] = message
         items = [
             ConversationListRow(
                 conversation=conversation,

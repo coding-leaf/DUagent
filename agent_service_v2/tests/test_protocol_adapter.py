@@ -1,28 +1,31 @@
 import json
 
 import pytest
-
 from agentscope.event import (
     DataBlockDeltaEvent,
+    DataBlockEndEvent,
+    DataBlockStartEvent,
+    EventBase,
     ExceedMaxItersEvent,
+    HintBlockEvent,
     ModelCallEndEvent,
     ModelCallStartEvent,
     ReplyEndEvent,
     ReplyStartEvent,
     RequireUserConfirmEvent,
-    TextBlockEndEvent,
     TextBlockDeltaEvent,
+    TextBlockEndEvent,
     TextBlockStartEvent,
-    ThinkingBlockEndEvent,
     ThinkingBlockDeltaEvent,
+    ThinkingBlockEndEvent,
     ThinkingBlockStartEvent,
     ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
     ToolResultDataDeltaEvent,
     ToolResultEndEvent,
-    ToolResultTextDeltaEvent,
     ToolResultStartEvent,
+    ToolResultTextDeltaEvent,
 )
 from agentscope.message import ToolCallBlock, ToolResultState
 
@@ -596,3 +599,53 @@ def test_protocol_adapter_ignores_agent_internal_thinking_and_confirmation_event
         None,
         None,
     ]
+
+
+def test_protocol_adapter_safely_ignores_hint_and_datablock_lifecycle_events():
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+
+    events = [
+        HintBlockEvent(reply_id="reply-1", block_id="hint-1", hint="intermediate prompt hint"),
+        DataBlockStartEvent(reply_id="reply-1", block_id="data-1", media_type="application/json"),
+        DataBlockEndEvent(reply_id="reply-1", block_id="data-1"),
+    ]
+
+    for event in events:
+        assert adapter.adapt(event) is None
+        assert adapter.adapt_many(event) == []
+
+
+def test_protocol_adapter_safely_drops_unknown_framework_events(caplog):
+    import logging
+
+    class FutureExperimentalEvent(EventBase):
+        future_flag: bool = True
+
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+
+    unknown_event = FutureExperimentalEvent()
+    with caplog.at_level(logging.DEBUG):
+        assert adapter.adapt(unknown_event) is None
+        assert adapter.adapt_many(unknown_event) == []
+
+    assert "Unhandled AgentScope event FutureExperimentalEvent; dropping safely" in caplog.text
+
+
+def test_protocol_adapter_still_fails_on_fatal_exceed_max_iters():
+    adapter = EDUProtocolAdapter(
+        run_id="run-1",
+        conversation_id="conv-1",
+        agent="workbench",
+    )
+    event = adapter.adapt(ExceedMaxItersEvent(reply_id="reply-fatal", name="workbench"))
+    assert event is not None
+    assert event.type == EduEventType.WORKFLOW_FAILED
+    assert event.payload["reason"] == "exceed_max_iters"

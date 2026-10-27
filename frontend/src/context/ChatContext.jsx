@@ -356,7 +356,7 @@ export const ChatProvider = ({ children }) => {
   };
 
   const regenerate = () => {
-    if (isSending) return;
+    if (isSending || !activeSession || !messages.length) return;
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
     const lastAiIdx = messages.map(m => m.role).lastIndexOf('assistant');
     if (!lastUserMsg || lastAiIdx < 0) return;
@@ -368,7 +368,7 @@ export const ChatProvider = ({ children }) => {
   };
 
   const editMessage = (newContent) => {
-    if (!newContent.trim() || isSending) return;
+    if (!newContent.trim() || isSending || !activeSession || !messages.length) return;
     const lastUserIdx = messages.map(m => m.role).lastIndexOf('user');
     const lastAiIdx = messages.map(m => m.role).lastIndexOf('assistant');
     if (lastUserIdx < 0) return;

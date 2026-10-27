@@ -307,3 +307,47 @@ async def test_list_conversations_empty_page_uses_two_queries(conversation_pair)
     assert page.total == 0
     assert page.items == []
     assert len(select_statements) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_multiple_conversations_picks_correct_latest_message(
+    conversation_pair,
+):
+    db, user, conv1, _, _ = conversation_pair
+    conv2 = Conversation(
+        user_id=user.id,
+        scope="global",
+        title="second conv",
+    )
+    db.add(conv2)
+    await db.flush()
+    msg_conv2_user = Message(
+        conversation_id=conv2.id,
+        role="user",
+        content="second user msg",
+    )
+    msg_conv2_assistant = Message(
+        conversation_id=conv2.id,
+        role="assistant",
+        content="second answer",
+    )
+    db.add_all([msg_conv2_user, msg_conv2_assistant])
+    await db.commit()
+
+    try:
+        page = await TutoringService(db).list_conversations(
+            user_id=user.id,
+            scope="global",
+            course_id=None,
+            page=1,
+            page_size=20,
+        )
+        assert page.total == 2
+        row_by_id = {item.conversation.id: item for item in page.items}
+        assert row_by_id[conv1.id].last_message.content == "answer"
+        assert row_by_id[conv2.id].last_message.content == "second answer"
+    finally:
+        await db.execute(delete(Message).where(Message.conversation_id == conv2.id))
+        await db.execute(delete(Conversation).where(Conversation.id == conv2.id))
+        await db.commit()
+

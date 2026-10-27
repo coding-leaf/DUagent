@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/agent_service_v2/backend/error-handling.md", "reason": "SSE streaming errors and agent protocol handling"}
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Testing standards for agent_service_v2 and ruff"}
+{"file": ".trellis/spec/backend/backend/database-guidelines.md", "reason": "SQLAlchemy 2.0 query patterns, database compatibility guidelines"}
+{"file": ".trellis/spec/backend/backend/quality-guidelines.md", "reason": "Backend test standards and ruff lint conventions"}

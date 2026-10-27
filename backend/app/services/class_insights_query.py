@@ -102,33 +102,28 @@ class ClassInsightsQuery:
                 }
             )
 
-        ranked_paths = (
-            select(
-                LearningPath.nodes.label("nodes"),
-                func.row_number()
-                .over(
-                    partition_by=LearningPath.user_id,
-                    order_by=(
-                        LearningPath.generated_at.desc(),
-                        LearningPath.create_time.desc(),
-                        LearningPath.id.desc(),
-                    ),
-                )
-                .label("row_num"),
-            )
+        stmt = (
+            select(LearningPath)
             .where(
                 LearningPath.course_id == class_id,
                 LearningPath.user_id.in_(active_enrollments),
                 LearningPath.is_deleted.is_(False),
             )
-            .subquery()
+            .order_by(
+                LearningPath.generated_at.desc(),
+                LearningPath.create_time.desc(),
+                LearningPath.id.desc(),
+            )
         )
-        path_result = await self.db.execute(
-            select(ranked_paths.c.nodes).where(ranked_paths.c.row_num == 1)
-        )
+        paths = list((await self.db.execute(stmt)).scalars().all())
+        latest_paths_by_user = {}
+        for path in paths:
+            if path.user_id not in latest_paths_by_user:
+                latest_paths_by_user[path.user_id] = path.nodes
+
         known_statuses = ("completed", "in_progress", "recommended", "pending")
         progress = {item: 0 for item in known_statuses}
-        for nodes in path_result.scalars():
+        for nodes in latest_paths_by_user.values():
             if not isinstance(nodes, list):
                 continue
             for node in nodes:

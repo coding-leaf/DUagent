@@ -30,8 +30,11 @@ export default function JoinCourseDialog({ open, onClose, onJoined }) {
       } else {
         setError(res.message || '加入失败，请检查课程码');
       }
-    } catch {
-      setError('网络错误，请重试');
+    } catch (err) {
+      const msg = err?.response?.data?.detail?.message
+        || err?.response?.data?.message
+        || '网络错误，请重试';
+      setError(msg);
     } finally {
       setSubmitting(false);
     }

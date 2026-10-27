@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from copy import deepcopy
 from typing import Any
 
 from agentscope.event import (
     DataBlockDeltaEvent,
+    DataBlockEndEvent,
+    DataBlockStartEvent,
     ExceedMaxItersEvent,
+    HintBlockEvent,
     ModelCallEndEvent,
     ModelCallStartEvent,
     ReplyEndEvent,
@@ -34,6 +38,9 @@ from agent_service_v2.runtime.edu_events import EduEvent, EduEventType, utc_now_
 from agent_service_v2.runtime.web_search_sources import normalize_web_search_sources
 from agent_service_v2.tools.contracts import outcome_for_status
 from agent_service_v2.tools.web_search_mcp import WEB_SEARCH_INTERNAL_TOOL_NAME
+
+
+logger = logging.getLogger(__name__)
 
 
 _TOOL_METADATA = {
@@ -259,7 +266,10 @@ class EDUProtocolAdapter:
             (
                 ModelCallStartEvent,
                 ModelCallEndEvent,
+                DataBlockStartEvent,
                 DataBlockDeltaEvent,
+                DataBlockEndEvent,
+                HintBlockEvent,
                 TextBlockStartEvent,
                 TextBlockEndEvent,
                 ThinkingBlockStartEvent,
@@ -275,10 +285,11 @@ class EDUProtocolAdapter:
             ),
         ):
             return None
-        return EduEventType.WORKFLOW_FAILED, {
-            "reason": "unsupported_agentscope_event",
-            "event_class": event.__class__.__name__,
-        }
+        logger.debug(
+            "Unhandled AgentScope event %s; dropping safely",
+            event.__class__.__name__,
+        )
+        return None
 
     def _build_plan_payload_for_tool_result(self, event: ToolResultEndEvent) -> dict[str, Any] | None:
         state = getattr(event.state, "value", event.state)

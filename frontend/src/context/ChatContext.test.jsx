@@ -73,7 +73,7 @@ const StreamConsumer = () => {
   const {
     activeSession, messages, workspaceArtifacts, activeArtifactId,
     runLogs, clearRunLogs, sendMessage, resetConversation, isSending,
-    hiddenArtifactIds, hideArtifact, restoreArtifact
+    hiddenArtifactIds, hideArtifact, restoreArtifact, regenerate, editMessage
   } = useChat();
   const assistant = messages.find(m => m.role === 'assistant');
   const user = messages.find(m => m.role === 'user');
@@ -112,6 +112,12 @@ const StreamConsumer = () => {
       </button>
       <button data-testid="restore-artifact" onClick={() => restoreArtifact('artifact-plan')}>
         Restore
+      </button>
+      <button data-testid="regenerate" onClick={() => regenerate()}>
+        Regenerate
+      </button>
+      <button data-testid="edit-message" onClick={() => editMessage('edited')}>
+        Edit
       </button>
     </div>
   );
@@ -413,3 +419,47 @@ test('handles hiding and restoring artifacts', async () => {
   expect(screen.getByTestId('hidden-count').textContent).toBe('0');
   expect(screen.getByTestId('active-artifact-id').textContent).toBe('artifact-plan');
 });
+
+test('regenerate and editMessage safely return when messages list is empty', async () => {
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+
+  expect(screen.getByTestId('message-count').textContent).toBe('0');
+
+  await act(async () => {
+    screen.getByTestId('regenerate').click();
+  });
+  expect(streamChatMock).not.toHaveBeenCalled();
+
+  await act(async () => {
+    screen.getByTestId('edit-message').click();
+  });
+  expect(streamChatMock).not.toHaveBeenCalled();
+});
+
+test('regenerate and editMessage safely return when activeSession is absent', async () => {
+  getSessionsMock.mockResolvedValueOnce({
+    code: 200,
+    data: { conversations: [] }
+  });
+
+  renderWithProviders(<StreamConsumer />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('');
+  });
+
+  await act(async () => {
+    screen.getByTestId('regenerate').click();
+  });
+  expect(streamChatMock).not.toHaveBeenCalled();
+
+  await act(async () => {
+    screen.getByTestId('edit-message').click();
+  });
+  expect(streamChatMock).not.toHaveBeenCalled();
+});
+

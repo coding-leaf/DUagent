@@ -147,6 +147,29 @@ ensure_service() {
   log "Creating missing container $container"
   infra_compose up -d "$service"
 }
+detect_mysql_version() {
+  local host="$1" port="$2" user="$3" pwd="$4"
+  local ver=""
+  if command -v mysql >/dev/null 2>&1; then
+    ver="$(MYSQL_PWD="$pwd" mysql -h "$host" -P "$port" -u"$user" -N -B -e "SELECT VERSION();" 2>/dev/null || true)"
+  fi
+  if [[ -z "$ver" ]]; then
+    ver="$(python3 -c "
+import socket, sys
+try:
+    s = socket.socket()
+    s.settimeout(3)
+    s.connect((sys.argv[1], int(sys.argv[2])))
+    data = s.recv(1024)
+    s.close()
+    if len(data) > 5 and data[4] == 10:
+        print(data[5:].split(b'\x00')[0].decode('utf-8', errors='ignore'))
+except Exception:
+    pass
+" "$host" "$port" 2>/dev/null || true)"
+  fi
+  echo "$ver"
+}
 ensure_core_infrastructure() {
   local mysql_host mysql_port qdrant_port
   mysql_host="$(env_value "$INFRA_ENV" DB_HOST 2>/dev/null || true)"
@@ -160,6 +183,16 @@ ensure_core_infrastructure() {
     ensure_service eduagent-mysql mysql
   else
     log "Reusing running MySQL on ${mysql_host}:${mysql_port}"
+    local db_user db_pwd mysql_ver
+    db_user="$(env_value "$INFRA_ENV" DB_USER 2>/dev/null || true)"
+    db_pwd="$(env_value "$INFRA_ENV" DB_PASSWORD 2>/dev/null || true)"
+    mysql_ver="$(detect_mysql_version "${mysql_host}" "${mysql_port}" "${db_user:-root}" "$db_pwd")"
+    if [[ -n "$mysql_ver" ]]; then
+      log "Detected MySQL version: $mysql_ver"
+      if [[ "$mysql_ver" =~ ^5\. ]]; then
+        log "[INFO] Detected MySQL 5.x. Core backend services are backward-compatible. Official production recommends MySQL 8.0+ via Docker."
+      fi
+    fi
   fi
 
   ensure_service eduagent-qdrant qdrant

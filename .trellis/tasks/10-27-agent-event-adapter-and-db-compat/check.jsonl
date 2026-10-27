@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Testing standards for agent_service_v2"}
+{"file": ".trellis/spec/backend/backend/quality-guidelines.md", "reason": "Backend test standards and ruff lint conventions"}
+{"file": ".trellis/spec/backend/backend/architecture-guardrails.md", "reason": "Architecture guardrails for backend queries and layering"}

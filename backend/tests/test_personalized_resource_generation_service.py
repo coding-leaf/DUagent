@@ -156,3 +156,83 @@ async def test_async_task_generation_keeps_task_link_and_completes_task():
     assert task.progress == 100
     assert task.completed_at is not None
     db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_publish_truncates_long_knowledge_point_and_title_to_prevent_1406():
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
+    long_kp = "A" * 180
+    long_title = "T" * 250
+    long_chapter = "C" * 150
+    generation = MagicMock(
+        id="gen-long-1",
+        user_id="user-1",
+        course_id="course-1",
+        source_type="manual",
+        run_id=None,
+        resource_type="personal_lesson",
+        status="approved",
+        validation_report={"status": "passed"},
+        review_decision="approved",
+        draft={
+            "title": long_title,
+            "description": "长文本防御测试",
+            "content": "# 测试内容",
+            "chapter": long_chapter,
+            "knowledge_point": long_kp,
+            "tags": ["测试"],
+        },
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = generation
+    db.execute.return_value = result
+    service = module.PersonalizedResourceGenerationService(db)
+
+    resource = await service.publish("gen-long-1")
+
+    assert len(resource.knowledge_point) <= 100
+    assert resource.knowledge_point == "A" * 100
+    assert len(resource.title) <= 200
+    assert resource.title == "T" * 200
+    assert len(resource.chapter) <= 100
+    assert resource.chapter == "C" * 100
+    assert resource.type == "personal_lesson"
+
+
+@pytest.mark.asyncio
+async def test_service_fail_task_marks_async_task_as_failed():
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
+    task = MagicMock(id="task-fail-1", status="processing", error_code=None, error_message="", completed_at=None)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = task
+    db.execute.return_value = result
+
+    service = module.PersonalizedResourceGenerationService(db)
+    res = await service.fail_task("task-fail-1", error_code="timeout", error_message="timeout occurred")
+
+    assert res is task
+    assert task.status == "failed"
+    assert task.error_code == "timeout"
+    assert task.error_message == "timeout occurred"
+    assert task.completed_at is not None
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_service_fail_task_returns_none_when_task_missing():
+    db = MagicMock()
+    db.execute = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db.execute.return_value = result
+
+    service = module.PersonalizedResourceGenerationService(db)
+    res = await service.fail_task("missing-task")
+
+    assert res is None
+
+

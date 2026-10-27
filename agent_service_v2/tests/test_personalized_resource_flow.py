@@ -46,6 +46,8 @@ class FakeBackendClient:
             }
         if path.endswith("/publish"):
             return {"resource_id": "r1", "resource_type": "diagram", "status": "published"}
+        if path.endswith("/fail"):
+            return {"task_id": payload.get("task_id"), "status": "failed"}
         raise AssertionError(f"unexpected backend path: {path}")
 
 
@@ -68,7 +70,7 @@ class FakeWriter:
         difficulty: str | None,
         repair_hint: str,
     ) -> dict[str, Any]:
-        assert resource_type == "diagram"
+        assert resource_type in {"diagram", "personal_lesson", "practice", "reading"}
         self.course_ids.append(course_id)
         self.hints.append(repair_hint)
         content = self._contents[min(self._index, len(self._contents) - 1)]
@@ -312,3 +314,58 @@ def test_runner_uses_catalog_id_for_rag_writer_and_course_id_for_draft_persisten
     ]
     for _path, payload in client.calls:
         assert payload["course_id"] == "class-course-101"
+
+
+def test_runner_concurrent_multi_resource_generation_via_teampipeline():
+    client = FakeBackendClient()
+    writer = FakeWriter()
+    runner = PersonalizedResourceGenerationRunner(client=client, writer=writer)
+
+    req = _request(
+        resource_types=["diagram", "personal_lesson"],
+        resource_preferences=[],
+    )
+    result, events = _run(runner, req)
+
+    assert result["status"] == "completed"
+    assert len(result["items"]) == 2
+    types = [item["resource_type"] for item in result["items"]]
+    assert "diagram" in types
+    assert "personal_lesson" in types
+    assert any(
+        event_type is EduEventType.WORKFLOW_COMPLETED and len(payload["generation_ids"]) == 2
+        for event_type, payload in events
+    )
+
+
+def test_runner_notifies_backend_task_fail_on_generation_failure():
+    client = FakeBackendClient(fail_endpoint="/review")
+    writer = FakeWriter()
+    runner = PersonalizedResourceGenerationRunner(client=client, writer=writer)
+
+    result, events = _run(runner, _request())
+
+    assert result["status"] == "failed"
+    assert any(
+        path.endswith("/tasks/task-1/fail") and payload.get("error_code") == "generation_failed"
+        for path, payload in client.calls
+    )
+
+
+def test_runner_notifies_backend_task_fail_on_unhandled_exception():
+    class ThrowingWriter(FakeWriter):
+        async def write(self, *args, **kwargs):
+            raise RuntimeError("unexpected llm engine crash")
+
+    client = FakeBackendClient()
+    writer = ThrowingWriter()
+    runner = PersonalizedResourceGenerationRunner(client=client, writer=writer)
+
+    result, events = _run(runner, _request())
+
+    assert result["status"] == "failed"
+    assert any(
+        path.endswith("/tasks/task-1/fail") and "unexpected llm engine crash" in payload.get("error_message", "")
+        for path, payload in client.calls
+    )
+

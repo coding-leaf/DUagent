@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, AsyncGenerator
+from uuid import uuid4
 
-from agentscope.message import UserMsg
+from agentscope.agent import Agent
+from agentscope.event import (
+    RequireExternalExecutionEvent,
+    TextBlockDeltaEvent,
+    ThinkingBlockDeltaEvent,
+)
+from agentscope.message import Msg, TextBlock, ToolCallBlock, UserMsg
+from agentscope.tool import Toolkit
+from agentscope.types import ReplyFinishedReason
 
 from agent_service_v2.agents.curriculum_planner import (
     CourseCurriculumPlanner,
@@ -282,3 +291,320 @@ async def run_leader_team_kg_generation(
     """Backward-compatible entry point for the generic curriculum planner."""
     planner = CourseCurriculumPlanner(settings)
     return await planner.plan_curriculum(context_text, course_title=course_title)
+
+
+class CurriculumLeaderAgent(Agent):
+    """Leader Agent: Analyzes learner goals and coordinates member specialists via AgentScope TeamPipeline."""
+
+    def __init__(
+        self,
+        name: str = "curriculum_leader",
+        *,
+        settings: AgentModelSettings | None = None,
+        assigned_types: list[str] | None = None,
+        request: Any = None,
+        model: Any = None,
+        toolkit: Toolkit | None = None,
+    ) -> None:
+        self.settings = settings or AgentModelSettings()
+        self.assigned_types = assigned_types or []
+        self.request = request
+        resolved_model = model or build_chat_model_from_settings(self.settings, stream=False)
+        system_prompt = (
+            "你是课程教学规划主管 (Curriculum Leader)。"
+            "你的职责是分析学生的学习目标与个性化诉求，"
+            "并通过官方 TeamAssign 工具将资源生成任务并发分派给对应的领域专家智能体："
+            "- lesson_worker: 课件精讲专家"
+            "- diagram_worker: 思维导图专家"
+            "- quiz_worker: 练习习题专家"
+            "- reading_worker: 拓展阅读专家\n"
+            "请在同一轮中一次性分派全部所需资源，实现高效并发调度。"
+        )
+        super().__init__(
+            name=name,
+            system_prompt=system_prompt,
+            model=resolved_model,
+            toolkit=toolkit or Toolkit(),
+        )
+        self._dispatched = False
+
+    async def reply_stream(
+        self,
+        inputs: Any = None,
+        structured_schema: Any = None,
+        yield_final_msg: bool = False,
+    ) -> AsyncGenerator[Any, None]:
+        reply_id = getattr(self.state, "reply_id", None) or f"leader_{uuid4().hex[:8]}"
+
+        if not self._dispatched and self.assigned_types:
+            self._dispatched = True
+            delta_msg = (
+                f"正在为目标规划并分派 {len(self.assigned_types)} 份专家资源生成任务："
+                f"{', '.join(self.assigned_types)}"
+            )
+            yield ThinkingBlockDeltaEvent(
+                reply_id=reply_id,
+                block_id=f"th_{uuid4().hex[:8]}",
+                delta=delta_msg,
+            )
+
+            type_to_member = {
+                "personal_lesson": "lesson_worker",
+                "diagram": "diagram_worker",
+                "practice": "quiz_worker",
+                "reading": "reading_worker",
+            }
+
+            calls = []
+            for r_type in self.assigned_types:
+                member_name = type_to_member.get(r_type, f"{r_type}_worker")
+                prompt_data = {
+                    "member": member_name,
+                    "prompt": json.dumps(
+                        {
+                            "resource_type": r_type,
+                            "goal": getattr(self.request, "goal", "") if self.request else "",
+                            "knowledge_point": (
+                                getattr(self.request, "knowledge_point", "")
+                                or getattr(self.request, "goal", "")
+                            ) if self.request else "",
+                            "chapter": getattr(self.request, "chapter", "") if self.request else "",
+                            "course_id": getattr(self.request, "course_id", "") if self.request else "",
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+                calls.append(
+                    ToolCallBlock(
+                        id=f"call_{uuid4().hex[:8]}",
+                        name="TeamAssign",
+                        input=json.dumps(prompt_data, ensure_ascii=False),
+                    )
+                )
+
+            yield RequireExternalExecutionEvent(
+                reply_id=reply_id,
+                tool_calls=calls,
+            )
+            return
+
+        yield TextBlockDeltaEvent(
+            reply_id=reply_id,
+            block_id=f"txt_{uuid4().hex[:8]}",
+            delta="领域专家智能体已全部完成生成与入库。",
+        )
+        yield Msg(
+            name=self.name,
+            role="assistant",
+            content=[TextBlock(text="All domain worker agents have completed their assignments.")],
+            finished_reason=ReplyFinishedReason.COMPLETED,
+        )
+
+
+class BaseResourceWorkerAgent(Agent):
+    """Specialized worker agent for generating and publishing personalized learning resources."""
+
+    resource_type: str = "generic"
+    description: str = "通用资源生成专家"
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        settings: AgentModelSettings | None = None,
+        client: Any | None = None,
+        writer: Any | None = None,
+        description: str | None = None,
+        model: Any = None,
+        toolkit: Toolkit | None = None,
+    ) -> None:
+        self.settings = settings or AgentModelSettings()
+        self.client = client
+        self.writer = writer
+        if description:
+            self.description = description
+
+        tools_list = []
+        if client:
+            try:
+                from agent_service_v2.tools.resource_drafts import build_resource_draft_tools
+                from agent_service_v2.tools.resource_reviews import build_resource_review_tools
+
+                tools_list.extend(build_resource_draft_tools(client))
+                tools_list.extend(build_resource_review_tools(client))
+            except Exception:
+                pass
+
+        tk = toolkit or Toolkit(tools=tools_list)
+
+        resolved_model = model or build_chat_model_from_settings(self.settings, stream=False)
+        super().__init__(
+            name=name,
+            system_prompt=(
+                f"You are {name}, a specialist domain agent for {self.resource_type} resources. "
+                f"{self.description}"
+            ),
+            model=resolved_model,
+            toolkit=tk,
+        )
+        self.last_published_item: dict[str, Any] | None = None
+        self.last_failure_reason: str | None = None
+        self._current_request: Any = None
+        self._current_emit: Any = None
+
+    def set_execution_context(self, request: Any, emit: Any) -> None:
+        self._current_request = request
+        self._current_emit = emit
+
+    async def reply_stream(
+        self,
+        inputs: Any = None,
+        structured_schema: Any = None,
+        yield_final_msg: bool = False,
+    ) -> AsyncGenerator[Any, None]:
+        if self._current_request and self._current_emit:
+            from agent_service_v2.generators.personalized_resource_flow import produce_resource_item
+
+            item = await produce_resource_item(
+                worker=self,
+                request=self._current_request,
+                resource_type=self.resource_type,
+                writer=self.writer,
+                client=self.client,
+                emit=self._current_emit,
+            )
+            self.last_published_item = item
+            if item is None:
+                self.last_failure_reason = getattr(self, "_last_reason", "not_published")
+                yield Msg(
+                    name=self.name,
+                    role="assistant",
+                    content=[TextBlock(text=f"{self.name} failed: {self.last_failure_reason}")],
+                    finished_reason=ReplyFinishedReason.ERROR,
+                )
+                return
+
+        yield Msg(
+            name=self.name,
+            role="assistant",
+            content=[TextBlock(text=f"{self.name} completed resource generation.")],
+            finished_reason=ReplyFinishedReason.COMPLETED,
+        )
+
+
+class LessonWorkerAgent(BaseResourceWorkerAgent):
+    """Worker Agent specialized in interactive presentation slides and courseware."""
+
+    resource_type = "personal_lesson"
+    description = "课件与精讲专家：负责基于课程教材与知识点生成结构化、互动式课件讲义（HTML/Markdown）"
+
+    def __init__(
+        self,
+        name: str = "lesson_worker",
+        *,
+        settings: AgentModelSettings | None = None,
+        client: Any | None = None,
+        writer: Any | None = None,
+        model: Any = None,
+        toolkit: Toolkit | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            settings=settings,
+            client=client,
+            writer=writer,
+            model=model,
+            toolkit=toolkit,
+        )
+
+
+class MindmapWorkerAgent(BaseResourceWorkerAgent):
+    """Worker Agent specialized in Mermaid knowledge graphs and mindmaps."""
+
+    resource_type = "diagram"
+    description = "思维导图专家：负责基于课程知识点生成 Mermaid 概念思维导图与知识结构图"
+
+    def __init__(
+        self,
+        name: str = "diagram_worker",
+        *,
+        settings: AgentModelSettings | None = None,
+        client: Any | None = None,
+        writer: Any | None = None,
+        model: Any = None,
+        toolkit: Toolkit | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            settings=settings,
+            client=client,
+            writer=writer,
+            model=model,
+            toolkit=toolkit,
+        )
+
+
+class QuizWorkerAgent(BaseResourceWorkerAgent):
+    """Worker Agent specialized in assessment and practice quizzes."""
+
+    resource_type = "practice"
+    description = "巩固习题专家：负责基于知识点生成单选、多选等巩固练习题及详细解析"
+
+    def __init__(
+        self,
+        name: str = "quiz_worker",
+        *,
+        settings: AgentModelSettings | None = None,
+        client: Any | None = None,
+        writer: Any | None = None,
+        model: Any = None,
+        toolkit: Toolkit | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            settings=settings,
+            client=client,
+            writer=writer,
+            model=model,
+            toolkit=toolkit,
+        )
+
+
+class ReadingWorkerAgent(BaseResourceWorkerAgent):
+    """Worker Agent specialized in tutorial reading notes and extended articles."""
+
+    resource_type = "reading"
+    description = "拓展阅读专家：负责基于知识点生成深度拓展阅读材料与延伸教程"
+
+    def __init__(
+        self,
+        name: str = "reading_worker",
+        *,
+        settings: AgentModelSettings | None = None,
+        client: Any | None = None,
+        writer: Any | None = None,
+        model: Any = None,
+        toolkit: Toolkit | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            settings=settings,
+            client=client,
+            writer=writer,
+            model=model,
+            toolkit=toolkit,
+        )
+
+
+__all__ = [
+    "CoursePlannerAgent",
+    "ResourceWorkerAgent",
+    "CurriculumLeaderAgent",
+    "BaseResourceWorkerAgent",
+    "LessonWorkerAgent",
+    "MindmapWorkerAgent",
+    "QuizWorkerAgent",
+    "ReadingWorkerAgent",
+    "run_leader_team_kg_generation",
+]
+

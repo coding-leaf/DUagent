@@ -7,7 +7,15 @@ from agentscope.message import Msg
 from agentscope.message import TextBlock
 from agentscope.model import ChatResponse
 
-from agent_service_v2.agents.leader_team import CoursePlannerAgent, ResourceWorkerAgent
+from agent_service_v2.agents.leader_team import (
+    CoursePlannerAgent,
+    CurriculumLeaderAgent,
+    LessonWorkerAgent,
+    MindmapWorkerAgent,
+    QuizWorkerAgent,
+    ReadingWorkerAgent,
+    ResourceWorkerAgent,
+)
 from agent_service_v2.agents.model_provider import AgentModelSettings
 
 
@@ -71,3 +79,48 @@ def test_resource_worker_awaits_agentscope_chat_model() -> None:
     assert isinstance(messages[0], Msg)
     assert messages[0].role == "user"
     assert "指针" in messages[0].content[0].text
+
+
+def test_leader_team_member_agent_types_and_descriptions() -> None:
+    lesson = LessonWorkerAgent()
+    diagram = MindmapWorkerAgent()
+    quiz = QuizWorkerAgent()
+    reading = ReadingWorkerAgent()
+
+    assert lesson.resource_type == "personal_lesson"
+    assert "课件" in lesson.description
+    assert diagram.resource_type == "diagram"
+    assert "思维导图" in diagram.description
+    assert quiz.resource_type == "practice"
+    assert "习题" in quiz.description
+    assert reading.resource_type == "reading"
+    assert "拓展阅读" in reading.description
+
+
+def test_curriculum_leader_and_member_agents_pipeline_dispatch() -> None:
+    from agentscope.message import UserMsg
+    from agentscope.pipeline import TeamMember, TeamPipeline
+
+    leader = CurriculumLeaderAgent(
+        assigned_types=["diagram", "personal_lesson"],
+    )
+    diagram_worker = MindmapWorkerAgent()
+    lesson_worker = LessonWorkerAgent()
+
+    pipeline = TeamPipeline(
+        leader=leader,
+        members=[
+            TeamMember(agent=diagram_worker, description=diagram_worker.description),
+            TeamMember(agent=lesson_worker, description=lesson_worker.description),
+        ],
+    )
+
+    events = []
+
+    async def run_pipeline():
+        async for evt in pipeline.reply_stream(UserMsg(name="user", content="生成图解与课件")):
+            events.append(evt)
+
+    asyncio.run(run_pipeline())
+    assert len(events) >= 2
+

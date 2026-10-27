@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import Icon from '../Icon';
@@ -25,7 +26,37 @@ const REVIEW_LABEL = {
 };
 
 export default function PersonalizedResourceCard({ item, onDelete }) {
+  const [isTimedOut, setIsTimedOut] = useState(() => {
+    const timeStr = item.created_at || item.create_time;
+    if (!timeStr) return false;
+    const created = new Date(timeStr).getTime();
+    return !Number.isNaN(created) && Date.now() - created > 180 * 1000;
+  });
+
+  useEffect(() => {
+    if (item.task_status !== 'processing' || isTimedOut) return;
+    const timeStr = item.created_at || item.create_time;
+    if (!timeStr) return;
+    const created = new Date(timeStr).getTime();
+    if (Number.isNaN(created)) return;
+
+    const remaining = Math.max(0, 180 * 1000 - (Date.now() - created));
+    const timer = setTimeout(() => setIsTimedOut(true), remaining);
+    return () => clearTimeout(timer);
+  }, [item.created_at, item.create_time, item.task_status, isTimedOut]);
+
   if (item.task_status === 'processing') {
+    if (isTimedOut) {
+      return (
+        <StatusCard
+          icon="timer_off"
+          title="生成超时（已中断）"
+          tone="error"
+          onDelete={onDelete ? () => onDelete(item.id) : undefined}
+        />
+      );
+    }
+
     return (
       <StatusCard
         icon="progress_activity"

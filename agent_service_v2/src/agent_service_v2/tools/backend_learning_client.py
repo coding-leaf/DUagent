@@ -71,6 +71,21 @@ class BackendLearningClient:
         data = body.get("data") if isinstance(body, dict) else None
         return data if isinstance(data, dict) else {}
 
+    async def fail_personalized_task(
+        self,
+        task_id: str,
+        *,
+        error_code: str = "agent_error",
+        error_message: str = "",
+    ) -> dict[str, Any]:
+        return await self.post_json(
+            f"/internal/personalized-resources/tasks/{task_id}/fail",
+            {
+                "error_code": str(error_code)[:20],
+                "error_message": str(error_message)[:500],
+            },
+        )
+
 
 def _response_detail_reason(response: httpx.Response) -> str | None:
     try:

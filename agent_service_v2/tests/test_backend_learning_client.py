@@ -148,3 +148,26 @@ def test_backend_learning_client_handles_non_json_response():
     assert exc.value.reason == "backend_bad_response"
     assert exc.value.status_code == 200
 
+
+def test_backend_learning_client_fail_personalized_task():
+    transport = StubTransport()
+    client = BackendLearningClient(
+        base_url="http://backend",
+        token="secret",
+        timeout=5.0,
+        transport=transport,
+    )
+
+    data = asyncio.run(
+        client.fail_personalized_task(
+            "task-456",
+            error_code="test_code",
+            error_message="test_msg",
+        )
+    )
+
+    assert data == {"status": "available"}
+    request = transport.requests[0]
+    assert str(request.url) == "http://backend/internal/personalized-resources/tasks/task-456/fail"
+
+

@@ -8,6 +8,17 @@ from collections.abc import Callable
 from typing import Any, Protocol
 from uuid import uuid4
 
+from agentscope.message import UserMsg
+from agentscope.pipeline import TeamMember, TeamPipeline
+
+from agent_service_v2.agents.leader_team import (
+    BaseResourceWorkerAgent,
+    CurriculumLeaderAgent,
+    LessonWorkerAgent,
+    MindmapWorkerAgent,
+    QuizWorkerAgent,
+    ReadingWorkerAgent,
+)
 from agent_service_v2.agents.model_provider import (
     AgentModelSettings,
     build_chat_model_from_settings,
@@ -230,14 +241,17 @@ class PersonalizedResourceGenerationRunner:
             client = self._client_of()
             if client is None:
                 emit(EduEventType.WORKFLOW_FAILED, {"reason": "backend_not_configured"})
+                await self._fail_task(
+                    request.task_id,
+                    error_code="backend_unavailable",
+                    error_message="backend_not_configured",
+                )
                 return {"status": "failed", "reason": "backend_not_configured"}
+
             writer = self._writer or ModelResourceContentWriter(self._settings)
-            draft_tools = {tool.name: tool for tool in build_resource_draft_tools(client)}
-            review_tools = {tool.name: tool for tool in build_resource_review_tools(client)}
             resource_types = resolve_resource_types(
                 request.resource_preferences, request.resource_types
             )
-            knowledge_point = request.knowledge_point or request.goal
 
             emit(
                 EduEventType.WORKFLOW_STARTED,
@@ -258,22 +272,63 @@ class PersonalizedResourceGenerationRunner:
                 },
             )
 
-            published: list[dict[str, Any]] = []
-            for resource_type in resource_types:
-                item = await self._produce_one(
-                    request=request,
-                    resource_type=resource_type,
-                    knowledge_point=knowledge_point,
+            # Build member agents
+            member_classes = {
+                "personal_lesson": LessonWorkerAgent,
+                "diagram": MindmapWorkerAgent,
+                "practice": QuizWorkerAgent,
+                "reading": ReadingWorkerAgent,
+            }
+            workers: list[BaseResourceWorkerAgent] = []
+            team_members: list[TeamMember] = []
+            for r_type in resource_types:
+                worker_cls = member_classes.get(r_type, LessonWorkerAgent)
+                worker = worker_cls(
+                    settings=self._settings,
+                    client=client,
                     writer=writer,
-                    draft_tools=draft_tools,
-                    review_tools=review_tools,
-                    emit=emit,
                 )
-                if item is None:
+                worker.set_execution_context(request=request, emit=emit)
+                workers.append(worker)
+                team_members.append(
+                    TeamMember(agent=worker, description=worker.description)
+                )
+
+            # Build Leader agent
+            leader = CurriculumLeaderAgent(
+                name="curriculum_leader",
+                settings=self._settings,
+                assigned_types=resource_types,
+                request=request,
+            )
+
+            # Build and execute AgentScope native TeamPipeline (concurrent across members)
+            pipeline = TeamPipeline(leader=leader, members=team_members)
+
+            async for _event in pipeline.reply_stream(
+                UserMsg(name="user", content=f"为学生规划并生成：{request.goal}")
+            ):
+                pass
+
+            published: list[dict[str, Any]] = []
+            for worker in workers:
+                if worker.last_published_item is None:
+                    last_reason = getattr(worker, "last_failure_reason", None) or "not_published"
+                    await self._fail_task(
+                        request.task_id,
+                        error_code="generation_failed",
+                        error_message=f"Generation failed for {worker.resource_type}: {last_reason}",
+                    )
                     return {"status": "failed", "reason": "not_published"}
-                published.append(item)
+                published.append(worker.last_published_item)
+
         except asyncio.CancelledError:
             emit(EduEventType.WORKFLOW_FAILED, {"reason": "cancelled"})
+            await self._fail_task(
+                request.task_id,
+                error_code="cancelled",
+                error_message="Generation cancelled",
+            )
             raise
         except Exception as exc:  # noqa: BLE001 - never break the SSE stream
             logger.exception(
@@ -282,6 +337,11 @@ class PersonalizedResourceGenerationRunner:
             emit(
                 EduEventType.WORKFLOW_FAILED,
                 {"reason": exc.__class__.__name__, "message": str(exc)[:500]},
+            )
+            await self._fail_task(
+                request.task_id,
+                error_code=exc.__class__.__name__[:20],
+                error_message=str(exc)[:500],
             )
             return {"status": "failed", "reason": exc.__class__.__name__}
 
@@ -305,6 +365,38 @@ class PersonalizedResourceGenerationRunner:
         )
         return {"status": "completed", "items": published}
 
+    async def _fail_task(
+        self,
+        task_id: str | None,
+        *,
+        error_code: str = "agent_error",
+        error_message: str = "",
+    ) -> None:
+        """Notify Backend that the async task failed so it does not hang in processing."""
+        if not task_id:
+            return
+        client = self._client_of()
+        if client is None:
+            return
+        try:
+            if hasattr(client, "fail_personalized_task"):
+                await client.fail_personalized_task(
+                    task_id,
+                    error_code=str(error_code)[:20],
+                    error_message=str(error_message)[:500],
+                )
+            else:
+                await client.post_json(
+                    f"/internal/personalized-resources/tasks/{task_id}/fail",
+                    {
+                        "error_code": str(error_code)[:20],
+                        "error_message": str(error_message)[:500],
+                    },
+                )
+            logger.info("Notified backend of task failure: task_id=%s, code=%s", task_id, error_code)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to notify backend of task failure: task_id=%s, err=%s", task_id, exc)
+
     async def _produce_one(
         self,
         *,
@@ -312,151 +404,183 @@ class PersonalizedResourceGenerationRunner:
         resource_type: str,
         knowledge_point: str,
         writer: ResourceContentWriter,
-        draft_tools: dict[str, Any],
-        review_tools: dict[str, Any],
+        draft_tools: dict[str, Any] | None = None,
+        review_tools: dict[str, Any] | None = None,
         emit: EmitEvent,
     ) -> dict[str, Any] | None:
-        repair_hint = ""
-        last_reason = "not_published"
-        rag_course_id = (request.catalog_id or request.course_id).strip()
-        for attempt in range(MAX_ATTEMPTS):
-            content = await writer.write(
-                resource_type,
-                goal=request.goal,
-                chapter=request.chapter or "",
-                knowledge_point=knowledge_point,
-                course_id=rag_course_id,
-                course_title=request.course_title,
-                difficulty=request.difficulty,
-                repair_hint=repair_hint,
-            )
-            draft = await _invoke_tool(
-                draft_tools["create_personalized_resource_draft"],
-                emit,
-                user_id=request.user_id,
-                course_id=request.course_id,
-                source_type=request.source_type,
-                goal=request.goal,
-                resource_type=resource_type,
-                title=content.get("title") or knowledge_point,
-                content=content.get("content") or "",
-                description=content.get("description") or "",
-                chapter=request.chapter or "",
-                knowledge_point=knowledge_point,
-                tags=content.get("tags") or [],
-                conversation_id=request.conversation_id,
-                run_id=request.task_id,
-            )
-            generation_id = str(draft.get("generation_id") or "")
-            if not generation_id:
-                last_reason = str(draft.get("reason") or "draft_failed")
-                break
-
-            validation = await _invoke_tool(
-                draft_tools["record_personalized_validation"],
-                emit,
-                generation_id=generation_id,
-                user_id=request.user_id,
-                course_id=request.course_id,
-                resource_type=resource_type,
-                content=content.get("content") or "",
-            )
-            report = validation.get("report") if isinstance(validation.get("report"), dict) else {}
-            warnings = [str(item) for item in report.get("warnings") or []]
-            if "generation_id" not in validation:
-                # `_post` swallows transport errors into a bare status payload;
-                # a persisted report always echoes the generation id back.
-                last_reason = str(validation.get("reason") or "validation_unavailable")
-                emit(
-                    EduEventType.WORKFLOW_FAILED,
-                    {"reason": last_reason, "generation_id": generation_id},
-                )
-                return None
-            if report.get("status") != "passed":
-                # Backend already moved the draft to `failed`; retrying means
-                # drafting a fresh generation instead of re-validating this one.
-                last_reason = "validation_failed"
-                hard_failures = [str(item) for item in report.get("hard_failures") or []]
-                if attempt + 1 >= MAX_ATTEMPTS:
-                    emit(
-                        EduEventType.WORKFLOW_FAILED,
-                        {
-                            "reason": "validation_failed",
-                            "generation_id": generation_id,
-                            "hard_failures": hard_failures,
-                        },
-                    )
-                    return None
-                repair_hint = (
-                    "\n\n上一版未通过确定性校验（"
-                    + (", ".join(hard_failures) or "unknown")
-                    + "），请据此修正。"
-                )
-                emit(
-                    EduEventType.THOUGHT,
-                    {"delta": f"“{resource_type}”草案未通过确定性校验，正在按反馈返修一次。"},
-                )
-                continue
-
-            review = await _invoke_tool(
-                review_tools["review_personalized_resource"],
-                emit,
-                generation_id=generation_id,
-                user_id=request.user_id,
-                course_id=request.course_id,
-                hard_failures=[],
-                warnings=warnings,
-                summary=f"结构化校验通过，资源类型 {resource_type}，目标：{request.goal[:120]}",
-            )
-            decision = str(review.get("decision") or "")
-            review_unavailable = "generation_id" not in review
-            if review_unavailable or decision not in PUBLISHED_DECISIONS:
-                last_reason = "review_rejected"
-                if attempt + 1 >= MAX_ATTEMPTS:
-                    emit(
-                        EduEventType.WORKFLOW_FAILED,
-                        {"reason": "review_rejected", "generation_id": generation_id},
-                    )
-                    return None
-                repair_hint = "\n\n上一版审核未通过，请重新生成更贴合课程资料与目标的内容。"
-                emit(
-                    EduEventType.THOUGHT,
-                    {"delta": f"“{resource_type}”审核未通过，正在返修一次。"},
-                )
-                continue
-
-            publish = await _invoke_tool(
-                review_tools["publish_personalized_resource"],
-                emit,
-                generation_id=generation_id,
-                user_id=request.user_id,
-                course_id=request.course_id,
-                resource_kind="resource",
-            )
-            if str(publish.get("status") or "") != "published":
-                emit(
-                    EduEventType.WORKFLOW_FAILED,
-                    {
-                        "reason": "publish_failed",
-                        "generation_id": generation_id,
-                        "message": publish.get("reason") or "",
-                    },
-                )
-                return None
-            return {
-                "generation_id": generation_id,
-                "resource_id": publish.get("resource_id"),
-                "title": content.get("title") or knowledge_point,
-                "resource_type": resource_type,
-            }
-
-        emit(EduEventType.WORKFLOW_FAILED, {"reason": last_reason})
-        return None
+        client = self._client_of()
+        if client is None:
+            return None
+        dummy = object()
+        return await produce_resource_item(
+            worker=dummy,
+            request=request,
+            resource_type=resource_type,
+            writer=writer,
+            client=client,
+            emit=emit,
+        )
 
     def _client_of(self) -> BackendLearningClient | None:
         if self._client is None:
             self._client = build_backend_learning_client_from_settings(self._settings)
         return self._client
+
+
+async def produce_resource_item(
+    *,
+    worker: Any,
+    request: PersonalizedResourceGenerationRequest,
+    resource_type: str,
+    writer: ResourceContentWriter,
+    client: BackendLearningClient,
+    emit: EmitEvent,
+) -> dict[str, Any] | None:
+    repair_hint = ""
+    last_reason = "not_published"
+    rag_course_id = (request.catalog_id or request.course_id).strip()
+    knowledge_point = request.knowledge_point or request.goal
+    draft_tools = {tool.name: tool for tool in build_resource_draft_tools(client)}
+    review_tools = {tool.name: tool for tool in build_resource_review_tools(client)}
+
+    for attempt in range(MAX_ATTEMPTS):
+        content = await writer.write(
+            resource_type,
+            goal=request.goal,
+            chapter=request.chapter or "",
+            knowledge_point=knowledge_point,
+            course_id=rag_course_id,
+            course_title=request.course_title,
+            difficulty=request.difficulty,
+            repair_hint=repair_hint,
+        )
+        draft = await _invoke_tool(
+            draft_tools["create_personalized_resource_draft"],
+            emit,
+            user_id=request.user_id,
+            course_id=request.course_id,
+            source_type=request.source_type,
+            goal=request.goal,
+            resource_type=resource_type,
+            title=content.get("title") or knowledge_point,
+            content=content.get("content") or "",
+            description=content.get("description") or "",
+            chapter=request.chapter or "",
+            knowledge_point=knowledge_point,
+            tags=content.get("tags") or [],
+            conversation_id=request.conversation_id,
+            run_id=request.task_id,
+        )
+        generation_id = str(draft.get("generation_id") or "")
+        if not generation_id:
+            last_reason = str(draft.get("reason") or "draft_failed")
+            break
+
+        validation = await _invoke_tool(
+            draft_tools["record_personalized_validation"],
+            emit,
+            generation_id=generation_id,
+            user_id=request.user_id,
+            course_id=request.course_id,
+            resource_type=resource_type,
+            content=content.get("content") or "",
+        )
+        report = validation.get("report") if isinstance(validation.get("report"), dict) else {}
+        warnings = [str(item) for item in report.get("warnings") or []]
+        if "generation_id" not in validation:
+            # `_post` swallows transport errors into a bare status payload;
+            # a persisted report always echoes the generation id back.
+            last_reason = str(validation.get("reason") or "validation_unavailable")
+            emit(
+                EduEventType.WORKFLOW_FAILED,
+                {"reason": last_reason, "generation_id": generation_id},
+            )
+            setattr(worker, "_last_reason", last_reason)
+            return None
+        if report.get("status") != "passed":
+            # Backend already moved the draft to `failed`; retrying means
+            # drafting a fresh generation instead of re-validating this one.
+            last_reason = "validation_failed"
+            hard_failures = [str(item) for item in report.get("hard_failures") or []]
+            if attempt + 1 >= MAX_ATTEMPTS:
+                emit(
+                    EduEventType.WORKFLOW_FAILED,
+                    {
+                        "reason": "validation_failed",
+                        "generation_id": generation_id,
+                        "hard_failures": hard_failures,
+                    },
+                )
+                setattr(worker, "_last_reason", last_reason)
+                return None
+            repair_hint = (
+                "\n\n上一版未通过确定性校验（"
+                + (", ".join(hard_failures) or "unknown")
+                + "），请据此修正。"
+            )
+            emit(
+                EduEventType.THOUGHT,
+                {"delta": f"“{resource_type}”草案未通过确定性校验，正在按反馈返修一次。"},
+            )
+            continue
+
+        review = await _invoke_tool(
+            review_tools["review_personalized_resource"],
+            emit,
+            generation_id=generation_id,
+            user_id=request.user_id,
+            course_id=request.course_id,
+            hard_failures=[],
+            warnings=warnings,
+            summary=f"结构化校验通过，资源类型 {resource_type}，目标：{request.goal[:120]}",
+        )
+        decision = str(review.get("decision") or "")
+        review_unavailable = "generation_id" not in review
+        if review_unavailable or decision not in PUBLISHED_DECISIONS:
+            last_reason = "review_rejected"
+            if attempt + 1 >= MAX_ATTEMPTS:
+                emit(
+                    EduEventType.WORKFLOW_FAILED,
+                    {"reason": "review_rejected", "generation_id": generation_id},
+                )
+                setattr(worker, "_last_reason", last_reason)
+                return None
+            repair_hint = "\n\n上一版审核未通过，请重新生成更贴合课程资料与目标的内容。"
+            emit(
+                EduEventType.THOUGHT,
+                {"delta": f"“{resource_type}”审核未通过，正在返修一次。"},
+            )
+            continue
+
+        publish = await _invoke_tool(
+            review_tools["publish_personalized_resource"],
+            emit,
+            generation_id=generation_id,
+            user_id=request.user_id,
+            course_id=request.course_id,
+            resource_kind="resource",
+        )
+        if str(publish.get("status") or "") != "published":
+            emit(
+                EduEventType.WORKFLOW_FAILED,
+                {
+                    "reason": "publish_failed",
+                    "generation_id": generation_id,
+                    "message": publish.get("reason") or "",
+                },
+            )
+            setattr(worker, "_last_reason", "publish_failed")
+            return None
+        return {
+            "generation_id": generation_id,
+            "resource_id": publish.get("resource_id"),
+            "title": content.get("title") or knowledge_point,
+            "resource_type": resource_type,
+        }
+
+    setattr(worker, "_last_reason", last_reason)
+    emit(EduEventType.WORKFLOW_FAILED, {"reason": last_reason})
+    return None
 
 
 class _ToolCallEmitter:

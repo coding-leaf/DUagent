@@ -108,6 +108,11 @@ In `PersonalizedResourceGenerationRunner._produce_one`:
    - 严禁不同 Embedding 模型或不同输出维度的向量混存在同一个 Qdrant Collection。集合名称必须动态绑定模型标识与维度（如 `course_knowledge_{model_slug}_{dim}`），保障向量空间纯净度；
    - 严禁仅因“向量维度相同”而静默回退历史集合。历史集合只读回退必须通过模型身份校验（集合名含模型标识、配置显式白名单或 DUagent 历史基准模型 `BAAI/bge-large-zh-v1.5` 严格一致），未知或模型不匹配时保守拒绝回退。
 
+### ❌ 严禁手写过程式循环替代多智能体编排与任务悬挂 (Enforce AgentScope native pipelines & failover closure)
+
+1. **拥抱 AgentScope 原生管道**：多智能体协作与多资源分派必须依赖 AgentScope 官方原生编排管道（如 `TeamPipeline`、`TeamMember`、`Toolkit`），禁止手写过程式单线程 `for` 循环串行调用，充分利用框架原生的 Leader-Member 并发任务调度与工具异常自愈机制；
+2. **任务生命周期状态闭环**：后台多智能体异步生成若遇未捕获异常或执行失败，必须显式调用 Backend 专用的任务失败闭环端点（如 `POST /internal/personalized-resources/tasks/{task_id}/fail`）通知后端更新 `AsyncTask` 状态，严禁任务静默崩溃并悬挂在 `processing`，彻底杜绝前端无休止转圈死锁。
+
 ---
 
 ## Escape Hatches (显式逃生通道)

@@ -9,6 +9,7 @@ from app.schemas.personalized_resource_generation import (
     PersonalizedGenerationScopeRequest,
     PersonalizedReviewRequest,
     PersonalizedValidationRequest,
+    TaskFailRequest,
 )
 from app.services.code_problem_service import (
     CodeProblemValidationError,
@@ -132,6 +133,23 @@ async def publish_generation(
     except (ResourcePublicationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _success(data)
+
+
+@router.post("/tasks/{task_id}/fail")
+async def fail_task(
+    task_id: str,
+    req: TaskFailRequest = TaskFailRequest(),
+    _auth: None = Depends(verify_internal_agent_token),
+    db: AsyncSession = Depends(get_db),
+):
+    task = await PersonalizedResourceGenerationService(db).fail_task(
+        task_id,
+        error_code=req.error_code,
+        error_message=req.error_message,
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    return _success({"task_id": task.id, "status": task.status})
 
 
 def _success(data: dict) -> dict:

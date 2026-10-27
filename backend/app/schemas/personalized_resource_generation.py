@@ -29,3 +29,9 @@ class PersonalizedReviewRequest(PersonalizedGenerationScopeRequest):
     hard_failures: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     summary: str = ""
+
+
+class TaskFailRequest(BaseModel):
+    error_code: str = Field(default="agent_error", max_length=20)
+    error_message: str = Field(default="", max_length=500)
+

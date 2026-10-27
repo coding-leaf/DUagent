@@ -43,4 +43,52 @@ describe('PersonalizedResourceCard', () => {
     expect(screen.getByText('审核通过')).toBeInTheDocument();
     expect(screen.queryByText('可增加一个边界示例')).not.toBeInTheDocument();
   });
+
+  it('shows processing status card when task is actively running', () => {
+    render(
+      <MemoryRouter>
+        <PersonalizedResourceCard
+          item={{
+            id: 'link-2',
+            task_status: 'processing',
+            created_at: new Date().toISOString(),
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('多智能体正在协作生成')).toBeInTheDocument();
+  });
+
+  it('shows timeout card when processing task exceeds 180 seconds', () => {
+    const expiredTime = new Date(Date.now() - 200 * 1000).toISOString();
+    render(
+      <MemoryRouter>
+        <PersonalizedResourceCard
+          item={{
+            id: 'link-3',
+            task_status: 'processing',
+            created_at: expiredTime,
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('生成超时（已中断）')).toBeInTheDocument();
+  });
+
+  it('shows failed status card when task failed', () => {
+    render(
+      <MemoryRouter>
+        <PersonalizedResourceCard
+          item={{
+            id: 'link-4',
+            task_status: 'failed',
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('生成失败')).toBeInTheDocument();
+  });
 });

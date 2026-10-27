@@ -124,14 +124,19 @@ class PersonalizedResourceGenerationService:
                 "title", "description", "content", "chapter", "knowledge_point", "tags"
             )
         })
+        raw_kp = str(draft.get("knowledge_point") or draft.get("chapter") or "综合")
+        safe_kp = raw_kp.strip()[:100]
+        safe_title = str(draft.get("title") or "个性化学习资料").strip()[:200]
+        safe_chapter = str(draft.get("chapter") or "").strip()[:100]
+
         resource = Resource(
             course_id=generation.course_id,
-            title=str(draft.get("title") or "个性化学习资料"),
+            title=safe_title,
             type=generation.resource_type,
             description=str(draft.get("description") or ""),
             content=str(draft.get("content") or ""),
-            chapter=str(draft.get("chapter") or ""),
-            knowledge_point=str(draft.get("knowledge_point") or ""),
+            chapter=safe_chapter,
+            knowledge_point=safe_kp,
             tags=draft.get("tags") or [],
             url="",
             create_by=generation.user_id,
@@ -147,6 +152,27 @@ class PersonalizedResourceGenerationService:
         generation.status = "published"
         await self.db.flush()
         return resource
+
+    async def fail_task(
+        self,
+        task_id: str,
+        *,
+        error_code: str = "agent_error",
+        error_message: str = "",
+    ) -> AsyncTask | None:
+        query = select(AsyncTask).where(
+            AsyncTask.id == task_id, AsyncTask.is_deleted == False
+        ).with_for_update()
+        result = await self.db.execute(query)
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+        task.status = "failed"
+        task.error_code = (error_code or "agent_error")[:20]
+        task.error_message = (error_message or "")[:500]
+        task.completed_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return task
 
     async def _get(
         self,

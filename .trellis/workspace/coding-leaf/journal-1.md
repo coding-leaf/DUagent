@@ -189,3 +189,26 @@
 ### Status
 
 [OK] **Completed**
+
+## Session 9: Agent事件适配器容错重构与数据库窗口函数降维兼容
+<!-- trellis-session: v=2 fp=c49e701ebd214f98 -->
+
+**Date**: 2026-10-27
+**Task**: Agent事件适配器容错重构与数据库窗口函数降维兼容
+**Package**: backend
+**Branch**: `fix/agent-event-adapter-and-db-compat`
+
+### Summary
+
+从架构根源重构Agent协议适配器未知事件防御模型（良性事件与扩展事件安全吸收，仅框架致命错误阻断），彻底消除HintBlockEvent引发的流中断；重构会话列表与班级学情数据访问层，消除非必要的MySQL 8.0窗口函数强依赖，实现MySQL 5.7/8.0/SQLite无差别向下兼容与内存映射；加固前端会话边界与部署环境数据库版本探测。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `62ea579` | fix(agent,backend,frontend,deploy): 重构Agent协议适配器未知事件防御模型、消除MySQL 8.0窗口函数强依赖并加固环境检测 |
+
+### Status
+
+[OK] **Completed**
+

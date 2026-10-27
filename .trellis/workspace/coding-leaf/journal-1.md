@@ -212,3 +212,26 @@
 
 [OK] **Completed**
 
+## Session 10: 修复聊天首字流式等待状态与学习面板代码题目渲染异常
+<!-- trellis-session: v=2 fp=d2830f3f18ea4c19 -->
+
+**Date**: 2026-10-27
+**Task**: 修复聊天首字流式等待状态与学习面板代码题目渲染异常
+**Package**: frontend
+**Branch**: `fix/chat-loading-state-and-code-problem-ui`
+
+### Summary
+
+修复在聊天框发送消息后startStream内部调用cancelStream误将新占位消息的loading置为false的时序缺陷，确保首字返回前持续展示跳动加载动效并彻底杜绝操作栏提前露底；重构MarkdownViewer代码围栏渲染逻辑，支持无语言标识代码块作为标准块级容器渲染，彻底解决样例输入输出被拆碎为药丸标签的严重UI破损；在代码沙箱用例增加多行换行格式化排版并在工作区Tab中补齐个性化资源卡片元数据。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d6045f9` | fix(frontend): 修复聊天首字流式等待状态丢失与学习面板代码题目渲染异常 |
+
+### Status
+
+[OK] **Completed**
+
+

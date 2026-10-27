@@ -234,4 +234,27 @@
 
 [OK] **Completed**
 
+## Session 11: 基于AgentScope原生编排重构多智能体生成并修复数据库死锁
+<!-- trellis-session: v=2 fp=6a71e86095ea4f18 -->
+
+**Date**: 2026-10-27
+**Task**: 基于AgentScope原生编排重构多智能体生成并修复数据库死锁
+**Package**: agent_service_v2
+**Branch**: `fix/agentscope-native-orchestration-and-deadlock-fix`
+
+### Summary
+
+全面废弃手写单线程过程式生成管道，拥抱AgentScope 2.0官方原生的TeamPipeline、TeamMember与Toolkit架构；重构CurriculumLeaderAgent规划主管与LessonWorkerAgent、MindmapWorkerAgent、QuizWorkerAgent、ReadingWorkerAgent领域专家智能体，利用框架底层的asyncio.gather同轮并发调度消除串行排队延迟；在Backend资源发布入库层增加knowledge_point/title等有限长字段防御截断，彻底消除MySQL 1406 Data too long异常；新增POST /internal/personalized-resources/tasks/{task_id}/fail内部失败闭环端点，结合Agent端全局异常拦截网与前端180s超时熔断，彻底杜绝异步任务悬挂与界面无休止转圈假死。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2752213` | feat(agent,backend,frontend): 基于AgentScope原生TeamPipeline重构多智能体并发生成并消除数据库死锁 |
+
+### Status
+
+[OK] **Completed**
+
+
 

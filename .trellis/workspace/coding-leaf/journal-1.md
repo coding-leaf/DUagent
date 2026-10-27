@@ -258,3 +258,26 @@
 
 
 
+
+
+## Session 12: 规范个性化讲义为Markdown契约并清洗历史HTML课件展开展示
+<!-- trellis-session: v=2 fp=7896f93986a972dc -->
+
+**Date**: 2026-10-27
+**Task**: 规范个性化讲义为Markdown契约并清洗历史HTML课件展开展示
+**Package**: backend
+**Branch**: `fix/patch-personalized-lesson-markdown-and-display`
+
+### Summary
+
+修复Agent端课件Prompt输出HTML幻灯片导致的前端脚本失效卡死，将生成规范重构为标准结构化Markdown讲义；在前端增加历史HTML课件清洗平铺与类型标签补丁，实现历史数据与未来新生成的双向闭环。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `04a345a` | fix(agent,frontend): 规范个性化讲义为Markdown契约并清洗历史HTML课件展开展示 |
+
+### Status
+
+[OK] **Completed**

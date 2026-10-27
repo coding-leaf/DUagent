@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 12
 - **Last Active**: 2026-10-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~191 | Active |
+| `journal-1.md` | ~283 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-10-27 | 规范个性化讲义为Markdown契约并清洗历史HTML课件展开展示 | `04a345a` | `fix/patch-personalized-lesson-markdown-and-display` |
 | 8 | 2026-10-27 | DUagent交接前稳定性修复 | `3bf26bf` | `fix/pre-handover-stability-fixes` |
 | 7 | 2026-10-27 | RAG入库数据安全加固与CI门禁修复 | `5483143` | `fix/rag-safety-and-ci-fixes` |
 | 6 | 2026-10-27 | 教材安全切片与版本化幂等入库改造 | `cd7d815` | `fix/robust-catalog-ingestion` |

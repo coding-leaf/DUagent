@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Agent service pytest and Ruff lint quality gates"}
+{"file": ".trellis/spec/backend/backend/quality-guidelines.md", "reason": "Backend test standards and transaction safety"}

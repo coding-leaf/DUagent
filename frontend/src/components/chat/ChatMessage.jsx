@@ -65,8 +65,9 @@ export default function ChatMessage({ message, onSendMessage, onRegenerate, isLa
   const isUser = message.role === 'user';
   const isReviewFlagged = !isUser && message.reviewFlagged;
   const isSafetyBlocked = !isUser && message.safetyBlocked;
-  const canUseAssistantActions = !isUser && !message.loading && !isSafetyBlocked;
   const hasOrderedParts = !isUser && Array.isArray(message.parts) && message.parts.length > 0;
+  const hasMeaningfulContent = typeof message.content === 'string' && message.content.trim().length > 0;
+  const canUseAssistantActions = !isUser && !message.loading && !isSafetyBlocked && !message.isError && (hasMeaningfulContent || hasOrderedParts);
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(typeof message.content === 'string' ? message.content : '').catch(console.error);

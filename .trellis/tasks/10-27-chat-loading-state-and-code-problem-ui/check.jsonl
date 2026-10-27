@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/frontend/quality-guidelines.md", "reason": "Frontend Vitest and ESLint quality standards"}
+{"file": ".trellis/spec/frontend/frontend/architecture-guardrails.md", "reason": "Architecture guardrails for frontend styling and SSE lifecycle"}

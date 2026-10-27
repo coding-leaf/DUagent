@@ -56,13 +56,13 @@ function PublicTestCases({ cases }) {
             </div>
             <div className="flex items-start gap-1">
               <span className="text-slate-400 font-bold shrink-0">输入:</span>
-              <span className="text-slate-700 bg-slate-50 px-1 py-0.5 rounded border border-slate-100 min-w-[30px] inline-block">
+              <span className="text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100 min-w-[30px] inline-block whitespace-pre-wrap font-mono break-all">
                 {String(testCase.stdin || '').trim() || '(无输入)'}
               </span>
             </div>
             <div className="flex items-start gap-1">
               <span className="text-emerald-500 font-bold shrink-0">输出:</span>
-              <span className="text-slate-700 bg-slate-50 px-1 py-0.5 rounded border border-slate-100 min-w-[30px] inline-block">
+              <span className="text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100 min-w-[30px] inline-block whitespace-pre-wrap font-mono break-all">
                 {String(testCase.expected_output || '').trim()}
               </span>
             </div>

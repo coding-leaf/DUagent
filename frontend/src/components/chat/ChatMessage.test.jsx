@@ -146,4 +146,64 @@ describe('ChatMessage', () => {
     // 内部的 TaskCreate 管理卡片因与 plan panel 并存，应被自动隐藏，不呈现在屏幕上
     expect(screen.queryByText('创建计划任务')).toBeNull();
   });
+
+  it('hides assistant action buttons when content is empty during loading and after loading', () => {
+    const { rerender } = render(
+      <ChatMessage
+        message={{
+          id: 'ai-loading',
+          role: 'assistant',
+          content: '',
+          loading: true
+        }}
+        onSendMessage={vi.fn()}
+        onRegenerate={vi.fn()}
+        isLastAssistant={true}
+      />
+    );
+
+    // 正在加载且内容为空时，不应露出重新生成、细化、复制按钮
+    expect(screen.queryByText('重新生成')).toBeNull();
+    expect(screen.queryByText('继续细化')).toBeNull();
+    expect(screen.queryByText('复制')).toBeNull();
+
+    // 加载结束但内容仍为空（或未开始输出），同样严格禁止露出操作按钮
+    rerender(
+      <ChatMessage
+        message={{
+          id: 'ai-empty-done',
+          role: 'assistant',
+          content: '',
+          loading: false
+        }}
+        onSendMessage={vi.fn()}
+        onRegenerate={vi.fn()}
+        isLastAssistant={true}
+      />
+    );
+
+    expect(screen.queryByText('重新生成')).toBeNull();
+    expect(screen.queryByText('继续细化')).toBeNull();
+    expect(screen.queryByText('复制')).toBeNull();
+  });
+
+  it('renders assistant action buttons once content is available and loading is finished', () => {
+    render(
+      <ChatMessage
+        message={{
+          id: 'ai-done',
+          role: 'assistant',
+          content: '二叉树前序遍历实现如下：',
+          loading: false
+        }}
+        onSendMessage={vi.fn()}
+        onRegenerate={vi.fn()}
+        isLastAssistant={true}
+      />
+    );
+
+    expect(screen.getByText('重新生成')).toBeDefined();
+    expect(screen.getByText('继续细化')).toBeDefined();
+    expect(screen.getByText('复制')).toBeDefined();
+  });
 });

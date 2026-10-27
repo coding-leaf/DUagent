@@ -98,3 +98,15 @@ test('filters hidden artifacts and shows empty state if all are hidden', () => {
   render(<AgentWorkspace />);
   expect(screen.getByText(/暂无生成产物/)).toBeDefined();
 });
+
+test('renders PersonalizedResourceCard default title from pluginMeta when title is not in props', () => {
+  useChat.mockReturnValue({
+    workspaceArtifacts: [
+      { id: 'res-1', type: 'PersonalizedResourceCard', props: {} },
+    ],
+    activeArtifactId: 'res-1',
+  });
+
+  render(<AgentWorkspace />);
+  expect(screen.getByText('个性化资源')).toBeDefined();
+});

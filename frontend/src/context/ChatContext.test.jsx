@@ -264,6 +264,23 @@ test('ChatProvider reduces native EDU v2 stream events', async () => {
   expect(screen.getByTestId('sending').textContent).toBe('false');
 });
 
+test('keeps assistant loading true before first stream chunk arrives without cancelStream resetting it', async () => {
+  streamChatMock.mockImplementation(() => vi.fn());
+
+  renderWithProviders(<StreamConsumer />);
+  await waitFor(() => {
+    expect(screen.getByTestId('active-session').textContent).toBe('conv-existing');
+  });
+
+  await act(async () => {
+    screen.getByTestId('send').click();
+  });
+
+  expect(screen.getByTestId('sending').textContent).toBe('true');
+  expect(screen.getByTestId('assistant-loading').textContent).toBe('true');
+  expect(screen.getByTestId('assistant-content').textContent).toBe('');
+});
+
 test('ChatProvider restores workspace artifacts from conversation history', async () => {
   getHistoryMock.mockResolvedValue({
     code: 200,

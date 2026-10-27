@@ -82,3 +82,28 @@ test('handles artifact download via apiClient blob response and preserves link b
   expect(globalThis.URL.createObjectURL).toHaveBeenCalledWith(fakeBlob);
   expect(globalThis.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
 });
+
+test('renders fenced code blocks without language annotation as block-level code container', () => {
+  const content = '```\n1\n7\n```';
+  const { container } = render(<MarkdownViewer content={content} />);
+
+  // 必须渲染带有头部和复制按钮的标准代码块容器
+  expect(screen.getByText('code')).toBeDefined();
+  expect(screen.getByRole('button', { name: /Copy/i })).toBeDefined();
+  expect(container.textContent).toContain('1');
+  expect(container.textContent).toContain('7');
+
+  // 确保没有 fallback 渲染成行内药丸标签
+  const inlineCodes = container.querySelectorAll('code.bg-slate-100.text-cyan-700');
+  expect(inlineCodes.length).toBe(0);
+});
+
+test('renders inline code with backticks as inline code tag without block container', () => {
+  const content = '这是行内代码 `variable_name` 测试';
+  const { container } = render(<MarkdownViewer content={content} />);
+
+  expect(screen.queryByRole('button', { name: /Copy/i })).toBeNull();
+  const inlineCode = container.querySelector('code.bg-slate-100');
+  expect(inlineCode).not.toBeNull();
+  expect(inlineCode.textContent).toBe('variable_name');
+});

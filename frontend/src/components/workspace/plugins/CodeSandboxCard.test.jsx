@@ -162,3 +162,23 @@ test('supports language selection in free sandbox mode', async () => {
   });
   expect(screen.getByText('main.c')).toBeInTheDocument();
 });
+
+test('renders public test cases with multiline formatting and whitespace-pre-wrap', async () => {
+  getCodeProblem.mockResolvedValue({
+    data: {
+      title: '多行输入输出题',
+      statement: '读取多行输入并输出',
+      language: 'python',
+      starter_code: '',
+      public_cases: [{ stdin: '1\n7', expected_output: '8\n9' }],
+    },
+  });
+
+  const { container } = render(<CodeSandboxCard problem_id="multiline-problem" language="python" />);
+
+  await screen.findByText('读取多行输入并输出');
+  const preWraps = container.querySelectorAll('.whitespace-pre-wrap');
+  expect(preWraps.length).toBeGreaterThanOrEqual(2);
+  expect(preWraps[0].textContent).toBe('1\n7');
+  expect(preWraps[1].textContent).toBe('8\n9');
+});

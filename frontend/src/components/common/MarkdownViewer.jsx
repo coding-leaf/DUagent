@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -9,6 +9,8 @@ import Icon from '../Icon';
 import apiClient from '../../api/client';
 import { useChat } from '../../context/ChatContext';
 import { markdownHeadingId } from '../../utils/markdownAnchors';
+
+const CodeBlockContext = React.createContext(false);
 
 
 class MermaidErrorBoundary extends React.Component {
@@ -268,12 +270,23 @@ export default function MarkdownViewer({ content, className = '', compact = fals
         </a>
       );
     },
+    pre({ children }) {
+      return (
+        <CodeBlockContext.Provider value={true}>
+          {children}
+        </CodeBlockContext.Provider>
+      );
+    },
     code({ inline, className: codeClassName, children, ...rest }) {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      const inPre = useContext(CodeBlockContext);
+      const isBlock = inline !== undefined ? !inline : inPre;
       const match = /language-(\w+)/.exec(codeClassName || '');
       const codeStr = String(children).replace(/\n$/, '');
       
-      if (!inline && match) {
-        if (match[1] === 'mermaid') {
+      if (isBlock) {
+        const language = match ? match[1] : 'text';
+        if (language === 'mermaid') {
           if (loading) {
             return (
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 mt-4 mb-2 shadow-sm animate-pulse">
@@ -301,7 +314,7 @@ export default function MarkdownViewer({ content, className = '', compact = fals
         return (
           <div className="relative rounded-xl overflow-hidden my-4 group/code shadow-sm border border-slate-200">
             <div className="flex items-center justify-between px-4 py-2 bg-slate-50 text-slate-500 text-[11px] font-mono uppercase tracking-wider border-b border-slate-200">
-              <span>{match[1]}</span>
+              <span>{match ? match[1] : 'code'}</span>
               <button 
                 onClick={() => handleCopy(codeStr)}
                 className="opacity-0 group-hover/code:opacity-100 focus:opacity-100 transition-opacity hover:text-slate-700 flex items-center gap-1 cursor-pointer"
@@ -315,7 +328,7 @@ export default function MarkdownViewer({ content, className = '', compact = fals
               {...rest}
               children={codeStr}
               style={vscDarkPlus}
-              language={match[1]}
+              language={language}
               PreTag="div"
               wrapLongLines={compact}
               customStyle={{

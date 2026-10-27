@@ -8,7 +8,8 @@ const pluginMeta = {
   StudyPlanCard: { title: '今日学习计划', icon: 'calendar_today' },
   WeakPointsCard: { title: '薄弱知识点', icon: 'insights' },
   PathRecommendationCard: { title: '学习路径推荐', icon: 'route' },
-  CodeSandboxCard: { title: '代码实操练习', icon: 'code' }
+  CodeSandboxCard: { title: '代码实操练习', icon: 'code' },
+  PersonalizedResourceCard: { title: '个性化资源', icon: 'auto_stories' }
 };
 
 export default function WorkspaceTabs({

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/frontend/component-guidelines.md", "reason": "React component structure, styling and composition standards"}
+{"file": ".trellis/spec/frontend/frontend/state-management.md", "reason": "Chat context state management and stream lifecycle conventions"}
+{"file": ".trellis/spec/frontend/frontend/quality-guidelines.md", "reason": "Frontend Vitest and ESLint quality standards"}

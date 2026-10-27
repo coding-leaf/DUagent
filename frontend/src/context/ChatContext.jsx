@@ -333,7 +333,10 @@ export const ChatProvider = ({ children }) => {
   const startStream = (targetId, requestPayload) => {
     setIsSending(true);
     clearRunLogs();
-    cancelStream();
+    if (abortControllerRef.current) {
+      abortControllerRef.current();
+      abortControllerRef.current = null;
+    }
     const handlers = createStreamHandlers(targetId);
     abortControllerRef.current = chatService.streamChat(
       { ...requestPayload, scope: 'course', course_id: activeCourseId, conversation_id: activeSession },

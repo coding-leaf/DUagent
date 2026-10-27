@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/agent_service_v2/backend/index.md", "reason": "Agent Service 后端开发基线规范"}
+{"file": ".trellis/spec/agent_service_v2/backend/architecture-guardrails.md", "reason": "RAG 入库教材隔离、蓝绿版本与向量空间红线"}
+{"file": ".trellis/spec/backend/backend/index.md", "reason": "Backend 基础规范与异步数据库连接约定"}
+{"file": ".trellis/spec/backend/backend/database-guidelines.md", "reason": "SQLAlchemy 异步会话与测试连接池规范"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Backend 与 Agent Service 跨层数据流契约"}

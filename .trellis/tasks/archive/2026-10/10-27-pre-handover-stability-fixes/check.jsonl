@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/agent_service_v2/backend/quality-guidelines.md", "reason": "Agent Service 测试质量与确定性基线"}
+{"file": ".trellis/spec/backend/backend/quality-guidelines.md", "reason": "Backend 测试框架与事件循环规范"}
+{"file": ".trellis/spec/agent_service_v2/backend/architecture-guardrails.md", "reason": "数据安全与隔离红线审查"}

@@ -10,6 +10,7 @@
 2. **Tool and Middleware Testing**: Whenever a tool or middleware is added/modified, add unit tests verifying both happy paths and edge cases (e.g., timeouts, malformed inputs, policy violations).
 3. **Simplicity First**: Agent prompts and workflow chains should remain as simple as possible to achieve the task. Avoid multi-turn over-complex deliberation when a single agent call suffices.
 4. **Code is Truth**: Reference existing tested components in `agent_service_v2/` as the primary standard.
+5. **Real-Environment Testing (Zero Mock on Core Paths)**: 严禁在关键核心功能（如 Qdrant 向量检索与入库、RAG 管道切片、智能体流式事件通信、后端内部数据写入）中使用虚假 Mock 掩盖协议不匹配或数据类型缺陷。必须使用真实服务（真实 Qdrant、真实向量维度、真实接口调用）与真实业务数据进行闭环检验，坚决杜绝编造数据。
 
 ---
 

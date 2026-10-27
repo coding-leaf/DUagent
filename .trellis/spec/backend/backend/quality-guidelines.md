@@ -10,6 +10,7 @@
 2. **Testing**: Run tests with `pytest`. When writing or refactoring services, add unit/integration tests for critical business logic under `backend/tests/`.
 3. **Async Cleanliness**: Avoid blocking synchronous calls (e.g., synchronous file I/O, `time.sleep()`, synchronous `requests.get`) inside async endpoint handlers or services. Use async counterparts (`asyncio.sleep`, `httpx.AsyncClient`).
 4. **Code is Truth**: If existing patterns in `backend/app/` work well and are tested, align with them rather than inventing new patterns.
+5. **Real-Environment Testing (Zero Mock on Core Paths)**: 严禁在核心关键业务链路（如数据库持久化、任务状态机流转、核心服务交互）中滥用 Mock 伪造数据或编造假数据来换取“虚假的测试通过”。关键功能必须在真实运行环境（如真实 MySQL/Redis、真实请求体）中执行真实校验，以真实物理运行结果作为唯一评判标准。
 
 ---
 
